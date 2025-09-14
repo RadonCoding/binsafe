@@ -17,12 +17,12 @@ pub fn build(rt: &mut Runtime) {
     {
         // cmp al, bl
         rt.asm.cmp(al, r8b).unwrap();
-        // jne not_equal
+        // jne ...
         rt.asm.jne(not_equal).unwrap();
 
         // test al, al
         rt.asm.test(al, al).unwrap();
-        // jz is_equal
+        // jz ...
         rt.asm.jz(is_equal).unwrap();
 
         // inc rcx
@@ -35,7 +35,7 @@ pub fn build(rt: &mut Runtime) {
         // mov r8b, byte ptr [rdx]
         rt.asm.mov(r8b, byte_ptr(rdx)).unwrap();
 
-        // jmp compare_loop
+        // jmp ...
         rt.asm.jmp(compare_loop).unwrap();
     }
 

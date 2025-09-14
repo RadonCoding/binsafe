@@ -44,7 +44,7 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov rax, 0x0
         rt.asm.mov(rax, 0u64).unwrap();
-        // jmp epilogue
+        // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
 
@@ -52,7 +52,7 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov rax, 0x1
         rt.asm.mov(rax, 1u64).unwrap();
-        // jmp epilogue
+        // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
 

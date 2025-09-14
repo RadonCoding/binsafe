@@ -27,5 +27,6 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(ptr(rcx + op as u8 * 8), rax).unwrap();
     }
 
+    // ret
     rt.asm.ret().unwrap();
 }

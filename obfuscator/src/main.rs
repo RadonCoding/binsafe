@@ -141,19 +141,19 @@ impl Engine {
     fn create_entry_point(&mut self, rtfasm: &mut Runtime, new_entry_point: u32) {
         let tls = TLSDirectory::parse(&self.pe).unwrap();
 
+        macro_rules! get_callbacks {
+            ($tls:expr, $va_constructor:path) => {
+                $tls.get_callbacks(&self.pe)
+                    .unwrap()
+                    .iter()
+                    .map(|va| self.pe.va_to_rva($va_constructor(*va)).unwrap().0)
+                    .collect::<Vec<u32>>()
+            };
+        }
+
         let old_callbacks = match tls {
-            TLSDirectory::TLS32(tls32) => tls32
-                .get_callbacks(&self.pe)
-                .unwrap()
-                .iter()
-                .map(|va32| self.pe.va_to_rva(VA::VA32(*va32)).unwrap().0)
-                .collect::<Vec<u32>>(),
-            TLSDirectory::TLS64(tls64) => tls64
-                .get_callbacks(&self.pe)
-                .unwrap()
-                .iter()
-                .map(|va64| self.pe.va_to_rva(VA::VA64(*va64)).unwrap().0)
-                .collect::<Vec<u32>>(),
+            TLSDirectory::TLS32(tls32) => get_callbacks!(tls32, VA::VA32),
+            TLSDirectory::TLS64(tls64) => get_callbacks!(tls64, VA::VA64),
         };
 
         if old_callbacks.is_empty() {
