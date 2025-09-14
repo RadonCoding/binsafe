@@ -11,7 +11,7 @@ Code virtualizer for compiled 64-bit portable executables.
 
 ### 2. Runtime
 
-- **Execution**: In-case there are TLS callbacks the first callback is patched with the address of the runtime's entry point, otherwise the entry point is patched. The runtime entry point will call the original TLS callbacks and entry point after the initialization is completed.
+- **Execution**: In-case there are TLS (Thread Local Storage) callbacks the first callback is patched with the address of the runtime's entry point, otherwise the entry point is patched directly. The runtime entry point will call the original callbacks and entry point after the initialization is completed.
 - **Redirection**: An exception handler, which will catch the **breakpoints** is registered using [AddVectoredExceptionHandler](https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-addvectoredexceptionhandler).
 - **Handling**: When a breakpoint is hit, the exception handler takes control and passes the [CONTEXT](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-context) to the runtime.
 
