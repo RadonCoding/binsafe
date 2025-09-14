@@ -1,0 +1,318 @@
+use std::collections::HashMap;
+
+use iced_x86::{Code, Instruction, OpKind, Register};
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
+pub enum VMOp {
+    SetReg64Imm,
+    SetReg64Reg,
+    SetReg64Mem,
+    CallRel,
+    CallReg,
+    CallMem,
+}
+pub const VM_OP_COUNT: usize = (VMOp::CallMem as u8 + 1) as usize;
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VMReg {
+    None,
+    Rax,
+    Rcx,
+    Rdx,
+    Rbx,
+    Rsp,
+    Rbp,
+    Rsi,
+    Rdi,
+    R8,
+    R9,
+    R10,
+    R11,
+    R12,
+    R13,
+    R14,
+    R15,
+    Rip,
+    Flags,
+}
+pub const VM_REG_COUNT: usize = (VMReg::Flags as u8) as usize;
+
+impl From<Register> for VMReg {
+    fn from(reg: Register) -> Self {
+        match reg {
+            Register::None => Self::None,
+            Register::RAX | Register::EAX | Register::AX | Register::AL | Register::AH => Self::Rax,
+            Register::RCX | Register::ECX | Register::CX | Register::CL | Register::CH => Self::Rcx,
+            Register::RDX | Register::EDX | Register::DX | Register::DL | Register::DH => Self::Rdx,
+            Register::RBX | Register::EBX | Register::BX | Register::BL | Register::BH => Self::Rbx,
+            Register::RSP | Register::ESP | Register::SP | Register::SPL => Self::Rsp,
+            Register::RBP | Register::EBP | Register::BP | Register::BPL => Self::Rbp,
+            Register::RSI | Register::ESI | Register::SI | Register::SIL => Self::Rsi,
+            Register::RDI | Register::EDI | Register::DI | Register::DIL => Self::Rdi,
+            Register::R8 | Register::R8D | Register::R8W | Register::R8L => Self::R8,
+            Register::R9 | Register::R9D | Register::R9W | Register::R9L => Self::R9,
+            Register::R10 | Register::R10D | Register::R10W | Register::R10L => Self::R10,
+            Register::R11 | Register::R11D | Register::R11W | Register::R11L => Self::R11,
+            Register::R12 | Register::R12D | Register::R12W | Register::R12L => Self::R12,
+            Register::R13 | Register::R13D | Register::R13W | Register::R13L => Self::R13,
+            Register::R14 | Register::R14D | Register::R14W | Register::R14L => Self::R14,
+            Register::R15 | Register::R15D | Register::R15W | Register::R15L => Self::R15,
+            Register::RIP => Self::Rip,
+            _ => panic!("unsupported register: {reg:?}"),
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VMSeg {
+    None,
+    Gs,
+}
+
+impl From<Register> for VMSeg {
+    fn from(reg: Register) -> Self {
+        match reg {
+            Register::None => Self::None,
+            Register::GS => Self::Gs,
+            _ => panic!("unsupported segment: {reg:?}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct VMMem {
+    pub base: VMReg,
+    pub index: VMReg,
+    pub scale: u8,
+    pub displacement: i32,
+    pub seg: VMSeg,
+}
+
+impl From<&Instruction> for VMMem {
+    fn from(instruction: &Instruction) -> Self {
+        let base = VMReg::from(instruction.memory_base());
+        let index = VMReg::from(instruction.memory_index());
+        let scale = instruction.memory_index_scale() as u8;
+        let displacement = if instruction.is_ip_rel_memory_operand() {
+            (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32
+        } else {
+            instruction.memory_displacement64() as i32
+        };
+        let seg = VMSeg::from(instruction.segment_prefix());
+
+        Self {
+            base,
+            index,
+            scale,
+            displacement,
+            seg,
+        }
+    }
+}
+
+impl VMMem {
+    fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(7);
+        bytes.push(self.base as u8);
+        bytes.push(self.index as u8);
+        bytes.push(self.scale);
+        bytes.extend_from_slice(&self.displacement.to_le_bytes());
+        bytes.push(self.seg as u8);
+        bytes
+    }
+}
+
+pub enum VMCmd<'a> {
+    RegImm {
+        len: u8,
+        vop: VMOp,
+        dst: VMReg,
+        src: &'a [u8],
+    },
+    RegReg {
+        len: u8,
+        vop: VMOp,
+        dst: VMReg,
+        src: VMReg,
+    },
+    RegMem {
+        len: u8,
+        vop: VMOp,
+        dst: VMReg,
+        src: VMMem,
+    },
+    MemReg {
+        len: u8,
+        vop: VMOp,
+        dst: VMMem,
+        src: VMReg,
+    },
+    CallRel {
+        len: u8,
+        vop: VMOp,
+        dst: i32,
+    },
+    CallReg {
+        len: u8,
+        vop: VMOp,
+        dst: VMReg,
+    },
+    CallMem {
+        len: u8,
+        vop: VMOp,
+        dst: VMMem,
+    },
+}
+
+impl<'a> VMCmd<'a> {
+    fn encode(&self) -> Vec<u8> {
+        match self {
+            Self::RegImm { len, vop, dst, src } => {
+                let mut bytes = vec![*len, *vop as u8, *dst as u8];
+                bytes.extend_from_slice(src);
+                bytes
+            }
+            Self::RegReg { len, vop, dst, src } => {
+                let bytes = vec![*len, *vop as u8, *dst as u8, *src as u8];
+                bytes
+            }
+            Self::RegMem { len, vop, dst, src } => {
+                let mut bytes = vec![*len, *vop as u8, *dst as u8];
+                bytes.extend_from_slice(&src.encode());
+                bytes
+            }
+            Self::MemReg { len, vop, dst, src } => {
+                let mut bytes = vec![*len, *vop as u8];
+                bytes.extend_from_slice(&dst.encode());
+                bytes.push(*src as u8);
+                bytes
+            }
+            Self::CallRel { len, vop, dst } => {
+                let mut bytes = vec![*len, *vop as u8];
+                bytes.extend_from_slice(&dst.to_le_bytes());
+                bytes
+            }
+            Self::CallReg { len, vop, dst } => {
+                let bytes = vec![*len, *vop as u8, *dst as u8];
+                bytes
+            }
+            Self::CallMem { len, vop, dst } => {
+                let mut bytes = vec![*len, *vop as u8];
+                bytes.extend_from_slice(&dst.encode());
+                bytes
+            }
+        }
+    }
+}
+
+pub fn is_lower(reg: Register) -> bool {
+    (reg >= Register::AL && reg <= Register::BL) || (reg >= Register::SPL && reg <= Register::R15L)
+}
+
+pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
+    let bytecode = match instruction.code() {
+        Code::Mov_r64_imm64 => {
+            let reg = instruction.op0_register();
+            let dst = VMReg::from(reg);
+            let imm = instruction.immediate64();
+            VMCmd::RegImm {
+                len: instruction.len() as u8,
+                vop: VMOp::SetReg64Imm,
+                dst,
+                src: &imm.to_le_bytes(),
+            }
+        }
+        Code::Mov_r64_rm64 => {
+            let dst = VMReg::from(instruction.op0_register());
+
+            match instruction.op1_kind() {
+                OpKind::Register => {
+                    let src = VMReg::from(instruction.op1_register());
+                    VMCmd::RegReg {
+                        len: instruction.len() as u8,
+                        vop: VMOp::SetReg64Reg,
+                        dst,
+                        src,
+                    }
+                }
+                OpKind::Memory => {
+                    let src = VMMem::from(instruction);
+                    VMCmd::RegMem {
+                        len: instruction.len() as u8,
+                        vop: VMOp::SetReg64Mem,
+                        dst,
+                        src,
+                    }
+                }
+                _ => return None,
+            }
+        }
+        Code::Call_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::CallRel {
+                len: instruction.len() as u8,
+                vop: VMOp::CallRel,
+                dst,
+            }
+        }
+        Code::Call_rm64 => match instruction.op0_kind() {
+            OpKind::Register => {
+                let dst = VMReg::from(instruction.op0_register());
+                VMCmd::CallReg {
+                    len: instruction.len() as u8,
+                    vop: VMOp::CallReg,
+                    dst,
+                }
+            }
+            OpKind::Memory => {
+                let dst = VMMem::from(instruction);
+                VMCmd::CallMem {
+                    len: instruction.len() as u8,
+                    vop: VMOp::CallMem,
+                    dst,
+                }
+            }
+            _ => return None,
+        },
+        _ => return None,
+    };
+
+    Some(bytecode.encode())
+}
+
+#[derive(Default)]
+pub struct VMBytecode {
+    entries: HashMap<u32, Vec<u8>>,
+}
+
+impl VMBytecode {
+    pub fn set(&mut self, key: u32, bytecode: Vec<u8>) {
+        self.entries.insert(key, bytecode);
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut entries: Vec<(&u32, &Vec<u8>)> = self.entries.iter().collect();
+        entries.sort_by_key(|&(k, _)| *k);
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&entries.len().to_le_bytes());
+
+        let mut offset = 0u32;
+
+        for (&key, bytecode) in &entries {
+            bytes.extend_from_slice(&key.to_le_bytes());
+            bytes.extend_from_slice(&offset.to_le_bytes());
+            offset += bytecode.len() as u32;
+        }
+
+        for (_, bytecode) in entries {
+            bytes.extend_from_slice(bytecode);
+        }
+
+        bytes
+    }
+}

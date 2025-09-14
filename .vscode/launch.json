@@ -1,0 +1,55 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'obfuscator'",
+      "cargo": {
+        "args": ["build", "--bin=obfuscator", "--package=obfuscator"],
+        "filter": {
+          "name": "obfuscator",
+          "kind": "bin"
+        }
+      },
+      "args": ["./binaries/crack-me.exe"],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'obfuscator'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=obfuscator",
+          "--package=obfuscator"
+        ],
+        "filter": {
+          "name": "obfuscator",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'pe_rewriter'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=pe-rewriter"],
+        "filter": {
+          "name": "pe_rewriter",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
