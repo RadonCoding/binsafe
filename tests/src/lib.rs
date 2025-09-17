@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use std::mem;
 
     use iced_x86::{
         code_asm::{ptr, rcx, rdx, CodeAssembler},
@@ -48,7 +47,7 @@ mod tests {
 
         unsafe { std::ptr::copy_nonoverlapping(code.as_ptr(), mem as *mut u8, code.len()) };
 
-        let entry_point: extern "C" fn() -> u64 = unsafe { mem::transmute(mem) };
+        let entry_point: extern "C" fn() -> u64 = unsafe { std::mem::transmute(mem) };
 
         entry_point();
 
@@ -58,8 +57,50 @@ mod tests {
     }
 
     #[test]
+    fn pushimm32() {
+        const EXPECTED_BYTE: i32 = 0xDECEA5EDu32 as i32;
+        const EXPECTED: u64 = EXPECTED_BYTE as u64;
+
+        let mut stack = [0u8; 0x8];
+
+        let mut registers = [0u64; VM_REG_COUNT];
+        registers[(VMReg::Rsp as u8 - 1) as usize] = stack.as_mut_ptr() as u64 + stack.len() as u64;
+
+        let instruction = Instruction::with1(Code::Pushq_imm32, EXPECTED as i32).unwrap();
+
+        let bytecode = vm::bytecode::convert(&instruction).unwrap();
+
+        run_bytecode(&mut registers, &bytecode);
+
+        let sp = registers[(VMReg::Rsp as u8 - 1) as usize] as *const u8;
+
+        assert_eq!(unsafe { *(sp as *const u64) }, EXPECTED);
+    }
+
+    #[test]
+    fn pushreg64() {
+        const EXPECTED: u64 = 0xDECEA5ED;
+
+        let mut stack = [0u8; 0x8];
+
+        let mut registers = [0u64; VM_REG_COUNT];
+        registers[(VMReg::Rax as u8 - 1) as usize] = EXPECTED;
+        registers[(VMReg::Rsp as u8 - 1) as usize] = stack.as_mut_ptr() as u64 + stack.len() as u64;
+
+        let instruction = Instruction::with1(Code::Push_r64, Register::RAX).unwrap();
+
+        let bytecode = vm::bytecode::convert(&instruction).unwrap();
+
+        run_bytecode(&mut registers, &bytecode);
+
+        let sp = registers[(VMReg::Rsp as u8 - 1) as usize] as *const u8;
+
+        assert_eq!(unsafe { *(sp as *const u64) }, EXPECTED);
+    }
+
+    #[test]
     fn setreg64imm() {
-        const EXPECTED: u64 = 0xDEADC0DE;
+        const EXPECTED: u64 = 0xDECEA5ED;
 
         let mut registers = [0u64; VM_REG_COUNT];
 
@@ -74,7 +115,7 @@ mod tests {
 
     #[test]
     fn setreg64reg() {
-        const EXPECTED: u64 = 0xDEADC0DE;
+        const EXPECTED: u64 = 0xDECEA5ED;
 
         let mut registers = [0u64; VM_REG_COUNT];
         registers[(VMReg::Rcx as u8 - 1) as usize] = EXPECTED;
@@ -91,7 +132,7 @@ mod tests {
 
     #[test]
     fn setreg64mem() {
-        const EXPECTED: u64 = 0xDEADC0DE;
+        const EXPECTED: u64 = 0xDECEA5ED;
 
         let mut registers = [0u64; VM_REG_COUNT];
         registers[(VMReg::Rcx as u8 - 1) as usize] = &EXPECTED as *const u64 as u64;
@@ -112,7 +153,7 @@ mod tests {
 
     #[test]
     fn setmemreg64() {
-        const EXPECTED: u64 = 0xDEADC0DE;
+        const EXPECTED: u64 = 0xDECEA5ED;
 
         let mut rax = 0u64;
 
