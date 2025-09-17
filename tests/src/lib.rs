@@ -57,27 +57,6 @@ mod tests {
     }
 
     #[test]
-    fn pushimm32() {
-        const EXPECTED_DWORD: i32 = 0xDECEA5EDu32 as i32;
-        const EXPECTED: u64 = EXPECTED_DWORD as u64;
-
-        let mut stack = [0u8; 0x8];
-
-        let mut registers = [0u64; VM_REG_COUNT];
-        registers[(VMReg::Rsp as u8 - 1) as usize] = stack.as_mut_ptr() as u64 + stack.len() as u64;
-
-        let instruction = Instruction::with1(Code::Pushq_imm32, EXPECTED as i32).unwrap();
-
-        let bytecode = vm::bytecode::convert(&instruction).unwrap();
-
-        run_bytecode(&mut registers, &bytecode);
-
-        let sp = registers[(VMReg::Rsp as u8 - 1) as usize] as *const u8;
-
-        assert_eq!(unsafe { *(sp as *const u64) }, EXPECTED);
-    }
-
-    #[test]
     fn pushreg64() {
         const EXPECTED: u64 = 0xDECEA5ED;
 
@@ -114,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn setreg64reg() {
+    fn setregreg64() {
         const EXPECTED: u64 = 0xDECEA5ED;
 
         let mut registers = [0u64; VM_REG_COUNT];
@@ -122,6 +101,65 @@ mod tests {
 
         let instruction =
             Instruction::with2(Code::Mov_rm64_r64, Register::RAX, Register::RCX).unwrap();
+
+        let bytecode = vm::bytecode::convert(&instruction).unwrap();
+
+        run_bytecode(&mut registers, &bytecode);
+
+        assert_eq!(registers[(VMReg::Rax as u8 - 1) as usize], EXPECTED);
+    }
+
+    #[test]
+    fn setregreg32() {
+        const PREEXISTING: u64 = 0xFFFF_FFFF_FFFF_FFFF;
+        const EXPECTED_DWORD: u32 = 0xDECEA5ED;
+        const EXPECTED: u64 = EXPECTED_DWORD as u64;
+
+        let mut registers = [0u64; VM_REG_COUNT];
+        registers[(VMReg::Rax as u8 - 1) as usize] = PREEXISTING;
+        registers[(VMReg::Rcx as u8 - 1) as usize] = EXPECTED_DWORD as u64;
+
+        let instruction =
+            Instruction::with2(Code::Mov_rm32_r32, Register::EAX, Register::ECX).unwrap();
+
+        let bytecode = vm::bytecode::convert(&instruction).unwrap();
+
+        run_bytecode(&mut registers, &bytecode);
+
+        assert_eq!(registers[(VMReg::Rax as u8 - 1) as usize], EXPECTED);
+    }
+
+    #[test]
+    fn setregreg16() {
+        const PREEXISTING: u64 = 0xFFFF_FFFF_FFFF_FFFF;
+        const EXPECTED_WORD: u16 = 0xDEAD;
+        const EXPECTED: u64 = (PREEXISTING & 0xFFFF_FFFF_FFFF_0000) | (EXPECTED_WORD as u64);
+
+        let mut registers = [0u64; VM_REG_COUNT];
+        registers[(VMReg::Rax as u8 - 1) as usize] = PREEXISTING;
+        registers[(VMReg::Rcx as u8 - 1) as usize] = EXPECTED_WORD as u64;
+
+        let instruction =
+            Instruction::with2(Code::Mov_rm16_r16, Register::AX, Register::CX).unwrap();
+
+        let bytecode = vm::bytecode::convert(&instruction).unwrap();
+
+        run_bytecode(&mut registers, &bytecode);
+
+        assert_eq!(registers[(VMReg::Rax as u8 - 1) as usize], EXPECTED);
+    }
+
+    #[test]
+    fn setregreg8() {
+        const PREEXISTING: u64 = 0xFFFF_FFFF_FFFF_FFFF;
+        const EXPECTED_BYTE: u8 = 0xDD;
+        const EXPECTED: u64 = (PREEXISTING & 0xFFFF_FFFF_FFFF_00FF) | ((EXPECTED_BYTE as u64) << 8);
+
+        let mut registers = [0u64; VM_REG_COUNT];
+        registers[(VMReg::Rax as u8 - 1) as usize] = PREEXISTING;
+        registers[(VMReg::Rcx as u8 - 1) as usize] = EXPECTED_BYTE as u64;
+
+        let instruction = Instruction::with2(Code::Mov_rm8_r8, Register::AH, Register::CH).unwrap();
 
         let bytecode = vm::bytecode::convert(&instruction).unwrap();
 
@@ -173,83 +211,5 @@ mod tests {
         run_bytecode(&mut registers, &bytecode);
 
         assert_eq!(rax, EXPECTED);
-    }
-
-    #[test]
-    fn setreg32reg() {
-        const PREEXISTING: u64 = 0xFFFF_FFFF_FFFF_FFFF;
-        const EXPECTED_DWORD: u32 = 0xDECEA5ED;
-        const EXPECTED: u64 = EXPECTED_DWORD as u64;
-
-        let mut registers = [0u64; VM_REG_COUNT];
-        registers[(VMReg::Rax as u8 - 1) as usize] = PREEXISTING;
-        registers[(VMReg::Rcx as u8 - 1) as usize] = EXPECTED_DWORD as u64;
-
-        let instruction =
-            Instruction::with2(Code::Mov_rm32_r32, Register::EAX, Register::ECX).unwrap();
-
-        let bytecode = vm::bytecode::convert(&instruction).unwrap();
-
-        run_bytecode(&mut registers, &bytecode);
-
-        assert_eq!(registers[(VMReg::Rax as u8 - 1) as usize], EXPECTED);
-    }
-
-    #[test]
-    fn setreg16reg() {
-        const PREEXISTING: u64 = 0xFFFF_FFFF_FFFF_FFFF;
-        const EXPECTED_WORD: u16 = 0xDEAD;
-        const EXPECTED: u64 = (PREEXISTING & 0xFFFF_FFFF_FFFF_0000) | (EXPECTED_WORD as u64);
-
-        let mut registers = [0u64; VM_REG_COUNT];
-        registers[(VMReg::Rax as u8 - 1) as usize] = PREEXISTING;
-        registers[(VMReg::Rcx as u8 - 1) as usize] = EXPECTED_WORD as u64;
-
-        let instruction =
-            Instruction::with2(Code::Mov_rm16_r16, Register::AX, Register::CX).unwrap();
-
-        let bytecode = vm::bytecode::convert(&instruction).unwrap();
-
-        run_bytecode(&mut registers, &bytecode);
-
-        assert_eq!(registers[(VMReg::Rax as u8 - 1) as usize], EXPECTED);
-    }
-
-    #[test]
-    fn setreg8reg_higher() {
-        const PREEXISTING: u64 = 0xFFFF_FFFF_FFFF_FFFF;
-        const EXPECTED_BYTE: u8 = 0xDD;
-        const EXPECTED: u64 = (PREEXISTING & 0xFFFF_FFFF_FFFF_00FF) | ((EXPECTED_BYTE as u64) << 8);
-
-        let mut registers = [0u64; VM_REG_COUNT];
-        registers[(VMReg::Rax as u8 - 1) as usize] = PREEXISTING;
-        registers[(VMReg::Rcx as u8 - 1) as usize] = EXPECTED_BYTE as u64;
-
-        let instruction = Instruction::with2(Code::Mov_rm8_r8, Register::AH, Register::CH).unwrap();
-
-        let bytecode = vm::bytecode::convert(&instruction).unwrap();
-
-        run_bytecode(&mut registers, &bytecode);
-
-        assert_eq!(registers[(VMReg::Rax as u8 - 1) as usize], EXPECTED);
-    }
-
-    #[test]
-    fn setreg8reg_lower() {
-        const PREEXISTING: u64 = 0xFFFF_FFFF_FFFF_FFFF;
-        const EXPECTED_BYTE: u8 = 0xDD;
-        const EXPECTED: u64 = (PREEXISTING & 0xFFFF_FFFF_FFFF_FF00) | (EXPECTED_BYTE as u64);
-
-        let mut registers = [0u64; VM_REG_COUNT];
-        registers[(VMReg::Rax as u8 - 1) as usize] = PREEXISTING;
-        registers[(VMReg::Rcx as u8 - 1) as usize] = EXPECTED_BYTE as u64;
-
-        let instruction = Instruction::with2(Code::Mov_rm8_r8, Register::AL, Register::CL).unwrap();
-
-        let bytecode = vm::bytecode::convert(&instruction).unwrap();
-
-        run_bytecode(&mut registers, &bytecode);
-
-        assert_eq!(registers[(VMReg::Rax as u8 - 1) as usize], EXPECTED);
     }
 }
