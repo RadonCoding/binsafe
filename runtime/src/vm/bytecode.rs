@@ -301,7 +301,7 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
             let src = instruction.immediate8();
             VMCmd::PushImm {
                 len: instruction.len() as u8,
-                vop: VMOp::SetRegImm,
+                vop: VMOp::PushImm,
                 bits: VMBits::Lower8,
                 src: &src.to_le_bytes(),
             }
@@ -310,7 +310,7 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
             let src = instruction.immediate16();
             VMCmd::PushImm {
                 len: instruction.len() as u8,
-                vop: VMOp::SetRegImm,
+                vop: VMOp::PushImm,
                 bits: VMBits::Lower16,
                 src: &src.to_le_bytes(),
             }
@@ -319,7 +319,7 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
             let src = instruction.immediate32();
             VMCmd::PushImm {
                 len: instruction.len() as u8,
-                vop: VMOp::SetRegImm,
+                vop: VMOp::PushImm,
                 bits: VMBits::Lower32,
                 src: &src.to_le_bytes(),
             }
