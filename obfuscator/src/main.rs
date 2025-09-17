@@ -66,6 +66,7 @@ impl Engine {
             };
 
             let offset = (instruction.ip() - ip) as usize;
+
             code[offset] = 0xCC;
 
             for j in 1..instruction.len() {
