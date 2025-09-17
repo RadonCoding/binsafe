@@ -7,8 +7,8 @@ use crate::{
 
 // unsigned char* (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
-    // mov rax, 0x8; sub [rcx + ...], rax
-    utils::sub_vreg_imm_64(rt, rcx, rax, 0x8, VMReg::Rsp);
+    // sub [rcx + ...], 0x8
+    utils::sub_vreg_imm_64(rt, rcx, 0x8, VMReg::Rsp);
 
     // mov r8, [rcx + ...]
     utils::load_vreg_reg_64(rt, rcx, VMReg::Rip, r8);

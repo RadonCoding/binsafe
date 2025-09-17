@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{ptr, AsmRegister64};
+use iced_x86::code_asm::{ptr, qword_ptr, AsmRegister64};
 
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
 
@@ -24,17 +24,11 @@ pub fn sub_vreg_reg_64(rt: &mut Runtime, src: AsmRegister64, from: AsmRegister64
     rt.asm.sub(ptr(src + (to as u8 - 1) * 8), from).unwrap();
 }
 
-pub fn sub_vreg_imm_64(
-    rt: &mut Runtime,
-    src: AsmRegister64,
-    with: AsmRegister64,
-    from: u64,
-    to: VMReg,
-) {
-    // mov ..., ...
-    rt.asm.mov(with, from).unwrap();
+pub fn sub_vreg_imm_64(rt: &mut Runtime, src: AsmRegister64, from: i32, to: VMReg) {
     // sub [...], ...
-    rt.asm.sub(ptr(src + (to as u8 - 1) * 8), with).unwrap();
+    rt.asm
+        .sub(qword_ptr(src + (to as u8 - 1) * 8), from)
+        .unwrap();
 }
 
 pub fn store_vmreg_memory_64(

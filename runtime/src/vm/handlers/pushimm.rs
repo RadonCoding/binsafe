@@ -15,8 +15,8 @@ pub fn build(rt: &mut Runtime) {
     let mut lower32 = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
-    // mov rax, 0x8; sub [rcx + ...], rax
-    utils::sub_vreg_imm_64(rt, rcx, rax, 0x8, VMReg::Rsp);
+    // sub [rcx + ...], 0x8
+    utils::sub_vreg_imm_64(rt, rcx, 0x8, VMReg::Rsp);
 
     // mov r8b, [rdx] -> bits
     rt.asm.mov(r8b, byte_ptr(rdx)).unwrap();
