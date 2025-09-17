@@ -12,6 +12,8 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
 
     let table = [
+        (VMOp::PushImm, FnDef::VmHandlerPushImm),
+        (VMOp::PushReg64, FnDef::VmHandlerPushReg64),
         (VMOp::SetRegImm, FnDef::VmHandlerSetRegImm),
         (VMOp::SetRegReg, FnDef::VmHandlerSetRegReg),
         (VMOp::SetRegMem, FnDef::VmHandlerSetRegMem),

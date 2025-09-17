@@ -1,6 +1,8 @@
 pub mod callmem;
 pub mod callreg;
 pub mod callrel;
+pub mod pushimm;
+pub mod pushreg64;
 pub mod setmemreg;
 pub mod setregimm;
 pub mod setregmem;

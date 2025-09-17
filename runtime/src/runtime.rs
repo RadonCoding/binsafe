@@ -22,6 +22,8 @@ pub enum FnDef {
     /* UTILS */
     ComputeEffectiveAddress,
     /* HANDLERS */
+    VmHandlerPushImm,
+    VmHandlerPushReg64,
     VmHandlerSetRegImm,
     VmHandlerSetRegReg,
     VmHandlerSetRegMem,
@@ -60,6 +62,8 @@ impl<'a> Runtime<'a> {
 
         func_labels.insert(FnDef::ComputeEffectiveAddress, asm.create_label());
 
+        func_labels.insert(FnDef::VmHandlerPushImm, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerPushReg64, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegMem, asm.create_label());
@@ -207,6 +211,8 @@ impl<'a> Runtime<'a> {
             vm::utils::compute_effective_address::build,
         );
 
+        self.define_func(FnDef::VmHandlerPushImm, vm::handlers::pushimm::build);
+        self.define_func(FnDef::VmHandlerPushReg64, vm::handlers::pushreg64::build);
         self.define_func(FnDef::VmHandlerSetRegImm, vm::handlers::setregimm::build);
         self.define_func(FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build);
         self.define_func(FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build);

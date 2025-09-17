@@ -42,7 +42,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower8).unwrap();
     {
-        // movzx rax, [rdx] -> imm
+        // movzx rax, [rdx] -> src
         rt.asm.movzx(rax, byte_ptr(rdx)).unwrap();
         // add rdx, 0x1
         rt.asm.add(rdx, 0x1).unwrap();
@@ -62,7 +62,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut higher8).unwrap();
     {
-        // movzx rax, [rdx] -> imm
+        // movzx rax, [rdx] -> src
         rt.asm.movzx(rax, byte_ptr(rdx)).unwrap();
         // add rdx, 0x1
         rt.asm.add(rdx, 0x1).unwrap();
@@ -84,7 +84,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower16).unwrap();
     {
-        // movzx rax, [rdx] -> imm
+        // movzx rax, [rdx] -> src
         rt.asm.movzx(rax, word_ptr(rdx)).unwrap();
         // add rdx, 0x2
         rt.asm.add(rdx, 0x2).unwrap();
@@ -104,7 +104,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower32).unwrap();
     {
-        // mov eax, [rdx] -> imm
+        // mov eax, [rdx] -> src
         rt.asm.mov(eax, ptr(rdx)).unwrap();
         // add rdx, 0x4
         rt.asm.add(rdx, 0x4).unwrap();
@@ -118,7 +118,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower64).unwrap();
     {
-        // mov rax, [rdx] -> imm
+        // mov rax, [rdx] -> src
         rt.asm.mov(rax, ptr(rdx)).unwrap();
         // add rdx, 0x8
         rt.asm.add(rdx, 0x8).unwrap();

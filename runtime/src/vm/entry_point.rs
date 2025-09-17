@@ -69,7 +69,7 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.mov(rax, ptr(r13 + offset)).unwrap();
         }
         // mov [r12 + ...], rax
-        utils::store_vmreg(rt, r12, rax, reg);
+        utils::store_vreg_reg_64(rt, r12, rax, reg);
     }
 
     // xor r14, r14
@@ -78,7 +78,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut lookup).unwrap();
     {
         // mov rcx, [r12 + ...]
-        utils::load_vmreg(rt, r12, VMReg::Rip, rcx);
+        utils::load_vreg_reg_64(rt, r12, VMReg::Rip, rcx);
         // call ...
         rt.asm.call(rt.func_labels[&FnDef::VmSearch]).unwrap();
 
@@ -105,7 +105,7 @@ pub fn build(rt: &mut Runtime) {
     {
         for &(offset, reg) in CONTEXT_STATE_MAP {
             // mov rax, [r12 + ...]
-            utils::load_vmreg(rt, r12, reg, rax);
+            utils::load_vreg_reg_64(rt, r12, reg, rax);
 
             if reg == VMReg::Flags {
                 // mov [r13 + ...], rax

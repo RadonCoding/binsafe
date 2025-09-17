@@ -5,6 +5,8 @@ use iced_x86::{Code, Instruction, OpKind, Register};
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 pub enum VMOp {
+    PushImm,
+    PushReg64,
     SetRegImm,
     SetRegReg,
     SetRegMem,
@@ -158,6 +160,17 @@ impl VMMem {
 }
 
 pub enum VMCmd<'a> {
+    PushImm {
+        len: u8,
+        vop: VMOp,
+        bits: VMBits,
+        src: &'a [u8],
+    },
+    PushReg64 {
+        len: u8,
+        vop: VMOp,
+        src: VMReg,
+    },
     RegImm {
         len: u8,
         vop: VMOp,
@@ -206,6 +219,20 @@ pub enum VMCmd<'a> {
 impl<'a> VMCmd<'a> {
     fn encode(&self) -> Vec<u8> {
         match self {
+            VMCmd::PushImm {
+                len,
+                vop,
+                bits,
+                src,
+            } => {
+                let mut bytes = vec![*len, *vop as u8, *bits as u8];
+                bytes.extend_from_slice(src);
+                bytes
+            }
+            VMCmd::PushReg64 { len, vop, src } => {
+                let bytes = vec![*len, *vop as u8, *src as u8];
+                bytes
+            }
             Self::RegImm {
                 len,
                 vop,
@@ -270,53 +297,89 @@ impl<'a> VMCmd<'a> {
 
 pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
     let bytecode = match instruction.code() {
+        Code::Pushq_imm8 => {
+            let src = instruction.immediate8();
+            VMCmd::PushImm {
+                len: instruction.len() as u8,
+                vop: VMOp::SetRegImm,
+                bits: VMBits::Lower8,
+                src: &src.to_le_bytes(),
+            }
+        }
+        Code::Push_imm16 => {
+            let src = instruction.immediate16();
+            VMCmd::PushImm {
+                len: instruction.len() as u8,
+                vop: VMOp::SetRegImm,
+                bits: VMBits::Lower16,
+                src: &src.to_le_bytes(),
+            }
+        }
+        Code::Pushq_imm32 => {
+            let src = instruction.immediate32();
+            VMCmd::PushImm {
+                len: instruction.len() as u8,
+                vop: VMOp::SetRegImm,
+                bits: VMBits::Lower32,
+                src: &src.to_le_bytes(),
+            }
+        }
+        Code::Push_r64 => {
+            let reg = instruction.op0_register();
+            let src = VMReg::from(reg);
+            VMCmd::PushReg64 {
+                len: instruction.len() as u8,
+                vop: VMOp::PushReg64,
+                src: src,
+            }
+        }
         Code::Mov_r8_imm8 => {
             let reg = instruction.op0_register();
             let bits = VMBits::from(reg);
             let dst = VMReg::from(reg);
-            let imm = instruction.immediate8();
+            let src = instruction.immediate8();
             VMCmd::RegImm {
                 len: instruction.len() as u8,
                 vop: VMOp::SetRegImm,
                 bits,
                 dst,
-                src: &imm.to_le_bytes(),
+                src: &src.to_le_bytes(),
             }
         }
         Code::Mov_r16_imm16 => {
             let reg = instruction.op0_register();
             let dst = VMReg::from(reg);
-            let imm = instruction.immediate16();
+            let src = instruction.immediate16();
             VMCmd::RegImm {
                 len: instruction.len() as u8,
                 vop: VMOp::SetRegImm,
                 bits: VMBits::Lower16,
                 dst,
-                src: &imm.to_le_bytes(),
+                src: &src.to_le_bytes(),
             }
         }
         Code::Mov_r32_imm32 => {
             let reg = instruction.op0_register();
             let dst = VMReg::from(reg);
-            let imm = instruction.immediate32();
+            let src = instruction.immediate32();
             VMCmd::RegImm {
                 len: instruction.len() as u8,
                 vop: VMOp::SetRegImm,
                 bits: VMBits::Lower32,
                 dst,
-                src: &imm.to_le_bytes(),
+                src: &src.to_le_bytes(),
             }
         }
         Code::Mov_r64_imm64 => {
             let reg = instruction.op0_register();
             let dst = VMReg::from(reg);
-            let imm = instruction.immediate64();
+            let src = instruction.immediate64();
             VMCmd::RegImm {
                 len: instruction.len() as u8,
                 vop: VMOp::SetRegImm,
                 bits: VMBits::Lower64,
                 dst,
-                src: &imm.to_le_bytes(),
+                src: &src.to_le_bytes(),
             }
         }
         Code::Mov_r64_rm64 | Code::Mov_r32_rm32 | Code::Mov_r16_rm16 | Code::Mov_r8_rm8 => {

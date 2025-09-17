@@ -17,17 +17,13 @@ pub fn build(rt: &mut Runtime) {
     // mov r14, rdx
     rt.asm.mov(r14, rdx).unwrap();
 
-    // mov rax, [r13 + ...]
-    utils::load_vmreg(rt, r13, VMReg::Rsp, rax);
-    // sub rax, 0x8
-    rt.asm.sub(rax, 0x8).unwrap();
-    // mov [r13 + ...], rax
-    utils::store_vmreg(rt, r13, rax, VMReg::Rsp);
+    // mov rax, 0x8; sub [rcx + ...], rax
+    utils::sub_vreg_imm_64(rt, rcx, rax, 0x8, VMReg::Rsp);
 
     // mov r8, [r13 + ...]
-    utils::load_vmreg(rt, r13, VMReg::Rip, r8);
-    // mov [r13 + ...], r8
-    utils::store_vmreg_memory(rt, r13, rax, r8, VMReg::Rsp);
+    utils::load_vreg_reg_64(rt, r13, VMReg::Rip, r8);
+    // mov rax, [rcx + ...]; mov [rax], r8
+    utils::store_vmreg_memory_64(rt, r13, rax, r8, VMReg::Rsp);
 
     // mov rcx, r13
     rt.asm.mov(rcx, r13).unwrap();
@@ -44,7 +40,7 @@ pub fn build(rt: &mut Runtime) {
     // mov rax, [rax]
     rt.asm.mov(rax, ptr(rax)).unwrap();
     // mov [r13 + ...], rax
-    utils::store_vmreg(rt, r13, rax, VMReg::Rip);
+    utils::store_vreg_reg_64(rt, r13, rax, VMReg::Rip);
 
     // mov rax, r14
     rt.asm.mov(rax, r14).unwrap();
