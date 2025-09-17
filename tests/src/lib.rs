@@ -58,8 +58,8 @@ mod tests {
 
     #[test]
     fn pushimm32() {
-        const EXPECTED_BYTE: i32 = 0xDECEA5EDu32 as i32;
-        const EXPECTED: u64 = EXPECTED_BYTE as u64;
+        const EXPECTED_DWORD: i32 = 0xDECEA5EDu32 as i32;
+        const EXPECTED: u64 = EXPECTED_DWORD as u64;
 
         let mut stack = [0u8; 0x8];
 
