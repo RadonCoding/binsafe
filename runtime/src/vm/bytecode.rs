@@ -5,9 +5,9 @@ use iced_x86::{Code, Instruction, OpKind, Register};
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 pub enum VMOp {
-    SetReg64Imm,
-    SetReg64Reg,
-    SetReg64Mem,
+    SetRegImm,
+    SetRegReg,
+    SetRegMem,
     CallRel,
     CallReg,
     CallMem,
@@ -60,6 +60,33 @@ impl From<Register> for VMReg {
             Register::R14 | Register::R14D | Register::R14W | Register::R14L => Self::R14,
             Register::R15 | Register::R15D | Register::R15W | Register::R15L => Self::R15,
             Register::RIP => Self::Rip,
+            _ => panic!("unsupported register: {reg:?}"),
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
+pub enum VMBits {
+    Lower8,
+    Higher8,
+    Lower16,
+    Lower32,
+    Lower64,
+}
+
+impl From<Register> for VMBits {
+    fn from(reg: Register) -> Self {
+        match reg {
+            reg if (reg >= Register::AL && reg <= Register::BL)
+                || (reg >= Register::SPL && reg <= Register::R15L) =>
+            {
+                Self::Lower8
+            }
+            reg if (reg >= Register::AH && reg <= Register::BH) => Self::Higher8,
+            reg if (reg >= Register::AX && reg <= Register::R15W) => Self::Lower16,
+            reg if (reg >= Register::EAX && reg <= Register::R15D) => Self::Lower32,
+            reg if (reg >= Register::RAX && reg <= Register::RIP) => Self::Lower64,
             _ => panic!("unsupported register: {reg:?}"),
         }
     }
@@ -129,24 +156,28 @@ pub enum VMCmd<'a> {
     RegImm {
         len: u8,
         vop: VMOp,
+        bits: VMBits,
         dst: VMReg,
         src: &'a [u8],
     },
     RegReg {
         len: u8,
         vop: VMOp,
+        bits: VMBits,
         dst: VMReg,
         src: VMReg,
     },
     RegMem {
         len: u8,
         vop: VMOp,
+        bits: VMBits,
         dst: VMReg,
         src: VMMem,
     },
     MemReg {
         len: u8,
         vop: VMOp,
+        bits: VMBits,
         dst: VMMem,
         src: VMReg,
     },
@@ -170,22 +201,46 @@ pub enum VMCmd<'a> {
 impl<'a> VMCmd<'a> {
     fn encode(&self) -> Vec<u8> {
         match self {
-            Self::RegImm { len, vop, dst, src } => {
-                let mut bytes = vec![*len, *vop as u8, *dst as u8];
+            Self::RegImm {
+                len,
+                vop,
+                bits,
+                dst,
+                src,
+            } => {
+                let mut bytes = vec![*len, *vop as u8, *bits as u8, *dst as u8];
                 bytes.extend_from_slice(src);
                 bytes
             }
-            Self::RegReg { len, vop, dst, src } => {
-                let bytes = vec![*len, *vop as u8, *dst as u8, *src as u8];
+            Self::RegReg {
+                len,
+                vop,
+                bits,
+                dst,
+                src,
+            } => {
+                let bytes = vec![*len, *vop as u8, *bits as u8, *dst as u8, *src as u8];
                 bytes
             }
-            Self::RegMem { len, vop, dst, src } => {
-                let mut bytes = vec![*len, *vop as u8, *dst as u8];
+            Self::RegMem {
+                len,
+                vop,
+                bits,
+                dst,
+                src,
+            } => {
+                let mut bytes = vec![*len, *vop as u8, *bits as u8, *dst as u8];
                 bytes.extend_from_slice(&src.encode());
                 bytes
             }
-            Self::MemReg { len, vop, dst, src } => {
-                let mut bytes = vec![*len, *vop as u8];
+            Self::MemReg {
+                len,
+                vop,
+                bits,
+                dst,
+                src,
+            } => {
+                let mut bytes = vec![*len, *vop as u8, *bits as u8];
                 bytes.extend_from_slice(&dst.encode());
                 bytes.push(*src as u8);
                 bytes
@@ -208,32 +263,69 @@ impl<'a> VMCmd<'a> {
     }
 }
 
-pub fn is_lower(reg: Register) -> bool {
-    (reg >= Register::AL && reg <= Register::BL) || (reg >= Register::SPL && reg <= Register::R15L)
-}
-
 pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
     let bytecode = match instruction.code() {
+        Code::Mov_r8_imm8 => {
+            let reg = instruction.op0_register();
+            let bits = VMBits::from(reg);
+            let dst = VMReg::from(reg);
+            let imm = instruction.immediate8();
+            VMCmd::RegImm {
+                len: instruction.len() as u8,
+                vop: VMOp::SetRegImm,
+                bits,
+                dst,
+                src: &imm.to_le_bytes(),
+            }
+        }
+        Code::Mov_r16_imm16 => {
+            let reg = instruction.op0_register();
+            let dst = VMReg::from(reg);
+            let imm = instruction.immediate16();
+            VMCmd::RegImm {
+                len: instruction.len() as u8,
+                vop: VMOp::SetRegImm,
+                bits: VMBits::Lower16,
+                dst,
+                src: &imm.to_le_bytes(),
+            }
+        }
+        Code::Mov_r32_imm32 => {
+            let reg = instruction.op0_register();
+            let dst = VMReg::from(reg);
+            let imm = instruction.immediate32();
+            VMCmd::RegImm {
+                len: instruction.len() as u8,
+                vop: VMOp::SetRegImm,
+                bits: VMBits::Lower32,
+                dst,
+                src: &imm.to_le_bytes(),
+            }
+        }
         Code::Mov_r64_imm64 => {
             let reg = instruction.op0_register();
             let dst = VMReg::from(reg);
             let imm = instruction.immediate64();
             VMCmd::RegImm {
                 len: instruction.len() as u8,
-                vop: VMOp::SetReg64Imm,
+                vop: VMOp::SetRegImm,
+                bits: VMBits::Lower64,
                 dst,
                 src: &imm.to_le_bytes(),
             }
         }
-        Code::Mov_r64_rm64 => {
-            let dst = VMReg::from(instruction.op0_register());
+        Code::Mov_r64_rm64 | Code::Mov_r32_rm32 | Code::Mov_r16_rm16 | Code::Mov_r8_rm8 => {
+            let reg = instruction.op0_register();
+            let bits = VMBits::from(reg);
+            let dst = VMReg::from(reg);
 
             match instruction.op1_kind() {
                 OpKind::Register => {
                     let src = VMReg::from(instruction.op1_register());
                     VMCmd::RegReg {
                         len: instruction.len() as u8,
-                        vop: VMOp::SetReg64Reg,
+                        vop: VMOp::SetRegReg,
+                        bits,
                         dst,
                         src,
                     }
@@ -242,7 +334,8 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
                     let src = VMMem::from(instruction);
                     VMCmd::RegMem {
                         len: instruction.len() as u8,
-                        vop: VMOp::SetReg64Mem,
+                        vop: VMOp::SetRegMem,
+                        bits,
                         dst,
                         src,
                     }

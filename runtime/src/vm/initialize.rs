@@ -12,9 +12,9 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
 
     let table = [
-        (VMOp::SetReg64Imm, FnDef::VmHandlerSetReg64Imm),
-        (VMOp::SetReg64Reg, FnDef::VmHandlerSetReg64Reg),
-        (VMOp::SetReg64Mem, FnDef::VmHandlerSetReg64Mem),
+        (VMOp::SetRegImm, FnDef::VmHandlerSetRegImm),
+        (VMOp::SetRegReg, FnDef::VmHandlerSetRegReg),
+        (VMOp::SetRegMem, FnDef::VmHandlerSetRegMem),
         (VMOp::CallRel, FnDef::VmHandlerCallRel),
         (VMOp::CallReg, FnDef::VmHandlerCallReg),
         (VMOp::CallMem, FnDef::VmHandlerCallMem),

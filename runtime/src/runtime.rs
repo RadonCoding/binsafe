@@ -22,9 +22,9 @@ pub enum FnDef {
     /* UTILS */
     ComputeEffectiveAddress,
     /* HANDLERS */
-    VmHandlerSetReg64Imm,
-    VmHandlerSetReg64Reg,
-    VmHandlerSetReg64Mem,
+    VmHandlerSetRegImm,
+    VmHandlerSetRegReg,
+    VmHandlerSetRegMem,
     VmHandlerCallRel,
     VmHandlerCallReg,
     VmHandlerCallMem,
@@ -59,9 +59,9 @@ impl<'a> Runtime<'a> {
 
         func_labels.insert(FnDef::ComputeEffectiveAddress, asm.create_label());
 
-        func_labels.insert(FnDef::VmHandlerSetReg64Imm, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerSetReg64Reg, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerSetReg64Mem, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerSetRegImm, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerSetRegReg, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerSetRegMem, asm.create_label());
         func_labels.insert(FnDef::VmHandlerCallRel, asm.create_label());
         func_labels.insert(FnDef::VmHandlerCallReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerCallMem, asm.create_label());
@@ -205,18 +205,9 @@ impl<'a> Runtime<'a> {
             vm::utils::compute_effective_address::build,
         );
 
-        self.define_func(
-            FnDef::VmHandlerSetReg64Imm,
-            vm::handlers::setreg64imm::build,
-        );
-        self.define_func(
-            FnDef::VmHandlerSetReg64Reg,
-            vm::handlers::setreg64reg::build,
-        );
-        self.define_func(
-            FnDef::VmHandlerSetReg64Mem,
-            vm::handlers::setreg64mem::build,
-        );
+        self.define_func(FnDef::VmHandlerSetRegImm, vm::handlers::setregimm::build);
+        self.define_func(FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build);
+        self.define_func(FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build);
         self.define_func(FnDef::VmHandlerCallRel, vm::handlers::callrel::build);
         self.define_func(FnDef::VmHandlerCallReg, vm::handlers::callreg::build);
         self.define_func(FnDef::VmHandlerCallMem, vm::handlers::callmem::build);

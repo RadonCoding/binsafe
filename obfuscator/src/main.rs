@@ -36,7 +36,7 @@ impl Engine {
         }
     }
 
-    pub fn virtualize(&mut self) {
+    pub fn protect(&mut self) {
         let entry_point = self.pe.get_entrypoint().unwrap();
         let section = self.pe.get_section_by_rva(entry_point).unwrap();
 
@@ -142,11 +142,11 @@ impl Engine {
         let tls = TLSDirectory::parse(&self.pe).unwrap();
 
         macro_rules! get_callbacks {
-            ($tls:expr, $va_constructor:path) => {
+            ($tls:expr, $va_type:path) => {
                 $tls.get_callbacks(&self.pe)
                     .unwrap()
                     .iter()
-                    .map(|va| self.pe.va_to_rva($va_constructor(*va)).unwrap().0)
+                    .map(|va| self.pe.va_to_rva($va_type(*va)).unwrap().0)
                     .collect::<Vec<u32>>()
             };
         }
@@ -220,7 +220,7 @@ fn main() {
     let input = Path::new(&args[1]);
 
     let mut engine = Engine::new(input);
-    engine.virtualize();
+    engine.protect();
     let image = engine.rebuild();
 
     let output = if let Some(extension) = input.extension() {

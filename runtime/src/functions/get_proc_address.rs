@@ -3,7 +3,7 @@ use crate::{
     runtime::{FnDef, Runtime},
 };
 use iced_x86::code_asm::{
-    eax, ecx, ptr, r12, r13, r14, r15, rax, rbp, rbx, rcx, rdx, rsp, word_ptr,
+    eax, ecx, ptr, r12, r13, r14, r15, rax, rbp, rbx, rcx, rdx, rsi, rsp, word_ptr,
 };
 
 // void* (const char*, const char*)
@@ -41,6 +41,8 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.push(r15).unwrap();
     // push rbx
     rt.asm.push(rbx).unwrap();
+    // push rsi
+    rt.asm.push(rsi).unwrap();
 
     // mov r13, rcx
     rt.asm.mov(r13, rcx).unwrap();
@@ -143,10 +145,10 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.add(rcx, r12).unwrap();
         // mov [rbp - ...], rcx
         rt.asm.mov(ptr(rbp - address_of_functions), rcx).unwrap();
-
-        // xor rcx, rcx
-        rt.asm.xor(rcx, rcx).unwrap();
     }
+
+    // xor rsi, rsi
+    rt.asm.xor(rsi, rsi).unwrap();
 
     rt.asm.set_label(&mut name_loop).unwrap();
     {
@@ -157,26 +159,22 @@ pub fn build(rt: &mut Runtime) {
 
         // mov rax, [rbp - ...]
         rt.asm.mov(rax, ptr(rbp - address_of_names)).unwrap();
-        // mov eax, [rax + rcx*4]
-        rt.asm.mov(eax, ptr(rax + rcx * 4)).unwrap();
+        // mov eax, [rax + rsi*4]
+        rt.asm.mov(eax, ptr(rax + rsi * 4)).unwrap();
         // add rax, r12
         rt.asm.add(rax, r12).unwrap();
 
-        // push rcx
-        rt.asm.push(rcx).unwrap();
         // mov rcx, rax
         rt.asm.mov(rcx, rax).unwrap();
         // mov rax, r14
         rt.asm.mov(rdx, r14).unwrap();
         // call ...
         rt.asm.call(rt.func_labels[&FnDef::CompareAnsi]).unwrap();
-        // pop rcx
-        rt.asm.pop(rcx).unwrap();
 
         rt.asm.test(rax, rax).unwrap();
         rt.asm.jnz(found).unwrap();
 
-        rt.asm.inc(rcx).unwrap();
+        rt.asm.inc(rsi).unwrap();
         rt.asm.jmp(name_loop).unwrap();
     }
 
@@ -186,8 +184,8 @@ pub fn build(rt: &mut Runtime) {
         rt.asm
             .mov(rax, ptr(rbp - address_of_name_ordinals))
             .unwrap();
-        // movzx rdx, word ptr [rax + rcx*2]
-        rt.asm.movzx(rdx, word_ptr(rax + rcx * 2)).unwrap();
+        // movzx rdx, word ptr [rax + rsi*2]
+        rt.asm.movzx(rdx, word_ptr(rax + rsi * 2)).unwrap();
 
         // mov rax, [rbp - ...]
         rt.asm.mov(rax, ptr(rbp - address_of_functions)).unwrap();
@@ -211,6 +209,8 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
+        // pop rsi
+        rt.asm.pop(rsi).unwrap();
         // pop rbx
         rt.asm.pop(rbx).unwrap();
         // pop r15

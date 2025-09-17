@@ -2,7 +2,7 @@
 mod tests {
     use iced_x86::{
         code_asm::{ptr, rcx, rdx, CodeAssembler},
-        Code, Instruction, Register,
+        Code, Instruction, MemoryOperand, Register,
     };
     use runtime::{
         runtime::{DataDef, FnDef, Runtime},
@@ -62,6 +62,44 @@ mod tests {
         let mut registers = [0u64; VM_REG_COUNT];
 
         let instruction = Instruction::with2(Code::Mov_r64_imm64, Register::RAX, EXPECTED).unwrap();
+
+        let bytecode = vm::bytecode::convert(&instruction).unwrap();
+
+        run_bytecode(&mut registers, &bytecode);
+
+        assert_eq!(registers[(VMReg::Rax as u8 - 1) as usize], EXPECTED);
+    }
+
+    #[test]
+    fn setreg64reg() {
+        const EXPECTED: u64 = 0xDEADC0DE;
+
+        let mut registers = [0u64; VM_REG_COUNT];
+        registers[(VMReg::Rcx as u8 - 1) as usize] = EXPECTED;
+
+        let instruction =
+            Instruction::with2(Code::Mov_r64_rm64, Register::RAX, Register::RCX).unwrap();
+
+        let bytecode = vm::bytecode::convert(&instruction).unwrap();
+
+        run_bytecode(&mut registers, &bytecode);
+
+        assert_eq!(registers[(VMReg::Rax as u8 - 1) as usize], EXPECTED);
+    }
+
+    #[test]
+    fn setreg64mem() {
+        const EXPECTED: u64 = 0xDEADC0DE;
+
+        let mut registers = [0u64; VM_REG_COUNT];
+        registers[(VMReg::Rcx as u8 - 1) as usize] = &EXPECTED as *const u64 as u64;
+
+        let instruction = Instruction::with2(
+            Code::Mov_r64_rm64,
+            Register::RAX,
+            MemoryOperand::with_base(Register::RCX),
+        )
+        .unwrap();
 
         let bytecode = vm::bytecode::convert(&instruction).unwrap();
 

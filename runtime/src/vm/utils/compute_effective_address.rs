@@ -80,7 +80,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut add_seg).unwrap();
     {
-        // add rax, gs:[0x30]
+        // add rax, gs:[0x30] -> NT_TIB *TEB->NT_TIB.Self
         rt.asm.add(rax, ptr(0x30).gs()).unwrap();
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
