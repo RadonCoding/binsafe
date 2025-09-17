@@ -1,6 +1,4 @@
-use iced_x86::code_asm::{
-    bl, byte_ptr, eax, ptr, r12, r13, r14, r15, rax, rbx, rcx, rdx, word_ptr,
-};
+use iced_x86::code_asm::{al, ax, bl, byte_ptr, eax, ptr, r12, r13, r14, r15, rax, rbx, rcx, rdx};
 
 use crate::{
     runtime::{FnDef, Runtime},
@@ -37,13 +35,6 @@ pub fn build(rt: &mut Runtime) {
     // add r13, 0x1
     rt.asm.add(r13, 0x1).unwrap();
 
-    // movzx r15, [r13] -> dst
-    rt.asm.movzx(r15, byte_ptr(r13)).unwrap();
-    // dec r15
-    rt.asm.dec(r15).unwrap();
-    // add r13, 0x1
-    rt.asm.add(r13, 0x1).unwrap();
-
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();
     // mov rdx, r13
@@ -53,10 +44,17 @@ pub fn build(rt: &mut Runtime) {
         .call(rt.func_labels[&FnDef::ComputeEffectiveAddress])
         .unwrap();
 
-    // mov r14, rax -> src
+    // mov r14, rax -> dst
     rt.asm.mov(r14, rax).unwrap();
     // mov r13, rdx
     rt.asm.mov(r13, rdx).unwrap();
+
+    // movzx r15, [r13] -> src
+    rt.asm.movzx(r15, byte_ptr(r13)).unwrap();
+    // dec r15
+    rt.asm.dec(r15).unwrap();
+    // add r13, 0x1
+    rt.asm.add(r13, 0x1).unwrap();
 
     // cmp bl, ...
     rt.asm.cmp(bl, VMBits::Lower64 as u8 as i32).unwrap();
@@ -77,18 +75,10 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower8).unwrap();
     {
-        // mov rax, [r14]
-        rt.asm.mov(rax, ptr(r14)).unwrap();
-
-        // mov rcx, [r12 + r15*8]
-        rt.asm.mov(rcx, ptr(r12 + r15 * 8)).unwrap();
-        // and rcx, !0xFF
-        rt.asm.and(rcx, !0xFFi32).unwrap();
-        // or rcx, rax
-        rt.asm.or(rcx, rax).unwrap();
-
-        // mov [r12 + r15*8], rcx
-        rt.asm.mov(ptr(r12 + r15 * 8), rcx).unwrap();
+        // mov al, [r12 + r15*8]
+        rt.asm.mov(al, ptr(r12 + r15 * 8)).unwrap();
+        // mov [r14], al
+        rt.asm.mov(ptr(r14), al).unwrap();
 
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
@@ -96,20 +86,13 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut higher8).unwrap();
     {
-        // mov rax, [r14]
-        rt.asm.mov(rax, ptr(r14)).unwrap();
-        // shl rax, 0x8
-        rt.asm.shl(rax, 0x8).unwrap();
+        // mov ax, [r12 + r15*8]
+        rt.asm.mov(ax, ptr(r12 + r15 * 8)).unwrap();
+        // shr ax, 0x8
+        rt.asm.shr(ax, 0x8).unwrap();
 
-        // mov rcx, [r12 + r15*8]
-        rt.asm.mov(rcx, ptr(r12 + r15 * 8)).unwrap();
-        // and rcx, !0xFF00
-        rt.asm.and(rcx, !0xFF00i32).unwrap();
-        // or rcx, rax
-        rt.asm.or(rcx, rax).unwrap();
-
-        // mov [r12 + r15*8], rcx
-        rt.asm.mov(ptr(r12 + r15 * 8), rcx).unwrap();
+        // mov [r14], al
+        rt.asm.mov(ptr(r14), al).unwrap();
 
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
@@ -117,18 +100,11 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower16).unwrap();
     {
-        // mov rax, [r14]
-        rt.asm.mov(rax, word_ptr(r14)).unwrap();
+        // mov ax, [r12 + r15*8]
+        rt.asm.mov(ax, ptr(r12 + r15 * 8)).unwrap();
 
-        // mov rcx, [r12 + r15*8]
-        rt.asm.mov(rcx, ptr(r12 + r15 * 8)).unwrap();
-        // and rcx, !0xFFFF
-        rt.asm.and(rcx, !0xFFFFi32).unwrap();
-        // or rcx, rax
-        rt.asm.or(rcx, rax).unwrap();
-
-        // mov [r12 + r15*8], rcx
-        rt.asm.mov(ptr(r12 + r15 * 8), rcx).unwrap();
+        // mov [r14], ax
+        rt.asm.mov(ptr(r14), ax).unwrap();
 
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
@@ -136,11 +112,11 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower32).unwrap();
     {
-        // mov eax, [r14]
-        rt.asm.mov(eax, ptr(r14)).unwrap();
+        // mov eax, [r12 + r15*8]
+        rt.asm.mov(eax, ptr(r12 + r15 * 8)).unwrap();
 
-        // mov [r12 + r15*8], rax
-        rt.asm.mov(ptr(r12 + r15 * 8), rax).unwrap();
+        // mov [r14], eax
+        rt.asm.mov(ptr(r14), eax).unwrap();
 
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
@@ -148,11 +124,11 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower64).unwrap();
     {
-        // mov rax, [r14]
-        rt.asm.mov(rax, ptr(r14)).unwrap();
+        // mov rax, [r12 + r15*8]
+        rt.asm.mov(rax, ptr(r12 + r15 * 8)).unwrap();
 
-        // mov [r12 + r15*8], rax
-        rt.asm.mov(ptr(r12 + r15 * 8), rax).unwrap();
+        // mov [r14], rax
+        rt.asm.mov(ptr(r14), rax).unwrap();
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();

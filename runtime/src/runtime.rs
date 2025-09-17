@@ -25,6 +25,7 @@ pub enum FnDef {
     VmHandlerSetRegImm,
     VmHandlerSetRegReg,
     VmHandlerSetRegMem,
+    VmHandlerSetMemReg,
     VmHandlerCallRel,
     VmHandlerCallReg,
     VmHandlerCallMem,
@@ -62,6 +63,7 @@ impl<'a> Runtime<'a> {
         func_labels.insert(FnDef::VmHandlerSetRegImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegMem, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerSetMemReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerCallRel, asm.create_label());
         func_labels.insert(FnDef::VmHandlerCallReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerCallMem, asm.create_label());
@@ -208,6 +210,7 @@ impl<'a> Runtime<'a> {
         self.define_func(FnDef::VmHandlerSetRegImm, vm::handlers::setregimm::build);
         self.define_func(FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build);
         self.define_func(FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build);
+        self.define_func(FnDef::VmHandlerSetMemReg, vm::handlers::setmemreg::build);
         self.define_func(FnDef::VmHandlerCallRel, vm::handlers::callrel::build);
         self.define_func(FnDef::VmHandlerCallReg, vm::handlers::callreg::build);
         self.define_func(FnDef::VmHandlerCallMem, vm::handlers::callmem::build);

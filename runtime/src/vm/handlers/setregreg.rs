@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, byte_ptr, ptr, r10, r8, r9, rax, rcx, rdx};
+use iced_x86::code_asm::{al, byte_ptr, eax, ptr, r10, r8, r9, rax, rcx, rdx};
 
 use crate::{runtime::Runtime, vm::bytecode::VMBits};
 
@@ -115,7 +115,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut lower32).unwrap();
     {
         // mov eax, [rcx + r9 * 8]
-        rt.asm.mov(rax, ptr(rcx + r9 * 8)).unwrap();
+        rt.asm.mov(eax, ptr(rcx + r9 * 8)).unwrap();
         // mov [rcx + r8 * 8], rax
         rt.asm.mov(ptr(rcx + r8 * 8), rax).unwrap();
 

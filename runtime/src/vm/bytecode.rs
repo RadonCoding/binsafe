@@ -8,6 +8,7 @@ pub enum VMOp {
     SetRegImm,
     SetRegReg,
     SetRegMem,
+    SetMemReg,
     CallRel,
     CallReg,
     CallMem,
@@ -66,7 +67,7 @@ impl From<Register> for VMReg {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VMBits {
     Lower8,
     Higher8,
@@ -85,8 +86,12 @@ impl From<Register> for VMBits {
             }
             reg if (reg >= Register::AH && reg <= Register::BH) => Self::Higher8,
             reg if (reg >= Register::AX && reg <= Register::R15W) => Self::Lower16,
-            reg if (reg >= Register::EAX && reg <= Register::R15D) => Self::Lower32,
-            reg if (reg >= Register::RAX && reg <= Register::RIP) => Self::Lower64,
+            reg if (reg >= Register::EAX && reg <= Register::R15D) || reg == Register::EIP => {
+                Self::Lower32
+            }
+            reg if (reg >= Register::RAX && reg <= Register::R15) || reg == Register::RIP => {
+                Self::Lower64
+            }
             _ => panic!("unsupported register: {reg:?}"),
         }
     }
@@ -335,6 +340,35 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
                     VMCmd::RegMem {
                         len: instruction.len() as u8,
                         vop: VMOp::SetRegMem,
+                        bits,
+                        dst,
+                        src,
+                    }
+                }
+                _ => return None,
+            }
+        }
+        Code::Mov_rm64_r64 | Code::Mov_rm32_r32 | Code::Mov_rm16_r16 | Code::Mov_rm8_r8 => {
+            let reg = instruction.op1_register();
+            let bits = VMBits::from(reg);
+            let src = VMReg::from(reg);
+
+            match instruction.op0_kind() {
+                OpKind::Register => {
+                    let dst = VMReg::from(instruction.op0_register());
+                    VMCmd::RegReg {
+                        len: instruction.len() as u8,
+                        vop: VMOp::SetRegReg,
+                        bits,
+                        dst,
+                        src,
+                    }
+                }
+                OpKind::Memory => {
+                    let dst = VMMem::from(instruction);
+                    VMCmd::MemReg {
+                        len: instruction.len() as u8,
+                        vop: VMOp::SetMemReg,
                         bits,
                         dst,
                         src,
