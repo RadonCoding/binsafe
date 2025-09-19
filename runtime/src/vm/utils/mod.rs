@@ -31,7 +31,7 @@ pub fn sub_vreg_imm_64(rt: &mut Runtime, src: AsmRegister64, from: i32, to: VMRe
         .unwrap();
 }
 
-pub fn store_vmreg_memory_64(
+pub fn store_vreg_mem_64(
     rt: &mut Runtime,
     src: AsmRegister64,
     with: AsmRegister64,

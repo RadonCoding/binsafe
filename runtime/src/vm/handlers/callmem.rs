@@ -23,7 +23,7 @@ pub fn build(rt: &mut Runtime) {
     // mov r8, [r13 + ...]
     utils::load_vreg_reg_64(rt, r13, VMReg::Rip, r8);
     // mov rax, [rcx + ...]; mov [rax], r8
-    utils::store_vmreg_memory_64(rt, r13, rax, r8, VMReg::Rsp);
+    utils::store_vreg_mem_64(rt, r13, rax, r8, VMReg::Rsp);
 
     // mov rcx, r13
     rt.asm.mov(rcx, r13).unwrap();
