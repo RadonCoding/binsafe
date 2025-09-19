@@ -31,6 +31,7 @@ pub enum FnDef {
     VmHandlerCallRel,
     VmHandlerCallReg,
     VmHandlerCallMem,
+    VmHandlerJcc,
     /* CORE */
     ExceptionHandler,
     CompareUnicodeToAnsi,
@@ -71,6 +72,7 @@ impl<'a> Runtime<'a> {
         func_labels.insert(FnDef::VmHandlerCallRel, asm.create_label());
         func_labels.insert(FnDef::VmHandlerCallReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerCallMem, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerJcc, asm.create_label());
 
         func_labels.insert(FnDef::ExceptionHandler, asm.create_label());
         func_labels.insert(FnDef::CompareUnicodeToAnsi, asm.create_label());
@@ -220,6 +222,7 @@ impl<'a> Runtime<'a> {
         self.define_func(FnDef::VmHandlerCallRel, vm::handlers::callrel::build);
         self.define_func(FnDef::VmHandlerCallReg, vm::handlers::callreg::build);
         self.define_func(FnDef::VmHandlerCallMem, vm::handlers::callmem::build);
+        self.define_func(FnDef::VmHandlerJcc, vm::handlers::jcc::build);
 
         self.define_func(FnDef::ExceptionHandler, functions::exception_handler::build);
         self.define_func(

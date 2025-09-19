@@ -1,6 +1,7 @@
 pub mod callmem;
 pub mod callreg;
 pub mod callrel;
+pub mod jcc;
 pub mod pushimm;
 pub mod pushreg64;
 pub mod setmemreg;

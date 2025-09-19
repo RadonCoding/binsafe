@@ -21,6 +21,7 @@ pub fn build(rt: &mut Runtime) {
         (VMOp::CallRel, FnDef::VmHandlerCallRel),
         (VMOp::CallReg, FnDef::VmHandlerCallReg),
         (VMOp::CallMem, FnDef::VmHandlerCallMem),
+        (VMOp::Jcc, FnDef::VmHandlerJcc),
     ];
 
     for (op, func) in table {

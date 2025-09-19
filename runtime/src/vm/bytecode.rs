@@ -14,8 +14,23 @@ pub enum VMOp {
     CallRel,
     CallReg,
     CallMem,
+    Jcc,
 }
-pub const VM_OP_COUNT: usize = (VMOp::CallMem as u8 + 1) as usize;
+pub const VM_OP_COUNT: usize = (VMOp::Jcc as u8 + 1) as usize;
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VMFlag {
+    Carry = 0,      // CF
+    Parity = 2,     // PF
+    Adjust = 4,     // AF
+    Zero = 6,       // ZF
+    Sign = 7,       // SF
+    Trap = 8,       // TF
+    Interrupt = 9,  // IF
+    Direction = 10, // DF
+    Overflow = 11,  // OF
+}
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -214,6 +229,13 @@ pub enum VMCmd<'a> {
         vop: VMOp,
         dst: VMMem,
     },
+    Jcc {
+        len: u8,
+        vop: VMOp,
+        flag: VMFlag,
+        set: u8,
+        dst: i32,
+    },
 }
 
 impl<'a> VMCmd<'a> {
@@ -289,6 +311,17 @@ impl<'a> VMCmd<'a> {
             Self::CallMem { len, vop, dst } => {
                 let mut bytes = vec![*len, *vop as u8];
                 bytes.extend_from_slice(&dst.encode());
+                bytes
+            }
+            Self::Jcc {
+                len,
+                vop,
+                flag,
+                set: cond,
+                dst,
+            } => {
+                let mut bytes = vec![*len, *vop as u8, *flag as u8, *cond];
+                bytes.extend_from_slice(&dst.to_le_bytes());
                 bytes
             }
         }
@@ -468,6 +501,83 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
             }
             _ => return None,
         },
+        Code::Je_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                flag: VMFlag::Zero,
+                set: 1,
+                dst,
+            }
+        }
+        Code::Jne_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                flag: VMFlag::Zero,
+                set: 0,
+                dst,
+            }
+        }
+        Code::Js_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                flag: VMFlag::Sign,
+                set: 1,
+                dst,
+            }
+        }
+        Code::Jns_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                flag: VMFlag::Sign,
+                set: 0,
+                dst,
+            }
+        }
+        Code::Jp_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                flag: VMFlag::Parity,
+                set: 1,
+                dst,
+            }
+        }
+        Code::Jnp_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                flag: VMFlag::Parity,
+                set: 0,
+                dst,
+            }
+        }
+        Code::Jb_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                flag: VMFlag::Carry,
+                set: 1,
+                dst,
+            }
+        }
         _ => return None,
     };
 

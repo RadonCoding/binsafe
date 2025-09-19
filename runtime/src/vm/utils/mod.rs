@@ -1,10 +1,15 @@
-use iced_x86::code_asm::{ptr, qword_ptr, AsmRegister64};
+use iced_x86::code_asm::{ptr, qword_ptr, AsmRegister32, AsmRegister64};
 
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
 
 pub mod compute_effective_address;
 
 pub fn load_vreg_reg_64(rt: &mut Runtime, src: AsmRegister64, from: VMReg, to: AsmRegister64) {
+    // mov ..., [...]
+    rt.asm.mov(to, ptr(src + (from as u8 - 1) * 8)).unwrap();
+}
+
+pub fn load_vreg_reg_32(rt: &mut Runtime, src: AsmRegister64, from: VMReg, to: AsmRegister32) {
     // mov ..., [...]
     rt.asm.mov(to, ptr(src + (from as u8 - 1) * 8)).unwrap();
 }

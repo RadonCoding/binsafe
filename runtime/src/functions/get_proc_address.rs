@@ -146,7 +146,7 @@ pub fn build(rt: &mut Runtime) {
             // cmp r15d, [rbp - ...]
             rt.asm.cmp(r15d, ptr(rbp - number_of_names)).unwrap();
             // je not_found
-            rt.asm.jge(not_found).unwrap();
+            rt.asm.je(not_found).unwrap();
 
             // mov rax, [rbp - ...]
             rt.asm.mov(rax, ptr(rbp - address_of_names)).unwrap();
