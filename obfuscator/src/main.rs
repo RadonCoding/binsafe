@@ -1,8 +1,9 @@
 use exe::{
-    Address, Arch, Buffer, ImageSectionHeader, NTHeaders, NTHeadersMut, Offset, PETranslation,
-    SectionCharacteristics, TLSDirectory, VecPE, PE, RVA, VA, VA32, VA64,
+    Address, Arch, Buffer, CCharString, ImageSectionHeader, NTHeaders, NTHeadersMut, Offset,
+    PETranslation, SectionCharacteristics, TLSDirectory, VecPE, PE, RVA, VA, VA32, VA64,
 };
 use iced_x86::{code_asm::CodeAssembler, Decoder, DecoderOptions, Instruction};
+use logger::info;
 use rand::Rng;
 use runtime::{
     runtime::{DataDef, Runtime},
@@ -29,6 +30,12 @@ impl Engine {
             _ => panic!("only 64-bit binaries are supported"),
         };
 
+        info!(
+            "Loaded {}-bit binary ({:.2} MB)",
+            bitness,
+            pe.len() as f64 / 1_000_000.0,
+        );
+
         Self {
             pe,
             bitness,
@@ -38,12 +45,19 @@ impl Engine {
 
     pub fn protect(&mut self) {
         let entry_point = self.pe.get_entrypoint().unwrap();
+
         let section = self.pe.get_section_by_rva(entry_point).unwrap();
+
+        info!(
+            "Protecting section '{}' at 0x{:016X}",
+            Self::get_section_name(section),
+            self.as_absolute(section.virtual_address.0)
+        );
 
         let ip = section.virtual_address.0 as u64;
         let mut code = section.read(&self.pe).unwrap().to_vec();
 
-        let mut decoder = Decoder::with_ip(64, &code, ip, DecoderOptions::NONE);
+        let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
 
         let mut instructions = Vec::new();
 
@@ -58,6 +72,8 @@ impl Engine {
 
             instructions.push(instruction);
         }
+
+        let mut total = 0;
 
         for instruction in instructions {
             let bytes = match bytecode::convert(&instruction) {
@@ -75,7 +91,11 @@ impl Engine {
 
             let ip = instruction.ip() as u32;
             self.bytecode.set(ip, bytes);
+
+            total += 1;
         }
+
+        info!("Virtualized {total} instructions");
 
         let offset = section.data_offset(self.pe.get_type());
         self.pe.write(offset, code).unwrap();
@@ -110,16 +130,32 @@ impl Engine {
         }
     }
 
+    fn as_absolute(&self, address: u32) -> u64 {
+        self.pe.get_image_base().unwrap() + address as u64
+    }
+
     fn rva_to_va(&self, rva: RVA) -> VA {
         let image_base = self.pe.get_image_base().unwrap();
 
         match self.pe.get_arch().unwrap() {
-            Arch::X86 => VA::VA32(VA32(rva.0 + (image_base as u32))),
-            Arch::X64 => VA::VA64(VA64((rva.0 as u64) + image_base)),
+            Arch::X86 => VA::VA32(VA32((image_base as u32) + rva.0)),
+            Arch::X64 => VA::VA64(VA64(image_base + (rva.0 as u64))),
         }
     }
 
-    fn create_section(&mut self, content: &[u8], characteristics: SectionCharacteristics) {
+    fn get_section_name(section: &ImageSectionHeader) -> String {
+        let bytes = section.name.iter().map(|c| c.0).collect::<Vec<u8>>();
+        String::from_utf8_lossy(&bytes)
+            .trim_end_matches('\0')
+            .to_string()
+    }
+
+    fn create_section(
+        &mut self,
+        name: Option<&str>,
+        content: &[u8],
+        characteristics: SectionCharacteristics,
+    ) -> ImageSectionHeader {
         let size = content.len() as u32;
 
         let virtual_size = self.pe.align_to_section(RVA(size)).unwrap().0;
@@ -129,17 +165,22 @@ impl Engine {
             .pe
             .append_section(&ImageSectionHeader::default())
             .unwrap();
+        section.set_name(name);
         section.virtual_size = virtual_size;
         section.size_of_raw_data = raw_size;
         section.characteristics = characteristics;
+
+        let section = *section;
 
         self.pe.append(content);
         self.pe.pad_to_alignment().unwrap();
 
         self.pe.fix_image_size().unwrap();
+
+        section
     }
 
-    fn create_entry_point(&mut self, rtfasm: &mut Runtime, new_entry_point: u32) {
+    fn switch_entry_point(&mut self, rtfasm: &mut Runtime, new_entry_point: u32) {
         let tls = TLSDirectory::parse(&self.pe).unwrap();
 
         macro_rules! get_callbacks {
@@ -198,12 +239,18 @@ impl Engine {
         let mut assembler = CodeAssembler::new(self.bitness).unwrap();
         let mut rtfasm = Runtime::new(&mut assembler);
 
-        self.create_entry_point(&mut rtfasm, new_entry_point);
+        self.switch_entry_point(&mut rtfasm, new_entry_point);
+
+        info!(
+            "Switched entry point to 0x{:016X}",
+            self.as_absolute(new_entry_point)
+        );
 
         rtfasm.define_data(DataDef::BYTECODE, &self.bytecode.encode());
 
         let code = rtfasm.assemble(new_entry_point as u64);
-        self.create_section(
+        let section = self.create_section(
+            Some("💀"),
             &code,
             SectionCharacteristics::CNT_CODE
                 | SectionCharacteristics::MEM_EXECUTE
@@ -211,7 +258,22 @@ impl Engine {
                 | SectionCharacteristics::MEM_WRITE,
         );
 
-        self.pe.to_vec()
+        info!(
+            "Created runtime section '{}' at 0x{:016X} ({:.2} MB)",
+            Self::get_section_name(&section),
+            self.as_absolute(section.virtual_address.0),
+            code.len() as f64 / 1_000_000.0,
+        );
+
+        let output = self.pe.to_vec();
+
+        info!(
+            "Rebuilt {}-bit binary ({:.2} MB)",
+            self.bitness,
+            self.pe.len() as f64 / 1_000_000.0,
+        );
+
+        output
     }
 }
 
@@ -222,7 +284,7 @@ fn main() {
 
     let mut engine = Engine::new(input);
     engine.protect();
-    let image = engine.rebuild();
+    let protected = engine.rebuild();
 
     let output = if let Some(extension) = input.extension() {
         input.with_extension("").with_file_name(format!(
@@ -239,5 +301,7 @@ fn main() {
         output
     };
 
-    fs::write(output, image).unwrap();
+    fs::write(&output, protected).unwrap();
+
+    info!("Wrote output to '{}'", output.display());
 }

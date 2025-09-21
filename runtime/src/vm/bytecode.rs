@@ -317,10 +317,10 @@ impl<'a> VMCmd<'a> {
                 len,
                 vop,
                 flag,
-                set: cond,
+                set,
                 dst,
             } => {
-                let mut bytes = vec![*len, *vop as u8, *flag as u8, *cond];
+                let mut bytes = vec![*len, *vop as u8, *flag as u8, *set];
                 bytes.extend_from_slice(&dst.to_le_bytes());
                 bytes
             }
@@ -523,6 +523,17 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
                 dst,
             }
         }
+        Code::Jb_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                flag: VMFlag::Carry,
+                set: 1,
+                dst,
+            }
+        }
         Code::Js_rel32_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
@@ -567,14 +578,25 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
                 dst,
             }
         }
-        Code::Jb_rel32_64 => {
+        Code::Jo_rel32_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
             VMCmd::Jcc {
                 len: instruction.len() as u8,
                 vop: VMOp::Jcc,
-                flag: VMFlag::Carry,
+                flag: VMFlag::Overflow,
                 set: 1,
+                dst,
+            }
+        }
+        Code::Jno_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                flag: VMFlag::Overflow,
+                set: 0,
                 dst,
             }
         }
