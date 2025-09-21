@@ -608,33 +608,38 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
 
 #[derive(Default)]
 pub struct VMBytecode {
-    entries: HashMap<u32, Vec<u8>>,
+    address_to_offset: HashMap<u32, u32>,
+    bytecode_to_offset: HashMap<Vec<u8>, u32>,
+    bytecode: Vec<u8>,
 }
 
 impl VMBytecode {
     pub fn set(&mut self, key: u32, bytecode: Vec<u8>) {
-        self.entries.insert(key, bytecode);
+        if let Some(&existing_offset) = self.bytecode_to_offset.get(&bytecode) {
+            self.address_to_offset.insert(key, existing_offset);
+            return;
+        }
+
+        let offset = self.bytecode.len() as u32;
+        self.bytecode.extend_from_slice(&bytecode);
+
+        self.bytecode_to_offset.insert(bytecode, offset);
+        self.address_to_offset.insert(key, offset);
     }
 
     pub fn encode(&self) -> Vec<u8> {
-        let mut entries: Vec<(&u32, &Vec<u8>)> = self.entries.iter().collect();
+        let mut entries = self.address_to_offset.iter().collect::<Vec<(&u32, &u32)>>();
         entries.sort_by_key(|&(k, _)| *k);
 
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&entries.len().to_le_bytes());
 
-        let mut offset = 0u32;
-
-        for (&key, bytecode) in &entries {
-            bytes.extend_from_slice(&key.to_le_bytes());
+        for (&address, &offset) in &entries {
+            bytes.extend_from_slice(&address.to_le_bytes());
             bytes.extend_from_slice(&offset.to_le_bytes());
-            offset += bytecode.len() as u32;
         }
 
-        for (_, bytecode) in entries {
-            bytes.extend_from_slice(bytecode);
-        }
-
+        bytes.extend_from_slice(&self.bytecode);
         bytes
     }
 }

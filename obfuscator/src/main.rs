@@ -1,6 +1,6 @@
 use exe::{
-    Address, Arch, Buffer, CCharString, ImageSectionHeader, NTHeaders, NTHeadersMut, Offset,
-    PETranslation, SectionCharacteristics, TLSDirectory, VecPE, PE, RVA, VA, VA32, VA64,
+    Address, Arch, Buffer, ImageSectionHeader, NTHeaders, NTHeadersMut, Offset, PETranslation,
+    SectionCharacteristics, TLSDirectory, VecPE, PE, RVA, VA, VA32, VA64,
 };
 use iced_x86::{code_asm::CodeAssembler, Decoder, DecoderOptions, Instruction};
 use logger::info;
