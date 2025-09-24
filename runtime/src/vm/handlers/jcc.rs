@@ -16,7 +16,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.add(rdx, 0x1).unwrap();
 
     // mov r8d, [rcx + ...]
-    utils::load_vreg_reg_32(rt, rcx, VMReg::Flags, r8d);
+    utils::mov_reg_vreg_32(rt, rcx, VMReg::Flags, r8d);
 
     // bt r8d, eax
     rt.asm.bt(r8d, eax).unwrap();

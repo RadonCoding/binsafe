@@ -11,7 +11,7 @@ pub fn build(rt: &mut Runtime) {
     utils::sub_vreg_imm_64(rt, rcx, 0x8, VMReg::Rsp);
 
     // mov r8, [rcx + ...]
-    utils::load_vreg_reg_64(rt, rcx, VMReg::Rip, r8);
+    utils::mov_reg_vreg_64(rt, rcx, VMReg::Rip, r8);
     // mov [rcx + ...], r8
     utils::store_vreg_mem_64(rt, rcx, rax, r8, VMReg::Rsp);
 

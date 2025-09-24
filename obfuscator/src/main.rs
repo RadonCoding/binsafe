@@ -246,7 +246,7 @@ impl Engine {
             self.as_absolute(new_entry_point)
         );
 
-        rtfasm.define_data(DataDef::BYTECODE, &self.bytecode.encode());
+        rtfasm.define_data(DataDef::Bytecode, &self.bytecode.encode());
 
         let code = rtfasm.assemble(new_entry_point as u64);
         let section = self.create_section(

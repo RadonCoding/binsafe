@@ -24,13 +24,13 @@ mod tests {
 
         rt.asm.mov(rcx, registers.as_ptr() as u64).unwrap();
         rt.asm
-            .lea(rdx, ptr(rt.data_labels[&DataDef::BYTECODE]))
+            .lea(rdx, ptr(rt.data_labels[&DataDef::Bytecode]))
             .unwrap();
         rt.asm.call(rt.func_labels[&FnDef::VmDispatcher]).unwrap();
 
         rt.asm.ret().unwrap();
 
-        rt.define_data(DataDef::BYTECODE, bytecode);
+        rt.define_data(DataDef::Bytecode, bytecode);
 
         let mem = unsafe {
             VirtualAlloc(

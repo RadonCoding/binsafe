@@ -6,9 +6,9 @@ use crate::{
 };
 
 pub fn build(rt: &mut Runtime) {
-    // lea rcx, [...]
+    // lea rax, [...]
     rt.asm
-        .lea(rcx, ptr(rt.data_labels[&DataDef::HANDLERS]))
+        .lea(rax, ptr(rt.data_labels[&DataDef::Handlers]))
         .unwrap();
 
     let table = [
@@ -25,10 +25,10 @@ pub fn build(rt: &mut Runtime) {
     ];
 
     for (op, func) in table {
-        // lea rax, [...]
-        rt.asm.lea(rax, ptr(rt.func_labels[&func])).unwrap();
-        // mov [rcx + op*8], rax
-        rt.asm.mov(ptr(rcx + op as u8 * 8), rax).unwrap();
+        // lea rcx, [...]
+        rt.asm.lea(rcx, ptr(rt.func_labels[&func])).unwrap();
+        // mov [rax + ...], rcx
+        rt.asm.mov(ptr(rax + op as u8 * 8), rcx).unwrap();
     }
 
     // ret

@@ -41,10 +41,10 @@ pub enum FnDef {
 
 #[derive(PartialEq, Eq, Hash)]
 pub enum DataDef {
-    BYTECODE,
-    HANDLERS,
-    NTDLL,
-    RAVEH,
+    Bytecode,
+    Handlers,
+    Ntdll,
+    RtlAddVectoredExceptionHandler,
 }
 
 pub struct Runtime<'a> {
@@ -80,10 +80,11 @@ impl<'a> Runtime<'a> {
         func_labels.insert(FnDef::GetProcAddress, asm.create_label());
 
         let mut data_labels = HashMap::new();
-        data_labels.insert(DataDef::BYTECODE, asm.create_label());
-        data_labels.insert(DataDef::HANDLERS, asm.create_label());
-        data_labels.insert(DataDef::NTDLL, asm.create_label());
-        data_labels.insert(DataDef::RAVEH, asm.create_label());
+        data_labels.insert(DataDef::Bytecode, asm.create_label());
+        data_labels.insert(DataDef::Handlers, asm.create_label());
+
+        data_labels.insert(DataDef::Ntdll, asm.create_label());
+        data_labels.insert(DataDef::RtlAddVectoredExceptionHandler, asm.create_label());
 
         Self {
             asm,
@@ -102,24 +103,29 @@ impl<'a> Runtime<'a> {
         self.asm.set_label(label).unwrap();
     }
 
+    pub fn get_proc_address(&mut self, module_name: DataDef, export_name: DataDef) {
+        // lea rcx, [...]
+        self.asm
+            .lea(rcx, ptr(self.data_labels[&module_name]))
+            .unwrap();
+        // lea rdx, [...]
+        self.asm
+            .lea(rdx, ptr(self.data_labels[&export_name]))
+            .unwrap();
+        // call ...
+        self.asm
+            .call(self.func_labels[&FnDef::GetProcAddress])
+            .unwrap();
+    }
+
     fn build_initilization(&mut self, oep: Option<u32>) {
         // call ...
         self.asm
             .call(self.func_labels[&FnDef::VmInitialize])
             .unwrap();
 
-        // lea rcx, [...]
-        self.asm
-            .lea(rcx, ptr(self.data_labels[&DataDef::NTDLL]))
-            .unwrap();
-        // lea rcx, [...]
-        self.asm
-            .lea(rdx, ptr(self.data_labels[&DataDef::RAVEH]))
-            .unwrap();
-        // call ...
-        self.asm
-            .call(self.func_labels[&FnDef::GetProcAddress])
-            .unwrap();
+        // lea rcx, [...]; lea rdx, [...];  call ...
+        self.get_proc_address(DataDef::Ntdll, DataDef::RtlAddVectoredExceptionHandler);
 
         // mov rcx, 0x1
         self.asm.mov(rcx, 0x1u64).unwrap();
@@ -232,10 +238,13 @@ impl<'a> Runtime<'a> {
         self.define_func(FnDef::CompareAnsi, functions::compare_ansi::build);
         self.define_func(FnDef::GetProcAddress, functions::get_proc_address::build);
 
-        self.define_data(DataDef::HANDLERS, &[0u8; VM_OP_COUNT * 8]);
+        self.define_data(DataDef::Handlers, &[0u8; VM_OP_COUNT * 8]);
 
-        self.define_data(DataDef::NTDLL, b"ntdll.dll\0");
-        self.define_data(DataDef::RAVEH, b"RtlAddVectoredExceptionHandler\0");
+        self.define_data(DataDef::Ntdll, b"ntdll.dll\0");
+        self.define_data(
+            DataDef::RtlAddVectoredExceptionHandler,
+            b"RtlAddVectoredExceptionHandler\0",
+        );
 
         self.asm.assemble(ip).unwrap()
     }

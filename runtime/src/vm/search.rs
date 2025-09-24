@@ -24,9 +24,9 @@ pub fn build(rt: &mut Runtime) {
 
     // lea rax, [...]
     rt.asm
-        .lea(rax, ptr(rt.data_labels[&DataDef::BYTECODE]))
+        .lea(rax, ptr(rt.data_labels[&DataDef::Bytecode]))
         .unwrap();
-    // mov rdx, [rax] -> number of entries
+    // mov r13, [rax] -> number of entries
     rt.asm.mov(r13, ptr(rax)).unwrap();
     // add rax, 0x8
     rt.asm.add(rax, 0x8).unwrap();
