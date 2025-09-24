@@ -27,7 +27,7 @@ pub fn build(rt: &mut Runtime) {
     utils::add_vreg_reg_64(rt, r12, rax, VMReg::Rip);
 
     // mov r14, [r12 + ...]
-    utils::mov_reg_vreg_64(rt, r12, VMReg::Rip, rax);
+    utils::mov_reg_vreg_64(rt, r12, VMReg::Rip, r14);
 
     // movzx rax, [r13] -> op
     rt.asm.movzx(rax, byte_ptr(r13)).unwrap();
