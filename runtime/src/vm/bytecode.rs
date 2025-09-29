@@ -33,6 +33,21 @@ pub enum VMFlag {
 }
 
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VMTest {
+    CMP = 0,
+    EQ = 1,
+    NEQ = 2,
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VMLogic {
+    AND = 0,
+    OR = 1,
+}
+
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VMReg {
     None,
@@ -174,6 +189,19 @@ impl VMMem {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct VMCond {
+    pub cmp: VMTest,
+    pub lhs: u8,
+    pub rhs: u8,
+}
+
+impl VMCond {
+    pub fn encode(&self) -> Vec<u8> {
+        vec![self.cmp as u8, self.lhs, self.rhs]
+    }
+}
+
 pub enum VMCmd<'a> {
     PushImm {
         len: u8,
@@ -232,8 +260,8 @@ pub enum VMCmd<'a> {
     Jcc {
         len: u8,
         vop: VMOp,
-        flag: VMFlag,
-        set: u8,
+        logic: VMLogic,
+        conds: Vec<VMCond>,
         dst: i32,
     },
 }
@@ -316,11 +344,15 @@ impl<'a> VMCmd<'a> {
             Self::Jcc {
                 len,
                 vop,
-                flag,
-                set,
+                logic,
+                conds,
                 dst,
             } => {
-                let mut bytes = vec![*len, *vop as u8, *flag as u8, *set];
+                let mut bytes = vec![*len, *vop as u8, *logic as u8, conds.len() as u8];
+
+                for op in conds {
+                    bytes.extend_from_slice(&op.encode());
+                }
                 bytes.extend_from_slice(&dst.to_le_bytes());
                 bytes
             }
@@ -501,106 +533,294 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
             }
             _ => return None,
         },
-        Code::Je_rel32_64 => {
+        Code::Ja_rel32_64 | Code::Ja_rel8_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JA = CF=0 AND ZF=0
             VMCmd::Jcc {
                 len: instruction.len() as u8,
                 vop: VMOp::Jcc,
-                flag: VMFlag::Zero,
-                set: 1,
+                logic: VMLogic::AND,
+                conds: vec![
+                    VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Carry as u8,
+                        rhs: 0,
+                    },
+                    VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Zero as u8,
+                        rhs: 0,
+                    },
+                ],
                 dst,
             }
         }
-        Code::Jne_rel32_64 => {
+        Code::Jae_rel32_64 | Code::Jae_rel8_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JAE = CF=0
             VMCmd::Jcc {
                 len: instruction.len() as u8,
                 vop: VMOp::Jcc,
-                flag: VMFlag::Zero,
-                set: 0,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Carry as u8,
+                    rhs: 0,
+                }],
                 dst,
             }
         }
-        Code::Jb_rel32_64 => {
+        Code::Jb_rel32_64 | Code::Jb_rel8_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JB = CF=1
             VMCmd::Jcc {
                 len: instruction.len() as u8,
                 vop: VMOp::Jcc,
-                flag: VMFlag::Carry,
-                set: 1,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Carry as u8,
+                    rhs: 1,
+                }],
                 dst,
             }
         }
-        Code::Js_rel32_64 => {
+        Code::Jbe_rel32_64 | Code::Jbe_rel8_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JBE = CF=1 OR ZF=1
             VMCmd::Jcc {
                 len: instruction.len() as u8,
                 vop: VMOp::Jcc,
-                flag: VMFlag::Sign,
-                set: 1,
+                logic: VMLogic::OR,
+                conds: vec![
+                    VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Carry as u8,
+                        rhs: 1,
+                    },
+                    VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Zero as u8,
+                        rhs: 1,
+                    },
+                ],
                 dst,
             }
         }
-        Code::Jns_rel32_64 => {
+        Code::Je_rel32_64 | Code::Je_rel8_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JE = ZF=1
             VMCmd::Jcc {
                 len: instruction.len() as u8,
                 vop: VMOp::Jcc,
-                flag: VMFlag::Sign,
-                set: 0,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Zero as u8,
+                    rhs: 1,
+                }],
                 dst,
             }
         }
-        Code::Jp_rel32_64 => {
+        Code::Jg_rel32_64 | Code::Jg_rel8_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JG = ZF=0 AND SF=OF
             VMCmd::Jcc {
                 len: instruction.len() as u8,
                 vop: VMOp::Jcc,
-                flag: VMFlag::Parity,
-                set: 1,
+                logic: VMLogic::AND,
+                conds: vec![
+                    VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Zero as u8,
+                        rhs: 0,
+                    },
+                    VMCond {
+                        cmp: VMTest::EQ,
+                        lhs: VMFlag::Sign as u8,
+                        rhs: VMFlag::Overflow as u8,
+                    },
+                ],
                 dst,
             }
         }
-        Code::Jnp_rel32_64 => {
+        Code::Jge_rel32_64 | Code::Jge_rel8_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JGE = SF=OF
             VMCmd::Jcc {
                 len: instruction.len() as u8,
                 vop: VMOp::Jcc,
-                flag: VMFlag::Parity,
-                set: 0,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::EQ,
+                    lhs: VMFlag::Sign as u8,
+                    rhs: VMFlag::Overflow as u8,
+                }],
                 dst,
             }
         }
-        Code::Jo_rel32_64 => {
+        Code::Jl_rel32_64 | Code::Jl_rel8_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JL = SF<>OF
             VMCmd::Jcc {
                 len: instruction.len() as u8,
                 vop: VMOp::Jcc,
-                flag: VMFlag::Overflow,
-                set: 1,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::NEQ,
+                    lhs: VMFlag::Sign as u8,
+                    rhs: VMFlag::Overflow as u8,
+                }],
                 dst,
             }
         }
-        Code::Jno_rel32_64 => {
+        Code::Jle_rel32_64 | Code::Jle_rel8_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JLE = ZF=1 OR SF<>OF
             VMCmd::Jcc {
                 len: instruction.len() as u8,
                 vop: VMOp::Jcc,
-                flag: VMFlag::Overflow,
-                set: 0,
+                logic: VMLogic::OR,
+                conds: vec![
+                    VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Zero as u8,
+                        rhs: 1,
+                    },
+                    VMCond {
+                        cmp: VMTest::NEQ,
+                        lhs: VMFlag::Sign as u8,
+                        rhs: VMFlag::Overflow as u8,
+                    },
+                ],
                 dst,
             }
         }
-        _ => return None,
+        Code::Jne_rel32_64 | Code::Jne_rel8_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JNE = ZF=0
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Zero as u8,
+                    rhs: 0,
+                }],
+                dst,
+            }
+        }
+        Code::Jno_rel32_64 | Code::Jno_rel8_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JNO = OF=0
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Overflow as u8,
+                    rhs: 0,
+                }],
+                dst,
+            }
+        }
+        Code::Jnp_rel32_64 | Code::Jnp_rel8_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JNP = PF=0
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Parity as u8,
+                    rhs: 0,
+                }],
+                dst,
+            }
+        }
+        Code::Jns_rel32_64 | Code::Jns_rel8_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JNS = SF=0
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Sign as u8,
+                    rhs: 0,
+                }],
+                dst,
+            }
+        }
+        Code::Jo_rel32_64 | Code::Jo_rel8_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JO = OF=1
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Overflow as u8,
+                    rhs: 1,
+                }],
+                dst,
+            }
+        }
+        Code::Jp_rel32_64 | Code::Jp_rel8_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JP = PF=1
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Parity as u8,
+                    rhs: 1,
+                }],
+                dst,
+            }
+        }
+        Code::Js_rel32_64 | Code::Js_rel8_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            // JS = SF=1
+            VMCmd::Jcc {
+                len: instruction.len() as u8,
+                vop: VMOp::Jcc,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Sign as u8,
+                    rhs: 1,
+                }],
+                dst,
+            }
+        }
+        _ => {
+            //println!("{instruction} -> {:?}", instruction.code());
+            return None;
+        }
     };
 
     Some(bytecode.encode())
