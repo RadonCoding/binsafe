@@ -1,7 +1,7 @@
 use crate::{
     runtime::Runtime,
     vm::{
-        bytecode::{VMLogic, VMReg},
+        bytecode::{VMLogic, VMReg, VMTest},
         utils,
     },
 };
@@ -53,16 +53,18 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.test(r14d, r14d).unwrap();
         // jz ...
         rt.asm.jz(epilogue).unwrap();
-        // movzx r8d, [rdx] -> cmp
-        rt.asm.movzx(r8d, byte_ptr(rdx)).unwrap();
+
+        // movzx r8b, [rdx] -> cmp
+        rt.asm.mov(r8b, ptr(rdx)).unwrap();
         // add rdx, 0x1
         rt.asm.add(rdx, 0x1).unwrap();
-        // test r8d, r8d
-        rt.asm.test(r8d, r8d).unwrap();
+
+        // cmp r8b, ...
+        rt.asm.cmp(r8b, VMTest::CMP as u8 as i32).unwrap();
         // jz ...
         rt.asm.jz(handle_cmp).unwrap();
-        // cmp r8d, 0x1
-        rt.asm.cmp(r8d, 0x1).unwrap();
+        // cmp r8b, ...
+        rt.asm.cmp(r8b, VMTest::EQ as u8 as i32).unwrap();
         // je ...
         rt.asm.je(handle_eq).unwrap();
         // jmp ...
