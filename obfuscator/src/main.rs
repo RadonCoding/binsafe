@@ -180,7 +180,7 @@ impl Engine {
         section
     }
 
-    fn switch_entry_point(&mut self, rtfasm: &mut Runtime, new_entry_point: u32) {
+    fn switch_entry_point(&mut self, rt: &mut Runtime, new_entry_point: u32) {
         let tls = TLSDirectory::parse(&self.pe).unwrap();
 
         macro_rules! get_callbacks {
@@ -200,12 +200,12 @@ impl Engine {
 
         if old_callbacks.is_empty() {
             let oep = self.get_entry_point();
-            rtfasm.build_entry_point(oep);
+            rt.build_entry_point(oep);
             self.set_entry_point(new_entry_point);
             return;
         }
 
-        rtfasm.build_callbacks(&old_callbacks);
+        rt.build_callbacks(&old_callbacks);
 
         let new_callback = self.rva_to_va(RVA(new_entry_point));
 
@@ -237,18 +237,18 @@ impl Engine {
         let new_entry_point = self.get_start_of_next_section();
 
         let mut assembler = CodeAssembler::new(self.bitness).unwrap();
-        let mut rtfasm = Runtime::new(&mut assembler);
+        let mut rt = Runtime::new(&mut assembler);
 
-        self.switch_entry_point(&mut rtfasm, new_entry_point);
+        self.switch_entry_point(&mut rt, new_entry_point);
 
         info!(
             "Switched entry point to 0x{:016X}",
             self.as_absolute(new_entry_point)
         );
 
-        rtfasm.define_data(DataDef::Bytecode, &self.bytecode.encode());
+        rt.define_data(DataDef::Bytecode, &self.bytecode.encode());
 
-        let code = rtfasm.assemble(new_entry_point as u64);
+        let code = rt.assemble(new_entry_point as u64);
         let section = self.create_section(
             Some("💀"),
             &code,

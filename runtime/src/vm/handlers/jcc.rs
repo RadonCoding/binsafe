@@ -1,10 +1,13 @@
 use crate::{
     runtime::Runtime,
-    vm::{bytecode::VMReg, utils},
+    vm::{
+        bytecode::{VMLogic, VMReg},
+        utils,
+    },
 };
 use iced_x86::code_asm::{
-    al, byte_ptr, dword_ptr, eax, r12, r12b, r13, r13d, r14, r14d, r8b, r8d, r9b, r9d, rax, rcx,
-    rdx,
+    al, byte_ptr, dword_ptr, eax, ptr, r12, r12b, r13, r13d, r14, r14d, r8b, r8d, r9b, r9d, rax,
+    rcx, rdx,
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -65,16 +68,19 @@ pub fn build(rt: &mut Runtime) {
         // jmp ...
         rt.asm.jmp(handle_neq).unwrap();
 
+        // Compares the bit in flags specified by the flag bit (lhs) with the set state (rhs)
         rt.asm.set_label(&mut handle_cmp).unwrap();
         {
             // movzx r8d, [rdx] -> lhs
             rt.asm.movzx(r8d, byte_ptr(rdx)).unwrap();
             // add rdx, 0x1
             rt.asm.add(rdx, 0x1).unwrap();
-            // movzx r9d, [rdx] -> rhs
-            rt.asm.movzx(r9d, byte_ptr(rdx)).unwrap();
+
+            // mov r9b, [rdx] -> rhs
+            rt.asm.mov(r9b, ptr(rdx)).unwrap();
             // add rdx, 0x1
             rt.asm.add(rdx, 0x1).unwrap();
+
             // bt r13d, r8d
             rt.asm.bt(r13d, r8d).unwrap();
             // setc r8b
@@ -87,16 +93,19 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.jmp(check_next).unwrap();
         }
 
+        // Checks if the bit in flags specified by the first flag bit (lhs) == the bit in flags specified by the second flag bit (rhs)
         rt.asm.set_label(&mut handle_eq).unwrap();
         {
             // movzx r8d, [rdx] -> lhs
             rt.asm.movzx(r8d, byte_ptr(rdx)).unwrap();
             // add rdx, 0x1
             rt.asm.add(rdx, 0x1).unwrap();
+
             // movzx r9d, [rdx] -> rhs
             rt.asm.movzx(r9d, byte_ptr(rdx)).unwrap();
             // add rdx, 0x1
             rt.asm.add(rdx, 0x1).unwrap();
+
             // bt r13d, r8d
             rt.asm.bt(r13d, r8d).unwrap();
             // setc r8b
@@ -113,16 +122,19 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.jmp(check_next).unwrap();
         }
 
+        // Checks if the bit in flags specified by the first flag bit (lhs) != the bit in flags specified by the second flag bit (rhs)
         rt.asm.set_label(&mut handle_neq).unwrap();
         {
             // movzx r8d, [rdx] -> lhs
             rt.asm.movzx(r8d, byte_ptr(rdx)).unwrap();
             // add rdx, 0x1
             rt.asm.add(rdx, 0x1).unwrap();
+
             // movzx r9d, [rdx] -> rhs
             rt.asm.movzx(r9d, byte_ptr(rdx)).unwrap();
             // add rdx, 0x1
             rt.asm.add(rdx, 0x1).unwrap();
+
             // bt r13d, r8d
             rt.asm.bt(r13d, r8d).unwrap();
             // setc r8b
@@ -139,10 +151,10 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut check_next).unwrap();
         {
-            // test eax, eax
-            rt.asm.test(eax, eax).unwrap();
-            // jnz ...
-            rt.asm.jnz(is_or).unwrap();
+            // cmp eax, ...
+            rt.asm.cmp(eax, VMLogic::OR as u8 as i32).unwrap();
+            // je ...
+            rt.asm.je(is_or).unwrap();
             // and r12b, r8b
             rt.asm.and(r12b, r8b).unwrap();
             // jmp ...
@@ -170,6 +182,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.movsxd(rax, dword_ptr(rdx)).unwrap();
         // add rdx, 0x4
         rt.asm.add(rdx, 0x4).unwrap();
+
         // test r12b, r12b
         rt.asm.test(r12b, r12b).unwrap();
         // jz ...

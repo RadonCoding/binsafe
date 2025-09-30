@@ -35,16 +35,16 @@ pub enum VMFlag {
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VMTest {
-    CMP = 0,
-    EQ = 1,
-    NEQ = 2,
+    CMP,
+    EQ,
+    NEQ,
 }
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VMLogic {
-    AND = 0,
-    OR = 1,
+    AND,
+    OR,
 }
 
 #[repr(u8)]
