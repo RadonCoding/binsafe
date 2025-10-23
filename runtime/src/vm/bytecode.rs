@@ -11,9 +11,9 @@ pub enum VMOp {
     SetRegReg,
     SetRegMem,
     SetMemReg,
-    CallRel,
-    CallReg,
-    CallMem,
+    BranchRel,
+    BranchReg,
+    BranchMem,
     Jcc,
 }
 pub const VM_OP_COUNT: usize = (VMOp::Jcc as u8 + 1) as usize;
@@ -242,20 +242,23 @@ pub enum VMCmd<'a> {
         dst: VMMem,
         src: VMReg,
     },
-    CallRel {
+    BranchRel {
         len: u8,
         vop: VMOp,
         dst: i32,
+        ret: bool,
     },
-    CallReg {
+    BranchReg {
         len: u8,
         vop: VMOp,
         dst: VMReg,
+        ret: bool,
     },
-    CallMem {
+    BranchMem {
         len: u8,
         vop: VMOp,
         dst: VMMem,
+        ret: bool,
     },
     Jcc {
         len: u8,
@@ -279,7 +282,7 @@ impl<'a> VMCmd<'a> {
                 bytes.extend_from_slice(src);
                 bytes
             }
-            VMCmd::PushReg64 { len, vop, src } => {
+            Self::PushReg64 { len, vop, src } => {
                 let bytes = vec![*len, *vop as u8, *src as u8];
                 bytes
             }
@@ -327,17 +330,16 @@ impl<'a> VMCmd<'a> {
                 bytes.push(*src as u8);
                 bytes
             }
-            Self::CallRel { len, vop, dst } => {
-                let mut bytes = vec![*len, *vop as u8];
+            Self::BranchRel { len, vop, dst, ret } => {
+                let mut bytes = vec![*len, *vop as u8, *ret as u8];
                 bytes.extend_from_slice(&dst.to_le_bytes());
                 bytes
             }
-            Self::CallReg { len, vop, dst } => {
-                let bytes = vec![*len, *vop as u8, *dst as u8];
-                bytes
+            Self::BranchReg { len, vop, dst, ret } => {
+                vec![*len, *vop as u8, *ret as u8, *dst as u8]
             }
-            Self::CallMem { len, vop, dst } => {
-                let mut bytes = vec![*len, *vop as u8];
+            Self::BranchMem { len, vop, dst, ret } => {
+                let mut bytes = vec![*len, *vop as u8, *ret as u8];
                 bytes.extend_from_slice(&dst.encode());
                 bytes
             }
@@ -508,29 +510,51 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
         Code::Call_rel32_64 => {
             let dst =
                 (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
-            VMCmd::CallRel {
+            VMCmd::BranchRel {
                 len: instruction.len() as u8,
-                vop: VMOp::CallRel,
+                vop: VMOp::BranchRel,
                 dst,
+                ret: true,
             }
         }
         Code::Call_rm64 => match instruction.op0_kind() {
-            OpKind::Register => {
-                let dst = VMReg::from(instruction.op0_register());
-                VMCmd::CallReg {
-                    len: instruction.len() as u8,
-                    vop: VMOp::CallReg,
-                    dst,
-                }
+            OpKind::Register => VMCmd::BranchReg {
+                len: instruction.len() as u8,
+                vop: VMOp::BranchReg,
+                dst: VMReg::from(instruction.op0_register()),
+                ret: true,
+            },
+            OpKind::Memory => VMCmd::BranchMem {
+                len: instruction.len() as u8,
+                vop: VMOp::BranchMem,
+                dst: VMMem::from(instruction),
+                ret: true,
+            },
+            _ => return None,
+        },
+        Code::Jmp_rel8_64 | Code::Jmp_rel32_64 => {
+            let dst =
+                (instruction.memory_displacement64() as i64 - instruction.next_ip() as i64) as i32;
+            VMCmd::BranchRel {
+                len: instruction.len() as u8,
+                vop: VMOp::BranchRel,
+                dst,
+                ret: false,
             }
-            OpKind::Memory => {
-                let dst = VMMem::from(instruction);
-                VMCmd::CallMem {
-                    len: instruction.len() as u8,
-                    vop: VMOp::CallMem,
-                    dst,
-                }
-            }
+        }
+        Code::Jmp_rm64 => match instruction.op0_kind() {
+            OpKind::Register => VMCmd::BranchReg {
+                len: instruction.len() as u8,
+                vop: VMOp::BranchReg,
+                dst: VMReg::from(instruction.op0_register()),
+                ret: false,
+            },
+            OpKind::Memory => VMCmd::BranchMem {
+                len: instruction.len() as u8,
+                vop: VMOp::BranchMem,
+                dst: VMMem::from(instruction),
+                ret: false,
+            },
             _ => return None,
         },
         Code::Ja_rel32_64 | Code::Ja_rel8_64 => {
@@ -818,7 +842,7 @@ pub fn convert(instruction: &Instruction) -> Option<Vec<u8>> {
             }
         }
         _ => {
-            //println!("{instruction} -> {:?}", instruction.code());
+            // println!("{instruction} -> {:?}", instruction.code());
             return None;
         }
     };

@@ -18,9 +18,9 @@ pub fn build(rt: &mut Runtime) {
         (VMOp::SetRegReg, FnDef::VmHandlerSetRegReg),
         (VMOp::SetRegMem, FnDef::VmHandlerSetRegMem),
         (VMOp::SetMemReg, FnDef::VmHandlerSetMemReg),
-        (VMOp::CallRel, FnDef::VmHandlerCallRel),
-        (VMOp::CallReg, FnDef::VmHandlerCallReg),
-        (VMOp::CallMem, FnDef::VmHandlerCallMem),
+        (VMOp::BranchRel, FnDef::VmHandlerBranchRel),
+        (VMOp::BranchReg, FnDef::VmHandlerBranchReg),
+        (VMOp::BranchMem, FnDef::VmHandlerBranchMem),
         (VMOp::Jcc, FnDef::VmHandlerJcc),
     ];
 

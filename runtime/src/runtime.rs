@@ -28,9 +28,9 @@ pub enum FnDef {
     VmHandlerSetRegReg,
     VmHandlerSetRegMem,
     VmHandlerSetMemReg,
-    VmHandlerCallRel,
-    VmHandlerCallReg,
-    VmHandlerCallMem,
+    VmHandlerBranchRel,
+    VmHandlerBranchReg,
+    VmHandlerBranchMem,
     VmHandlerJcc,
     /* CORE */
     ExceptionHandler,
@@ -69,9 +69,9 @@ impl<'a> Runtime<'a> {
         func_labels.insert(FnDef::VmHandlerSetRegReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegMem, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetMemReg, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerCallRel, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerCallReg, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerCallMem, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerBranchRel, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerBranchReg, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerBranchMem, asm.create_label());
         func_labels.insert(FnDef::VmHandlerJcc, asm.create_label());
 
         func_labels.insert(FnDef::ExceptionHandler, asm.create_label());
@@ -225,9 +225,9 @@ impl<'a> Runtime<'a> {
         self.define_func(FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build);
         self.define_func(FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build);
         self.define_func(FnDef::VmHandlerSetMemReg, vm::handlers::setmemreg::build);
-        self.define_func(FnDef::VmHandlerCallRel, vm::handlers::callrel::build);
-        self.define_func(FnDef::VmHandlerCallReg, vm::handlers::callreg::build);
-        self.define_func(FnDef::VmHandlerCallMem, vm::handlers::callmem::build);
+        self.define_func(FnDef::VmHandlerBranchRel, vm::handlers::branchrel::build);
+        self.define_func(FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build);
+        self.define_func(FnDef::VmHandlerBranchMem, vm::handlers::branchmem::build);
         self.define_func(FnDef::VmHandlerJcc, vm::handlers::jcc::build);
 
         self.define_func(FnDef::ExceptionHandler, functions::exception_handler::build);
