@@ -4,7 +4,7 @@ Code virtualizer for compiled 64-bit portable executables.
 
 ### 1. Conversion
 
-- **Parsing**: Input file is parsed using the [exe](https://crates.io/crates/exe/0.4.6) library.
+- **Parsing**: Input file is parsed using the [exe](https://crates.io/crates/exe) library.
 - **Disassembly**: Using the [iced-x86](https://crates.io/crates/iced-x86) library the section containing the entry point is disassembled.
 - **Conversion**: Instructions are converted into a bytecode format that the runtime can interpret.
 - **Patching**: Instructions which were able to be converted are patched with **breakpoint** instructions `INT3` (`0xCC`).
