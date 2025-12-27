@@ -1,0 +1,3 @@
+[workspace]
+members = ["logger", "obfuscator"]
+resolver = "2"
