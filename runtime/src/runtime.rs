@@ -43,14 +43,24 @@ pub enum FnDef {
 pub enum DataDef {
     Bytecode,
     Handlers,
+    Sections,
     Ntdll,
+    Kernel32,
     RtlAddVectoredExceptionHandler,
+    VirtualProtect,
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub enum ImportDef {
+    RtlAddVectoredExceptionHandler,
+    VirtualProtect,
 }
 
 pub struct Runtime<'a> {
     pub asm: &'a mut CodeAssembler,
     pub func_labels: HashMap<FnDef, CodeLabel>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
+    pub import_labels: HashMap<ImportDef, CodeLabel>,
 }
 
 impl<'a> Runtime<'a> {
@@ -82,14 +92,25 @@ impl<'a> Runtime<'a> {
         let mut data_labels = HashMap::new();
         data_labels.insert(DataDef::Bytecode, asm.create_label());
         data_labels.insert(DataDef::Handlers, asm.create_label());
+        data_labels.insert(DataDef::Sections, asm.create_label());
 
         data_labels.insert(DataDef::Ntdll, asm.create_label());
+        data_labels.insert(DataDef::Kernel32, asm.create_label());
         data_labels.insert(DataDef::RtlAddVectoredExceptionHandler, asm.create_label());
+        data_labels.insert(DataDef::VirtualProtect, asm.create_label());
+
+        let mut import_labels = HashMap::new();
+        import_labels.insert(
+            ImportDef::RtlAddVectoredExceptionHandler,
+            asm.create_label(),
+        );
+        import_labels.insert(ImportDef::VirtualProtect, asm.create_label());
 
         Self {
             asm,
             func_labels,
             data_labels,
+            import_labels,
         }
     }
 
@@ -100,6 +121,11 @@ impl<'a> Runtime<'a> {
 
     fn set_data_label(&mut self, def: DataDef) {
         let label = self.data_labels.get_mut(&def).unwrap();
+        self.asm.set_label(label).unwrap();
+    }
+
+    fn set_import_label(&mut self, def: ImportDef) {
+        let label = self.import_labels.get_mut(&def).unwrap();
         self.asm.set_label(label).unwrap();
     }
 
@@ -118,20 +144,45 @@ impl<'a> Runtime<'a> {
             .unwrap();
     }
 
+    fn build_imports(&mut self) {
+        // lea rcx, [...]; lea rdx, [...], call ...
+        self.get_proc_address(DataDef::Ntdll, DataDef::RtlAddVectoredExceptionHandler);
+        // mov [...], rax
+        self.asm
+            .mov(
+                ptr(self.import_labels[&ImportDef::RtlAddVectoredExceptionHandler]),
+                rax,
+            )
+            .unwrap();
+
+        // lea rcx, [...]; lea rdx, [...], call ...
+        self.get_proc_address(DataDef::Kernel32, DataDef::VirtualProtect);
+        // mov [...], rax
+        self.asm
+            .mov(ptr(self.import_labels[&ImportDef::VirtualProtect]), rax)
+            .unwrap();
+    }
+
     fn build_initilization(&mut self, oep: Option<u32>) {
+        self.build_imports();
+
         // call ...
         self.asm
             .call(self.func_labels[&FnDef::VmInitialize])
             .unwrap();
-
-        // lea rcx, [...]; lea rdx, [...];  call ...
-        self.get_proc_address(DataDef::Ntdll, DataDef::RtlAddVectoredExceptionHandler);
 
         // mov rcx, 0x1
         self.asm.mov(rcx, 0x1u64).unwrap();
         // lea rdx, ...
         self.asm
             .lea(rdx, ptr(self.func_labels[&FnDef::ExceptionHandler]))
+            .unwrap();
+        // mov rax, [...]
+        self.asm
+            .mov(
+                rax,
+                ptr(self.import_labels[&ImportDef::RtlAddVectoredExceptionHandler]),
+            )
             .unwrap();
         // call rax
         self.asm.call(rax).unwrap();
@@ -208,6 +259,11 @@ impl<'a> Runtime<'a> {
         self.asm.db(data).unwrap();
     }
 
+    fn define_import(&mut self, def: ImportDef) {
+        self.set_import_label(def);
+        self.asm.db(&[0u8; 8]).unwrap();
+    }
+
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
         self.define_func(FnDef::VmInitialize, vm::initialize::build);
         self.define_func(FnDef::VmEntryPoint, vm::entry_point::build);
@@ -241,10 +297,15 @@ impl<'a> Runtime<'a> {
         self.define_data(DataDef::Handlers, &[0u8; VM_OP_COUNT * 8]);
 
         self.define_data(DataDef::Ntdll, b"ntdll.dll\0");
+        self.define_data(DataDef::Kernel32, b"KERNEL32.DLL\0");
         self.define_data(
             DataDef::RtlAddVectoredExceptionHandler,
             b"RtlAddVectoredExceptionHandler\0",
         );
+        self.define_data(DataDef::VirtualProtect, b"VirtualProtect\0");
+
+        self.define_import(ImportDef::RtlAddVectoredExceptionHandler);
+        self.define_import(ImportDef::VirtualProtect);
 
         self.asm.assemble(ip).unwrap()
     }

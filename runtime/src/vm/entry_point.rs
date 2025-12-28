@@ -108,7 +108,7 @@ pub fn build(rt: &mut Runtime) {
             utils::mov_reg_vreg_64(rt, r12, reg, rax);
 
             if reg == VMReg::Flags {
-                // mov [r13 + ...], rax
+                // mov [r13 + ...], eax
                 rt.asm.mov(ptr(r13 + offset), eax).unwrap();
             } else {
                 // mov [r13 + ...], rax

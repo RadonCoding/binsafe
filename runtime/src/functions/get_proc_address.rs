@@ -28,7 +28,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.push(rbp).unwrap();
     // mov rbp, rsp
     rt.asm.mov(rbp, rsp).unwrap();
-    // sub rsp, stack_size
+    // sub rsp, ...
     rt.asm.sub(rsp, stack_size).unwrap();
 
     // push r12
@@ -89,7 +89,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut get_exports).unwrap();
     {
-        // mov rax, [rbx + 0x20] -> PVOID LDR_DATA_TABLE_ENTRY->DllBase
+        // mov rax, [rbx + 0x20] -> VOID *LDR_DATA_TABLE_ENTRY->DllBase
         rt.asm.mov(rax, ptr(rbx + 0x20)).unwrap();
         // mov rbx, rax
         rt.asm.mov(rbx, rax).unwrap();

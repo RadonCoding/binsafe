@@ -131,7 +131,8 @@ impl Engine {
     }
 
     fn as_absolute(&self, address: u32) -> u64 {
-        self.pe.get_image_base().unwrap() + address as u64
+        let image_base = self.pe.get_image_base().unwrap();
+        image_base + address as u64
     }
 
     fn rva_to_va(&self, rva: RVA) -> VA {
@@ -181,7 +182,7 @@ impl Engine {
     }
 
     fn switch_entry_point(&mut self, rt: &mut Runtime, new_entry_point: u32) {
-        let tls = TLSDirectory::parse(&self.pe).unwrap();
+        let tls = TLSDirectory::parse(&self.pe);
 
         macro_rules! get_callbacks {
             ($tls:expr, $va_type:path) => {
@@ -194,8 +195,9 @@ impl Engine {
         }
 
         let old_callbacks = match tls {
-            TLSDirectory::TLS32(tls32) => get_callbacks!(tls32, VA::VA32),
-            TLSDirectory::TLS64(tls64) => get_callbacks!(tls64, VA::VA64),
+            Ok(TLSDirectory::TLS32(tls32)) => get_callbacks!(tls32, VA::VA32),
+            Ok(TLSDirectory::TLS64(tls64)) => get_callbacks!(tls64, VA::VA64),
+            Err(_) => Vec::new(),
         };
 
         if old_callbacks.is_empty() {
@@ -223,13 +225,13 @@ impl Engine {
         }
 
         match (tls, new_callback) {
-            (TLSDirectory::TLS32(tls32), VA::VA32(va32)) => {
+            (Ok(TLSDirectory::TLS32(tls32)), VA::VA32(va32)) => {
                 redirect_callbacks!(tls32, VA32, va32.0);
             }
-            (TLSDirectory::TLS64(tls64), VA::VA64(va64)) => {
+            (Ok(TLSDirectory::TLS64(tls64)), VA::VA64(va64)) => {
                 redirect_callbacks!(tls64, VA64, va64.0);
             }
-            _ => unreachable!(),
+            _ => {}
         }
     }
 
