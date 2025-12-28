@@ -1,12 +1,8 @@
 [package]
-name = "obfuscator"
+name = "runtime"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-exe = "0.5.6"
 iced-x86 = { version = "1.21.0", features = ["code_asm"] }
-rand = "0.8.5"
-logger = { path = "../logger" }
 shared = { path = "../shared" }
-runtime = { path = "../runtime" }

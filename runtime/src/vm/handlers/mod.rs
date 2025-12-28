@@ -1,0 +1,10 @@
+pub mod branchmem;
+pub mod branchreg;
+pub mod branchrel;
+pub mod jcc;
+pub mod pushimm;
+pub mod pushreg64;
+pub mod setmemreg;
+pub mod setregimm;
+pub mod setregmem;
+pub mod setregreg;
