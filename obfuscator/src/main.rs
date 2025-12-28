@@ -62,8 +62,8 @@ impl Engine {
 
     fn print_block(image_base: u64, block: &Block) {
         println!(
-            "Block [offset: 0x{:X}, size: {} bytes, virtualized: {}]",
-            block.offset, block.size, block.virtualized
+            "Block [offset: 0x{:X}, size: {} bytes]",
+            block.offset, block.size
         );
 
         let mut formatter = IntelFormatter::new();
@@ -304,6 +304,8 @@ impl Engine {
             }
 
             block.virtualized = true;
+
+            Self::print_block(self.image_base, block);
         }
 
         info!("Virtualized {} blocks", vblocks.len());
@@ -321,10 +323,6 @@ impl Engine {
 
     pub fn rebuild(&mut self) -> Vec<u8> {
         let output = self.pe.to_vec();
-
-        for block in &self.blocks {
-            Self::print_block(self.image_base, block);
-        }
 
         info!(
             "Rebuilt {}-bit binary ({:.2} MB)",

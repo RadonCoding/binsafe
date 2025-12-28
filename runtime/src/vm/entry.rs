@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    ecx, ptr, r10, r11, r12, r13, r14, r15, r8, r8d, r9, rax, rbp, rbx, rcx, rdi, rdx, rsi, rsp,
+    ptr, r10, r11, r12, r13, r14, r15, r8, r8d, r9, rax, rbp, rbx, rcx, rdi, rdx, rsi, rsp,
     AsmRegister64,
 };
 
