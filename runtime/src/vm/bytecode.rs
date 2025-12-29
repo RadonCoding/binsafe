@@ -1,4 +1,4 @@
-use iced_x86::{Code, Instruction, Mnemonic, OpKind, Register};
+use iced_x86::{Code, Instruction, OpKind, Register};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
@@ -10,7 +10,6 @@ pub enum VMOp {
     SetRegReg,
     SetRegMem,
     SetMemReg,
-    AddSubReg,
     BranchRel,
     BranchReg,
     BranchMem,
@@ -235,13 +234,6 @@ pub enum VMCmd<'a> {
         dst: VMMem,
         src: VMReg,
     },
-    AddSubReg {
-        vop: VMOp,
-        bits: VMBits,
-        dst: VMReg,
-        src: VMReg,
-        sub: bool,
-    },
     BranchRel {
         vop: VMOp,
         dst: i32,
@@ -316,16 +308,6 @@ impl<'a> VMCmd<'a> {
                 let mut bytes = vec![*vop as u8, *bits as u8];
                 bytes.extend_from_slice(&dst.encode());
                 bytes.push(*src as u8);
-                bytes
-            }
-            Self::AddSubReg {
-                vop,
-                bits,
-                dst,
-                src,
-                sub,
-            } => {
-                let bytes = vec![*vop as u8, *bits as u8, *dst as u8, *src as u8, *sub as u8];
                 bytes
             }
             Self::BranchRel { vop, dst, ret } => {
@@ -488,62 +470,6 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                         bits,
                         dst,
                         src,
-                    }
-                }
-                _ => return None,
-            }
-        }
-        Code::Add_r64_rm64
-        | Code::Add_r32_rm32
-        | Code::Add_r16_rm16
-        | Code::Add_r8_rm8
-        | Code::Sub_r64_rm64
-        | Code::Sub_r32_rm32
-        | Code::Sub_r16_rm16
-        | Code::Sub_r8_rm8 => {
-            let reg = instruction.op0_register();
-            let bits = VMBits::from(reg);
-            let dst = VMReg::from(reg);
-
-            let sub = instruction.mnemonic() == Mnemonic::Sub;
-
-            match instruction.op1_kind() {
-                OpKind::Register => {
-                    let src = VMReg::from(instruction.op1_register());
-                    VMCmd::AddSubReg {
-                        vop: VMOp::AddSubReg,
-                        bits,
-                        dst,
-                        src,
-                        sub,
-                    }
-                }
-                _ => return None,
-            }
-        }
-        Code::Add_rm64_r64
-        | Code::Add_rm32_r32
-        | Code::Add_rm16_r16
-        | Code::Add_rm8_r8
-        | Code::Sub_rm64_r64
-        | Code::Sub_rm32_r32
-        | Code::Sub_rm16_r16
-        | Code::Sub_rm8_r8 => {
-            let reg = instruction.op1_register();
-            let bits = VMBits::from(reg);
-            let src = VMReg::from(reg);
-
-            let sub = instruction.mnemonic() == Mnemonic::Sub;
-
-            match instruction.op0_kind() {
-                OpKind::Register => {
-                    let dst = VMReg::from(instruction.op0_register());
-                    VMCmd::AddSubReg {
-                        vop: VMOp::AddSubReg,
-                        bits,
-                        dst,
-                        src,
-                        sub,
                     }
                 }
                 _ => return None,
