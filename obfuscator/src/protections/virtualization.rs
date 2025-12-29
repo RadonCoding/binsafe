@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use clap::builder::Str;
 use iced_x86::code_asm::CodeAssembler;
 use iced_x86::Mnemonic;
 use logger::info;
@@ -98,8 +99,8 @@ impl Protection for Virtualization {
             let top = sorted
                 .iter()
                 .take(10)
-                .map(|(m, _)| format!("{:?}", m).to_lowercase())
-                .collect::<Vec<_>>()
+                .map(|(m, n)| format!("{:?}={}", m, n).to_lowercase())
+                .collect::<Vec<String>>()
                 .join(", ");
             output.push(' ');
             output.push_str(&format!("(most failures: {})", top));
