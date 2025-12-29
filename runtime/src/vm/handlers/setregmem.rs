@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    bl, byte_ptr, eax, ptr, r12, r13, r14, r15, rax, rbx, rcx, rdx, word_ptr,
+    bh, bl, byte_ptr, eax, ptr, r12, r13, r14, r14d, r15, rax, rbx, rcx, rdx, word_ptr,
 };
 
 use crate::{
@@ -33,10 +33,10 @@ pub fn build(rt: &mut Runtime) {
     // mov r13, rdx
     rt.asm.mov(r13, rdx).unwrap();
 
-    // mov bl, [r13] -> bits
-    rt.asm.mov(bl, ptr(r13)).unwrap();
-    // add r13, 0x1
-    rt.asm.add(r13, 0x1).unwrap();
+    // movzx rbx, [r13] -> bits | load
+    rt.asm.movzx(rbx, word_ptr(r13)).unwrap();
+    // add r13, 0x2
+    rt.asm.add(r13, 0x2).unwrap();
 
     // movzx r15, [r13] -> dst
     rt.asm.movzx(r15, byte_ptr(r13)).unwrap();
@@ -116,42 +116,78 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower16).unwrap();
     {
-        // mov rax, [r14]
-        rt.asm.mov(rax, word_ptr(r14)).unwrap();
+        // test bh, bh
+        rt.asm.test(bh, bh).unwrap();
 
-        // mov rcx, [r12 + r15*8]
-        rt.asm.mov(rcx, ptr(r12 + r15 * 8)).unwrap();
-        // and rcx, !0xFFFF
-        rt.asm.and(rcx, !0xFFFFi32).unwrap();
-        // or rcx, rax
-        rt.asm.or(rcx, rax).unwrap();
+        let skip = rt.asm.fwd().unwrap();
 
-        // mov [r12 + r15*8], rcx
-        rt.asm.mov(ptr(r12 + r15 * 8), rcx).unwrap();
+        // jz ...
+        rt.asm.jz(skip).unwrap();
+        // movzx r14, [r14]
+        rt.asm.movzx(r14, word_ptr(r14)).unwrap();
 
-        // jmp ...
-        rt.asm.jmp(epilogue).unwrap();
+        rt.asm.anonymous_label().unwrap();
+        {
+            // Truncate to 16-bit operand size
+            rt.asm.and(r14, 0xFFFFi32).unwrap();
+
+            // mov rcx, [r12 + r15*8]
+            rt.asm.mov(rcx, ptr(r12 + r15 * 8)).unwrap();
+            // and rcx, !0xFFFF
+            rt.asm.and(rcx, !0xFFFFi32).unwrap();
+            // or rcx, rax
+            rt.asm.or(rcx, rax).unwrap();
+
+            // mov [r12 + r15*8], rcx
+            rt.asm.mov(ptr(r12 + r15 * 8), rcx).unwrap();
+
+            // jmp ...
+            rt.asm.jmp(epilogue).unwrap();
+        }
     }
 
     rt.asm.set_label(&mut lower32).unwrap();
     {
+        // test bh, bh
+        rt.asm.test(bh, bh).unwrap();
+
+        let skip = rt.asm.fwd().unwrap();
+
+        // jz ...
+        rt.asm.jz(skip).unwrap();
         // mov eax, [r14]
         rt.asm.mov(eax, ptr(r14)).unwrap();
+        // mov r14, rax
+        rt.asm.mov(r14, rax).unwrap();
 
-        // mov [r12 + r15*8], rax
-        rt.asm.mov(ptr(r12 + r15 * 8), rax).unwrap();
-
-        // jmp ...
-        rt.asm.jmp(epilogue).unwrap();
+        rt.asm.anonymous_label().unwrap();
+        {
+            // mov eax, r14d
+            rt.asm.mov(eax, r14d).unwrap();
+            // mov [r12 + r15*8], rax
+            rt.asm.mov(ptr(r12 + r15 * 8), rax).unwrap();
+            // jmp ...
+            rt.asm.jmp(epilogue).unwrap();
+        }
     }
 
     rt.asm.set_label(&mut lower64).unwrap();
     {
-        // mov rax, [r14]
-        rt.asm.mov(rax, ptr(r14)).unwrap();
+        // test bh, bh
+        rt.asm.test(bh, bh).unwrap();
 
-        // mov [r12 + r15*8], rax
-        rt.asm.mov(ptr(r12 + r15 * 8), rax).unwrap();
+        let skip = rt.asm.fwd().unwrap();
+
+        // jz ...
+        rt.asm.jz(skip).unwrap();
+        // mov r14, [r14]
+        rt.asm.mov(r14, ptr(r14)).unwrap();
+
+        rt.asm.anonymous_label().unwrap();
+        {
+            // mov [r12 + r15*8], r14
+            rt.asm.mov(ptr(r12 + r15 * 8), r14).unwrap();
+        }
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();

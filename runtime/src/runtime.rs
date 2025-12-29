@@ -195,13 +195,21 @@ impl Runtime {
             .unwrap();
 
         for label in self.func_labels.values() {
-            self.addresses
-                .insert(*label, options.label_ip(&label).unwrap());
+            match options.label_ip(label) {
+                Ok(ip) => {
+                    self.addresses.insert(*label, ip);
+                }
+                Err(_) => continue,
+            }
         }
 
         for label in self.data_labels.values() {
-            self.addresses
-                .insert(*label, options.label_ip(&label).unwrap());
+            match options.label_ip(label) {
+                Ok(ip) => {
+                    self.addresses.insert(*label, ip);
+                }
+                Err(_) => continue,
+            }
         }
 
         options.inner.code_buffer
