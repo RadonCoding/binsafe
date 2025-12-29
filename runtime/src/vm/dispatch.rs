@@ -14,11 +14,11 @@ pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // push r12
-    stack::stack_push(rt, r12);
+    stack::push(rt, r12);
     // push r13
-    stack::stack_push(rt, r13);
+    stack::push(rt, r13);
     // push r14
-    stack::stack_push(rt, r14);
+    stack::push(rt, r14);
 
     // mov r12, rcx
     rt.asm.mov(r12, rcx).unwrap();
@@ -46,6 +46,7 @@ pub fn build(rt: &mut Runtime) {
         (VMOp::SetRegReg, FnDef::VmHandlerSetRegReg),
         (VMOp::SetRegMem, FnDef::VmHandlerSetRegMem),
         (VMOp::SetMemReg, FnDef::VmHandlerSetMemReg),
+        (VMOp::AddSubReg, FnDef::VmHandlerAddSubReg),
         (VMOp::BranchRel, FnDef::VmHandlerBranchRel),
         (VMOp::BranchReg, FnDef::VmHandlerBranchReg),
         (VMOp::BranchMem, FnDef::VmHandlerBranchMem),
@@ -103,11 +104,11 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut epilogue).unwrap();
     {
         // pop r14
-        stack::stack_pop(rt, r14);
+        stack::pop(rt, r14);
         // pop r13
-        stack::stack_pop(rt, r13);
+        stack::pop(rt, r13);
         // pop r12
-        stack::stack_pop(rt, r12);
+        stack::pop(rt, r12);
         // ret
         stack::ret(rt);
     }

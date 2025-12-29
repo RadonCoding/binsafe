@@ -24,6 +24,7 @@ pub enum FnDef {
     VmHandlerSetRegReg,
     VmHandlerSetRegMem,
     VmHandlerSetMemReg,
+    VmHandlerAddSubReg,
     VmHandlerBranchRel,
     VmHandlerBranchReg,
     VmHandlerBranchMem,
@@ -72,6 +73,7 @@ impl Runtime {
         func_labels.insert(FnDef::VmHandlerSetRegReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegMem, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetMemReg, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerAddSubReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchRel, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchMem, asm.create_label());
@@ -168,6 +170,7 @@ impl Runtime {
         self.define_func(FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build);
         self.define_func(FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build);
         self.define_func(FnDef::VmHandlerSetMemReg, vm::handlers::setmemreg::build);
+        self.define_func(FnDef::VmHandlerAddSubReg, vm::handlers::addsubreg::build);
         self.define_func(FnDef::VmHandlerBranchRel, vm::handlers::branchrel::build);
         self.define_func(FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build);
         self.define_func(FnDef::VmHandlerBranchMem, vm::handlers::branchmem::build);

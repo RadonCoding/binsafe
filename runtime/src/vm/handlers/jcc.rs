@@ -24,11 +24,11 @@ pub fn build(rt: &mut Runtime) {
     let mut skip_jump = rt.asm.create_label();
 
     // push r12
-    stack::stack_push(rt, r12);
+    stack::push(rt, r12);
     // push r13
-    stack::stack_push(rt, r13);
+    stack::push(rt, r13);
     // push r14
-    stack::stack_push(rt, r14);
+    stack::push(rt, r14);
 
     // mov r13d, [rcx + ...]
     utils::mov_reg_vreg_32(rt, rcx, VMReg::Flags, r13d);
@@ -199,11 +199,11 @@ pub fn build(rt: &mut Runtime) {
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
         // pop r14
-        stack::stack_pop(rt, r14);
+        stack::pop(rt, r14);
         // pop r13
-        stack::stack_pop(rt, r13);
+        stack::pop(rt, r13);
         // pop r12
-        stack::stack_pop(rt, r12);
+        stack::pop(rt, r12);
         // ret
         stack::ret(rt);
     }

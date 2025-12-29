@@ -16,15 +16,15 @@ pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // push r12
-    stack::stack_push(rt, r12);
+    stack::push(rt, r12);
     // push r13
-    stack::stack_push(rt, r13);
+    stack::push(rt, r13);
     // push r14
-    stack::stack_push(rt, r14);
+    stack::push(rt, r14);
     // push r15
-    stack::stack_push(rt, r15);
+    stack::push(rt, r15);
     // push rbx
-    stack::stack_push(rt, rbx);
+    stack::push(rt, rbx);
 
     // mov r12, rcx
     rt.asm.mov(r12, rcx).unwrap();
@@ -135,15 +135,15 @@ pub fn build(rt: &mut Runtime) {
         // mov rax, r13
         rt.asm.mov(rax, r13).unwrap();
         // pop rbx
-        stack::stack_pop(rt, rbx);
+        stack::pop(rt, rbx);
         // pop r15
-        stack::stack_pop(rt, r15);
+        stack::pop(rt, r15);
         // pop r14
-        stack::stack_pop(rt, r14);
+        stack::pop(rt, r14);
         // pop r13
-        stack::stack_pop(rt, r13);
+        stack::pop(rt, r13);
         // pop r12
-        stack::stack_pop(rt, r12);
+        stack::pop(rt, r12);
         // ret
         stack::ret(rt);
     }
