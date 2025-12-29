@@ -2,7 +2,7 @@ use iced_x86::code_asm::{asm_traits::CodeAsmJmp, ptr, r10, r11, AsmRegister64, C
 
 use crate::runtime::{DataDef, Runtime};
 
-pub const VM_STACK_SIZE: usize = 0x1000;
+pub const VM_STACK_SIZE: usize = 0x100;
 
 pub fn initialize(rt: &mut Runtime) {
     let mut initialized = rt.asm.create_label();
@@ -34,7 +34,7 @@ pub fn initialize(rt: &mut Runtime) {
     }
 }
 
-pub fn stack_push(rt: &mut Runtime, src: AsmRegister64) {
+pub fn push(rt: &mut Runtime, src: AsmRegister64) {
     // mov r11, [...]
     rt.asm
         .mov(r11, ptr(rt.data_labels[&DataDef::VmStackPointer]))
@@ -49,7 +49,7 @@ pub fn stack_push(rt: &mut Runtime, src: AsmRegister64) {
     rt.asm.mov(ptr(r11), src).unwrap();
 }
 
-pub fn stack_pop(rt: &mut Runtime, dst: AsmRegister64) {
+pub fn pop(rt: &mut Runtime, dst: AsmRegister64) {
     // mov r11, [...]
     rt.asm
         .mov(r11, ptr(rt.data_labels[&DataDef::VmStackPointer]))
@@ -73,7 +73,7 @@ where
     // lea r10, [...]
     rt.asm.lea(r10, ptr(ret)).unwrap();
     // push r10
-    stack_push(rt, r10);
+    push(rt, r10);
     // jmp ...
     rt.asm.jmp(target).unwrap();
 
@@ -82,7 +82,7 @@ where
 
 pub fn ret(rt: &mut Runtime) {
     // pop r10
-    stack_pop(rt, r10);
+    pop(rt, r10);
     // jmp r10
     rt.asm.jmp(r10).unwrap();
 }

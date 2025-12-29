@@ -1,3 +1,4 @@
+pub mod addsubreg;
 pub mod branchmem;
 pub mod branchreg;
 pub mod branchrel;

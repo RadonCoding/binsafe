@@ -10,9 +10,9 @@ pub fn build(rt: &mut Runtime) {
     let mut skip_ret = rt.asm.create_label();
 
     // push r12
-    stack::stack_push(rt, r12);
+    stack::push(rt, r12);
     // push r13
-    stack::stack_push(rt, r13);
+    stack::push(rt, r13);
 
     // mov r12, rcx
     rt.asm.mov(r12, rcx).unwrap();
@@ -56,9 +56,9 @@ pub fn build(rt: &mut Runtime) {
     // mov rax, r13
     rt.asm.mov(rax, r13).unwrap();
     // pop r13
-    stack::stack_pop(rt, r13);
+    stack::pop(rt, r13);
     // pop r12
-    stack::stack_pop(rt, r12);
+    stack::pop(rt, r12);
     // ret
     stack::ret(rt);
 }
