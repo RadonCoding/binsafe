@@ -1,26 +1,43 @@
 mod engine;
 mod protections;
 
-use std::{env, fs, path::Path};
-
+use clap::Parser;
 use logger::info;
+use std::{fs, path::PathBuf};
 
 use crate::{
     engine::Engine,
     protections::{mutation::Mutation, virtualization::Virtualization},
 };
 
-fn main() {
-    let args = env::args().collect::<Vec<String>>();
+#[derive(Parser)]
+#[command(author, version)]
+struct Args {
+    input: PathBuf,
 
-    let input = Path::new(&args[1]);
+    #[arg(short = 'v', long = "virtualize")]
+    virtualize: bool,
+
+    #[arg(short = 'm', long = "mutate")]
+    mutate: bool,
+}
+
+fn main() {
+    let args = Args::parse();
+
+    let input = &args.input;
 
     let mut engine = Engine::new(input);
 
     engine.scan();
 
-    engine.apply::<Virtualization>();
-    engine.apply::<Mutation>();
+    if args.virtualize {
+        engine.apply::<Virtualization>();
+    }
+
+    if args.mutate {
+        engine.apply::<Mutation>();
+    }
 
     let protected = engine.execute();
 

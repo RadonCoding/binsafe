@@ -224,6 +224,7 @@ pub enum VMCmd<'a> {
     RegMem {
         vop: VMOp,
         bits: VMBits,
+        load: bool,
         dst: VMReg,
         src: VMMem,
     },
@@ -290,10 +291,11 @@ impl<'a> VMCmd<'a> {
             Self::RegMem {
                 vop,
                 bits,
+                load,
                 dst,
                 src,
             } => {
-                let mut bytes = vec![*vop as u8, *bits as u8, *dst as u8];
+                let mut bytes = vec![*vop as u8, *bits as u8, *load as u8, *dst as u8];
                 bytes.extend_from_slice(&src.encode());
                 bytes
             }
@@ -438,6 +440,7 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                     VMCmd::RegMem {
                         vop: VMOp::SetRegMem,
                         bits,
+                        load: true,
                         dst,
                         src,
                     }
@@ -470,6 +473,20 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                     }
                 }
                 _ => return None,
+            }
+        }
+        Code::Lea_r16_m | Code::Lea_r32_m | Code::Lea_r64_m => {
+            let reg = instruction.op0_register();
+            let bits = VMBits::from(reg);
+            let dst = VMReg::from(reg);
+            let src = VMMem::new(address, instruction);
+
+            VMCmd::RegMem {
+                vop: VMOp::SetRegMem,
+                bits,
+                load: false,
+                dst,
+                src,
             }
         }
         Code::Call_rel32_64 => {
@@ -752,21 +769,20 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                 dst,
             }
         }
-        // Code::Js_rel32_64 | Code::Js_rel8_64 => {
-        //     let dst =
-        //         (instruction.memory_displacement64() as i64 - ip as i64) as i32;
-        //     // JS = SF=1
-        //     VMCmd::Jcc {
-        //         vop: VMOp::Jcc,
-        //         logic: VMLogic::AND,
-        //         conds: vec![VMCond {
-        //             cmp: VMTest::CMP,
-        //             lhs: VMFlag::Sign as u8,
-        //             rhs: 1,
-        //         }],
-        //         dst,
-        //     }
-        // }
+        Code::Js_rel32_64 | Code::Js_rel8_64 => {
+            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            // JS = SF=1
+            VMCmd::Jcc {
+                vop: VMOp::Jcc,
+                logic: VMLogic::AND,
+                conds: vec![VMCond {
+                    cmp: VMTest::CMP,
+                    lhs: VMFlag::Sign as u8,
+                    rhs: 1,
+                }],
+                dst,
+            }
+        }
         _ => {
             // println!("{instruction} -> {:?}", instruction.code());
             return None;

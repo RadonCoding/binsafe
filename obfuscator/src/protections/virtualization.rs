@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use iced_x86::code_asm::CodeAssembler;
+use iced_x86::Mnemonic;
 use logger::info;
 use runtime::vm::bytecode;
 use runtime::{
@@ -15,6 +16,7 @@ use crate::protections::Protection;
 #[derive(Default)]
 pub struct Virtualization {
     vblocks: HashMap<u64, i32>,
+    failures: HashMap<Mnemonic, u32>,
 }
 
 impl Protection for Virtualization {
@@ -35,7 +37,11 @@ impl Protection for Virtualization {
             for instruction in &block.instructions {
                 let bytecode = match bytecode::convert(address, instruction) {
                     Some(virtualized) => virtualized,
-                    None => continue 'outer,
+                    None => {
+                        let mnemonic = instruction.mnemonic();
+                        *self.failures.entry(mnemonic).or_insert(0) += 1;
+                        continue 'outer;
+                    }
                 };
                 vblock.extend(bytecode);
             }
@@ -71,11 +77,34 @@ impl Protection for Virtualization {
 
             assert!(dispatch.len() <= VM_DISPATCH_SIZE);
 
-            info(block);
-
+            info!("PRE-VIRTUALIZATION:\n{}", engine.blocks[i]);
             engine.replace(i, &dispatch);
+            info!("POST-VIRTUALIZATION:\n{}", engine.blocks[i]);
         }
 
-        info!("Virtualized {} blocks", self.vblocks.len());
+        let total = engine.blocks.len();
+        let virtualized = self.vblocks.len();
+        let percentage = (virtualized as f64 / total.max(1) as f64) * 100.0;
+
+        let mut output = format!(
+            "VIRTUALIZED: {}/{} blocks ({:.2}%)",
+            virtualized, total, percentage
+        );
+
+        if !self.failures.is_empty() {
+            let mut sorted = self.failures.iter().collect::<Vec<_>>();
+            sorted.sort_by(|a, b| b.1.cmp(a.1));
+
+            let top = sorted
+                .iter()
+                .take(10)
+                .map(|(m, _)| format!("{:?}", m).to_lowercase())
+                .collect::<Vec<_>>()
+                .join(", ");
+            output.push(' ');
+            output.push_str(&format!("(most failures: {})", top));
+        }
+
+        info!("{}", output);
     }
 }
