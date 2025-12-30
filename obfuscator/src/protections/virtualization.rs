@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use clap::builder::Str;
 use iced_x86::code_asm::CodeAssembler;
 use iced_x86::Mnemonic;
 use logger::info;
