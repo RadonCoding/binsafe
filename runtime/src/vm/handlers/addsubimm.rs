@@ -19,6 +19,7 @@ macro_rules! arithmetic {
         $src:ident,
         $dst:ident,
         $offset:expr,
+        $size:expr,
         $is_32:expr
     ) => {
         $rt.asm.set_label(&mut $label).unwrap();
@@ -28,8 +29,11 @@ macro_rules! arithmetic {
 
             // mov ..., [rcx + r8*8 + ...]
             $rt.asm.mov($dst, ptr(rcx + r8 * 8 + $offset)).unwrap();
-            // mov ..., [rcx + r9*8 + ...]
-            $rt.asm.mov($src, ptr(rcx + r9 * 8 + $offset)).unwrap();
+
+            // mov ..., [rdx]
+            $rt.asm.mov($src, ptr(rdx)).unwrap();
+            // add rdx, ...
+            $rt.asm.add(rdx, $size as i32).unwrap();
 
             // test r12b, r12b
             $rt.asm.test(r12b, r12b).unwrap();
@@ -124,13 +128,6 @@ pub fn build(rt: &mut Runtime) {
     // add rdx, 0x1
     rt.asm.add(rdx, 0x1).unwrap();
 
-    // movzx r9, [rdx] -> src
-    rt.asm.movzx(r9, byte_ptr(rdx)).unwrap();
-    // dec r9
-    rt.asm.dec(r9).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
-
     // mov r12b, [rdx] -> sub
     rt.asm.mov(r12b, ptr(rdx)).unwrap();
     // add rdx, 0x1
@@ -153,11 +150,11 @@ pub fn build(rt: &mut Runtime) {
     // je ...
     rt.asm.je(higher8).unwrap();
 
-    arithmetic!(rt, lower8, epilogue, r13b, r14b, 0, false);
-    arithmetic!(rt, higher8, epilogue, r13b, r14b, 1, false);
-    arithmetic!(rt, lower16, epilogue, r13w, r14w, 0, false);
-    arithmetic!(rt, lower32, epilogue, r13d, r14d, 0, true);
-    arithmetic!(rt, lower64, epilogue, r13, r14, 0, false);
+    arithmetic!(rt, lower8, epilogue, r13b, r14b, 0, 1, false);
+    arithmetic!(rt, higher8, epilogue, r13b, r14b, 1, 1, false);
+    arithmetic!(rt, lower16, epilogue, r13w, r14w, 0, 2, false);
+    arithmetic!(rt, lower32, epilogue, r13d, r14d, 0, 4, true);
+    arithmetic!(rt, lower64, epilogue, r13, r14, 0, 8, false);
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
