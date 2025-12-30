@@ -44,7 +44,7 @@ pub fn build(rt: &mut Runtime) {
     // mov rdx, r13
     rt.asm.mov(rdx, r13).unwrap();
     // call ...
-    stack::call(rt, rt.func_labels[&FnDef::ComputeEffectiveAddress]);
+    stack::call(rt, rt.func_labels[&FnDef::ComputeAddress]);
     // mov r13, rdx
     rt.asm.mov(r13, rdx).unwrap();
 

@@ -1,4 +1,4 @@
-pub mod compute_effective_address;
+pub mod compute_address;
 
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
 use iced_x86::code_asm::{ptr, qword_ptr, AsmRegister32, AsmRegister64};

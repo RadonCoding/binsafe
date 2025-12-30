@@ -1,4 +1,6 @@
-use iced_x86::code_asm::{asm_traits::CodeAsmJmp, ptr, r10, r11, AsmRegister64, CodeAssembler};
+use iced_x86::code_asm::{
+    asm_traits::CodeAsmJmp, ptr, r10, r11, rsp, AsmRegister64, CodeAssembler,
+};
 
 use crate::runtime::{DataDef, Runtime};
 
@@ -61,6 +63,20 @@ pub fn pop(rt: &mut Runtime, dst: AsmRegister64) {
     // mov [...], r11
     rt.asm
         .mov(ptr(rt.data_labels[&DataDef::VmStackPointer]), r11)
+        .unwrap();
+}
+
+// NOTE: Hopefully this does not cause problems :D
+pub fn pushfq(rt: &mut Runtime) {
+    // mov rsp, ...
+    rt.asm
+        .mov(rsp, ptr(rt.data_labels[&DataDef::VmStackPointer]))
+        .unwrap();
+    // pushfq
+    rt.asm.pushfq().unwrap();
+    // mov [...], rsp
+    rt.asm
+        .mov(ptr(rt.data_labels[&DataDef::VmStackPointer]), rsp)
         .unwrap();
 }
 

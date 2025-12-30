@@ -16,7 +16,7 @@ pub enum FnDef {
     VmEntry,
     VmDispatch,
     /* VM UTILS */
-    ComputeEffectiveAddress,
+    ComputeAddress,
     /* VM HANDLERS */
     VmHandlerPushImm,
     VmHandlerPushReg64,
@@ -24,6 +24,7 @@ pub enum FnDef {
     VmHandlerSetRegReg,
     VmHandlerSetRegMem,
     VmHandlerSetMemReg,
+    VmHandlerAddSubReg,
     VmHandlerBranchRel,
     VmHandlerBranchReg,
     VmHandlerBranchMem,
@@ -64,7 +65,7 @@ impl Runtime {
         func_labels.insert(FnDef::VmEntry, asm.create_label());
         func_labels.insert(FnDef::VmDispatch, asm.create_label());
 
-        func_labels.insert(FnDef::ComputeEffectiveAddress, asm.create_label());
+        func_labels.insert(FnDef::ComputeAddress, asm.create_label());
 
         func_labels.insert(FnDef::VmHandlerPushImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerPushReg64, asm.create_label());
@@ -72,6 +73,7 @@ impl Runtime {
         func_labels.insert(FnDef::VmHandlerSetRegReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegMem, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetMemReg, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerAddSubReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchRel, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchMem, asm.create_label());
@@ -157,10 +159,7 @@ impl Runtime {
         self.define_func(FnDef::VmEntry, vm::entry::build);
         self.define_func(FnDef::VmDispatch, vm::dispatch::build);
 
-        self.define_func(
-            FnDef::ComputeEffectiveAddress,
-            vm::utils::compute_effective_address::build,
-        );
+        self.define_func(FnDef::ComputeAddress, vm::utils::compute_address::build);
 
         self.define_func(FnDef::VmHandlerPushImm, vm::handlers::pushimm::build);
         self.define_func(FnDef::VmHandlerPushReg64, vm::handlers::pushreg64::build);
@@ -168,6 +167,7 @@ impl Runtime {
         self.define_func(FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build);
         self.define_func(FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build);
         self.define_func(FnDef::VmHandlerSetMemReg, vm::handlers::setmemreg::build);
+        self.define_func(FnDef::VmHandlerAddSubReg, vm::handlers::addsubreg::build);
         self.define_func(FnDef::VmHandlerBranchRel, vm::handlers::branchrel::build);
         self.define_func(FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build);
         self.define_func(FnDef::VmHandlerBranchMem, vm::handlers::branchmem::build);
