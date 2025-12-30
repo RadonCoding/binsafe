@@ -10,6 +10,7 @@ pub enum VMOp {
     SetRegReg,
     SetRegMem,
     SetMemReg,
+    AddSubImm,
     AddSubReg,
     BranchRel,
     BranchReg,
@@ -235,6 +236,13 @@ pub enum VMCmd<'a> {
         dst: VMMem,
         src: VMReg,
     },
+    AddSubImm {
+        vop: VMOp,
+        bits: VMBits,
+        dst: VMReg,
+        sub: bool,
+        src: &'a [u8],
+    },
     AddSubReg {
         vop: VMOp,
         bits: VMBits,
@@ -316,6 +324,17 @@ impl<'a> VMCmd<'a> {
                 let mut bytes = vec![*vop as u8, *bits as u8];
                 bytes.extend_from_slice(&dst.encode());
                 bytes.push(*src as u8);
+                bytes
+            }
+            Self::AddSubImm {
+                vop,
+                bits,
+                dst,
+                src,
+                sub,
+            } => {
+                let mut bytes = vec![*vop as u8, *bits as u8, *dst as u8, *sub as u8];
+                bytes.extend_from_slice(src);
                 bytes
             }
             Self::AddSubReg {
@@ -488,6 +507,86 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                         bits,
                         dst,
                         src,
+                    }
+                }
+                _ => return None,
+            }
+        }
+        Code::Add_rm8_imm8
+        | Code::Sub_rm8_imm8
+        | Code::Add_rm16_imm8
+        | Code::Sub_rm16_imm8
+        | Code::Add_rm32_imm8
+        | Code::Sub_rm32_imm8
+        | Code::Add_rm64_imm8
+        | Code::Sub_rm64_imm8 => {
+            let sub = matches!(instruction.mnemonic(), Mnemonic::Sub);
+
+            let (src, size) = match instruction.code() {
+                Code::Add_rm8_imm8 | Code::Sub_rm8_imm8 => (instruction.immediate8() as u64, 1),
+                Code::Add_rm16_imm8 | Code::Sub_rm16_imm8 => {
+                    (instruction.immediate8to16() as u64, 2)
+                }
+                Code::Add_rm32_imm8 | Code::Sub_rm32_imm8 => {
+                    (instruction.immediate8to32() as u64, 4)
+                }
+                Code::Add_rm64_imm8 | Code::Sub_rm64_imm8 => {
+                    (instruction.immediate8to64() as u64, 8)
+                }
+                _ => unreachable!(),
+            };
+
+            match instruction.op0_kind() {
+                OpKind::Register => {
+                    let reg = instruction.op0_register();
+                    let dst = VMReg::from(reg);
+                    let bits = VMBits::from(reg);
+                    VMCmd::AddSubImm {
+                        vop: VMOp::AddSubImm,
+                        bits,
+                        dst,
+                        sub,
+                        src: &src.to_le_bytes()[..size],
+                    }
+                }
+                _ => return None,
+            }
+        }
+        Code::Add_rm16_imm16 | Code::Sub_rm16_imm16 => {
+            let sub = matches!(instruction.mnemonic(), Mnemonic::Sub);
+            let src = instruction.immediate16();
+
+            match instruction.op0_kind() {
+                OpKind::Register => {
+                    let reg = instruction.op0_register();
+                    let dst = VMReg::from(reg);
+                    let bits = VMBits::from(reg);
+                    VMCmd::AddSubImm {
+                        vop: VMOp::AddSubImm,
+                        bits,
+                        dst,
+                        sub,
+                        src: &src.to_le_bytes(),
+                    }
+                }
+                _ => return None,
+            }
+        }
+        Code::Add_rm32_imm32 | Code::Sub_rm32_imm32 => {
+            let sub = matches!(instruction.mnemonic(), Mnemonic::Sub);
+            let src = instruction.immediate32();
+
+            match instruction.op0_kind() {
+                OpKind::Register => {
+                    let reg = instruction.op0_register();
+                    let dst = VMReg::from(reg);
+                    let bits = VMBits::from(reg);
+                    VMCmd::AddSubImm {
+                        vop: VMOp::AddSubImm,
+                        bits,
+                        dst,
+                        sub,
+                        src: &src.to_le_bytes(),
                     }
                 }
                 _ => return None,

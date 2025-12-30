@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, ptr, r12, r12b, r13, r13b, r13d, r13w, r14, r14b, r14d, r14w, r15, r8, r9, rax,
-    rcx, rdx,
+    al, byte_ptr, dword_ptr, ptr, r12, r12b, r13, r13b, r13d, r13w, r14, r14b, r14d, r14w, r15, r8,
+    r9, rax, rcx, rdx,
 };
 
 use crate::{
@@ -18,7 +18,8 @@ macro_rules! arithmetic {
         $epilogue:expr,
         $src:ident,
         $dst:ident,
-        $offset:expr
+        $offset:expr,
+        $is_32:expr
     ) => {
         $rt.asm.set_label(&mut $label).unwrap();
         {
@@ -48,16 +49,13 @@ macro_rules! arithmetic {
 
             $rt.asm.set_label(&mut done).unwrap();
             {
-                match stringify!($dst) {
-                    "r14d" => {
-                        // mov [rcx + r8*8], r14
-                        $rt.asm.mov(ptr(rcx + r8 * 8), r14).unwrap();
-                    }
-                    _ => {
-                        // mov [rcx + r8*8], ...
-                        $rt.asm.mov(ptr(rcx + r8 * 8 + $offset), $dst).unwrap();
-                    }
+                if $is_32 {
+                    // mov [rcx + r8*8 + 0x4], 0x0
+                    $rt.asm.mov(dword_ptr(rcx + r8 * 8 + 0x4), 0x0i32).unwrap();
                 }
+
+                // mov [rcx + r8*8], ...
+                $rt.asm.mov(ptr(rcx + r8 * 8 + $offset), $dst).unwrap();
 
                 // pushfq
                 stack::pushfq($rt);
@@ -155,11 +153,11 @@ pub fn build(rt: &mut Runtime) {
     // je ...
     rt.asm.je(higher8).unwrap();
 
-    arithmetic!(rt, lower8, epilogue, r13b, r14b, 0);
-    arithmetic!(rt, higher8, epilogue, r13b, r14b, 1);
-    arithmetic!(rt, lower16, epilogue, r13w, r14w, 0);
-    arithmetic!(rt, lower32, epilogue, r13d, r14d, 0);
-    arithmetic!(rt, lower64, epilogue, r13, r14, 0);
+    arithmetic!(rt, lower8, epilogue, r13b, r14b, 0, false);
+    arithmetic!(rt, higher8, epilogue, r13b, r14b, 1, false);
+    arithmetic!(rt, lower16, epilogue, r13w, r14w, 0, false);
+    arithmetic!(rt, lower32, epilogue, r13d, r14d, 0, true);
+    arithmetic!(rt, lower64, epilogue, r13, r14, 0, false);
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
