@@ -78,21 +78,16 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(al, ptr(r12 + r15 * 8)).unwrap();
         // mov [r14], al
         rt.asm.mov(ptr(r14), al).unwrap();
-
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
 
     rt.asm.set_label(&mut higher8).unwrap();
     {
-        // mov ax, [r12 + r15*8]
-        rt.asm.mov(ax, ptr(r12 + r15 * 8)).unwrap();
-        // shr ax, 0x8
-        rt.asm.shr(ax, 0x8).unwrap();
-
+        // mov al, [r12 + r15*8 + 0x1]
+        rt.asm.mov(al, ptr(r12 + r15 * 8 + 0x1)).unwrap();
         // mov [r14], al
         rt.asm.mov(ptr(r14), al).unwrap();
-
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
@@ -101,10 +96,8 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov ax, [r12 + r15*8]
         rt.asm.mov(ax, ptr(r12 + r15 * 8)).unwrap();
-
         // mov [r14], ax
         rt.asm.mov(ptr(r14), ax).unwrap();
-
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
@@ -113,10 +106,8 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov eax, [r12 + r15*8]
         rt.asm.mov(eax, ptr(r12 + r15 * 8)).unwrap();
-
         // mov [r14], eax
         rt.asm.mov(ptr(r14), eax).unwrap();
-
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
@@ -125,7 +116,6 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov rax, [r12 + r15*8]
         rt.asm.mov(rax, ptr(r12 + r15 * 8)).unwrap();
-
         // mov [r14], rax
         rt.asm.mov(ptr(r14), rax).unwrap();
     }
@@ -134,6 +124,7 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov rax, r13
         rt.asm.mov(rax, r13).unwrap();
+
         // pop rbx
         stack::pop(rt, rbx);
         // pop r15

@@ -1,21 +1,20 @@
-use iced_x86::code_asm::{ah, ax, dword_ptr, eax, ptr, r8d, r9b, r9w, rdx};
+use iced_x86::code_asm::{eax, ptr, r8d, r9b, rax, rdx};
 
 use crate::{
     runtime::{FnDef, Runtime},
     vm::stack,
 };
 
-// void (unsigned long*, unsigned long*, unsigned long, unsigned short)
+// void (unsigned long*, unsigned long*, unsigned int, byte)
 pub fn build(rt: &mut Runtime) {
     let mut sub = rt.asm.create_label();
     let mut done = rt.asm.create_label();
-    let mut flags = rt.asm.create_label();
 
     // mov eax, [rdx]
     rt.asm.mov(eax, ptr(rdx)).unwrap();
 
-    // test r9b, r9b
-    rt.asm.test(r9b, r9b).unwrap();
+    // test r9b, 0x1 -> sub
+    rt.asm.test(r9b, 0x1).unwrap();
     // jnz ...
     rt.asm.jnz(sub).unwrap();
 
@@ -32,22 +31,18 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut done).unwrap();
     {
+        let mut flags = rt.asm.create_label();
+
         // pushfq
         stack::pushfq(rt);
 
-        // mov [rdx], eax
-        rt.asm.mov(ptr(rdx), eax).unwrap();
-
-        // mov ax, r9w
-        rt.asm.mov(ax, r9w).unwrap();
-
-        // test ah, ah
-        rt.asm.test(ah, ah).unwrap();
+        // test r9b, 0x2 -> store
+        rt.asm.test(r9b, 0x2).unwrap();
         // jz ...
         rt.asm.jz(flags).unwrap();
 
-        // mov dword ptr [rdx + 0x4], 0x0
-        rt.asm.mov(dword_ptr(rdx + 0x4), 0x0i32).unwrap();
+        // mov [rdx], rax
+        rt.asm.mov(ptr(rdx), rax).unwrap();
 
         rt.asm.set_label(&mut flags).unwrap();
         {
