@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    asm_traits::CodeAsmJmp, ptr, r10, r11, rsp, AsmRegister64, CodeAssembler,
+    asm_traits::CodeAsmJmp, ptr, r10, r11, rsp, AsmRegister64, CodeAssembler, CodeLabel,
 };
 
 use crate::runtime::{DataDef, Runtime};
@@ -85,15 +85,20 @@ where
     CodeAssembler: CodeAsmJmp<T>,
 {
     let mut ret = rt.asm.create_label();
+    call_with_label(rt, target, &mut ret);
+    rt.asm.set_label(&mut ret).unwrap();
+}
 
+pub fn call_with_label<T>(rt: &mut Runtime, target: T, ret: &mut CodeLabel)
+where
+    CodeAssembler: CodeAsmJmp<T>,
+{
     // lea r10, [...]
-    rt.asm.lea(r10, ptr(ret)).unwrap();
+    rt.asm.lea(r10, ptr(*ret)).unwrap();
     // push r10
     push(rt, r10);
     // jmp ...
     rt.asm.jmp(target).unwrap();
-
-    rt.asm.set_label(&mut ret).unwrap();
 }
 
 pub fn ret(rt: &mut Runtime) {

@@ -24,7 +24,7 @@ pub const VM_OP_COUNT: usize = (VMOp::Jcc as u8 + 1) as usize;
 pub enum VMFlag {
     Carry = 0,      // CF
     Parity = 2,     // PF
-    Auxfiliary = 4, // AF
+    Auxiliary = 4,  // AF
     Zero = 6,       // ZF
     Sign = 7,       // SF
     Trap = 8,       // TF
@@ -219,8 +219,9 @@ pub enum VMCmd<'a> {
     },
     RegReg {
         vop: VMOp,
-        bits: VMBits,
+        dbits: VMBits,
         dst: VMReg,
+        sbits: VMBits,
         src: VMReg,
     },
     RegMem {
@@ -245,8 +246,9 @@ pub enum VMCmd<'a> {
     },
     AddSubReg {
         vop: VMOp,
-        bits: VMBits,
+        dbits: VMBits,
         dst: VMReg,
+        sbits: VMBits,
         src: VMReg,
         sub: bool,
     },
@@ -297,11 +299,18 @@ impl<'a> VMCmd<'a> {
             }
             Self::RegReg {
                 vop,
-                bits,
+                dbits,
                 dst,
+                sbits,
                 src,
             } => {
-                let bytes = vec![*vop as u8, *bits as u8, *dst as u8, *src as u8];
+                let bytes = vec![
+                    *vop as u8,
+                    *dbits as u8,
+                    *dst as u8,
+                    *sbits as u8,
+                    *src as u8,
+                ];
                 bytes
             }
             Self::RegMem {
@@ -339,12 +348,20 @@ impl<'a> VMCmd<'a> {
             }
             Self::AddSubReg {
                 vop,
-                bits,
+                dbits,
                 dst,
+                sbits,
                 src,
                 sub,
             } => {
-                let bytes = vec![*vop as u8, *bits as u8, *dst as u8, *src as u8, *sub as u8];
+                let bytes = vec![
+                    *vop as u8,
+                    *dbits as u8,
+                    *dst as u8,
+                    *sbits as u8,
+                    *src as u8,
+                    *sub as u8,
+                ];
                 bytes
             }
             Self::BranchRel { vop, dst, ret } => {
@@ -458,17 +475,20 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
             }
         }
         Code::Mov_r64_rm64 | Code::Mov_r32_rm32 | Code::Mov_r16_rm16 | Code::Mov_r8_rm8 => {
-            let reg = instruction.op0_register();
-            let bits = VMBits::from(reg);
-            let dst = VMReg::from(reg);
+            let dreg = instruction.op0_register();
+            let dbits = VMBits::from(dreg);
+            let dst = VMReg::from(dreg);
 
             match instruction.op1_kind() {
                 OpKind::Register => {
-                    let src = VMReg::from(instruction.op1_register());
+                    let sreg = instruction.op1_register();
+                    let sbits = VMBits::from(sreg);
+                    let src = VMReg::from(sreg);
                     VMCmd::RegReg {
                         vop: VMOp::SetRegReg,
-                        bits,
+                        dbits,
                         dst,
+                        sbits,
                         src,
                     }
                 }
@@ -476,7 +496,7 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                     let src = VMMem::new(address, instruction);
                     VMCmd::RegMem {
                         vop: VMOp::SetRegMem,
-                        bits,
+                        bits: dbits,
                         load: true,
                         dst,
                         src,
@@ -486,17 +506,20 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
             }
         }
         Code::Mov_rm64_r64 | Code::Mov_rm32_r32 | Code::Mov_rm16_r16 | Code::Mov_rm8_r8 => {
-            let reg = instruction.op1_register();
-            let bits = VMBits::from(reg);
-            let src = VMReg::from(reg);
+            let sreg = instruction.op1_register();
+            let sbits = VMBits::from(sreg);
+            let src = VMReg::from(sreg);
 
             match instruction.op0_kind() {
                 OpKind::Register => {
-                    let dst = VMReg::from(instruction.op0_register());
+                    let dreg = instruction.op0_register();
+                    let dbits = VMBits::from(dreg);
+                    let dst = VMReg::from(dreg);
                     VMCmd::RegReg {
                         vop: VMOp::SetRegReg,
-                        bits,
+                        dbits,
                         dst,
+                        sbits,
                         src,
                     }
                 }
@@ -504,7 +527,7 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                     let dst = VMMem::new(address, instruction);
                     VMCmd::MemReg {
                         vop: VMOp::SetMemReg,
-                        bits,
+                        bits: sbits,
                         dst,
                         src,
                     }
@@ -600,18 +623,21 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
         | Code::Sub_r32_rm32
         | Code::Sub_r16_rm16
         | Code::Sub_r8_rm8 => {
-            let reg = instruction.op0_register();
-            let bits = VMBits::from(reg);
-            let dst = VMReg::from(reg);
+            let dreg = instruction.op0_register();
+            let dbits = VMBits::from(dreg);
+            let dst = VMReg::from(dreg);
             let sub = instruction.mnemonic() == Mnemonic::Sub;
 
             match instruction.op1_kind() {
                 OpKind::Register => {
+                    let sreg = instruction.op1_register();
+                    let sbits = VMBits::from(sreg);
                     let src = VMReg::from(instruction.op1_register());
                     VMCmd::AddSubReg {
                         vop: VMOp::AddSubReg,
-                        bits,
+                        dbits,
                         dst,
+                        sbits,
                         src,
                         sub,
                     }
@@ -627,18 +653,21 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
         | Code::Sub_rm32_r32
         | Code::Sub_rm16_r16
         | Code::Sub_rm8_r8 => {
-            let reg = instruction.op1_register();
-            let bits = VMBits::from(reg);
-            let src = VMReg::from(reg);
+            let sreg = instruction.op1_register();
+            let sbits = VMBits::from(sreg);
+            let src = VMReg::from(sreg);
             let sub = instruction.mnemonic() == Mnemonic::Sub;
 
             match instruction.op0_kind() {
                 OpKind::Register => {
-                    let dst = VMReg::from(instruction.op0_register());
+                    let dreg = instruction.op0_register();
+                    let dbits = VMBits::from(dreg);
+                    let dst = VMReg::from(dreg);
                     VMCmd::AddSubReg {
                         vop: VMOp::AddSubReg,
-                        bits,
+                        dbits,
                         dst,
+                        sbits,
                         src,
                         sub,
                     }
