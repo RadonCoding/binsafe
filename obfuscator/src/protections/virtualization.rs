@@ -8,10 +8,11 @@ use runtime::{
     runtime::{DataDef, FnDef},
     vm::bytecode::VMOp,
 };
-use shared::constants::VM_DISPATCH_SIZE;
 
 use crate::engine::Engine;
 use crate::protections::Protection;
+
+const VM_DISPATCH_SIZE: usize = 10;
 
 #[derive(Default)]
 pub struct Virtualization {

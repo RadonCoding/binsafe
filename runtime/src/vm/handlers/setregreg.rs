@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    al, ax, byte_ptr, eax, ptr, r12, r12b, r13, r13b, r8, r9, r9b, rax, rcx, rdx,
+    ax, byte_ptr, eax, ptr, r12, r12b, r13, r13b, r8, r9, r9b, rax, rcx, rdx,
 };
 
 use crate::{
@@ -66,9 +66,6 @@ pub fn build(rt: &mut Runtime) {
     {
         let mut is_lower = rt.asm.create_label();
 
-        // mov al, [rcx + r8*8]
-        rt.asm.mov(al, ptr(rcx + r8 * 8)).unwrap();
-
         // lea r9, [rcx + r9*8]
         rt.asm.lea(r9, ptr(rcx + r9 * 8)).unwrap();
 
@@ -131,8 +128,8 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov eax, [rcx + r9*8] -> src
         rt.asm.mov(eax, ptr(rcx + r9 * 8)).unwrap();
-        // mov [rcx + r8*8], eax
-        rt.asm.mov(ptr(rcx + r8 * 8), eax).unwrap();
+        // mov [rcx + r8*8], rax
+        rt.asm.mov(ptr(rcx + r8 * 8), rax).unwrap();
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
