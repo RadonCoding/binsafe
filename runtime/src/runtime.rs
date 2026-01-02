@@ -30,6 +30,7 @@ pub enum FnDef {
     VmHandlerBranchReg,
     VmHandlerBranchMem,
     VmHandlerJcc,
+    VmHandlerNop,
     /* VM ARITHMETIC */
     VmArithmeticFlags,
     VmArithmeticAddSub8,
@@ -84,6 +85,7 @@ impl Runtime {
         func_labels.insert(FnDef::VmHandlerBranchReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchMem, asm.create_label());
         func_labels.insert(FnDef::VmHandlerJcc, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerNop, asm.create_label());
 
         func_labels.insert(FnDef::VmArithmeticFlags, asm.create_label());
         func_labels.insert(FnDef::VmArithmeticAddSub8, asm.create_label());
@@ -165,6 +167,7 @@ impl Runtime {
         self.define_func(FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build);
         self.define_func(FnDef::VmHandlerBranchMem, vm::handlers::branchmem::build);
         self.define_func(FnDef::VmHandlerJcc, vm::handlers::jcc::build);
+        self.define_func(FnDef::VmHandlerNop, vm::handlers::nop::build);
 
         self.define_func(
             FnDef::VmArithmeticFlags,

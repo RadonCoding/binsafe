@@ -1,4 +1,6 @@
-use exe::{Arch, Buffer, ImageSectionHeader, Offset, SectionCharacteristics, VecPE, PE, RVA};
+use exe::{
+    Arch, Buffer, ImageSectionHeader, Offset, PETranslation, SectionCharacteristics, VecPE, PE, RVA,
+};
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};
 use logger::info;
 use rand::Rng;
@@ -132,6 +134,8 @@ impl Engine {
 
         let mut jumps = HashSet::new();
 
+        jumps.insert(entry_point.0 as u64);
+
         let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
 
         let mut instruction = Instruction::default();
@@ -169,7 +173,7 @@ impl Engine {
                 let ip = block[0].ip();
                 let offset = self
                     .pe
-                    .translate(exe::PETranslation::Memory(RVA(ip as u32)))
+                    .translate(PETranslation::Memory(RVA(ip as u32)))
                     .unwrap();
                 let size = (current - ip) as usize;
 

@@ -3,6 +3,7 @@ pub mod branchmem;
 pub mod branchreg;
 pub mod branchrel;
 pub mod jcc;
+pub mod nop;
 pub mod popreg64;
 pub mod pushimm;
 pub mod pushreg64;
