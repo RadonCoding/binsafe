@@ -1,28 +1,33 @@
 use std::collections::HashMap;
+use std::i32;
 
 use iced_x86::code_asm::CodeAssembler;
 use iced_x86::Mnemonic;
 use logger::info;
-use runtime::vm::bytecode;
+use runtime::vm::bytecode::{self};
 use runtime::{
     runtime::{DataDef, FnDef},
     vm::bytecode::VMOp,
 };
 
 use crate::engine::Engine;
+use crate::protections::virtualization::transforms::anti_debug::AntiDebug;
 use crate::protections::Protection;
-
-const VM_DISPATCH_SIZE: usize = 10;
 
 #[derive(Default)]
 pub struct Virtualization {
     vblocks: HashMap<u64, i32>,
     failures: HashMap<Mnemonic, u32>,
+    transforms: usize,
 }
+
+const VM_DISPATCH_SIZE: usize = 10;
 
 impl Protection for Virtualization {
     fn initialize(&mut self, engine: &mut Engine) {
         let mut vcode = Vec::new();
+
+        let xrefs = &engine.xrefs;
 
         'outer: for block in &mut engine.blocks {
             if block.size < VM_DISPATCH_SIZE {
@@ -45,6 +50,12 @@ impl Protection for Virtualization {
                     }
                 };
                 vblock.extend(bytecode);
+            }
+
+            if let Some(bytecode) = AntiDebug::transform(xrefs, block) {
+                vblock.splice(0..0, bytecode);
+
+                self.transforms += 1;
             }
 
             self.vblocks.insert(block.ip, vcode.len() as i32);
@@ -78,9 +89,7 @@ impl Protection for Virtualization {
 
             assert!(dispatch.len() <= VM_DISPATCH_SIZE);
 
-            info!("PRE-VIRTUALIZATION:\n{}", engine.blocks[i]);
             engine.replace(i, &dispatch);
-            info!("POST-VIRTUALIZATION:\n{}", engine.blocks[i]);
         }
 
         let total = engine.blocks.len();
@@ -88,8 +97,8 @@ impl Protection for Virtualization {
         let percentage = (virtualized as f64 / total.max(1) as f64) * 100.0;
 
         let mut output = format!(
-            "VIRTUALIZED: {}/{} blocks ({:.2}%)",
-            virtualized, total, percentage
+            "VIRTUALIZED: {}/{} blocks ({:.2}%) [transforms: {}]",
+            virtualized, total, percentage, self.transforms
         );
 
         if !self.failures.is_empty() {

@@ -3,7 +3,11 @@ use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, Int
 use logger::info;
 use rand::Rng;
 use runtime::runtime::Runtime;
-use std::{collections::HashSet, fmt, mem, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt, mem,
+    path::Path,
+};
 
 use crate::protections::Protection;
 
@@ -41,6 +45,7 @@ pub struct Engine {
     pub pe: VecPE,
     pub bitness: u32,
     pub blocks: Vec<Block>,
+    pub xrefs: HashMap<u64, usize>,
     pub rt: Runtime,
     protections: Vec<Box<dyn Protection>>,
 }
@@ -64,6 +69,7 @@ impl Engine {
             pe,
             bitness,
             blocks: Vec::new(),
+            xrefs: HashMap::new(),
             rt: Runtime::new(bitness),
             protections: Vec::new(),
         }
@@ -145,6 +151,8 @@ impl Engine {
 
                     if target >= ip && target < ip + code.len() as u64 {
                         jumps.insert(target);
+
+                        *self.xrefs.entry(target).or_insert(0) += 1;
                     }
                 }
                 _ => {}

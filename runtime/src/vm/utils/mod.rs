@@ -23,6 +23,13 @@ pub fn add_vreg_reg_64(rt: &mut Runtime, src: AsmRegister64, from: AsmRegister64
     rt.asm.add(ptr(src + (to as u8 - 1) * 8), from).unwrap();
 }
 
+pub fn add_vreg_imm_64(rt: &mut Runtime, src: AsmRegister64, from: i32, to: VMReg) {
+    // add [...], ...
+    rt.asm
+        .add(qword_ptr(src + (to as u8 - 1) * 8), from)
+        .unwrap();
+}
+
 pub fn sub_vreg_reg_64(rt: &mut Runtime, src: AsmRegister64, from: AsmRegister64, to: VMReg) {
     // sub [...], ...
     rt.asm.sub(ptr(src + (to as u8 - 1) * 8), from).unwrap();
@@ -51,6 +58,19 @@ pub fn store_vreg_mem_64(
     rt.asm.mov(with, ptr(src + (to as u8 - 1) * 8)).unwrap();
     // mov [...], ...
     rt.asm.mov(ptr(with), from).unwrap();
+}
+
+pub fn load_reg_mem_64(
+    rt: &mut Runtime,
+    src: AsmRegister64,
+    with: AsmRegister64,
+    from: VMReg,
+    to: AsmRegister64,
+) {
+    // mov ..., [...]
+    rt.asm.mov(with, ptr(src + (from as u8 - 1) * 8)).unwrap();
+    // mov ..., [...]
+    rt.asm.mov(to, ptr(with)).unwrap();
 }
 
 pub fn push_vreg_64(rt: &mut Runtime, src: AsmRegister64, from: VMReg) {
