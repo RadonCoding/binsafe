@@ -1,14 +1,11 @@
 use std::collections::HashMap;
 
 use iced_x86::{
-    code_asm::{ptr, rcx, rdx, CodeAssembler, CodeLabel},
+    code_asm::{CodeAssembler, CodeLabel},
     BlockEncoderOptions,
 };
 
-use crate::{
-    functions,
-    vm::{self, bytecode::VM_OP_COUNT, entry::VM_STATE_SIZE, stack::VM_STACK_SIZE},
-};
+use crate::vm::{self, bytecode::VM_OP_COUNT, entry::VM_STATE_SIZE, stack::VM_STACK_SIZE};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum FnDef {
@@ -30,12 +27,14 @@ pub enum FnDef {
     VmHandlerBranchReg,
     VmHandlerBranchMem,
     VmHandlerJcc,
+    /* VM ARITHMETIC */
+    VmArithmeticFlags,
+    VmArithmeticAddSub8,
+    VmArithmeticAddSub16,
+    VmArithmeticAddSub32,
+    VmArithmeticAddSub64,
     /* VM STACK */
     InitializeStack,
-    /* CORE */
-    CompareUnicodeToAnsi,
-    CompareAnsi,
-    GetProcAddress,
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -55,7 +54,6 @@ pub struct Runtime {
     pub func_labels: HashMap<FnDef, CodeLabel>,
     pub addresses: HashMap<CodeLabel, u64>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
-    pub import_labels: HashMap<ImportDef, CodeLabel>,
 }
 
 impl Runtime {
@@ -81,11 +79,13 @@ impl Runtime {
         func_labels.insert(FnDef::VmHandlerBranchMem, asm.create_label());
         func_labels.insert(FnDef::VmHandlerJcc, asm.create_label());
 
-        func_labels.insert(FnDef::InitializeStack, asm.create_label());
+        func_labels.insert(FnDef::VmArithmeticFlags, asm.create_label());
+        func_labels.insert(FnDef::VmArithmeticAddSub8, asm.create_label());
+        func_labels.insert(FnDef::VmArithmeticAddSub16, asm.create_label());
+        func_labels.insert(FnDef::VmArithmeticAddSub32, asm.create_label());
+        func_labels.insert(FnDef::VmArithmeticAddSub64, asm.create_label());
 
-        func_labels.insert(FnDef::CompareUnicodeToAnsi, asm.create_label());
-        func_labels.insert(FnDef::CompareAnsi, asm.create_label());
-        func_labels.insert(FnDef::GetProcAddress, asm.create_label());
+        func_labels.insert(FnDef::InitializeStack, asm.create_label());
 
         let mut data_labels = HashMap::new();
         data_labels.insert(DataDef::VmHandlers, asm.create_label());
@@ -94,14 +94,11 @@ impl Runtime {
         data_labels.insert(DataDef::VmStackContent, asm.create_label());
         data_labels.insert(DataDef::VmCode, asm.create_label());
 
-        let import_labels = HashMap::new();
-
         Self {
             asm,
             func_labels,
             addresses: HashMap::new(),
             data_labels,
-            import_labels,
         }
     }
 
@@ -113,26 +110,6 @@ impl Runtime {
     fn set_data_label(&mut self, def: DataDef) {
         let label = self.data_labels.get_mut(&def).unwrap();
         self.asm.set_label(label).unwrap();
-    }
-
-    fn set_import_label(&mut self, def: ImportDef) {
-        let label = self.import_labels.get_mut(&def).unwrap();
-        self.asm.set_label(label).unwrap();
-    }
-
-    pub fn get_proc_address(&mut self, module_name: DataDef, export_name: DataDef) {
-        // lea rcx, [...]
-        self.asm
-            .lea(rcx, ptr(self.data_labels[&module_name]))
-            .unwrap();
-        // lea rdx, [...]
-        self.asm
-            .lea(rdx, ptr(self.data_labels[&export_name]))
-            .unwrap();
-        // call ...
-        self.asm
-            .call(self.func_labels[&FnDef::GetProcAddress])
-            .unwrap();
     }
 
     pub fn lookup(&self, label: CodeLabel) -> u64 {
@@ -152,11 +129,6 @@ impl Runtime {
         self.asm.db(data).unwrap();
     }
 
-    fn define_import(&mut self, def: ImportDef) {
-        self.set_import_label(def);
-        self.asm.db(&[0u8; 8]).unwrap();
-    }
-
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
         self.define_func(FnDef::VmEntry, vm::entry::build);
         self.define_func(FnDef::VmDispatch, vm::dispatch::build);
@@ -169,21 +141,41 @@ impl Runtime {
         self.define_func(FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build);
         self.define_func(FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build);
         self.define_func(FnDef::VmHandlerSetMemReg, vm::handlers::setmemreg::build);
-        self.define_func(FnDef::VmHandlerAddSubImm, vm::handlers::addsubimm::build);
-        self.define_func(FnDef::VmHandlerAddSubReg, vm::handlers::addsubreg::build);
+        self.define_func(
+            FnDef::VmHandlerAddSubImm,
+            vm::handlers::arithmetic::addsubimm::build,
+        );
+        self.define_func(
+            FnDef::VmHandlerAddSubReg,
+            vm::handlers::arithmetic::addsubreg::build,
+        );
         self.define_func(FnDef::VmHandlerBranchRel, vm::handlers::branchrel::build);
         self.define_func(FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build);
         self.define_func(FnDef::VmHandlerBranchMem, vm::handlers::branchmem::build);
         self.define_func(FnDef::VmHandlerJcc, vm::handlers::jcc::build);
 
-        self.define_func(FnDef::InitializeStack, vm::stack::initialize);
-
         self.define_func(
-            FnDef::CompareUnicodeToAnsi,
-            functions::compare_unicode_to_ansi::build,
+            FnDef::VmArithmeticFlags,
+            vm::handlers::arithmetic::flags::build,
         );
-        self.define_func(FnDef::CompareAnsi, functions::compare_ansi::build);
-        self.define_func(FnDef::GetProcAddress, functions::get_proc_address::build);
+        self.define_func(
+            FnDef::VmArithmeticAddSub8,
+            vm::handlers::arithmetic::addsub8::build,
+        );
+        self.define_func(
+            FnDef::VmArithmeticAddSub16,
+            vm::handlers::arithmetic::addsub16::build,
+        );
+        self.define_func(
+            FnDef::VmArithmeticAddSub32,
+            vm::handlers::arithmetic::addsub32::build,
+        );
+        self.define_func(
+            FnDef::VmArithmeticAddSub64,
+            vm::handlers::arithmetic::addsub64::build,
+        );
+
+        self.define_func(FnDef::InitializeStack, vm::stack::initialize);
 
         self.define_data(DataDef::VmHandlers, &[0u8; VM_OP_COUNT * 8]);
 

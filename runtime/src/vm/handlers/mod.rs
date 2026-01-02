@@ -1,5 +1,4 @@
-pub mod addsubimm;
-pub mod addsubreg;
+pub mod arithmetic;
 pub mod branchmem;
 pub mod branchreg;
 pub mod branchrel;
