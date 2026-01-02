@@ -17,6 +17,7 @@ pub enum FnDef {
     /* VM HANDLERS */
     VmHandlerPushImm,
     VmHandlerPushReg64,
+    VmHandlerPopReg64,
     VmHandlerSetRegImm,
     VmHandlerSetRegReg,
     VmHandlerSetRegMem,
@@ -70,6 +71,7 @@ impl Runtime {
 
         func_labels.insert(FnDef::VmHandlerPushImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerPushReg64, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerPopReg64, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegMem, asm.create_label());
@@ -141,6 +143,7 @@ impl Runtime {
 
         self.define_func(FnDef::VmHandlerPushImm, vm::handlers::pushimm::build);
         self.define_func(FnDef::VmHandlerPushReg64, vm::handlers::pushreg64::build);
+        self.define_func(FnDef::VmHandlerPopReg64, vm::handlers::popreg64::build);
         self.define_func(FnDef::VmHandlerSetRegImm, vm::handlers::setregimm::build);
         self.define_func(FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build);
         self.define_func(FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build);

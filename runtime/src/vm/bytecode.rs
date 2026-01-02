@@ -6,6 +6,7 @@ pub enum VMOp {
     Invalid,
     PushImm,
     PushReg64,
+    PopReg64,
     SetRegImm,
     SetRegReg,
     SetRegMem,
@@ -213,6 +214,10 @@ pub enum VMCmd<'a> {
         vop: VMOp,
         src: VMReg,
     },
+    PopReg64 {
+        vop: VMOp,
+        dst: VMReg,
+    },
     RegImm {
         vop: VMOp,
         bits: VMBits,
@@ -292,7 +297,7 @@ pub enum VMCmd<'a> {
 }
 
 impl<'a> VMCmd<'a> {
-    fn encode(&self) -> Vec<u8> {
+    pub fn encode(&self) -> Vec<u8> {
         match self {
             VMCmd::PushImm { vop, bits, src } => {
                 let mut bytes = vec![*vop as u8, *bits as u8];
@@ -301,6 +306,10 @@ impl<'a> VMCmd<'a> {
             }
             Self::PushReg64 { vop, src } => {
                 let bytes = vec![*vop as u8, *src as u8];
+                bytes
+            }
+            Self::PopReg64 { vop, dst } => {
+                let bytes = vec![*vop as u8, *dst as u8];
                 bytes
             }
             Self::RegImm {
@@ -474,6 +483,14 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
             VMCmd::PushReg64 {
                 vop: VMOp::PushReg64,
                 src: src,
+            }
+        }
+        Code::Pop_r64 => {
+            let reg = instruction.op0_register();
+            let dst = VMReg::from(reg);
+            VMCmd::PopReg64 {
+                vop: VMOp::PopReg64,
+                dst,
             }
         }
         Code::Mov_r8_imm8 => {
