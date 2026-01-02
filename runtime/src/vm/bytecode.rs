@@ -19,8 +19,9 @@ pub enum VMOp {
     BranchReg,
     BranchMem,
     Jcc,
+    Nop,
 }
-pub const VM_OP_COUNT: usize = (VMOp::Jcc as u8 + 1) as usize;
+pub const VM_OP_COUNT: usize = VMOp::Nop as u8 as usize;
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -294,6 +295,9 @@ pub enum VMCmd<'a> {
         conds: Vec<VMCond>,
         dst: i32,
     },
+    Nop {
+        vop: VMOp,
+    },
 }
 
 impl<'a> VMCmd<'a> {
@@ -445,6 +449,10 @@ impl<'a> VMCmd<'a> {
                     bytes.extend_from_slice(&op.encode());
                 }
                 bytes.extend_from_slice(&dst.to_le_bytes());
+                bytes
+            }
+            Self::Nop { vop } => {
+                let bytes = vec![*vop as u8];
                 bytes
             }
         }
@@ -1126,6 +1134,9 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                 }],
                 dst,
             }
+        }
+        Code::Nopw | Code::Nopd | Code::Nopq | Code::Nop_rm16 | Code::Nop_rm32 | Code::Nop_rm64 => {
+            VMCmd::Nop { vop: VMOp::Nop }
         }
         _ => {
             // println!("{instruction} -> {:?}", instruction.code());

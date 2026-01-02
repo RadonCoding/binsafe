@@ -198,6 +198,7 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
+
         // pop r14
         stack::pop(rt, r14);
         // pop r13

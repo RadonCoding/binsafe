@@ -55,6 +55,7 @@ pub fn build(rt: &mut Runtime) {
         (VMOp::BranchReg, FnDef::VmHandlerBranchReg),
         (VMOp::BranchMem, FnDef::VmHandlerBranchMem),
         (VMOp::Jcc, FnDef::VmHandlerJcc),
+        (VMOp::Nop, FnDef::VmHandlerNop),
     ];
 
     for (op, func) in table {
