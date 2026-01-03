@@ -52,11 +52,11 @@ impl Protection for Virtualization {
                 vblock.extend(bytecode);
             }
 
-            if let Some(bytecode) = AntiDebug::transform(xrefs, block) {
-                vblock.splice(0..0, bytecode);
+            // if let Some(bytecode) = AntiDebug::transform(xrefs, block) {
+            //     vblock.splice(0..0, bytecode);
 
-                self.transforms += 1;
-            }
+            //     self.transforms += 1;
+            // }
 
             self.vblocks.insert(block.ip, vcode.len() as i32);
 
@@ -66,7 +66,9 @@ impl Protection for Virtualization {
             vcode.extend(vblock);
         }
 
-        engine.rt.define_data(DataDef::VmCode, &vcode);
+        if !vcode.is_empty() {
+            engine.rt.define_data(DataDef::VmCode, &vcode);
+        }
     }
 
     fn apply(&self, engine: &mut Engine) {
