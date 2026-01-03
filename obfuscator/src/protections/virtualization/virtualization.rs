@@ -6,8 +6,8 @@ use crate::protections::virtualization::transforms::anti_debug::AntiDebug;
 use crate::protections::Protection;
 use exe::Buffer;
 use exe::{PETranslation, PE, RVA};
-use iced_x86::code_asm::{tr, CodeAssembler};
-use iced_x86::{Mnemonic, OpKind, Register};
+use iced_x86::code_asm::CodeAssembler;
+use iced_x86::Mnemonic;
 use logger::info;
 use runtime::vm::bytecode::{self};
 use runtime::{
