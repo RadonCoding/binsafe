@@ -174,6 +174,7 @@ impl VMMem {
         } else {
             instruction.memory_displacement64() as i32
         };
+
         let seg = VMSeg::from(instruction.segment_prefix());
 
         Self {
@@ -295,18 +296,18 @@ pub enum VMCmd<'a> {
     },
     BranchRel {
         vop: VMOp,
-        dst: i32,
         ret: bool,
+        dst: i32,
     },
     BranchReg {
         vop: VMOp,
-        dst: VMReg,
         ret: bool,
+        dst: VMReg,
     },
     BranchMem {
         vop: VMOp,
-        dst: VMMem,
         ret: bool,
+        dst: VMMem,
     },
     Jcc {
         vop: VMOp,
@@ -382,11 +383,11 @@ impl<'a> VMCmd<'a> {
             }
             Self::MemReg {
                 vop,
-                sbits: bits,
+                sbits,
                 dst,
                 src,
             } => {
-                let mut bytes = vec![*vop as u8, *bits as u8];
+                let mut bytes = vec![*vop as u8, *sbits as u8];
                 bytes.extend_from_slice(&dst.encode());
                 bytes.push(*src as u8);
                 bytes
@@ -478,15 +479,15 @@ impl<'a> VMCmd<'a> {
                 bytes.push(*src as u8);
                 bytes
             }
-            Self::BranchRel { vop, dst, ret } => {
+            Self::BranchRel { vop, ret, dst } => {
                 let mut bytes = vec![*vop as u8, *ret as u8];
                 bytes.extend_from_slice(&dst.to_le_bytes());
                 bytes
             }
-            Self::BranchReg { vop, dst, ret } => {
+            Self::BranchReg { vop, ret, dst } => {
                 vec![*vop as u8, *ret as u8, *dst as u8]
             }
-            Self::BranchMem { vop, dst, ret } => {
+            Self::BranchMem { vop, ret, dst } => {
                 let mut bytes = vec![*vop as u8, *ret as u8];
                 bytes.extend_from_slice(&dst.encode());
                 bytes
@@ -541,7 +542,7 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
             let src = VMReg::from(reg);
             VMCmd::PushReg64 {
                 vop: VMOp::PushReg64,
-                src: src,
+                src,
             }
         }
         Code::Pop_r64 => {
@@ -660,10 +661,10 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
         }
         Code::Mov_rm64_imm32 | Code::Mov_rm32_imm32 | Code::Mov_rm16_imm16 | Code::Mov_rm8_imm8 => {
             let (src, size) = match instruction.code() {
-                Code::Mov_rm8_imm8 => (instruction.immediate8() as u64, 1),
-                Code::Mov_rm16_imm16 => (instruction.immediate16() as u64, 2),
-                Code::Mov_rm32_imm32 => (instruction.immediate32() as u64, 4),
-                Code::Mov_rm64_imm32 => (instruction.immediate32to64() as u64, 8),
+                Code::Mov_rm8_imm8 => (instruction.immediate8() as i64, 1),
+                Code::Mov_rm16_imm16 => (instruction.immediate16() as i64, 2),
+                Code::Mov_rm32_imm32 => (instruction.immediate32() as i64, 4),
+                Code::Mov_rm64_imm32 => (instruction.immediate32to64() as i64, 8),
                 _ => unreachable!(),
             };
 
@@ -706,10 +707,10 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
             let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
 
             let (src, size) = match instruction.op1_kind() {
-                OpKind::Immediate8 => (instruction.immediate8() as u64, 1),
-                OpKind::Immediate8to16 => (instruction.immediate8to16() as u64, 2),
-                OpKind::Immediate8to32 => (instruction.immediate8to32() as u64, 4),
-                OpKind::Immediate8to64 => (instruction.immediate8to64() as u64, 8),
+                OpKind::Immediate8 => (instruction.immediate8() as i64, 1),
+                OpKind::Immediate8to16 => (instruction.immediate8to16() as i64, 2),
+                OpKind::Immediate8to32 => (instruction.immediate8to32() as i64, 4),
+                OpKind::Immediate8to64 => (instruction.immediate8to64() as i64, 8),
                 _ => unreachable!(),
             };
 
@@ -741,9 +742,10 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
             }
         }
         Code::Add_rm16_imm16 | Code::Sub_rm16_imm16 | Code::Cmp_rm16_imm16 => {
-            let src = instruction.immediate16();
             let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
             let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
+
+            let src = instruction.immediate16();
 
             match instruction.op0_kind() {
                 OpKind::Register => {
@@ -772,10 +774,20 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                 _ => return None,
             }
         }
-        Code::Add_rm32_imm32 | Code::Sub_rm32_imm32 | Code::Cmp_rm32_imm32 => {
-            let src = instruction.immediate32();
+        Code::Add_rm64_imm32
+        | Code::Add_rm32_imm32
+        | Code::Sub_rm64_imm32
+        | Code::Sub_rm32_imm32
+        | Code::Cmp_rm64_imm32
+        | Code::Cmp_rm32_imm32 => {
             let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
             let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
+
+            let (src, size) = match instruction.op1_kind() {
+                OpKind::Immediate32 => (instruction.immediate32() as i64, 4),
+                OpKind::Immediate32to64 => (instruction.immediate32to64() as i64, 8),
+                _ => unreachable!(),
+            };
 
             match instruction.op0_kind() {
                 OpKind::Register => {
@@ -788,7 +800,7 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                         dst,
                         sub,
                         store,
-                        src: &src.to_le_bytes(),
+                        src: &src.to_le_bytes()[..size],
                     }
                 }
                 OpKind::Memory => {
@@ -798,7 +810,7 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
                         dst,
                         sub,
                         store,
-                        src: &src.to_le_bytes(),
+                        src: &src.to_le_bytes()[..size],
                     }
                 }
                 _ => return None,
@@ -923,13 +935,13 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
         Code::Call_rm64 => match instruction.op0_kind() {
             OpKind::Register => VMCmd::BranchReg {
                 vop: VMOp::BranchReg,
-                dst: VMReg::from(instruction.op0_register()),
                 ret: true,
+                dst: VMReg::from(instruction.op0_register()),
             },
             OpKind::Memory => VMCmd::BranchMem {
                 vop: VMOp::BranchMem,
-                dst: VMMem::new(address, instruction),
                 ret: true,
+                dst: VMMem::new(address, instruction),
             },
             _ => return None,
         },
@@ -937,8 +949,8 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
             let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
             VMCmd::BranchRel {
                 vop: VMOp::BranchRel,
-                dst,
                 ret: false,
+                dst,
             }
         }
         Code::Jmp_rm64 => match instruction.op0_kind() {

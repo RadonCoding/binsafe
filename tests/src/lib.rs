@@ -9,7 +9,7 @@ mod tests {
     use runtime::{
         runtime::{DataDef, FnDef, Runtime},
         vm::{
-            bytecode::{self, VMOp, VMReg, VM_REG_COUNT},
+            bytecode::{self, VMFlag, VMOp, VMReg, VM_REG_COUNT},
             stack,
         },
     };
@@ -77,7 +77,12 @@ mod tests {
         }
     }
 
-    fn template(instruction: Instruction, setup: &[(VMReg, u64)], target: VMReg, expected: u64) {
+    fn template(
+        instructions: &[Instruction],
+        setup: &[(VMReg, u64)],
+        target: VMReg,
+        expected: u64,
+    ) {
         let executor = Executor::new(0x2000);
 
         let mut registers = [0u64; VM_REG_COUNT];
@@ -86,7 +91,13 @@ mod tests {
             registers[(*reg as u8 - 1) as usize] = *val;
         }
 
-        let mut bytecode = bytecode::convert(0, &instruction).unwrap();
+        let mut bytecode = Vec::new();
+
+        for instruction in instructions {
+            let mut part = bytecode::convert(0x0, &instruction).unwrap();
+
+            bytecode.append(&mut part);
+        }
 
         bytecode.push(VMOp::Invalid as u8);
 
@@ -96,19 +107,76 @@ mod tests {
             registers[(target as u8 - 1) as usize],
             expected,
             "Failed: {:?} | Expected: 0x{:X}, Got: 0x{:X}",
-            instruction,
+            instructions[0],
             expected,
             registers[(target as u8 - 1) as usize]
         );
     }
 
+    fn flag(f: VMFlag) -> u64 {
+        1 << (f as u64)
+    }
+
     #[test]
     fn test_mov_reg_imm() {
         template(
-            Instruction::with2(Code::Mov_r32_imm32, Register::EAX, 0x0000_0000u32).unwrap(),
+            &[Instruction::with2(Code::Mov_r32_imm32, Register::EAX, 0x0000_0000).unwrap()],
             &[(VMReg::Rax, 0xFFFF_FFFF_FFFF_FFFF)],
             VMReg::Rax,
             0x0000_0000_0000_0000,
+        );
+    }
+
+    #[test]
+    fn test_flags() {
+        // SF & PF
+        template(
+            &[Instruction::with2(Code::Add_rm64_imm8, Register::RAX, -0x1).unwrap()],
+            &[(VMReg::Rax, 0x0)],
+            VMReg::Flags,
+            flag(VMFlag::Sign) | flag(VMFlag::Parity),
+        );
+        // OF & SF & AF & PF
+        template(
+            &[Instruction::with2(Code::Add_rm64_imm8, Register::RAX, 0x1).unwrap()],
+            &[(VMReg::Rax, 0x7FFF_FFFF_FFFF_FFFF)],
+            VMReg::Flags,
+            flag(VMFlag::Overflow)
+                | flag(VMFlag::Sign)
+                | flag(VMFlag::Auxiliary)
+                | flag(VMFlag::Parity),
+        );
+        // ZF & CF & AF & PF
+        template(
+            &[Instruction::with2(Code::Add_rm64_imm8, Register::RAX, 0x1).unwrap()],
+            &[(VMReg::Rax, 0xFFFF_FFFF_FFFF_FFFF)],
+            VMReg::Flags,
+            flag(VMFlag::Carry)
+                | flag(VMFlag::Parity)
+                | flag(VMFlag::Auxiliary)
+                | flag(VMFlag::Zero),
+        );
+    }
+
+    #[test]
+    fn test_jcc() {
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm8, Register::RAX, 0x1).unwrap(),
+                Instruction::with_branch(Code::Je_rel8_64, 0x1000).unwrap(),
+            ],
+            &[(VMReg::Rax, 0x1)],
+            VMReg::Rip,
+            0x1000,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm8, Register::RAX, 0x2).unwrap(),
+                Instruction::with_branch(Code::Jne_rel8_64, 0x1000).unwrap(),
+            ],
+            &[(VMReg::Rax, 0x1)],
+            VMReg::Rip,
+            0x1000,
         );
     }
 }

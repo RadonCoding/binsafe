@@ -9,7 +9,7 @@ use crate::{
 pub fn build(rt: &mut Runtime) {
     let mut skip_ret = rt.asm.create_label();
 
-    // mov al, [rdx]
+    // mov al, [rdx] -> ret
     rt.asm.mov(al, ptr(rdx)).unwrap();
     // add rdx, 0x1
     rt.asm.add(rdx, 0x1).unwrap();
@@ -27,21 +27,22 @@ pub fn build(rt: &mut Runtime) {
     utils::store_vreg_mem_64(rt, rcx, rax, r8, VMReg::Rsp);
 
     rt.asm.set_label(&mut skip_ret).unwrap();
+    {
+        // movzx rax, [rdx] -> dst
+        rt.asm.movzx(rax, byte_ptr(rdx)).unwrap();
+        // dec rax
+        rt.asm.dec(rax).unwrap();
+        // add rdx, 0x1
+        rt.asm.add(rdx, 0x1).unwrap();
 
-    // movzx rax, [rdx] -> dst
-    rt.asm.movzx(rax, byte_ptr(rdx)).unwrap();
-    // dec rax
-    rt.asm.dec(rax).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
+        // mov rax, [rcx + rax * 8]
+        rt.asm.mov(rax, ptr(rcx + rax * 8)).unwrap();
+        // mov [rcx + ...], rax
+        utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Rip);
 
-    // mov rax, [rcx + rax * 8]
-    rt.asm.mov(rax, ptr(rcx + rax * 8)).unwrap();
-    // mov [rcx + ...], rax
-    utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Rip);
-
-    // mov rax, rdx
-    rt.asm.mov(rax, rdx).unwrap();
-    // ret
-    stack::ret(rt);
+        // mov rax, rdx
+        rt.asm.mov(rax, rdx).unwrap();
+        // ret
+        stack::ret(rt);
+    }
 }

@@ -62,10 +62,10 @@ pub fn build(rt: &mut Runtime) {
     {
         // movsxd r8, [rdx] -> displ
         rt.asm.movsxd(r8, dword_ptr(rdx)).unwrap();
-        // add rax, r8
-        rt.asm.add(rax, r8).unwrap();
         // add rdx, 0x4
         rt.asm.add(rdx, 0x4).unwrap();
+        // add rax, r8
+        rt.asm.add(rax, r8).unwrap();
     }
 
     // movzx r8, [rdx] -> seg

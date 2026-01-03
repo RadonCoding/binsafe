@@ -1,18 +1,18 @@
 use std::collections::HashMap;
-use std::i32;
+use std::{i32, mem};
 
-use iced_x86::code_asm::CodeAssembler;
-use iced_x86::Mnemonic;
+use crate::engine::Engine;
+use crate::protections::Protection;
+use exe::Buffer;
+use exe::{PETranslation, PE, RVA};
+use iced_x86::code_asm::{tr, CodeAssembler};
+use iced_x86::{Mnemonic, OpKind, Register};
 use logger::info;
 use runtime::vm::bytecode::{self};
 use runtime::{
     runtime::{DataDef, FnDef},
     vm::bytecode::VMOp,
 };
-
-use crate::engine::Engine;
-use crate::protections::virtualization::transforms::anti_debug::AntiDebug;
-use crate::protections::Protection;
 
 #[derive(Default)]
 pub struct Virtualization {
@@ -52,6 +52,20 @@ impl Protection for Virtualization {
                 vblock.extend(bytecode);
             }
 
+            let found = block.ip == 0xD8BC;
+
+            if !found {
+                continue 'outer;
+            }
+
+            let image_base = engine.pe.get_image_base().unwrap();
+
+            println!("BLOCK: 0x{:016X}", image_base + block.ip);
+
+            for inst in &block.instructions {
+                println!("  {:X}: {}", inst.ip(), inst);
+            }
+
             // if let Some(bytecode) = AntiDebug::transform(xrefs, block) {
             //     vblock.splice(0..0, bytecode);
 
@@ -60,7 +74,7 @@ impl Protection for Virtualization {
 
             self.vblocks.insert(block.ip, vcode.len() as i32);
 
-            vblock.splice(0..0, next_ip.to_le_bytes());
+            vblock.splice(0..0, [0x0u8; mem::size_of::<u32>()]);
             vblock.push(VMOp::Invalid as u8);
 
             vcode.extend(vblock);
@@ -74,6 +88,13 @@ impl Protection for Virtualization {
     fn apply(&self, engine: &mut Engine) {
         let ventry = engine.rt.lookup(engine.rt.func_labels[&FnDef::VmEntry]);
 
+        let vcode_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmCode]);
+        let vcode_offset = engine
+            .pe
+            .translate(PETranslation::Memory(RVA(vcode_rva as u32)))
+            .unwrap();
+        let vcode = unsafe { engine.pe.as_mut_ptr().byte_add(vcode_offset) };
+
         for i in 0..engine.blocks.len() {
             let block = &engine.blocks[i];
 
@@ -85,11 +106,18 @@ impl Protection for Virtualization {
 
             let mut asm = CodeAssembler::new(engine.bitness).unwrap();
             asm.push(voffset).unwrap();
-            asm.jmp(ventry).unwrap();
+            asm.call(ventry).unwrap();
 
             let dispatch = asm.assemble(block.ip).unwrap();
 
             assert!(dispatch.len() <= VM_DISPATCH_SIZE);
+
+            unsafe {
+                let displacement = (block.size - dispatch.len()) as u32;
+                vcode
+                    .byte_add(voffset as usize)
+                    .copy_from(displacement.to_le_bytes().as_ptr(), mem::size_of::<u32>());
+            }
 
             engine.replace(i, &dispatch);
         }

@@ -46,6 +46,7 @@ pub enum FnDef {
 #[derive(PartialEq, Eq, Hash)]
 pub enum DataDef {
     VmHandlers,
+    VmLock,
     VmState,
     VmStackPointer,
     VmStackContent,
@@ -99,6 +100,7 @@ impl Runtime {
         let mut data_labels = HashMap::new();
         data_labels.insert(DataDef::VmHandlers, asm.create_label());
         data_labels.insert(DataDef::VmState, asm.create_label());
+        data_labels.insert(DataDef::VmLock, asm.create_label());
         data_labels.insert(DataDef::VmStackPointer, asm.create_label());
         data_labels.insert(DataDef::VmStackContent, asm.create_label());
         data_labels.insert(DataDef::VmCode, asm.create_label());
@@ -207,6 +209,7 @@ impl Runtime {
         self.define_data(DataDef::VmStackContent, &[0u8; VM_STACK_SIZE]);
 
         self.define_data(DataDef::VmState, &[0u8; VM_STATE_SIZE]);
+        self.define_data(DataDef::VmLock, &[0u8; 1]);
 
         let options = self
             .asm

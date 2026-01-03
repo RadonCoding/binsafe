@@ -151,7 +151,7 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut skip).unwrap();
         {
-            // mov [r12 + r15*8], r14
+            // mov [r12 + r15*8], r14d
             rt.asm.mov(ptr(r12 + r15 * 8), r14).unwrap();
             // jmp ...
             rt.asm.jmp(epilogue).unwrap();
