@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{ptr, r12, r13, r13b, r8, r8b, r8d, r8w, r9b, rax, rdx};
+use iced_x86::code_asm::{ptr, r12, r13, r14, r14b, r8, r8b, r8d, r8w, r9b, rax, rcx, rdx};
 
 use crate::{
     runtime::{FnDef, Runtime},
@@ -17,41 +17,46 @@ pub fn build(rt: &mut Runtime) {
     stack::push(rt, r12);
     // push r13
     stack::push(rt, r13);
+    // push r14
+    stack::push(rt, r14);
 
-    // mov r12, rdx
-    rt.asm.mov(r12, rdx).unwrap();
+    // mov r12, rcx
+    rt.asm.mov(r12, rcx).unwrap();
+    // mov r13, rdx
+    rt.asm.mov(r13, rdx).unwrap();
 
-    // mov rdx, r12
-    rt.asm.mov(rdx, r12).unwrap();
     // call ...
     stack::call(rt, rt.func_labels[&FnDef::ComputeAddress]);
 
-    // mov r12, rdx
-    rt.asm.mov(r12, rdx).unwrap();
+    // mov r13, rdx
+    rt.asm.mov(r13, rdx).unwrap();
 
-    // xor r13b, r13b
-    rt.asm.xor(r13b, r13b).unwrap();
+    // xor r14b, r14b
+    rt.asm.xor(r14b, r14b).unwrap();
 
-    // mov r8b, [r12] -> sub
-    rt.asm.mov(r8b, ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
-    // or r13b, r8b
-    rt.asm.or(r13b, r8b).unwrap();
+    // mov r8b, [r13] -> sub
+    rt.asm.mov(r8b, ptr(r13)).unwrap();
+    // add r13, 0x1
+    rt.asm.add(r13, 0x1).unwrap();
+    // or r14b, r8b
+    rt.asm.or(r14b, r8b).unwrap();
 
-    // mov r8b, [r12] -> store
-    rt.asm.mov(r8b, ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
+    // mov r8b, [r13] -> store
+    rt.asm.mov(r8b, ptr(r13)).unwrap();
+    // add r13, 0x1
+    rt.asm.add(r13, 0x1).unwrap();
     // shl r8b, 0x1
     rt.asm.shl(r8b, 0x1).unwrap();
-    // or r13b, r8b
-    rt.asm.or(r13b, r8b).unwrap();
+    // or r14b, r8b
+    rt.asm.or(r14b, r8b).unwrap();
 
-    // mov r8b, [r12] -> size
-    rt.asm.mov(r8b, ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
+    // or r14b, 0x4 -> memory
+    rt.asm.or(r14b, 0x4).unwrap();
+
+    // mov r8b, [r13] -> size
+    rt.asm.mov(r8b, ptr(r13)).unwrap();
+    // add r13, 0x1
+    rt.asm.add(r13, 0x1).unwrap();
 
     // cmp r8b, ...
     rt.asm.cmp(r8b, 0x8).unwrap();
@@ -68,14 +73,16 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut byte).unwrap();
     {
+        // mov rcx, r12
+        rt.asm.mov(rcx, r12).unwrap();
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
-        // mov r8b, [r12]
-        rt.asm.mov(r8b, ptr(r12)).unwrap();
-        // add r12, 0x1
-        rt.asm.add(r12, 0x1).unwrap();
-        // mov r9b, r13b
-        rt.asm.mov(r9b, r13b).unwrap();
+        // mov r8b, [r13]
+        rt.asm.mov(r8b, ptr(r13)).unwrap();
+        // add r13, 0x1
+        rt.asm.add(r13, 0x1).unwrap();
+        // mov r9b, r14b
+        rt.asm.mov(r9b, r14b).unwrap();
         // call ...
         stack::call_with_label(
             rt,
@@ -86,14 +93,16 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut word).unwrap();
     {
+        // mov rcx, r12
+        rt.asm.mov(rcx, r12).unwrap();
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
-        // mov r8b, [r12]
-        rt.asm.mov(r8w, ptr(r12)).unwrap();
-        // add r12, 0x1
-        rt.asm.add(r12, 0x2).unwrap();
-        // mov r9b, r13b
-        rt.asm.mov(r9b, r13b).unwrap();
+        // mov r8b, [r13]
+        rt.asm.mov(r8w, ptr(r13)).unwrap();
+        // add r13, 0x1
+        rt.asm.add(r13, 0x2).unwrap();
+        // mov r9b, r14b
+        rt.asm.mov(r9b, r14b).unwrap();
         // call ...
         stack::call_with_label(
             rt,
@@ -104,14 +113,16 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut dword).unwrap();
     {
+        // mov rcx, r12
+        rt.asm.mov(rcx, r12).unwrap();
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
-        // mov r8d, [r12]
-        rt.asm.mov(r8d, ptr(r12)).unwrap();
-        // add r12, 0x1
-        rt.asm.add(r12, 0x4).unwrap();
-        // mov r9b, r13b
-        rt.asm.mov(r9b, r13b).unwrap();
+        // mov r8d, [r13]
+        rt.asm.mov(r8d, ptr(r13)).unwrap();
+        // add r13, 0x1
+        rt.asm.add(r13, 0x4).unwrap();
+        // mov r9b, r14b
+        rt.asm.mov(r9b, r14b).unwrap();
         // call ...
         stack::call_with_label(
             rt,
@@ -122,14 +133,16 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut qword).unwrap();
     {
+        // mov rcx, r12
+        rt.asm.mov(rcx, r12).unwrap();
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
-        // mov r8, [r12]
-        rt.asm.mov(r8, ptr(r12)).unwrap();
-        // add r12, 0x8
-        rt.asm.add(r12, 0x8).unwrap();
-        // mov r9b, r13b
-        rt.asm.mov(r9b, r13b).unwrap();
+        // mov r8, [r13]
+        rt.asm.mov(r8, ptr(r13)).unwrap();
+        // add r13, 0x8
+        rt.asm.add(r13, 0x8).unwrap();
+        // mov r9b, r14b
+        rt.asm.mov(r9b, r14b).unwrap();
         // call ...
         stack::call_with_label(
             rt,
@@ -140,9 +153,11 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
-        // mov rax, r12
-        rt.asm.mov(rax, r12).unwrap();
+        // mov rax, r13
+        rt.asm.mov(rax, r13).unwrap();
 
+        // pop r14
+        stack::pop(rt, r14);
         // pop r13
         stack::pop(rt, r13);
         // pop r12

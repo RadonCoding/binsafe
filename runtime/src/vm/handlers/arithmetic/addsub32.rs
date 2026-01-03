@@ -31,6 +31,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut done).unwrap();
     {
+        let mut extend = rt.asm.create_label();
         let mut flags = rt.asm.create_label();
 
         // pushfq
@@ -41,8 +42,21 @@ pub fn build(rt: &mut Runtime) {
         // jz ...
         rt.asm.jz(flags).unwrap();
 
-        // mov [rdx], rax
-        rt.asm.mov(ptr(rdx), rax).unwrap();
+        // test r9b, 0x4 -> memory
+        rt.asm.test(r9b, 0x4).unwrap();
+        // jz ...
+        rt.asm.jz(extend).unwrap();
+
+        // mov [rdx], eax
+        rt.asm.mov(ptr(rdx), eax).unwrap();
+        // jmp ...
+        rt.asm.jmp(flags).unwrap();
+
+        rt.asm.set_label(&mut extend).unwrap();
+        {
+            // mov [rdx], rax
+            rt.asm.mov(ptr(rdx), rax).unwrap();
+        }
 
         rt.asm.set_label(&mut flags).unwrap();
         {

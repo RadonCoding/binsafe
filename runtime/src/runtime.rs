@@ -26,6 +26,7 @@ pub enum FnDef {
     VmHandlerAddSubRegImm,
     VmHandlerAddSubRegReg,
     VmHandlerAddSubMemImm,
+    VmHandlerAddSubMemReg,
     VmHandlerBranchRel,
     VmHandlerBranchReg,
     VmHandlerBranchMem,
@@ -49,9 +50,6 @@ pub enum DataDef {
     VmStackContent,
     VmCode,
 }
-
-#[derive(PartialEq, Eq, Hash)]
-pub enum ImportDef {}
 
 pub struct Runtime {
     pub asm: CodeAssembler,
@@ -80,6 +78,7 @@ impl Runtime {
         func_labels.insert(FnDef::VmHandlerSetMemReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerAddSubRegImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerAddSubRegReg, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerAddSubMemReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerAddSubMemImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchRel, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchReg, asm.create_label());
@@ -162,6 +161,10 @@ impl Runtime {
         self.define_func(
             FnDef::VmHandlerAddSubMemImm,
             vm::handlers::arithmetic::addsubmemimm::build,
+        );
+        self.define_func(
+            FnDef::VmHandlerAddSubMemReg,
+            vm::handlers::arithmetic::addsubmemreg::build,
         );
         self.define_func(FnDef::VmHandlerBranchRel, vm::handlers::branchrel::build);
         self.define_func(FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build);

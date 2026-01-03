@@ -31,7 +31,7 @@ impl AntiDebug {
             },
             VMCmd::RegMem {
                 vop: VMOp::SetRegMem,
-                bits: VMBits::Lower64,
+                dbits: VMBits::Lower64,
                 load: true,
                 dst: VMReg::Rax,
                 src: VMMem {
@@ -44,7 +44,7 @@ impl AntiDebug {
             },
             VMCmd::RegMem {
                 vop: VMOp::SetRegMem,
-                bits: VMBits::Lower8,
+                dbits: VMBits::Lower8,
                 load: true,
                 dst: VMReg::Rax,
                 src: VMMem {
@@ -57,7 +57,7 @@ impl AntiDebug {
             },
             VMCmd::AddSubRegImm {
                 vop: VMOp::AddSubRegImm,
-                bits: VMBits::Lower8,
+                dbits: VMBits::Lower8,
                 dst: VMReg::Rax,
                 sub: true,
                 store: false,
