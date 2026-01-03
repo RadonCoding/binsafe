@@ -33,7 +33,7 @@ pub fn build(rt: &mut Runtime) {
     // mov r13, rdx
     rt.asm.mov(r13, rdx).unwrap();
 
-    // movzx rbx, [r13] -> bits | load
+    // movzx rbx, [r13] -> dbits | load
     rt.asm.movzx(rbx, word_ptr(r13)).unwrap();
     // add r13, 0x2
     rt.asm.add(r13, 0x2).unwrap();

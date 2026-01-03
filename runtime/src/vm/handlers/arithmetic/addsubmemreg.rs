@@ -1,16 +1,19 @@
-use iced_x86::code_asm::{ptr, r12, r13, r14, r14b, r8, r8b, r8d, r8w, r9b, rax, rcx, rdx};
+use iced_x86::code_asm::{
+    byte_ptr, ptr, r12, r13, r14, r14b, r8, r8b, r8d, r8w, r9, r9b, rax, rcx, rdx,
+};
 
 use crate::{
     runtime::{FnDef, Runtime},
-    vm::stack,
+    vm::{bytecode::VMBits, stack},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
-    let mut byte = rt.asm.create_label();
-    let mut word = rt.asm.create_label();
-    let mut dword = rt.asm.create_label();
-    let mut qword = rt.asm.create_label();
+    let mut lower8 = rt.asm.create_label();
+    let mut higher8 = rt.asm.create_label();
+    let mut lower16 = rt.asm.create_label();
+    let mut lower32 = rt.asm.create_label();
+    let mut lower64 = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // push r12
@@ -53,34 +56,43 @@ pub fn build(rt: &mut Runtime) {
     // or r14b, 0x4 -> memory
     rt.asm.or(r14b, 0x4).unwrap();
 
-    // mov r8b, [r13] -> size
+    // mov r8b, [r13] -> sbits
     rt.asm.mov(r8b, ptr(r13)).unwrap();
     // add r13, 0x1
     rt.asm.add(r13, 0x1).unwrap();
 
-    // cmp r8b, ...
-    rt.asm.cmp(r8b, 0x8).unwrap();
-    // je ...
-    rt.asm.je(qword).unwrap();
-    // cmp r8b, ...
-    rt.asm.cmp(r8b, 0x4).unwrap();
-    // je ...
-    rt.asm.je(dword).unwrap();
-    // cmp r8b, ...
-    rt.asm.cmp(r8b, 0x2).unwrap();
-    // je ...
-    rt.asm.je(word).unwrap();
+    // movzx r9, [r13] -> src
+    rt.asm.movzx(r9, byte_ptr(r13)).unwrap();
+    // dec r9
+    rt.asm.dec(r9).unwrap();
+    // add r13, 0x1
+    rt.asm.add(r13, 0x1).unwrap();
 
-    rt.asm.set_label(&mut byte).unwrap();
+    // cmp r8b, ...
+    rt.asm.cmp(r8b, VMBits::Lower64 as u8 as i32).unwrap();
+    // je ...
+    rt.asm.je(lower64).unwrap();
+    // cmp r8b, ...
+    rt.asm.cmp(r8b, VMBits::Lower32 as u8 as i32).unwrap();
+    // je ...
+    rt.asm.je(lower32).unwrap();
+    // cmp r8b, ...
+    rt.asm.cmp(r8b, VMBits::Lower16 as u8 as i32).unwrap();
+    // je ...
+    rt.asm.je(lower16).unwrap();
+    // cmp r8b, ...
+    rt.asm.cmp(r8b, VMBits::Higher8 as u8 as i32).unwrap();
+    // je ...
+    rt.asm.je(higher8).unwrap();
+
+    rt.asm.set_label(&mut lower8).unwrap();
     {
         // mov rcx, r12
         rt.asm.mov(rcx, r12).unwrap();
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
-        // mov r8b, [r13]
-        rt.asm.mov(r8b, ptr(r13)).unwrap();
-        // add r13, 0x1
-        rt.asm.add(r13, 0x1).unwrap();
+        // mov r8b, [r12 + r9*8]
+        rt.asm.mov(r8b, ptr(r12 + r9 * 8)).unwrap();
         // mov r9b, r14b
         rt.asm.mov(r9b, r14b).unwrap();
         // call ...
@@ -91,16 +103,32 @@ pub fn build(rt: &mut Runtime) {
         );
     }
 
-    rt.asm.set_label(&mut word).unwrap();
+    rt.asm.set_label(&mut higher8).unwrap();
     {
         // mov rcx, r12
         rt.asm.mov(rcx, r12).unwrap();
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
-        // mov r8b, [r13]
-        rt.asm.mov(r8w, ptr(r13)).unwrap();
-        // add r13, 0x1
-        rt.asm.add(r13, 0x2).unwrap();
+        // mov r8b, [r12 + r9*8 + 0x1]
+        rt.asm.mov(r8b, ptr(r12 + r9 * 8 + 0x1)).unwrap();
+        // mov r9b, r14b
+        rt.asm.mov(r9b, r14b).unwrap();
+        // call ...
+        stack::call_with_label(
+            rt,
+            rt.func_labels[&FnDef::VmArithmeticAddSub8],
+            &mut epilogue,
+        );
+    }
+
+    rt.asm.set_label(&mut lower16).unwrap();
+    {
+        // mov rcx, r12
+        rt.asm.mov(rcx, r12).unwrap();
+        // mov rdx, rax
+        rt.asm.mov(rdx, rax).unwrap();
+        // mov r8w, [r12 + r9*8]
+        rt.asm.mov(r8w, ptr(r12 + r9 * 8)).unwrap();
         // mov r9b, r14b
         rt.asm.mov(r9b, r14b).unwrap();
         // call ...
@@ -111,16 +139,14 @@ pub fn build(rt: &mut Runtime) {
         );
     }
 
-    rt.asm.set_label(&mut dword).unwrap();
+    rt.asm.set_label(&mut lower32).unwrap();
     {
         // mov rcx, r12
         rt.asm.mov(rcx, r12).unwrap();
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
-        // mov r8d, [r13]
-        rt.asm.mov(r8d, ptr(r13)).unwrap();
-        // add r13, 0x1
-        rt.asm.add(r13, 0x4).unwrap();
+        // mov r8d, [r12 + r9*8]
+        rt.asm.mov(r8d, ptr(r12 + r9 * 8)).unwrap();
         // mov r9b, r14b
         rt.asm.mov(r9b, r14b).unwrap();
         // call ...
@@ -130,17 +156,14 @@ pub fn build(rt: &mut Runtime) {
             &mut epilogue,
         );
     }
-
-    rt.asm.set_label(&mut qword).unwrap();
+    rt.asm.set_label(&mut lower64).unwrap();
     {
         // mov rcx, r12
         rt.asm.mov(rcx, r12).unwrap();
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
-        // mov r8, [r13]
-        rt.asm.mov(r8, ptr(r13)).unwrap();
-        // add r13, 0x8
-        rt.asm.add(r13, 0x8).unwrap();
+        // mov r8, [r12 + r9*8]
+        rt.asm.mov(r8, ptr(r12 + r9 * 8)).unwrap();
         // mov r9b, r14b
         rt.asm.mov(r9b, r14b).unwrap();
         // call ...
