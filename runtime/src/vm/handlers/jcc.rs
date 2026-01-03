@@ -190,6 +190,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.test(r12b, r12b).unwrap();
         // jz ...
         rt.asm.jz(skip_jump).unwrap();
+
         // add [rcx + ...], rax
         utils::add_vreg_reg_64(rt, rcx, rax, VMReg::Rip);
     }

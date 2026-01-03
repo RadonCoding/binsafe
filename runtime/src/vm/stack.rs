@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    asm_traits::CodeAsmJmp, ptr, r10, r11, rsp, AsmRegister64, CodeAssembler, CodeLabel,
+    al, asm_traits::CodeAsmJmp, ptr, r10, r11, r11b, rax, AsmRegister64, CodeAssembler, CodeLabel,
 };
 
 use crate::runtime::{DataDef, Runtime};
@@ -68,20 +68,41 @@ pub fn pop(rt: &mut Runtime, dst: AsmRegister64) {
 
 // NOTE: Hopefully this does not cause problems :D
 pub fn pushfq(rt: &mut Runtime) {
-    // mov r11, rsp
-    rt.asm.mov(r11, rsp).unwrap();
-    // mov rsp, ...
+    // mov r10, rax
+    rt.asm.mov(r10, rax).unwrap();
+
+    // lahf
+    rt.asm.lahf().unwrap();
+    // seto r11b
+    rt.asm.seto(r11b).unwrap();
+
+    // movzx r11, r11b
+    rt.asm.movzx(r11, r11b).unwrap();
+    // shl r11, 0xb
+    rt.asm.shl(r11, 0xb).unwrap();
+
+    // shr rax, 0x8
+    rt.asm.shr(rax, 0x8).unwrap();
+    // movzx rax, al
+    rt.asm.movzx(rax, al).unwrap();
+    // or r11, rax
+    rt.asm.or(r11, rax).unwrap();
+
+    // mov rax, r10
+    rt.asm.mov(rax, r10).unwrap();
+
+    // mov r10, [...]
     rt.asm
-        .mov(rsp, ptr(rt.data_labels[&DataDef::VmStackPointer]))
+        .mov(r10, ptr(rt.data_labels[&DataDef::VmStackPointer]))
         .unwrap();
-    // pushfq
-    rt.asm.pushfq().unwrap();
-    // mov [...], rsp
+    // sub r10, 0x8
+    rt.asm.sub(r10, 0x8).unwrap();
+    // mov [r10], r11
+    rt.asm.mov(ptr(r10), r11).unwrap();
+    // mov [...], r10
     rt.asm
-        .mov(ptr(rt.data_labels[&DataDef::VmStackPointer]), rsp)
+        .mov(ptr(rt.data_labels[&DataDef::VmStackPointer]), r10)
         .unwrap();
-    // mov rsp, r11
-    rt.asm.mov(rsp, r11).unwrap();
 }
 
 pub fn call<T>(rt: &mut Runtime, target: T)

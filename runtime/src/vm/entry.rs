@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{
-    ptr, r10, r11, r12, r13, r14, r15, r8, r8d, r9, rax, rbp, rbx, rcx, rdi, rdx, rsi, rsp,
-    AsmRegister64,
+    al, byte_ptr, ecx, ptr, r10, r11, r12, r13, r14, r15, r8, r9, rax, rbp, rbx, rcx, rdi, rdx,
+    rsi, rsp, AsmRegister64,
 };
 
 use crate::{
@@ -32,8 +32,28 @@ const VREG_TO_REG: &[(VMReg, AsmRegister64)] = &[
 
 // void (unsigned int)
 pub fn build(rt: &mut Runtime) {
+    let mut wait_for_lock = rt.asm.create_label();
+
+    // pushfq
+    rt.asm.pushfq().unwrap();
     // push rax
     rt.asm.push(rax).unwrap();
+
+    rt.asm.set_label(&mut wait_for_lock).unwrap();
+    {
+        // mov al, 0x1
+        rt.asm.mov(al, 0x1).unwrap();
+        // lock xchg [...], al
+        rt.asm
+            .lock()
+            .xchg(ptr(rt.data_labels[&DataDef::VmLock]), al)
+            .unwrap();
+        // test al, al
+        rt.asm.test(al, al).unwrap();
+        // jnz ...
+        rt.asm.jnz(wait_for_lock).unwrap();
+    }
+
     // lea rax, [...]
     rt.asm
         .lea(rax, ptr(rt.data_labels[&DataDef::VmState]))
@@ -44,17 +64,20 @@ pub fn build(rt: &mut Runtime) {
         utils::mov_vreg_reg_64(rt, rax, *reg, *vreg);
     }
 
-    // pop rcx
+    // pop rcx -> rax
     rt.asm.pop(rcx).unwrap();
     // mov [rax + ...], ...
     utils::mov_vreg_reg_64(rt, rax, rcx, VMReg::Rax);
 
-    // pushfq
-    rt.asm.pushfq().unwrap();
-    // pop rcx
+    // pop rcx -> flags
     rt.asm.pop(rcx).unwrap();
     // mov [rax + ...], rcx
     utils::mov_vreg_reg_64(rt, rax, rcx, VMReg::Flags);
+
+    // pop rcx -> ret
+    rt.asm.pop(rcx).unwrap();
+    // mov [rax + ...], rcx
+    utils::mov_vreg_reg_64(rt, rax, rcx, VMReg::Rip);
 
     // pop rcx -> offset
     rt.asm.pop(rcx).unwrap();
@@ -65,18 +88,12 @@ pub fn build(rt: &mut Runtime) {
     // add rdx, rcx
     rt.asm.add(rdx, rcx).unwrap();
 
-    // mov rcx, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
-    rt.asm.mov(rcx, ptr(0x60).gs()).unwrap();
-    // mov rcx, [rcx + 0x10] -> VOID *PEB->ImageBaseAddress
-    rt.asm.mov(rcx, ptr(rcx + 0x10)).unwrap();
-    // mov r8d, [rdx] -> next ip
-    rt.asm.mov(r8d, ptr(rdx)).unwrap();
+    // mov ecx, [rdx] -> displ
+    rt.asm.mov(ecx, ptr(rdx)).unwrap();
     // add rdx, 0x4
     rt.asm.add(rdx, 0x4).unwrap();
-    // add rcx, r8d
-    rt.asm.add(rcx, r8).unwrap();
     // add [rax + ...], rcx
-    utils::mov_vreg_reg_64(rt, rax, rcx, VMReg::Rip);
+    utils::add_vreg_reg_64(rt, rax, rcx, VMReg::Rip);
 
     // call ...
     rt.asm
@@ -102,9 +119,7 @@ pub fn build(rt: &mut Runtime) {
     utils::mov_reg_vreg_64(rt, rax, VMReg::Rsp, rsp);
 
     // mov rcx, [...]
-    utils::mov_reg_vreg_64(rt, rax, VMReg::Flags, rcx);
-    // push rcx
-    rt.asm.push(rcx).unwrap();
+    utils::push_vreg_64(rt, rax, VMReg::Flags);
     // popfq
     rt.asm.popfq().unwrap();
 
@@ -118,6 +133,11 @@ pub fn build(rt: &mut Runtime) {
 
     // mov rax, [rax + ...]
     utils::mov_reg_vreg_64(rt, rax, VMReg::Rax, rax);
+
+    // mov [...], 0x0
+    rt.asm
+        .mov(byte_ptr(rt.data_labels[&DataDef::VmLock]), 0x0)
+        .unwrap();
 
     // ret
     rt.asm.ret().unwrap();

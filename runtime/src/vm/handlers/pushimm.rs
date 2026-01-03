@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{byte_ptr, dword_ptr, r8, r8b, rax, rcx, rdx, word_ptr};
+use iced_x86::code_asm::{byte_ptr, ptr, r8, r8b, r8d, rax, rcx, rdx, word_ptr};
 
 use crate::{
     runtime::Runtime,
@@ -53,8 +53,8 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut dword).unwrap();
     {
-        // movsxd r8, [rdx] -> src
-        rt.asm.movsxd(r8, dword_ptr(rdx)).unwrap();
+        // mov r8d, [rdx] -> src
+        rt.asm.mov(r8d, ptr(rdx)).unwrap();
         // add rdx, 0x4
         rt.asm.add(rdx, 0x4).unwrap();
 
