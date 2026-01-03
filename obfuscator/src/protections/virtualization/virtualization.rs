@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::{i32, mem};
 
 use crate::engine::Engine;
+use crate::protections::virtualization::transforms::anti_debug::AntiDebug;
 use crate::protections::Protection;
 use exe::Buffer;
 use exe::{PETranslation, PE, RVA};
@@ -52,25 +53,11 @@ impl Protection for Virtualization {
                 vblock.extend(bytecode);
             }
 
-            let found = block.ip == 0xD8BC;
+            if let Some(bytecode) = AntiDebug::transform(xrefs, block) {
+                vblock.splice(0..0, bytecode);
 
-            if !found {
-                continue 'outer;
+                self.transforms += 1;
             }
-
-            let image_base = engine.pe.get_image_base().unwrap();
-
-            println!("BLOCK: 0x{:016X}", image_base + block.ip);
-
-            for inst in &block.instructions {
-                println!("  {:X}: {}", inst.ip(), inst);
-            }
-
-            // if let Some(bytecode) = AntiDebug::transform(xrefs, block) {
-            //     vblock.splice(0..0, bytecode);
-
-            //     self.transforms += 1;
-            // }
 
             self.vblocks.insert(block.ip, vcode.len() as i32);
 
