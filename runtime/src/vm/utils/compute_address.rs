@@ -82,8 +82,6 @@ pub fn build(rt: &mut Runtime) {
     {
         // add rax, gs:[0x30] -> NT_TIB *TEB->NT_TIB.Self
         rt.asm.add(rax, ptr(0x30).gs()).unwrap();
-        // jmp ...
-        rt.asm.jmp(epilogue).unwrap();
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();

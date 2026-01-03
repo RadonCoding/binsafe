@@ -156,6 +156,7 @@ pub fn build(rt: &mut Runtime) {
             &mut epilogue,
         );
     }
+
     rt.asm.set_label(&mut lower64).unwrap();
     {
         // mov rcx, r12

@@ -68,6 +68,8 @@ pub fn pop(rt: &mut Runtime, dst: AsmRegister64) {
 
 // NOTE: Hopefully this does not cause problems :D
 pub fn pushfq(rt: &mut Runtime) {
+    // mov r11, rsp
+    rt.asm.mov(r11, rsp).unwrap();
     // mov rsp, ...
     rt.asm
         .mov(rsp, ptr(rt.data_labels[&DataDef::VmStackPointer]))
@@ -78,6 +80,8 @@ pub fn pushfq(rt: &mut Runtime) {
     rt.asm
         .mov(ptr(rt.data_labels[&DataDef::VmStackPointer]), rsp)
         .unwrap();
+    // mov rsp, r11
+    rt.asm.mov(rsp, r11).unwrap();
 }
 
 pub fn call<T>(rt: &mut Runtime, target: T)

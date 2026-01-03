@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    bh, bl, byte_ptr, eax, ptr, r12, r13, r14, r14d, r15, rax, rbx, rcx, rdx, word_ptr,
+    bh, bl, byte_ptr, ptr, r12, r13, r14, r14b, r14d, r14w, r15, rax, rbx, rcx, rdx, word_ptr,
 };
 
 use crate::{
@@ -76,71 +76,62 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower8).unwrap();
     {
-        // mov rax, [r14]
-        rt.asm.mov(rax, ptr(r14)).unwrap();
+        let mut skip = rt.asm.create_label();
 
-        // mov rcx, [r12 + r15*8]
-        rt.asm.mov(rcx, ptr(r12 + r15 * 8)).unwrap();
-        // and rcx, !0xFF
-        rt.asm.and(rcx, !0xFFi32).unwrap();
-        // or rcx, rax
-        rt.asm.or(rcx, rax).unwrap();
+        // test bh, bh
+        rt.asm.test(bh, bh).unwrap();
+        // jz ...
+        rt.asm.jz(skip).unwrap();
 
-        // mov [r12 + r15*8], rcx
-        rt.asm.mov(ptr(r12 + r15 * 8), rcx).unwrap();
+        // mov r14b, [r14]
+        rt.asm.mov(r14b, ptr(r14)).unwrap();
 
-        // jmp ...
-        rt.asm.jmp(epilogue).unwrap();
+        rt.asm.set_label(&mut skip).unwrap();
+        {
+            // mov [r12 + r15*8], r14b
+            rt.asm.mov(ptr(r12 + r15 * 8), r14b).unwrap();
+            // jmp ...
+            rt.asm.jmp(epilogue).unwrap();
+        }
     }
 
     rt.asm.set_label(&mut higher8).unwrap();
     {
-        // mov rax, [r14]
-        rt.asm.mov(rax, ptr(r14)).unwrap();
-        // shl rax, 0x8
-        rt.asm.shl(rax, 0x8).unwrap();
+        let mut skip = rt.asm.create_label();
 
-        // mov rcx, [r12 + r15*8]
-        rt.asm.mov(rcx, ptr(r12 + r15 * 8)).unwrap();
-        // and rcx, !0xFF00
-        rt.asm.and(rcx, !0xFF00i32).unwrap();
-        // or rcx, rax
-        rt.asm.or(rcx, rax).unwrap();
+        // test bh, bh
+        rt.asm.test(bh, bh).unwrap();
+        // jz ...
+        rt.asm.jz(skip).unwrap();
 
-        // mov [r12 + r15*8], rcx
-        rt.asm.mov(ptr(r12 + r15 * 8), rcx).unwrap();
+        // mov r14b, [r14]
+        rt.asm.mov(r14b, ptr(r14)).unwrap();
 
-        // jmp ...
-        rt.asm.jmp(epilogue).unwrap();
+        rt.asm.set_label(&mut skip).unwrap();
+        {
+            // mov [r12 + r15*8 + 0x1], r14b
+            rt.asm.mov(ptr(r12 + r15 * 8 + 0x1), r14b).unwrap();
+            // jmp ...
+            rt.asm.jmp(epilogue).unwrap();
+        }
     }
 
     rt.asm.set_label(&mut lower16).unwrap();
     {
+        let mut skip = rt.asm.create_label();
+
         // test bh, bh
         rt.asm.test(bh, bh).unwrap();
-
-        let skip = rt.asm.fwd().unwrap();
-
         // jz ...
         rt.asm.jz(skip).unwrap();
-        // movzx r14, [r14]
-        rt.asm.movzx(r14, word_ptr(r14)).unwrap();
 
-        rt.asm.anonymous_label().unwrap();
+        // mov r14w, [r14]
+        rt.asm.mov(r14w, ptr(r14)).unwrap();
+
+        rt.asm.set_label(&mut skip).unwrap();
         {
-            // Truncate to 16-bit operand size
-            rt.asm.and(r14, 0xFFFFi32).unwrap();
-
-            // mov rcx, [r12 + r15*8]
-            rt.asm.mov(rcx, ptr(r12 + r15 * 8)).unwrap();
-            // and rcx, !0xFFFF
-            rt.asm.and(rcx, !0xFFFFi32).unwrap();
-            // or rcx, rax
-            rt.asm.or(rcx, rax).unwrap();
-
-            // mov [r12 + r15*8], rcx
-            rt.asm.mov(ptr(r12 + r15 * 8), rcx).unwrap();
-
+            // mov [r12 + r15*8], r14w
+            rt.asm.mov(ptr(r12 + r15 * 8), r14w).unwrap();
             // jmp ...
             rt.asm.jmp(epilogue).unwrap();
         }
@@ -148,24 +139,20 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower32).unwrap();
     {
+        let mut skip = rt.asm.create_label();
+
         // test bh, bh
         rt.asm.test(bh, bh).unwrap();
-
-        let skip = rt.asm.fwd().unwrap();
-
         // jz ...
         rt.asm.jz(skip).unwrap();
-        // mov eax, [r14]
-        rt.asm.mov(eax, ptr(r14)).unwrap();
-        // mov r14, rax
-        rt.asm.mov(r14, rax).unwrap();
 
-        rt.asm.anonymous_label().unwrap();
+        // mov r14d, [r14]
+        rt.asm.mov(r14d, ptr(r14)).unwrap();
+
+        rt.asm.set_label(&mut skip).unwrap();
         {
-            // mov eax, r14d
-            rt.asm.mov(eax, r14d).unwrap();
-            // mov [r12 + r15*8], rax
-            rt.asm.mov(ptr(r12 + r15 * 8), rax).unwrap();
+            // mov [r12 + r15*8], r14
+            rt.asm.mov(ptr(r12 + r15 * 8), r14).unwrap();
             // jmp ...
             rt.asm.jmp(epilogue).unwrap();
         }
@@ -173,17 +160,17 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower64).unwrap();
     {
+        let mut skip = rt.asm.create_label();
+
         // test bh, bh
         rt.asm.test(bh, bh).unwrap();
-
-        let skip = rt.asm.fwd().unwrap();
-
         // jz ...
         rt.asm.jz(skip).unwrap();
+
         // mov r14, [r14]
         rt.asm.mov(r14, ptr(r14)).unwrap();
 
-        rt.asm.anonymous_label().unwrap();
+        rt.asm.set_label(&mut skip).unwrap();
         {
             // mov [r12 + r15*8], r14
             rt.asm.mov(ptr(r12 + r15 * 8), r14).unwrap();
@@ -194,6 +181,7 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov rax, r13
         rt.asm.mov(rax, r13).unwrap();
+
         // pop rbx
         stack::pop(rt, rbx);
         // pop r15

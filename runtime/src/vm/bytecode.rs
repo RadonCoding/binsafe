@@ -10,8 +10,8 @@ pub enum VMOp {
     SetRegImm,
     SetRegReg,
     SetRegMem,
-    SetMemReg,
     SetMemImm,
+    SetMemReg,
     AddSubRegImm,
     AddSubRegReg,
     AddSubRegMem,
@@ -76,8 +76,10 @@ pub enum VMReg {
     R15,
     Rip,
     Flags,
+    V0,
+    V1,
 }
-pub const VM_REG_COUNT: usize = (VMReg::Flags as u8) as usize;
+pub const VM_REG_COUNT: usize = (VMReg::V1 as u8 - 1) as usize;
 
 impl From<Register> for VMReg {
     fn from(reg: Register) -> Self {
@@ -391,15 +393,15 @@ impl<'a> VMCmd<'a> {
             }
             Self::AddSubRegImm {
                 vop,
-                dbits: bits,
+                dbits,
                 dst,
-                src,
                 sub,
                 store,
+                src,
             } => {
                 let mut bytes = vec![
                     *vop as u8,
-                    *bits as u8,
+                    *dbits as u8,
                     *dst as u8,
                     *sub as u8,
                     *store as u8,
@@ -713,12 +715,12 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
 
             match instruction.op0_kind() {
                 OpKind::Register => {
-                    let reg = instruction.op0_register();
-                    let dst = VMReg::from(reg);
-                    let bits = VMBits::from(reg);
+                    let dreg = instruction.op0_register();
+                    let dst = VMReg::from(dreg);
+                    let dbits = VMBits::from(dreg);
                     VMCmd::AddSubRegImm {
                         vop: VMOp::AddSubRegImm,
-                        dbits: bits,
+                        dbits,
                         dst,
                         sub,
                         store,
