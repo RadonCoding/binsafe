@@ -25,9 +25,19 @@ impl AntiDebug {
         const TRUE: [u8; 1] = [0x1];
 
         vec![
-            VMCmd::PushReg64 {
-                vop: VMOp::PushReg64,
+            VMCmd::RegReg {
+                vop: VMOp::SetRegReg,
+                dbits: VMBits::Lower64,
+                dst: VMReg::V0,
+                sbits: VMBits::Lower64,
                 src: VMReg::Rax,
+            },
+            VMCmd::RegReg {
+                vop: VMOp::SetRegReg,
+                dbits: VMBits::Lower64,
+                dst: VMReg::V1,
+                sbits: VMBits::Lower64,
+                src: VMReg::Flags,
             },
             VMCmd::RegMem {
                 vop: VMOp::SetRegMem,
@@ -73,9 +83,19 @@ impl AntiDebug {
                 }],
                 dst: i32::MIN,
             },
-            VMCmd::PopReg64 {
-                vop: VMOp::PopReg64,
+            VMCmd::RegReg {
+                vop: VMOp::SetRegReg,
+                dbits: VMBits::Lower64,
+                dst: VMReg::Flags,
+                sbits: VMBits::Lower64,
+                src: VMReg::V1,
+            },
+            VMCmd::RegReg {
+                vop: VMOp::SetRegReg,
+                dbits: VMBits::Lower64,
                 dst: VMReg::Rax,
+                sbits: VMBits::Lower64,
+                src: VMReg::V0,
             },
         ]
     }

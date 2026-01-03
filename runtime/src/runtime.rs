@@ -24,6 +24,7 @@ pub enum FnDef {
     VmHandlerSetMemImm,
     VmHandlerSetMemReg,
     VmHandlerAddSubRegImm,
+    VmHandlerAddSubRegMem,
     VmHandlerAddSubRegReg,
     VmHandlerAddSubMemImm,
     VmHandlerAddSubMemReg,
@@ -78,6 +79,7 @@ impl Runtime {
         func_labels.insert(FnDef::VmHandlerSetMemReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerAddSubRegImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerAddSubRegReg, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerAddSubRegMem, asm.create_label());
         func_labels.insert(FnDef::VmHandlerAddSubMemReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerAddSubMemImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchRel, asm.create_label());
@@ -153,6 +155,10 @@ impl Runtime {
         self.define_func(
             FnDef::VmHandlerAddSubRegImm,
             vm::handlers::arithmetic::addsubregimm::build,
+        );
+        self.define_func(
+            FnDef::VmHandlerAddSubRegMem,
+            vm::handlers::arithmetic::addsubregmem::build,
         );
         self.define_func(
             FnDef::VmHandlerAddSubRegReg,

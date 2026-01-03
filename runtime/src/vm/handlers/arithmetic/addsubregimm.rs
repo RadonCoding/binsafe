@@ -26,7 +26,7 @@ pub fn build(rt: &mut Runtime) {
     // mov r12, rdx
     rt.asm.mov(r12, rdx).unwrap();
 
-    // mov r13b, [r12] -> bits
+    // mov r13b, [r12] -> dbits
     rt.asm.mov(r13b, ptr(r12)).unwrap();
     // add r12, 0x1
     rt.asm.add(r12, 0x1).unwrap();
