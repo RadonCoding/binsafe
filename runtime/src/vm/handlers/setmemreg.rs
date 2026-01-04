@@ -50,25 +50,31 @@ pub fn build(rt: &mut Runtime) {
 
     // movzx r15, [r13] -> src
     rt.asm.movzx(r15, byte_ptr(r13)).unwrap();
-    // dec r15
-    rt.asm.dec(r15).unwrap();
     // add r13, 0x1
     rt.asm.add(r13, 0x1).unwrap();
 
     // cmp bl, ...
-    rt.asm.cmp(bl, VMBits::Lower64 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(bl, rt.mapper.index(VMBits::Lower64) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower64).unwrap();
     // cmp bl, ...
-    rt.asm.cmp(bl, VMBits::Lower32 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(bl, rt.mapper.index(VMBits::Lower32) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower32).unwrap();
     // cmp bl, ...
-    rt.asm.cmp(bl, VMBits::Lower16 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(bl, rt.mapper.index(VMBits::Lower16) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower16).unwrap();
     // cmp bl, ...
-    rt.asm.cmp(bl, VMBits::Higher8 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(bl, rt.mapper.index(VMBits::Higher8) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(higher8).unwrap();
 

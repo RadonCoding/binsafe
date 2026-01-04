@@ -5,7 +5,14 @@ use iced_x86::{
     BlockEncoderOptions,
 };
 
-use crate::vm::{self, bytecode::VM_OP_COUNT, entry::VM_STATE_SIZE, stack::VM_STACK_SIZE};
+use crate::{
+    mapper::{MappedSpec, MapperRegistry},
+    vm::{
+        self,
+        bytecode::{VMOp, VMReg},
+        stack::VM_STACK_SIZE,
+    },
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum FnDef {
@@ -58,6 +65,7 @@ pub struct Runtime {
     pub func_labels: HashMap<FnDef, CodeLabel>,
     pub addresses: HashMap<CodeLabel, u64>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
+    pub mapper: MapperRegistry,
 }
 
 impl Runtime {
@@ -110,6 +118,7 @@ impl Runtime {
             func_labels,
             addresses: HashMap::new(),
             data_labels,
+            mapper: MapperRegistry::new(),
         }
     }
 
@@ -203,12 +212,12 @@ impl Runtime {
 
         self.define_func(FnDef::InitializeStack, vm::stack::initialize);
 
-        self.define_data(DataDef::VmHandlers, &[0u8; VM_OP_COUNT * 8]);
+        self.define_data(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
 
         self.define_data(DataDef::VmStackPointer, &[0u8; 8]);
         self.define_data(DataDef::VmStackContent, &[0u8; VM_STACK_SIZE]);
 
-        self.define_data(DataDef::VmState, &[0u8; VM_STATE_SIZE]);
+        self.define_data(DataDef::VmState, &[0u8; VMReg::COUNT * 8]);
         self.define_data(DataDef::VmLock, &[0u8; 1]);
 
         let options = self

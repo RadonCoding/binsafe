@@ -14,7 +14,7 @@ use std::{
 use crate::protections::Protection;
 
 pub struct Block {
-    pub ip: u64,
+    pub rva: u64,
     pub offset: usize,
     pub size: usize,
     pub instructions: Vec<Instruction>,
@@ -104,17 +104,18 @@ impl Engine {
             .get_slice_ref::<u8>(block.offset, block.size)
             .unwrap();
 
-        let mut decoder = Decoder::with_ip(self.bitness, bytes, block.ip, DecoderOptions::NONE);
+        let mut decoder = Decoder::with_ip(self.bitness, bytes, block.rva, DecoderOptions::NONE);
 
         block.instructions.clear();
 
         while decoder.can_decode() {
-            let mut instr = Instruction::default();
-            decoder.decode_out(&mut instr);
-            if instr.is_invalid() {
+            let mut instruction = Instruction::default();
+            decoder.decode_out(&mut instruction);
+
+            if instruction.is_invalid() {
                 break;
             }
-            block.instructions.push(instr);
+            block.instructions.push(instruction);
         }
     }
 
@@ -133,7 +134,6 @@ impl Engine {
         let code = section.read(&self.pe).unwrap();
 
         let mut jumps = HashSet::new();
-
         jumps.insert(entry_point.0 as u64);
 
         let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
@@ -164,25 +164,35 @@ impl Engine {
         }
 
         let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
+
         let mut block = Vec::<Instruction>::new();
+
+        let mut capture = |block: &mut Vec<Instruction>, end: u64| {
+            if block.is_empty() {
+                return;
+            }
+
+            let start = block[0].ip();
+
+            let offset = self
+                .pe
+                .translate(PETranslation::Memory(RVA(start as u32)))
+                .unwrap();
+            let size = (end - start) as usize;
+
+            self.blocks.push(Block {
+                rva: start,
+                offset,
+                size,
+                instructions: mem::take(block),
+            });
+        };
 
         while decoder.can_decode() {
             let current = decoder.ip();
 
             if jumps.contains(&current) && !block.is_empty() {
-                let ip = block[0].ip();
-                let offset = self
-                    .pe
-                    .translate(PETranslation::Memory(RVA(ip as u32)))
-                    .unwrap();
-                let size = (current - ip) as usize;
-
-                self.blocks.push(Block {
-                    ip,
-                    offset,
-                    size,
-                    instructions: mem::take(&mut block),
-                });
+                capture(&mut block, current);
             }
 
             decoder.decode_out(&mut instruction);
@@ -197,19 +207,9 @@ impl Engine {
                 continue;
             }
 
-            let ip = block[0].ip();
-            let offset = self
-                .pe
-                .translate(exe::PETranslation::Memory(RVA(ip as u32)))
-                .unwrap();
-            let size = (instruction.next_ip() - ip) as usize;
+            let next = instruction.next_ip();
 
-            self.blocks.push(Block {
-                ip,
-                offset,
-                size,
-                instructions: mem::take(&mut block),
-            });
+            capture(&mut block, next);
         }
 
         info!("Found {} blocks", self.blocks.len());

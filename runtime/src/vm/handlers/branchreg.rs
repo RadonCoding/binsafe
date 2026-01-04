@@ -30,8 +30,6 @@ pub fn build(rt: &mut Runtime) {
     {
         // movzx rax, [rdx] -> dst
         rt.asm.movzx(rax, byte_ptr(rdx)).unwrap();
-        // dec rax
-        rt.asm.dec(rax).unwrap();
         // add rdx, 0x1
         rt.asm.add(rdx, 0x1).unwrap();
 

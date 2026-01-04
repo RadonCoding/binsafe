@@ -4,12 +4,13 @@ mod tests {
 
     use iced_x86::{
         code_asm::{ptr, rcx, rdx},
-        Code, Instruction, Register,
+        Code, Instruction, MemoryOperand, Register,
     };
     use runtime::{
+        mapper::MappedSpec,
         runtime::{DataDef, FnDef, Runtime},
         vm::{
-            bytecode::{self, VMFlag, VMOp, VMReg, VM_REG_COUNT},
+            bytecode::{self, VMFlag, VMOp, VMReg},
             stack,
         },
     };
@@ -18,44 +19,46 @@ mod tests {
     };
 
     struct Executor {
+        rt: Runtime,
         mem: *mut c_void,
         size: usize,
     }
 
     impl Executor {
         fn new(size: usize) -> Self {
+            let rt = Runtime::new(64);
             let mem = unsafe {
                 VirtualAlloc(None, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
             };
-            Self { mem, size }
+            Self { rt, mem, size }
         }
 
-        fn run(&self, registers: &mut [u64], bytecode: &[u8]) {
-            let mut rt = Runtime::new(64);
-
-            let dispatch = rt.func_labels[&FnDef::VmDispatch];
+        fn run(&mut self, registers: &mut [u64], bytecode: &[u8]) {
+            let dispatch = self.rt.func_labels[&FnDef::VmDispatch];
 
             // call ...
-            rt.asm
-                .call(rt.func_labels[&FnDef::InitializeStack])
+            self.rt
+                .asm
+                .call(self.rt.func_labels[&FnDef::InitializeStack])
                 .unwrap();
 
             // mov rcx, ...
-            rt.asm.mov(rcx, registers.as_mut_ptr() as u64).unwrap();
+            self.rt.asm.mov(rcx, registers.as_mut_ptr() as u64).unwrap();
             // lea rdx, [...]
-            rt.asm
-                .lea(rdx, ptr(rt.data_labels[&DataDef::VmCode]))
+            self.rt
+                .asm
+                .lea(rdx, ptr(self.rt.data_labels[&DataDef::VmCode]))
                 .unwrap();
             // call ...
-            stack::call(&mut rt, dispatch);
+            stack::call(&mut self.rt, dispatch);
             // ret
-            rt.asm.ret().unwrap();
+            self.rt.asm.ret().unwrap();
 
-            rt.define_data(DataDef::VmCode, bytecode);
+            self.rt.define_data(DataDef::VmCode, bytecode);
 
             let ip = self.mem as u64;
 
-            let code = rt.assemble(ip);
+            let code = self.rt.assemble(ip);
 
             assert!(code.len() <= self.size);
 
@@ -83,33 +86,33 @@ mod tests {
         target: VMReg,
         expected: u64,
     ) {
-        let executor = Executor::new(0x2000);
+        let mut executor = Executor::new(0x2000);
 
-        let mut registers = [0u64; VM_REG_COUNT];
+        let mut registers = [0u64; VMReg::COUNT];
 
         for (reg, val) in setup {
-            registers[(*reg as u8 - 1) as usize] = *val;
+            registers[(executor.rt.mapper.index(*reg)) as usize] = *val;
         }
 
         let mut bytecode = Vec::new();
 
         for instruction in instructions {
-            let mut part = bytecode::convert(0x0, &instruction).unwrap();
+            let mut part = bytecode::convert(&mut executor.rt.mapper, 0x0, &instruction).unwrap();
 
             bytecode.append(&mut part);
         }
 
-        bytecode.push(VMOp::Invalid as u8);
+        bytecode.push(executor.rt.mapper.index(VMOp::Invalid));
 
         executor.run(&mut registers, &bytecode);
 
         assert_eq!(
-            registers[(target as u8 - 1) as usize],
+            registers[(executor.rt.mapper.index(target)) as usize],
             expected,
             "Failed: {:?} | Expected: 0x{:X}, Got: 0x{:X}",
             instructions[0],
             expected,
-            registers[(target as u8 - 1) as usize]
+            registers[(executor.rt.mapper.index(target)) as usize]
         );
     }
 
@@ -163,20 +166,76 @@ mod tests {
         template(
             &[
                 Instruction::with2(Code::Cmp_rm64_imm8, Register::RAX, 0x1).unwrap(),
-                Instruction::with_branch(Code::Je_rel8_64, 0x1000).unwrap(),
+                Instruction::with_branch(Code::Je_rel8_64, 0xDEAD).unwrap(),
             ],
             &[(VMReg::Rax, 0x1)],
             VMReg::Rip,
-            0x1000,
+            0xDEAD,
         );
         template(
             &[
                 Instruction::with2(Code::Cmp_rm64_imm8, Register::RAX, 0x2).unwrap(),
-                Instruction::with_branch(Code::Jne_rel8_64, 0x1000).unwrap(),
+                Instruction::with_branch(Code::Jne_rel8_64, 0xDEAD).unwrap(),
             ],
             &[(VMReg::Rax, 0x1)],
             VMReg::Rip,
-            0x1000,
+            0xDEAD,
+        );
+    }
+
+    #[test]
+    fn test_memory_load_store() {
+        let mut buffer = [0u64; 2];
+
+        let memory = buffer.as_mut_ptr() as u64;
+
+        template(
+            &[
+                Instruction::with2(
+                    Code::Mov_rm64_r64,
+                    MemoryOperand::with_base_index_scale_displ_size(
+                        Register::RBX,
+                        Register::None,
+                        1,
+                        0,
+                        8,
+                    ),
+                    Register::RAX,
+                )
+                .unwrap(),
+                Instruction::with2(
+                    Code::Mov_r64_rm64,
+                    Register::RCX,
+                    MemoryOperand::with_base_index_scale_displ_size(
+                        Register::RBX,
+                        Register::None,
+                        1,
+                        0,
+                        8,
+                    ),
+                )
+                .unwrap(),
+            ],
+            &[(VMReg::Rax, 0xDEADC0DE), (VMReg::Rbx, memory)],
+            VMReg::Rcx,
+            0xDEADC0DE,
+        );
+    }
+
+    #[test]
+    fn test_push_pop() {
+        let mut stack = [0u64; 4];
+
+        let sp = unsafe { stack.as_mut_ptr().add(stack.len()) } as u64;
+
+        template(
+            &[
+                Instruction::with1(Code::Push_r64, Register::RAX).unwrap(),
+                Instruction::with1(Code::Pop_r64, Register::RBX).unwrap(),
+            ],
+            &[(VMReg::Rax, 0xDEADC0DE), (VMReg::Rsp, sp)],
+            VMReg::Rbx,
+            0xDEADC0DE,
         );
     }
 }

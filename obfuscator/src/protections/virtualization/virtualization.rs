@@ -42,7 +42,8 @@ impl Protection for Virtualization {
             let address = next_ip as u64;
 
             for instruction in &block.instructions {
-                let bytecode = match bytecode::convert(address, instruction) {
+                let bytecode = match bytecode::convert(&mut engine.rt.mapper, address, instruction)
+                {
                     Some(virtualized) => virtualized,
                     None => {
                         let mnemonic = instruction.mnemonic();
@@ -53,16 +54,16 @@ impl Protection for Virtualization {
                 vblock.extend(bytecode);
             }
 
-            if let Some(bytecode) = AntiDebug::transform(xrefs, block) {
+            if let Some(bytecode) = AntiDebug::transform(&mut engine.rt.mapper, xrefs, block) {
                 vblock.splice(0..0, bytecode);
 
                 self.transforms += 1;
             }
 
-            self.vblocks.insert(block.ip, vcode.len() as i32);
+            self.vblocks.insert(block.rva, vcode.len() as i32);
 
             vblock.splice(0..0, [0x0u8; mem::size_of::<u32>()]);
-            vblock.push(VMOp::Invalid as u8);
+            vblock.push(engine.rt.mapper.index(VMOp::Invalid));
 
             vcode.extend(vblock);
         }
@@ -85,17 +86,17 @@ impl Protection for Virtualization {
         for i in 0..engine.blocks.len() {
             let block = &engine.blocks[i];
 
-            if !self.vblocks.contains_key(&block.ip) {
+            if !self.vblocks.contains_key(&block.rva) {
                 continue;
             }
 
-            let voffset = self.vblocks[&block.ip];
+            let voffset = self.vblocks[&block.rva];
 
             let mut asm = CodeAssembler::new(engine.bitness).unwrap();
             asm.push(voffset).unwrap();
             asm.call(ventry).unwrap();
 
-            let dispatch = asm.assemble(block.ip).unwrap();
+            let dispatch = asm.assemble(block.rva).unwrap();
 
             assert!(dispatch.len() <= VM_DISPATCH_SIZE);
 

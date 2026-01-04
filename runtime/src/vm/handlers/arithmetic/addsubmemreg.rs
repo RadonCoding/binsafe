@@ -63,25 +63,31 @@ pub fn build(rt: &mut Runtime) {
 
     // movzx r9, [r13] -> src
     rt.asm.movzx(r9, byte_ptr(r13)).unwrap();
-    // dec r9
-    rt.asm.dec(r9).unwrap();
     // add r13, 0x1
     rt.asm.add(r13, 0x1).unwrap();
 
     // cmp r8b, ...
-    rt.asm.cmp(r8b, VMBits::Lower64 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(r8b, rt.mapper.index(VMBits::Lower64) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower64).unwrap();
     // cmp r8b, ...
-    rt.asm.cmp(r8b, VMBits::Lower32 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(r8b, rt.mapper.index(VMBits::Lower32) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower32).unwrap();
     // cmp r8b, ...
-    rt.asm.cmp(r8b, VMBits::Lower16 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(r8b, rt.mapper.index(VMBits::Lower16) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower16).unwrap();
     // cmp r8b, ...
-    rt.asm.cmp(r8b, VMBits::Higher8 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(r8b, rt.mapper.index(VMBits::Higher8) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(higher8).unwrap();
 

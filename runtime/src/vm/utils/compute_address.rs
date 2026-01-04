@@ -1,6 +1,12 @@
 use iced_x86::code_asm::{byte_ptr, dword_ptr, ptr, r8, r9, rax, rcx, rdx};
 
-use crate::{runtime::Runtime, vm::stack};
+use crate::{
+    runtime::Runtime,
+    vm::{
+        bytecode::{VMReg, VMSeg},
+        stack,
+    },
+};
 
 // unsigned long, unsigned long (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
@@ -18,15 +24,13 @@ pub fn build(rt: &mut Runtime) {
     // add rdx, 0x1
     rt.asm.add(rdx, 0x1).unwrap();
 
-    // test r8, r8
-    rt.asm.test(r8, r8).unwrap();
+    // cmp r8, ...
+    rt.asm.cmp(r8, rt.mapper.index(VMReg::None) as i32).unwrap();
     // jz ...
     rt.asm.jz(check_index).unwrap();
 
     rt.asm.set_label(&mut add_base).unwrap();
     {
-        // dec r8
-        rt.asm.dec(r8).unwrap();
         // add rax, [rcx + r8*8]
         rt.asm.add(rax, ptr(rcx + r8 * 8)).unwrap();
     }
@@ -43,14 +47,12 @@ pub fn build(rt: &mut Runtime) {
         // add rdx, 0x1
         rt.asm.add(rdx, 0x1).unwrap();
 
-        // test r8, r8
-        rt.asm.test(r8, r8).unwrap();
+        // cmp r8, ...
+        rt.asm.cmp(r8, rt.mapper.index(VMReg::None) as i32).unwrap();
         // jz ...
         rt.asm.jz(add_displ).unwrap();
     }
 
-    // dec r8
-    rt.asm.dec(r8).unwrap();
     // mov r8, [rcx + r8*8]
     rt.asm.mov(r8, ptr(rcx + r8 * 8)).unwrap();
     // imul r8, r9
@@ -73,8 +75,8 @@ pub fn build(rt: &mut Runtime) {
     // add rdx, 0x1
     rt.asm.add(rdx, 0x1).unwrap();
 
-    // test r8, r8
-    rt.asm.test(r8, r8).unwrap();
+    // cmp r8, ...
+    rt.asm.cmp(r8, rt.mapper.index(VMSeg::None) as i32).unwrap();
     // jz ...
     rt.asm.jz(epilogue).unwrap();
 
