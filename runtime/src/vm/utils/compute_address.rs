@@ -26,8 +26,8 @@ pub fn build(rt: &mut Runtime) {
 
     // cmp r8, ...
     rt.asm.cmp(r8, rt.mapper.index(VMReg::None) as i32).unwrap();
-    // jz ...
-    rt.asm.jz(check_index).unwrap();
+    // je ...
+    rt.asm.je(check_index).unwrap();
 
     rt.asm.set_label(&mut add_base).unwrap();
     {
@@ -49,8 +49,8 @@ pub fn build(rt: &mut Runtime) {
 
         // cmp r8, ...
         rt.asm.cmp(r8, rt.mapper.index(VMReg::None) as i32).unwrap();
-        // jz ...
-        rt.asm.jz(add_displ).unwrap();
+        // je ...
+        rt.asm.je(add_displ).unwrap();
     }
 
     // mov r8, [rcx + r8*8]
@@ -77,8 +77,8 @@ pub fn build(rt: &mut Runtime) {
 
     // cmp r8, ...
     rt.asm.cmp(r8, rt.mapper.index(VMSeg::None) as i32).unwrap();
-    // jz ...
-    rt.asm.jz(epilogue).unwrap();
+    // je ...
+    rt.asm.je(epilogue).unwrap();
 
     rt.asm.set_label(&mut add_seg).unwrap();
     {

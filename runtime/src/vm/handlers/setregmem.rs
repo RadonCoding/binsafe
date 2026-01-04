@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    bh, bl, byte_ptr, ptr, r12, r13, r14, r14b, r14d, r14w, r15, rax, rbx, rcx, rdx, word_ptr,
+    bh, bl, bx, byte_ptr, ptr, r12, r13, r14, r14b, r14d, r14w, r15, rax, rbx, rcx, rdx,
 };
 
 use crate::{
@@ -33,8 +33,8 @@ pub fn build(rt: &mut Runtime) {
     // mov r13, rdx
     rt.asm.mov(r13, rdx).unwrap();
 
-    // movzx rbx, [r13] -> dbits | load
-    rt.asm.movzx(rbx, word_ptr(r13)).unwrap();
+    // mov bx, [r13] -> dbits | load
+    rt.asm.mov(bx, ptr(r13)).unwrap();
     // add r13, 0x2
     rt.asm.add(r13, 0x2).unwrap();
 
