@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::{i32, mem};
 
 use crate::engine::Engine;
@@ -60,14 +61,18 @@ impl Protection for Virtualization {
 
             vblock.push(engine.rt.mapper.index(VMOp::Invalid));
 
-            let vcode_offset = if let Some(&offset) = dedup.get(&vblock) {
+            let mut hasher = DefaultHasher::new();
+            vblock.hash(&mut hasher);
+            let hash = hasher.finish();
+
+            let vcode_offset = if let Some(&offset) = dedup.get(&hash) {
                 self.dedupes += 1;
 
                 offset
             } else {
                 let offset = vcode.len() as u32;
                 vcode.extend_from_slice(&vblock);
-                dedup.insert(vblock, offset);
+                dedup.insert(hash, offset);
                 offset
             };
 

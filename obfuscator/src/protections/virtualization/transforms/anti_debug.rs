@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use runtime::{
     mapper::Mapper,
-    vm::bytecode::{VMBits, VMCmd, VMCond, VMFlag, VMLogic, VMMem, VMOp, VMReg, VMSeg, VMTest},
+    vm::bytecode::{VMBits, VMCmd, VMMem, VMOp, VMReg, VMSeg},
 };
 
 use crate::engine::Block;
@@ -53,11 +53,12 @@ impl AntiDebug {
                     seg: VMSeg::Gs,
                 },
             },
-            VMCmd::RegMem {
-                vop: VMOp::SetRegMem,
+            VMCmd::AddSubRegMem {
+                vop: VMOp::AddSubRegMem,
+                sub: true,
+                store: true,
                 dbits: VMBits::Lower8,
-                load: true,
-                dst: VMReg::V0,
+                dst: VMReg::Rsp,
                 src: VMMem {
                     base: VMReg::V0,
                     index: VMReg::None,
@@ -65,15 +66,6 @@ impl AntiDebug {
                     displacement: 0x02,
                     seg: VMSeg::None,
                 },
-            },
-            VMCmd::AddSubRegReg {
-                vop: VMOp::AddSubRegImm,
-                dbits: VMBits::Lower8,
-                dst: VMReg::Rsp,
-                sbits: VMBits::Lower8,
-                src: VMReg::V0,
-                sub: true,
-                store: true,
             },
             VMCmd::RegReg {
                 vop: VMOp::SetRegReg,
