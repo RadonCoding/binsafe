@@ -7,8 +7,8 @@ use crate::{
     },
 };
 use iced_x86::code_asm::{
-    al, byte_ptr, dword_ptr, eax, ptr, r12, r12b, r13, r13d, r14, r14d, r8b, r8d, r9b, r9d, rax,
-    rcx, rdx,
+    al, byte_ptr, dword_ptr, ptr, r12, r12b, r13, r13d, r14, r14b, r8b, r8d, r9b, r9d, rax, rcx,
+    rdx,
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -33,25 +33,27 @@ pub fn build(rt: &mut Runtime) {
     // mov r13d, [rcx + ...]
     utils::mov_reg_vreg_32(rt, rcx, VMReg::Flags, r13d);
 
-    // movzx eax, [rdx] -> logic
-    rt.asm.movzx(eax, byte_ptr(rdx)).unwrap();
+    // mov al, [rdx] -> logic
+    rt.asm.mov(al, ptr(rdx)).unwrap();
     // add rdx, 0x1
     rt.asm.add(rdx, 0x1).unwrap();
 
-    // movzx r14d, [rdx] -> number of conditions
-    rt.asm.movzx(r14d, byte_ptr(rdx)).unwrap();
+    // mov r14b, [rdx] -> number of conditions
+    rt.asm.mov(r14b, ptr(rdx)).unwrap();
     // add rdx, 0x1
     rt.asm.add(rdx, 0x1).unwrap();
 
-    // mov r12b, al
-    rt.asm.mov(r12b, al).unwrap();
-    // xor r12b, 0x1
-    rt.asm.xor(r12b, 0x1).unwrap();
+    // cmp al, ...
+    rt.asm
+        .cmp(al, rt.mapper.index(VMLogic::AND) as i32)
+        .unwrap();
+    // sete r12b
+    rt.asm.sete(r12b).unwrap();
 
     rt.asm.set_label(&mut condition_loop).unwrap();
     {
-        // test r14d, r14d
-        rt.asm.test(r14d, r14d).unwrap();
+        // test r14b, r14b
+        rt.asm.test(r14b, r14b).unwrap();
         // jz ...
         rt.asm.jz(epilogue).unwrap();
 
@@ -61,11 +63,13 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.add(rdx, 0x1).unwrap();
 
         // cmp r8b, ...
-        rt.asm.cmp(r8b, VMTest::CMP as u8 as i32).unwrap();
+        rt.asm
+            .cmp(r8b, rt.mapper.index(VMTest::CMP) as i32)
+            .unwrap();
         // jz ...
         rt.asm.jz(handle_cmp).unwrap();
         // cmp r8b, ...
-        rt.asm.cmp(r8b, VMTest::EQ as u8 as i32).unwrap();
+        rt.asm.cmp(r8b, rt.mapper.index(VMTest::EQ) as i32).unwrap();
         // je ...
         rt.asm.je(handle_eq).unwrap();
         // jmp ...
@@ -154,8 +158,8 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut check_next).unwrap();
         {
-            // cmp eax, ...
-            rt.asm.cmp(eax, VMLogic::OR as u8 as i32).unwrap();
+            // cmp al, ...
+            rt.asm.cmp(al, rt.mapper.index(VMLogic::OR) as i32).unwrap();
             // je ...
             rt.asm.je(is_or).unwrap();
             // and r12b, r8b
@@ -172,8 +176,8 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut continue_loop).unwrap();
         {
-            // dec r14d
-            rt.asm.dec(r14d).unwrap();
+            // dec r14b
+            rt.asm.dec(r14b).unwrap();
             // jmp ...
             rt.asm.jmp(condition_loop).unwrap();
         }

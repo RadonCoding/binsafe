@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
-use runtime::vm::bytecode::{
-    VMBits, VMCmd, VMCond, VMFlag, VMLogic, VMMem, VMOp, VMReg, VMSeg, VMTest,
+use runtime::{
+    mapper::MapperRegistry,
+    vm::bytecode::{VMBits, VMCmd, VMCond, VMFlag, VMLogic, VMMem, VMOp, VMReg, VMSeg, VMTest},
 };
 
 use crate::engine::Block;
@@ -9,29 +10,31 @@ use crate::engine::Block;
 pub struct AntiDebug;
 
 impl AntiDebug {
-    pub fn transform(xrefs: &HashMap<u64, usize>, block: &Block) -> Option<Vec<u8>> {
+    pub fn transform(
+        mapper: &mut MapperRegistry,
+        xrefs: &HashMap<u64, usize>,
+        block: &Block,
+    ) -> Option<Vec<u8>> {
         const THRESHOLD: usize = 10;
 
-        if xrefs.get(&block.ip).map_or(0, |&c| c) < THRESHOLD {
+        if xrefs.get(&block.rva).map_or(0, |&c| c) < THRESHOLD {
             return None;
         }
 
         let vblock = Self::gen_peb_check();
 
-        Some(vblock.into_iter().flat_map(|cmd| cmd.encode()).collect())
+        Some(
+            vblock
+                .into_iter()
+                .flat_map(|cmd| cmd.encode(mapper))
+                .collect(),
+        )
     }
 
     fn gen_peb_check() -> Vec<VMCmd<'static>> {
         const TRUE: [u8; 1] = [0x1];
 
         vec![
-            VMCmd::RegReg {
-                vop: VMOp::SetRegReg,
-                dbits: VMBits::Lower64,
-                dst: VMReg::V0,
-                sbits: VMBits::Lower64,
-                src: VMReg::Rax,
-            },
             VMCmd::RegReg {
                 vop: VMOp::SetRegReg,
                 dbits: VMBits::Lower64,
@@ -43,7 +46,7 @@ impl AntiDebug {
                 vop: VMOp::SetRegMem,
                 dbits: VMBits::Lower64,
                 load: true,
-                dst: VMReg::Rax,
+                dst: VMReg::V0,
                 src: VMMem {
                     base: VMReg::None,
                     index: VMReg::None,
@@ -56,9 +59,9 @@ impl AntiDebug {
                 vop: VMOp::SetRegMem,
                 dbits: VMBits::Lower8,
                 load: true,
-                dst: VMReg::Rax,
+                dst: VMReg::V0,
                 src: VMMem {
-                    base: VMReg::Rax,
+                    base: VMReg::V0,
                     index: VMReg::None,
                     scale: 1,
                     displacement: 0x02,
@@ -68,7 +71,7 @@ impl AntiDebug {
             VMCmd::AddSubRegImm {
                 vop: VMOp::AddSubRegImm,
                 dbits: VMBits::Lower8,
-                dst: VMReg::Rax,
+                dst: VMReg::V0,
                 sub: true,
                 store: false,
                 src: &TRUE,
@@ -89,13 +92,6 @@ impl AntiDebug {
                 dst: VMReg::Flags,
                 sbits: VMBits::Lower64,
                 src: VMReg::V1,
-            },
-            VMCmd::RegReg {
-                vop: VMOp::SetRegReg,
-                dbits: VMBits::Lower64,
-                dst: VMReg::Rax,
-                sbits: VMBits::Lower64,
-                src: VMReg::V0,
             },
         ]
     }

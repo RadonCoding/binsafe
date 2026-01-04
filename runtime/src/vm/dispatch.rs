@@ -64,7 +64,7 @@ pub fn build(rt: &mut Runtime) {
         // lea rcx, [...]
         rt.asm.lea(rcx, ptr(rt.func_labels[&func])).unwrap();
         // mov [rax + ...], rcx
-        rt.asm.mov(ptr(rax + (op as u8 - 1) * 8), rcx).unwrap();
+        rt.asm.mov(ptr(rax + rt.mapper.index(op) * 8), rcx).unwrap();
     }
 
     rt.asm.set_label(&mut execute_loop).unwrap();
@@ -74,13 +74,12 @@ pub fn build(rt: &mut Runtime) {
         // add r13, 0x1
         rt.asm.add(r13, 0x1).unwrap();
 
-        // test r8b, r8b
-        rt.asm.test(r8b, r8b).unwrap();
+        // cmp r8b, ...
+        rt.asm
+            .cmp(r8b, rt.mapper.index(VMOp::Invalid) as i32)
+            .unwrap();
         // jz ...
         rt.asm.jz(epilogue).unwrap();
-
-        // dec r8b
-        rt.asm.dec(r8b).unwrap();
 
         // lea rax, [...]
         rt.asm

@@ -1,29 +1,30 @@
 use iced_x86::{Code, Instruction, Mnemonic, OpKind, Register};
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy)]
-pub enum VMOp {
-    Invalid,
-    PushImm,
-    PushReg64,
-    PopReg64,
-    SetRegImm,
-    SetRegReg,
-    SetRegMem,
-    SetMemImm,
-    SetMemReg,
-    AddSubRegImm,
-    AddSubRegReg,
-    AddSubRegMem,
-    AddSubMemImm,
-    AddSubMemReg,
-    BranchRel,
-    BranchReg,
-    BranchMem,
-    Jcc,
-    Nop,
+use crate::mapper::{mapped, MapperRegistry};
+
+mapped! {
+    VMOp {
+        Invalid,
+        PushImm,
+        PushReg64,
+        PopReg64,
+        SetRegImm,
+        SetRegReg,
+        SetRegMem,
+        SetMemImm,
+        SetMemReg,
+        AddSubRegImm,
+        AddSubRegReg,
+        AddSubRegMem,
+        AddSubMemImm,
+        AddSubMemReg,
+        BranchRel,
+        BranchReg,
+        BranchMem,
+        Jcc,
+        Nop,
+    }
 }
-pub const VM_OP_COUNT: usize = VMOp::Nop as u8 as usize;
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,47 +40,46 @@ pub enum VMFlag {
     Overflow = 11,  // OF
 }
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VMTest {
-    CMP,
-    EQ,
-    NEQ,
+mapped! {
+    VMTest {
+        CMP,
+        EQ,
+        NEQ,
+    }
 }
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VMLogic {
-    AND,
-    OR,
+mapped! {
+    VMLogic {
+        AND,
+        OR,
+    }
 }
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum VMReg {
-    None,
-    Rax,
-    Rcx,
-    Rdx,
-    Rbx,
-    Rsp,
-    Rbp,
-    Rsi,
-    Rdi,
-    R8,
-    R9,
-    R10,
-    R11,
-    R12,
-    R13,
-    R14,
-    R15,
-    Rip,
-    Flags,
-    V0,
-    V1,
+mapped! {
+    VMReg {
+        None,
+        Rax,
+        Rcx,
+        Rdx,
+        Rbx,
+        Rsp,
+        Rbp,
+        Rsi,
+        Rdi,
+        R8,
+        R9,
+        R10,
+        R11,
+        R12,
+        R13,
+        R14,
+        R15,
+        Rip,
+        Flags,
+        V0,
+        V1,
+    }
 }
-pub const VM_REG_COUNT: usize = (VMReg::V1 as u8 - 1) as usize;
 
 impl From<Register> for VMReg {
     fn from(reg: Register) -> Self {
@@ -107,14 +107,14 @@ impl From<Register> for VMReg {
     }
 }
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum VMBits {
-    Lower8,
-    Higher8,
-    Lower16,
-    Lower32,
-    Lower64,
+mapped! {
+    VMBits {
+        Lower8,
+        Higher8,
+        Lower16,
+        Lower32,
+        Lower64,
+    }
 }
 
 impl From<Register> for VMBits {
@@ -138,11 +138,11 @@ impl From<Register> for VMBits {
     }
 }
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum VMSeg {
-    None,
-    Gs,
+mapped! {
+    VMSeg {
+        None,
+        Gs,
+    }
 }
 
 impl From<Register> for VMSeg {
@@ -186,13 +186,13 @@ impl VMMem {
         }
     }
 
-    fn encode(&self) -> Vec<u8> {
+    fn encode(&self, mapper: &mut MapperRegistry) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(7);
-        bytes.push(self.base as u8);
-        bytes.push(self.index as u8);
+        bytes.push(mapper.index(self.base));
+        bytes.push(mapper.index(self.index));
         bytes.push(self.scale);
         bytes.extend_from_slice(&self.displacement.to_le_bytes());
-        bytes.push(self.seg as u8);
+        bytes.push(mapper.index(self.seg));
         bytes
     }
 }
@@ -205,8 +205,8 @@ pub struct VMCond {
 }
 
 impl VMCond {
-    pub fn encode(&self) -> Vec<u8> {
-        vec![self.cmp as u8, self.lhs, self.rhs]
+    pub fn encode(&self, mapper: &mut MapperRegistry) -> Vec<u8> {
+        vec![mapper.index(self.cmp), self.lhs, self.rhs]
     }
 }
 
@@ -321,29 +321,29 @@ pub enum VMCmd<'a> {
 }
 
 impl<'a> VMCmd<'a> {
-    pub fn encode(&self) -> Vec<u8> {
+    pub fn encode(&self, mapper: &mut MapperRegistry) -> Vec<u8> {
         match self {
-            VMCmd::PushImm { vop, src } => {
-                let mut bytes = vec![*vop as u8];
+            Self::PushImm { vop, src } => {
+                let mut bytes = vec![mapper.index(*vop)];
                 bytes.push(src.len() as u8);
                 bytes.extend_from_slice(src);
                 bytes
             }
             Self::PushReg64 { vop, src } => {
-                let bytes = vec![*vop as u8, *src as u8];
+                let bytes = vec![mapper.index(*vop), mapper.index(*src)];
                 bytes
             }
             Self::PopReg64 { vop, dst } => {
-                let bytes = vec![*vop as u8, *dst as u8];
+                let bytes = vec![mapper.index(*vop), mapper.index(*dst)];
                 bytes
             }
             Self::RegImm {
                 vop,
-                dbits: bits,
+                dbits,
                 dst,
                 src,
             } => {
-                let mut bytes = vec![*vop as u8, *bits as u8, *dst as u8];
+                let mut bytes = vec![mapper.index(*vop), mapper.index(*dbits), mapper.index(*dst)];
                 bytes.extend_from_slice(src);
                 bytes
             }
@@ -355,11 +355,11 @@ impl<'a> VMCmd<'a> {
                 src,
             } => {
                 let bytes = vec![
-                    *vop as u8,
-                    *dbits as u8,
-                    *dst as u8,
-                    *sbits as u8,
-                    *src as u8,
+                    mapper.index(*vop),
+                    mapper.index(*dbits),
+                    mapper.index(*dst),
+                    mapper.index(*sbits),
+                    mapper.index(*src),
                 ];
                 bytes
             }
@@ -370,13 +370,18 @@ impl<'a> VMCmd<'a> {
                 dst,
                 src,
             } => {
-                let mut bytes = vec![*vop as u8, *dbits as u8, *load as u8, *dst as u8];
-                bytes.extend_from_slice(&src.encode());
+                let mut bytes = vec![
+                    mapper.index(*vop),
+                    mapper.index(*dbits),
+                    *load as u8,
+                    mapper.index(*dst),
+                ];
+                bytes.extend_from_slice(&src.encode(mapper));
                 bytes
             }
             Self::MemImm { vop, dst, src } => {
-                let mut bytes = vec![*vop as u8];
-                bytes.extend_from_slice(&dst.encode());
+                let mut bytes = vec![mapper.index(*vop)];
+                bytes.extend_from_slice(&dst.encode(mapper));
                 bytes.push(src.len() as u8);
                 bytes.extend_from_slice(src);
                 bytes
@@ -387,9 +392,9 @@ impl<'a> VMCmd<'a> {
                 dst,
                 src,
             } => {
-                let mut bytes = vec![*vop as u8, *sbits as u8];
-                bytes.extend_from_slice(&dst.encode());
-                bytes.push(*src as u8);
+                let mut bytes = vec![mapper.index(*vop), mapper.index(*sbits)];
+                bytes.extend_from_slice(&dst.encode(mapper));
+                bytes.push(mapper.index(*src));
                 bytes
             }
             Self::AddSubRegImm {
@@ -401,9 +406,9 @@ impl<'a> VMCmd<'a> {
                 src,
             } => {
                 let mut bytes = vec![
-                    *vop as u8,
-                    *dbits as u8,
-                    *dst as u8,
+                    mapper.index(*vop),
+                    mapper.index(*dbits),
+                    mapper.index(*dst),
                     *sub as u8,
                     *store as u8,
                 ];
@@ -420,11 +425,11 @@ impl<'a> VMCmd<'a> {
                 store,
             } => {
                 let bytes = vec![
-                    *vop as u8,
-                    *dbits as u8,
-                    *dst as u8,
-                    *sbits as u8,
-                    *src as u8,
+                    mapper.index(*vop),
+                    mapper.index(*dbits),
+                    mapper.index(*dst),
+                    mapper.index(*sbits),
+                    mapper.index(*src),
                     *sub as u8,
                     *store as u8,
                 ];
@@ -439,13 +444,13 @@ impl<'a> VMCmd<'a> {
                 src,
             } => {
                 let mut bytes = vec![
-                    *vop as u8,
-                    *dbits as u8,
-                    *dst as u8,
+                    mapper.index(*vop),
+                    mapper.index(*dbits),
+                    mapper.index(*dst),
                     *sub as u8,
                     *store as u8,
                 ];
-                bytes.extend_from_slice(&src.encode());
+                bytes.extend_from_slice(&src.encode(mapper));
                 bytes
             }
             Self::AddSubMemImm {
@@ -455,8 +460,8 @@ impl<'a> VMCmd<'a> {
                 store,
                 src,
             } => {
-                let mut bytes = vec![*vop as u8];
-                bytes.extend_from_slice(&dst.encode());
+                let mut bytes = vec![mapper.index(*vop)];
+                bytes.extend_from_slice(&dst.encode(mapper));
                 bytes.push(*sub as u8);
                 bytes.push(*store as u8);
                 bytes.push(src.len() as u8);
@@ -471,25 +476,25 @@ impl<'a> VMCmd<'a> {
                 sbits,
                 src,
             } => {
-                let mut bytes = vec![*vop as u8];
-                bytes.extend_from_slice(&dst.encode());
+                let mut bytes = vec![mapper.index(*vop)];
+                bytes.extend_from_slice(&dst.encode(mapper));
                 bytes.push(*sub as u8);
                 bytes.push(*store as u8);
-                bytes.push(*sbits as u8);
-                bytes.push(*src as u8);
+                bytes.push(mapper.index(*sbits));
+                bytes.push(mapper.index(*src));
                 bytes
             }
             Self::BranchRel { vop, ret, dst } => {
-                let mut bytes = vec![*vop as u8, *ret as u8];
+                let mut bytes = vec![mapper.index(*vop), *ret as u8];
                 bytes.extend_from_slice(&dst.to_le_bytes());
                 bytes
             }
             Self::BranchReg { vop, ret, dst } => {
-                vec![*vop as u8, *ret as u8, *dst as u8]
+                vec![mapper.index(*vop), *ret as u8, mapper.index(*dst)]
             }
             Self::BranchMem { vop, ret, dst } => {
-                let mut bytes = vec![*vop as u8, *ret as u8];
-                bytes.extend_from_slice(&dst.encode());
+                let mut bytes = vec![mapper.index(*vop), *ret as u8];
+                bytes.extend_from_slice(&dst.encode(mapper));
                 bytes
             }
             Self::Jcc {
@@ -498,23 +503,27 @@ impl<'a> VMCmd<'a> {
                 conds,
                 dst,
             } => {
-                let mut bytes = vec![*vop as u8, *logic as u8, conds.len() as u8];
+                let mut bytes = vec![mapper.index(*vop), mapper.index(*logic), conds.len() as u8];
 
                 for op in conds {
-                    bytes.extend_from_slice(&op.encode());
+                    bytes.extend_from_slice(&op.encode(mapper));
                 }
                 bytes.extend_from_slice(&dst.to_le_bytes());
                 bytes
             }
             Self::Nop { vop } => {
-                let bytes = vec![*vop as u8];
+                let bytes = vec![mapper.index(*vop)];
                 bytes
             }
         }
     }
 }
 
-pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
+pub fn convert(
+    mapper: &mut MapperRegistry,
+    address: u64,
+    instruction: &Instruction,
+) -> Option<Vec<u8>> {
     let bytecode = match instruction.code() {
         Code::Pushq_imm8 => {
             let src = instruction.immediate8();
@@ -1227,5 +1236,5 @@ pub fn convert(address: u64, instruction: &Instruction) -> Option<Vec<u8>> {
         }
     };
 
-    Some(bytecode.encode())
+    Some(bytecode.encode(mapper))
 }

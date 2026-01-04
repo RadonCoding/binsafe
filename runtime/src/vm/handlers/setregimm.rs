@@ -14,32 +14,38 @@ pub fn build(rt: &mut Runtime) {
     let mut lower64 = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
-    // mov al, [rdx] -> bits
+    // mov al, [rdx] -> dbits
     rt.asm.mov(al, ptr(rdx)).unwrap();
     // add rdx, 0x1
     rt.asm.add(rdx, 0x1).unwrap();
 
     // movzx r8, [rdx] -> dst
     rt.asm.movzx(r8, byte_ptr(rdx)).unwrap();
-    // dec r8
-    rt.asm.dec(r8).unwrap();
     // add rdx, 0x1
     rt.asm.add(rdx, 0x1).unwrap();
 
     // cmp al, ...
-    rt.asm.cmp(al, VMBits::Lower64 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(al, rt.mapper.index(VMBits::Lower64) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower64).unwrap();
     // cmp al, ...
-    rt.asm.cmp(al, VMBits::Lower32 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(al, rt.mapper.index(VMBits::Lower32) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower32).unwrap();
     // cmp al, ...
-    rt.asm.cmp(al, VMBits::Lower16 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(al, rt.mapper.index(VMBits::Lower16) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower16).unwrap();
     // cmp al, ...
-    rt.asm.cmp(al, VMBits::Higher8 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(al, rt.mapper.index(VMBits::Higher8) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(higher8).unwrap();
 

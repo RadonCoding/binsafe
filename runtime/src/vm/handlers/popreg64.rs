@@ -9,8 +9,6 @@ use crate::{
 pub fn build(rt: &mut Runtime) {
     // movzx r8, [rdx] -> dst
     rt.asm.movzx(r8, byte_ptr(rdx)).unwrap();
-    // dec r8
-    rt.asm.dec(r8).unwrap();
     // add rdx, 0x1
     rt.asm.add(rdx, 0x1).unwrap();
 

@@ -5,13 +5,8 @@ use iced_x86::code_asm::{
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
-    vm::{
-        bytecode::{VMReg, VM_REG_COUNT},
-        stack, utils,
-    },
+    vm::{bytecode::VMReg, stack, utils},
 };
-
-pub const VM_STATE_SIZE: usize = VM_REG_COUNT * 8;
 
 const VREG_TO_REG: &[(VMReg, AsmRegister64)] = &[
     (VMReg::Rcx, rcx),

@@ -36,8 +36,6 @@ pub fn build(rt: &mut Runtime) {
 
     // movzx r8, [r12] -> dst
     rt.asm.movzx(r8, byte_ptr(r12)).unwrap();
-    // dec r8
-    rt.asm.dec(r8).unwrap();
     // add r12, 0x1
     rt.asm.add(r12, 0x1).unwrap();
 
@@ -48,8 +46,6 @@ pub fn build(rt: &mut Runtime) {
 
     // movzx r9, [r12] -> src
     rt.asm.movzx(r9, byte_ptr(r12)).unwrap();
-    // dec r9
-    rt.asm.dec(r9).unwrap();
     // add r12, 0x1
     rt.asm.add(r12, 0x1).unwrap();
 
@@ -73,19 +69,27 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.or(r15b, al).unwrap();
 
     // cmp r13b, ...
-    rt.asm.cmp(r13b, VMBits::Lower64 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(r13b, rt.mapper.index(VMBits::Lower64) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower64).unwrap();
     // cmp r13b, ...
-    rt.asm.cmp(r13b, VMBits::Lower32 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(r13b, rt.mapper.index(VMBits::Lower32) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower32).unwrap();
     // cmp r13b, ...
-    rt.asm.cmp(r13b, VMBits::Lower16 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(r13b, rt.mapper.index(VMBits::Lower16) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(lower16).unwrap();
     // cmp r13b, ...
-    rt.asm.cmp(r13b, VMBits::Higher8 as u8 as i32).unwrap();
+    rt.asm
+        .cmp(r13b, rt.mapper.index(VMBits::Higher8) as i32)
+        .unwrap();
     // je ...
     rt.asm.je(higher8).unwrap();
 
@@ -100,7 +104,9 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.lea(r8, ptr(rcx + r9 * 8)).unwrap();
 
         // cmp r14b, ...
-        rt.asm.cmp(r14b, VMBits::Higher8 as u8 as i32).unwrap();
+        rt.asm
+            .cmp(r14b, rt.mapper.index(VMBits::Higher8) as i32)
+            .unwrap();
         // jne ...
         rt.asm.jne(is_lower).unwrap();
 
@@ -133,7 +139,9 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.lea(r8, ptr(rcx + r9 * 8)).unwrap();
 
         // cmp r14b, ...
-        rt.asm.cmp(r14b, VMBits::Higher8 as u8 as i32).unwrap();
+        rt.asm
+            .cmp(r14b, rt.mapper.index(VMBits::Higher8) as i32)
+            .unwrap();
         // jne ...
         rt.asm.jne(is_lower).unwrap();
 
