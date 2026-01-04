@@ -32,8 +32,6 @@ impl AntiDebug {
     }
 
     fn gen_peb_check() -> Vec<VMCmd<'static>> {
-        const TRUE: [u8; 1] = [0x1];
-
         vec![
             VMCmd::RegReg {
                 vop: VMOp::SetRegReg,
@@ -68,23 +66,14 @@ impl AntiDebug {
                     seg: VMSeg::None,
                 },
             },
-            VMCmd::AddSubRegImm {
+            VMCmd::AddSubRegReg {
                 vop: VMOp::AddSubRegImm,
                 dbits: VMBits::Lower8,
-                dst: VMReg::V0,
+                dst: VMReg::Rsp,
+                sbits: VMBits::Lower8,
+                src: VMReg::V0,
                 sub: true,
-                store: false,
-                src: &TRUE,
-            },
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Zero as u8,
-                    rhs: 1,
-                }],
-                dst: u32::MIN,
+                store: true,
             },
             VMCmd::RegReg {
                 vop: VMOp::SetRegReg,
