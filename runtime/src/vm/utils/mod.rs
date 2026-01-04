@@ -38,6 +38,13 @@ pub fn add_vreg_imm_64(rt: &mut Runtime, src: AsmRegister64, from: i32, to: VMRe
         .unwrap();
 }
 
+pub fn add_reg_vreg_64(rt: &mut Runtime, src: AsmRegister64, from: VMReg, to: AsmRegister64) {
+    // add ..., [...]
+    rt.asm
+        .add(to, ptr(src + rt.mapper.index(from) * 8))
+        .unwrap();
+}
+
 pub fn sub_vreg_reg_64(rt: &mut Runtime, src: AsmRegister64, from: AsmRegister64, to: VMReg) {
     // sub [...], ...
     rt.asm

@@ -1,6 +1,6 @@
 use iced_x86::{Code, Instruction, Mnemonic, OpKind, Register};
 
-use crate::mapper::{mapped, MapperRegistry};
+use crate::mapper::{mapped, Mapper};
 
 mapped! {
     VMOp {
@@ -74,8 +74,9 @@ mapped! {
         R13,
         R14,
         R15,
-        Rip,
+        Vip,
         Flags,
+        VB,
         V0,
         V1,
     }
@@ -101,7 +102,7 @@ impl From<Register> for VMReg {
             Register::R13 | Register::R13D | Register::R13W | Register::R13L => Self::R13,
             Register::R14 | Register::R14D | Register::R14W | Register::R14L => Self::R14,
             Register::R15 | Register::R15D | Register::R15W | Register::R15L => Self::R15,
-            Register::RIP => Self::Rip,
+            Register::RIP => Self::VB,
             _ => panic!("unsupported register: {reg:?}"),
         }
     }
@@ -165,16 +166,13 @@ pub struct VMMem {
 }
 
 impl VMMem {
-    fn new(address: u64, instruction: &Instruction) -> Self {
+    fn new(instruction: &Instruction) -> Self {
         let base = VMReg::from(instruction.memory_base());
         let index = VMReg::from(instruction.memory_index());
         let scale = instruction.memory_index_scale() as u8;
-        let displacement = if instruction.is_ip_rel_memory_operand() {
-            (instruction.memory_displacement64() as i64 - address as i64) as i32
-        } else {
-            instruction.memory_displacement64() as i32
-        };
-
+        let displacement = (instruction.memory_displacement64() as i64)
+            .try_into()
+            .unwrap();
         let seg = VMSeg::from(instruction.segment_prefix());
 
         Self {
@@ -186,8 +184,8 @@ impl VMMem {
         }
     }
 
-    fn encode(&self, mapper: &mut MapperRegistry) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(7);
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+        let mut bytes = Vec::new();
         bytes.push(mapper.index(self.base));
         bytes.push(mapper.index(self.index));
         bytes.push(self.scale);
@@ -205,7 +203,7 @@ pub struct VMCond {
 }
 
 impl VMCond {
-    pub fn encode(&self, mapper: &mut MapperRegistry) -> Vec<u8> {
+    pub fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(self.cmp), self.lhs, self.rhs]
     }
 }
@@ -273,9 +271,9 @@ pub enum VMCmd<'a> {
     },
     AddSubRegMem {
         vop: VMOp,
+        src: VMMem,
         dbits: VMBits,
         dst: VMReg,
-        src: VMMem,
         sub: bool,
         store: bool,
     },
@@ -297,7 +295,7 @@ pub enum VMCmd<'a> {
     BranchRel {
         vop: VMOp,
         ret: bool,
-        dst: i32,
+        dst: u32,
     },
     BranchReg {
         vop: VMOp,
@@ -313,7 +311,7 @@ pub enum VMCmd<'a> {
         vop: VMOp,
         logic: VMLogic,
         conds: Vec<VMCond>,
-        dst: i32,
+        dst: u32,
     },
     Nop {
         vop: VMOp,
@@ -321,7 +319,7 @@ pub enum VMCmd<'a> {
 }
 
 impl<'a> VMCmd<'a> {
-    pub fn encode(&self, mapper: &mut MapperRegistry) -> Vec<u8> {
+    pub fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         match self {
             Self::PushImm { vop, src } => {
                 let mut bytes = vec![mapper.index(*vop)];
@@ -443,14 +441,12 @@ impl<'a> VMCmd<'a> {
                 store,
                 src,
             } => {
-                let mut bytes = vec![
-                    mapper.index(*vop),
-                    mapper.index(*dbits),
-                    mapper.index(*dst),
-                    *sub as u8,
-                    *store as u8,
-                ];
+                let mut bytes = vec![mapper.index(*vop)];
                 bytes.extend_from_slice(&src.encode(mapper));
+                bytes.push(*sub as u8);
+                bytes.push(*store as u8);
+                bytes.push(mapper.index(*dbits));
+                bytes.push(mapper.index(*dst));
                 bytes
             }
             Self::AddSubMemImm {
@@ -519,11 +515,7 @@ impl<'a> VMCmd<'a> {
     }
 }
 
-pub fn convert(
-    mapper: &mut MapperRegistry,
-    address: u64,
-    instruction: &Instruction,
-) -> Option<Vec<u8>> {
+pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>> {
     let bytecode = match instruction.code() {
         Code::Pushq_imm8 => {
             let src = instruction.immediate8();
@@ -626,7 +618,7 @@ pub fn convert(
                     }
                 }
                 OpKind::Memory => {
-                    let src = VMMem::new(address, instruction);
+                    let src = VMMem::new(instruction);
                     VMCmd::RegMem {
                         vop: VMOp::SetRegMem,
                         dbits,
@@ -657,7 +649,7 @@ pub fn convert(
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(address, instruction);
+                    let dst = VMMem::new(instruction);
                     VMCmd::MemReg {
                         vop: VMOp::SetMemReg,
                         sbits,
@@ -690,7 +682,7 @@ pub fn convert(
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(address, instruction);
+                    let dst = VMMem::new(instruction);
                     VMCmd::MemImm {
                         vop: VMOp::SetMemImm,
                         dst,
@@ -738,7 +730,7 @@ pub fn convert(
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(address, instruction);
+                    let dst = VMMem::new(instruction);
                     VMCmd::AddSubMemImm {
                         vop: VMOp::AddSubMemImm,
                         dst,
@@ -771,7 +763,7 @@ pub fn convert(
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(address, instruction);
+                    let dst = VMMem::new(instruction);
                     VMCmd::AddSubMemImm {
                         vop: VMOp::AddSubMemImm,
                         dst,
@@ -813,7 +805,7 @@ pub fn convert(
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(address, instruction);
+                    let dst = VMMem::new(instruction);
                     VMCmd::AddSubMemImm {
                         vop: VMOp::AddSubMemImm,
                         dst,
@@ -858,17 +850,17 @@ pub fn convert(
                         store,
                     }
                 }
-                // OpKind::Memory => {
-                //     let src = VMMem::new(address, instruction);
-                //     VMCmd::AddSubRegMem {
-                //         vop: VMOp::AddSubRegMem,
-                //         dbits,
-                //         dst,
-                //         src,
-                //         sub,
-                //         store,
-                //     }
-                // }
+                OpKind::Memory => {
+                    let src = VMMem::new(instruction);
+                    VMCmd::AddSubRegMem {
+                        vop: VMOp::AddSubRegMem,
+                        dbits,
+                        dst,
+                        src,
+                        sub,
+                        store,
+                    }
+                }
                 _ => return None,
             }
         }
@@ -906,7 +898,7 @@ pub fn convert(
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(address, instruction);
+                    let dst = VMMem::new(instruction);
                     VMCmd::AddSubMemReg {
                         vop: VMOp::AddSubMemReg,
                         dst,
@@ -923,7 +915,7 @@ pub fn convert(
             let reg = instruction.op0_register();
             let bits = VMBits::from(reg);
             let dst = VMReg::from(reg);
-            let src = VMMem::new(address, instruction);
+            let src = VMMem::new(instruction);
 
             VMCmd::RegMem {
                 vop: VMOp::SetRegMem,
@@ -934,11 +926,11 @@ pub fn convert(
             }
         }
         Code::Call_rel32_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             VMCmd::BranchRel {
                 vop: VMOp::BranchRel,
-                dst,
                 ret: true,
+                dst,
             }
         }
         Code::Call_rm64 => match instruction.op0_kind() {
@@ -950,12 +942,12 @@ pub fn convert(
             OpKind::Memory => VMCmd::BranchMem {
                 vop: VMOp::BranchMem,
                 ret: true,
-                dst: VMMem::new(address, instruction),
+                dst: VMMem::new(instruction),
             },
             _ => return None,
         },
         Code::Jmp_rel8_64 | Code::Jmp_rel32_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             VMCmd::BranchRel {
                 vop: VMOp::BranchRel,
                 ret: false,
@@ -970,13 +962,13 @@ pub fn convert(
             },
             OpKind::Memory => VMCmd::BranchMem {
                 vop: VMOp::BranchMem,
-                dst: VMMem::new(address, instruction),
+                dst: VMMem::new(instruction),
                 ret: false,
             },
             _ => return None,
         },
         Code::Ja_rel32_64 | Code::Ja_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JA = CF=0 AND ZF=0
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -997,7 +989,7 @@ pub fn convert(
             }
         }
         Code::Jae_rel32_64 | Code::Jae_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JAE = CF=0
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1011,7 +1003,7 @@ pub fn convert(
             }
         }
         Code::Jb_rel32_64 | Code::Jb_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JB = CF=1
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1025,7 +1017,7 @@ pub fn convert(
             }
         }
         Code::Jbe_rel32_64 | Code::Jbe_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JBE = CF=1 OR ZF=1
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1046,7 +1038,7 @@ pub fn convert(
             }
         }
         Code::Je_rel32_64 | Code::Je_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JE = ZF=1
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1060,7 +1052,7 @@ pub fn convert(
             }
         }
         Code::Jg_rel32_64 | Code::Jg_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JG = ZF=0 AND SF=OF
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1081,7 +1073,7 @@ pub fn convert(
             }
         }
         Code::Jge_rel32_64 | Code::Jge_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JGE = SF=OF
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1095,7 +1087,7 @@ pub fn convert(
             }
         }
         Code::Jl_rel32_64 | Code::Jl_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JL = SF<>OF
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1109,7 +1101,7 @@ pub fn convert(
             }
         }
         Code::Jle_rel32_64 | Code::Jle_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JLE = ZF=1 OR SF<>OF
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1130,7 +1122,7 @@ pub fn convert(
             }
         }
         Code::Jne_rel32_64 | Code::Jne_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JNE = ZF=0
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1144,7 +1136,7 @@ pub fn convert(
             }
         }
         Code::Jno_rel32_64 | Code::Jno_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JNO = OF=0
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1158,7 +1150,7 @@ pub fn convert(
             }
         }
         Code::Jnp_rel32_64 | Code::Jnp_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JNP = PF=0
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1172,7 +1164,7 @@ pub fn convert(
             }
         }
         Code::Jns_rel32_64 | Code::Jns_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JNS = SF=0
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1186,7 +1178,7 @@ pub fn convert(
             }
         }
         Code::Jo_rel32_64 | Code::Jo_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JO = OF=1
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1200,7 +1192,7 @@ pub fn convert(
             }
         }
         Code::Jp_rel32_64 | Code::Jp_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JP = PF=1
             VMCmd::Jcc {
                 vop: VMOp::Jcc,
@@ -1214,7 +1206,7 @@ pub fn convert(
             }
         }
         Code::Js_rel32_64 | Code::Js_rel8_64 => {
-            let dst = (instruction.memory_displacement64() as i64 - address as i64) as i32;
+            let dst = instruction.memory_displacement64().try_into().unwrap();
             // JS = SF=1
             VMCmd::Jcc {
                 vop: VMOp::Jcc,

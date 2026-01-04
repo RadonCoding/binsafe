@@ -17,33 +17,32 @@ use runtime::{
 
 #[derive(Default)]
 pub struct Virtualization {
-    vblocks: HashMap<u64, i32>,
+    vblocks: HashMap<u64, usize>,
     failures: HashMap<Mnemonic, u32>,
     transforms: usize,
+    dedupes: usize,
 }
 
-const VM_DISPATCH_SIZE: usize = 10;
+const VDISPATCH_SIZE: usize = 10;
 
 impl Protection for Virtualization {
     fn initialize(&mut self, engine: &mut Engine) {
+        let mut vtable = Vec::new();
         let mut vcode = Vec::new();
+
+        let mut dedup = HashMap::new();
 
         let xrefs = &engine.xrefs;
 
         'outer: for block in &mut engine.blocks {
-            if block.size < VM_DISPATCH_SIZE {
+            if block.size < VDISPATCH_SIZE {
                 continue;
             }
 
             let mut vblock = Vec::new();
 
-            let next_ip = block.instructions[block.instructions.len() - 1].next_ip() as u32;
-
-            let address = next_ip as u64;
-
             for instruction in &block.instructions {
-                let bytecode = match bytecode::convert(&mut engine.rt.mapper, address, instruction)
-                {
+                let bytecode = match bytecode::convert(&mut engine.rt.mapper, instruction) {
                     Some(virtualized) => virtualized,
                     None => {
                         let mnemonic = instruction.mnemonic();
@@ -56,19 +55,30 @@ impl Protection for Virtualization {
 
             if let Some(bytecode) = AntiDebug::transform(&mut engine.rt.mapper, xrefs, block) {
                 vblock.splice(0..0, bytecode);
-
                 self.transforms += 1;
             }
 
-            self.vblocks.insert(block.rva, vcode.len() as i32);
-
-            vblock.splice(0..0, [0x0u8; mem::size_of::<u32>()]);
             vblock.push(engine.rt.mapper.index(VMOp::Invalid));
 
-            vcode.extend(vblock);
+            let vcode_offset = if let Some(&offset) = dedup.get(&vblock) {
+                self.dedupes += 1;
+
+                offset
+            } else {
+                let offset = vcode.len() as u32;
+                vcode.extend_from_slice(&vblock);
+                dedup.insert(vblock, offset);
+                offset
+            };
+
+            self.vblocks.insert(block.rva, vtable.len());
+
+            vtable.extend_from_slice(&0u32.to_le_bytes());
+            vtable.extend_from_slice(&vcode_offset.to_le_bytes());
         }
 
         if !vcode.is_empty() {
+            engine.rt.define_data(DataDef::VmTable, &vtable);
             engine.rt.define_data(DataDef::VmCode, &vcode);
         }
     }
@@ -76,12 +86,12 @@ impl Protection for Virtualization {
     fn apply(&self, engine: &mut Engine) {
         let ventry = engine.rt.lookup(engine.rt.func_labels[&FnDef::VmEntry]);
 
-        let vcode_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmCode]);
-        let vcode_offset = engine
+        let vtable_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmTable]);
+        let vtable_offset = engine
             .pe
-            .translate(PETranslation::Memory(RVA(vcode_rva as u32)))
+            .translate(PETranslation::Memory(RVA(vtable_rva as u32)))
             .unwrap();
-        let vcode = unsafe { engine.pe.as_mut_ptr().byte_add(vcode_offset) };
+        let vtable = unsafe { engine.pe.as_mut_ptr().add(vtable_offset) };
 
         for i in 0..engine.blocks.len() {
             let block = &engine.blocks[i];
@@ -91,20 +101,21 @@ impl Protection for Virtualization {
             }
 
             let voffset = self.vblocks[&block.rva];
+            let vindex = (voffset / 8) as i32;
 
             let mut asm = CodeAssembler::new(engine.bitness).unwrap();
-            asm.push(voffset).unwrap();
+            asm.push(vindex).unwrap();
             asm.call(ventry).unwrap();
 
             let dispatch = asm.assemble(block.rva).unwrap();
 
-            assert!(dispatch.len() <= VM_DISPATCH_SIZE);
+            assert!(dispatch.len() <= VDISPATCH_SIZE);
 
             unsafe {
-                let displacement = (block.size - dispatch.len()) as u32;
-                vcode
-                    .byte_add(voffset as usize)
-                    .copy_from(displacement.to_le_bytes().as_ptr(), mem::size_of::<u32>());
+                let displ = (block.size - dispatch.len()) as u32;
+                vtable
+                    .add(voffset)
+                    .copy_from(displ.to_le_bytes().as_ptr(), mem::size_of::<u32>());
             }
 
             engine.replace(i, &dispatch);
@@ -115,8 +126,8 @@ impl Protection for Virtualization {
         let percentage = (virtualized as f64 / total.max(1) as f64) * 100.0;
 
         let mut output = format!(
-            "VIRTUALIZED: {}/{} blocks ({:.2}%) [transforms: {}]",
-            virtualized, total, percentage, self.transforms
+            "VIRTUALIZED: {}/{} blocks ({:.2}%) [transforms: {}] [dedupes: {}]",
+            virtualized, total, percentage, self.transforms, self.dedupes
         );
 
         if !self.failures.is_empty() {

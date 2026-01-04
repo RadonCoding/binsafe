@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use runtime::{
-    mapper::MapperRegistry,
+    mapper::Mapper,
     vm::bytecode::{VMBits, VMCmd, VMCond, VMFlag, VMLogic, VMMem, VMOp, VMReg, VMSeg, VMTest},
 };
 
@@ -11,7 +11,7 @@ pub struct AntiDebug;
 
 impl AntiDebug {
     pub fn transform(
-        mapper: &mut MapperRegistry,
+        mapper: &mut Mapper,
         xrefs: &HashMap<u64, usize>,
         block: &Block,
     ) -> Option<Vec<u8>> {
@@ -84,7 +84,7 @@ impl AntiDebug {
                     lhs: VMFlag::Zero as u8,
                     rhs: 1,
                 }],
-                dst: i32::MIN,
+                dst: u32::MIN,
             },
             VMCmd::RegReg {
                 vop: VMOp::SetRegReg,

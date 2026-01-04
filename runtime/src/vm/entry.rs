@@ -72,23 +72,36 @@ pub fn build(rt: &mut Runtime) {
     // pop rcx -> ret
     rt.asm.pop(rcx).unwrap();
     // mov [rax + ...], rcx
-    utils::mov_vreg_reg_64(rt, rax, rcx, VMReg::Rip);
+    utils::mov_vreg_reg_64(rt, rax, rcx, VMReg::Vip);
 
-    // pop rcx -> offset
+    // mov rdx, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
+    rt.asm.mov(rdx, ptr(0x60).gs()).unwrap();
+    // mov rdx, [rdx + 0x10] -> PVOID PEB->ImageBaseAddress
+    rt.asm.mov(rdx, ptr(rdx + 0x10)).unwrap();
+    // mov [rax + ...], rcx
+    utils::mov_vreg_reg_64(rt, rax, rdx, VMReg::VB);
+
+    // pop rcx -> index
     rt.asm.pop(rcx).unwrap();
+    // lea rdx, [...]
+    rt.asm
+        .lea(rdx, ptr(rt.data_labels[&DataDef::VmTable]))
+        .unwrap();
+    // lea rdx, [rdx + rcx*8]
+    rt.asm.lea(rdx, ptr(rdx + rcx * 8)).unwrap();
+    // mov ecx, [rdx] -> displ
+    rt.asm.mov(ecx, ptr(rdx)).unwrap();
+    // add [rax + ...], rcx
+    utils::add_vreg_reg_64(rt, rax, rcx, VMReg::Vip);
+    // mov ecx, [rdx + 0x4] -> offset
+    rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();
+
     // lea rdx, [...]
     rt.asm
         .lea(rdx, ptr(rt.data_labels[&DataDef::VmCode]))
         .unwrap();
     // add rdx, rcx
     rt.asm.add(rdx, rcx).unwrap();
-
-    // mov ecx, [rdx] -> displ
-    rt.asm.mov(ecx, ptr(rdx)).unwrap();
-    // add rdx, 0x4
-    rt.asm.add(rdx, 0x4).unwrap();
-    // add [rax + ...], rcx
-    utils::add_vreg_reg_64(rt, rax, rcx, VMReg::Rip);
 
     // call ...
     rt.asm
@@ -124,7 +137,7 @@ pub fn build(rt: &mut Runtime) {
     }
 
     // push [rax + ...]
-    utils::push_vreg_64(rt, rax, VMReg::Rip);
+    utils::push_vreg_64(rt, rax, VMReg::Vip);
 
     // mov rax, [rax + ...]
     utils::mov_reg_vreg_64(rt, rax, VMReg::Rax, rax);

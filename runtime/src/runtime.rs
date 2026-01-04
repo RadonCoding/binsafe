@@ -6,7 +6,7 @@ use iced_x86::{
 };
 
 use crate::{
-    mapper::{MappedSpec, MapperRegistry},
+    mapper::{Mappable, Mapper},
     vm::{
         self,
         bytecode::{VMOp, VMReg},
@@ -57,6 +57,7 @@ pub enum DataDef {
     VmState,
     VmStackPointer,
     VmStackContent,
+    VmTable,
     VmCode,
 }
 
@@ -65,7 +66,7 @@ pub struct Runtime {
     pub func_labels: HashMap<FnDef, CodeLabel>,
     pub addresses: HashMap<CodeLabel, u64>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
-    pub mapper: MapperRegistry,
+    pub mapper: Mapper,
 }
 
 impl Runtime {
@@ -111,6 +112,7 @@ impl Runtime {
         data_labels.insert(DataDef::VmLock, asm.create_label());
         data_labels.insert(DataDef::VmStackPointer, asm.create_label());
         data_labels.insert(DataDef::VmStackContent, asm.create_label());
+        data_labels.insert(DataDef::VmTable, asm.create_label());
         data_labels.insert(DataDef::VmCode, asm.create_label());
 
         Self {
@@ -118,7 +120,7 @@ impl Runtime {
             func_labels,
             addresses: HashMap::new(),
             data_labels,
-            mapper: MapperRegistry::new(),
+            mapper: Mapper::new(),
         }
     }
 
@@ -214,11 +216,11 @@ impl Runtime {
 
         self.define_data(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
 
-        self.define_data(DataDef::VmStackPointer, &[0u8; 8]);
+        self.define_data(DataDef::VmStackPointer, &0u64.to_le_bytes());
         self.define_data(DataDef::VmStackContent, &[0u8; VM_STACK_SIZE]);
 
         self.define_data(DataDef::VmState, &[0u8; VMReg::COUNT * 8]);
-        self.define_data(DataDef::VmLock, &[0u8; 1]);
+        self.define_data(DataDef::VmLock, &0u8.to_le_bytes());
 
         let options = self
             .asm

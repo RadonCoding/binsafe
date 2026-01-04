@@ -7,7 +7,7 @@ mod tests {
         Code, Instruction, MemoryOperand, Register,
     };
     use runtime::{
-        mapper::MappedSpec,
+        mapper::Mappable,
         runtime::{DataDef, FnDef, Runtime},
         vm::{
             bytecode::{self, VMFlag, VMOp, VMReg},
@@ -97,7 +97,7 @@ mod tests {
         let mut bytecode = Vec::new();
 
         for instruction in instructions {
-            let mut part = bytecode::convert(&mut executor.rt.mapper, 0x0, &instruction).unwrap();
+            let mut part = bytecode::convert(&mut executor.rt.mapper, &instruction).unwrap();
 
             bytecode.append(&mut part);
         }
@@ -169,7 +169,7 @@ mod tests {
                 Instruction::with_branch(Code::Je_rel8_64, 0xDEAD).unwrap(),
             ],
             &[(VMReg::Rax, 0x1)],
-            VMReg::Rip,
+            VMReg::Vip,
             0xDEAD,
         );
         template(
@@ -178,7 +178,7 @@ mod tests {
                 Instruction::with_branch(Code::Jne_rel8_64, 0xDEAD).unwrap(),
             ],
             &[(VMReg::Rax, 0x1)],
-            VMReg::Rip,
+            VMReg::Vip,
             0xDEAD,
         );
     }
@@ -236,6 +236,27 @@ mod tests {
             &[(VMReg::Rax, 0xDEADC0DE), (VMReg::Rsp, sp)],
             VMReg::Rbx,
             0xDEADC0DE,
+        );
+    }
+
+    #[test]
+    fn test_lea_sib() {
+        template(
+            &[Instruction::with2(
+                Code::Lea_r64_m,
+                Register::RAX,
+                MemoryOperand::with_base_index_scale_displ_size(
+                    Register::RBX,
+                    Register::RCX,
+                    4,
+                    0x8,
+                    8,
+                ),
+            )
+            .unwrap()],
+            &[(VMReg::Rbx, 0x1000), (VMReg::Rcx, 0x10)],
+            VMReg::Rax,
+            0x1000 + (0x10 * 4) + 0x8,
         );
     }
 }

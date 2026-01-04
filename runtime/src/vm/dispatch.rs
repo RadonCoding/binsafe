@@ -26,7 +26,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r13, rdx).unwrap();
 
     // mov r14, [r12 + ...]
-    utils::mov_reg_vreg_64(rt, r12, VMReg::Rip, r14);
+    utils::mov_reg_vreg_64(rt, r12, VMReg::Vip, r14);
 
     // lea rax, [...]
     rt.asm
@@ -99,7 +99,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(r13, rax).unwrap();
 
         // cmp [r12 + ...], r14
-        utils::cmp_vreg_reg_64(rt, r12, VMReg::Rip, r14);
+        utils::cmp_vreg_reg_64(rt, r12, VMReg::Vip, r14);
         // jne ...
         rt.asm.jne(epilogue).unwrap();
 

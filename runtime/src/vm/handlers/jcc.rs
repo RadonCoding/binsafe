@@ -7,8 +7,7 @@ use crate::{
     },
 };
 use iced_x86::code_asm::{
-    al, byte_ptr, dword_ptr, ptr, r12, r12b, r13, r13d, r14, r14b, r8b, r8d, r9b, r9d, rax, rcx,
-    rdx,
+    al, byte_ptr, eax, ptr, r12, r12b, r13, r13d, r14, r14b, r8b, r8d, r9b, r9d, rax, rcx, rdx,
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -185,18 +184,21 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
-        // movsxd rax, [rdx] -> dst
-        rt.asm.movsxd(rax, dword_ptr(rdx)).unwrap();
+        // mov eax, [rdx] -> dst
+        rt.asm.mov(eax, ptr(rdx)).unwrap();
         // add rdx, 0x4
         rt.asm.add(rdx, 0x4).unwrap();
+
+        // add rax, [rcx + ...]
+        utils::add_reg_vreg_64(rt, rcx, VMReg::VB, rax);
 
         // test r12b, r12b
         rt.asm.test(r12b, r12b).unwrap();
         // jz ...
         rt.asm.jz(skip_jump).unwrap();
 
-        // add [rcx + ...], rax
-        utils::add_vreg_reg_64(rt, rcx, rax, VMReg::Rip);
+        // mov [rcx + ...], rax
+        utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Vip);
     }
 
     rt.asm.set_label(&mut skip_jump).unwrap();
