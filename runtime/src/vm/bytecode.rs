@@ -272,10 +272,10 @@ pub enum VMCmd<'a> {
     AddSubRegMem {
         vop: VMOp,
         src: VMMem,
-        dbits: VMBits,
-        dst: VMReg,
         sub: bool,
         store: bool,
+        dbits: VMBits,
+        dst: VMReg,
     },
     AddSubMemImm {
         vop: VMOp,
@@ -435,11 +435,11 @@ impl<'a> VMCmd<'a> {
             }
             Self::AddSubRegMem {
                 vop,
-                dbits,
-                dst,
+                src,
                 sub,
                 store,
-                src,
+                dbits,
+                dst,
             } => {
                 let mut bytes = vec![mapper.index(*vop)];
                 bytes.extend_from_slice(&src.encode(mapper));
@@ -854,11 +854,11 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     let src = VMMem::new(instruction);
                     VMCmd::AddSubRegMem {
                         vop: VMOp::AddSubRegMem,
-                        dbits,
-                        dst,
                         src,
                         sub,
                         store,
+                        dbits,
+                        dst,
                     }
                 }
                 _ => return None,
