@@ -4,7 +4,7 @@ use iced_x86::code_asm::{
 
 use crate::runtime::{DataDef, Runtime};
 
-pub const VM_STACK_SIZE: usize = 0x100;
+pub const VSTACK_SIZE: usize = 0x100;
 
 pub fn initialize(rt: &mut Runtime) {
     let mut initialized = rt.asm.create_label();
@@ -23,7 +23,7 @@ pub fn initialize(rt: &mut Runtime) {
         .lea(r11, ptr(rt.data_labels[&DataDef::VmStackContent]))
         .unwrap();
     // add r11, ...
-    rt.asm.add(r11, VM_STACK_SIZE as i32).unwrap();
+    rt.asm.add(r11, VSTACK_SIZE as i32).unwrap();
     // mov [...], r11
     rt.asm
         .mov(ptr(rt.data_labels[&DataDef::VmStackPointer]), r11)

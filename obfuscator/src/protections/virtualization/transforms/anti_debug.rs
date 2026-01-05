@@ -23,18 +23,7 @@ impl AntiDebug {
             return None;
         }
 
-        let vblock = Self::gen_peb_check();
-
-        Some(
-            vblock
-                .into_iter()
-                .flat_map(|cmd| cmd.encode(mapper))
-                .collect(),
-        )
-    }
-
-    fn gen_peb_check() -> Vec<VMCmd<'static>> {
-        vec![
+        let vblock = [
             VMCmd::SetRegReg {
                 vop: VMOp::SetRegReg,
                 dbits: VMBits::Lower64,
@@ -76,6 +65,13 @@ impl AntiDebug {
                 sbits: VMBits::Lower64,
                 src: VMReg::V1,
             },
-        ]
+        ];
+
+        Some(
+            vblock
+                .into_iter()
+                .flat_map(|cmd| cmd.encode(mapper))
+                .collect(),
+        )
     }
 }
