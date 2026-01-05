@@ -55,40 +55,21 @@ impl Mutation {
         }
     }
 
-    fn has_dead_flags(&self, instructions: &[Instruction], start_index: usize) -> bool {
-        for i in start_index..instructions.len() {
-            let instr = &instructions[i];
-            match instr.mnemonic() {
-                Mnemonic::Jb
-                | Mnemonic::Jae
-                | Mnemonic::Je
-                | Mnemonic::Jne
-                | Mnemonic::Jbe
-                | Mnemonic::Ja
-                | Mnemonic::Js
-                | Mnemonic::Jns
-                | Mnemonic::Jp
-                | Mnemonic::Jnp
-                | Mnemonic::Jl
-                | Mnemonic::Jge
-                | Mnemonic::Jle
-                | Mnemonic::Jg
-                | Mnemonic::Cmovb
-                | Mnemonic::Cmove
-                | Mnemonic::Sete
-                | Mnemonic::Setne
-                | Mnemonic::Adc
-                | Mnemonic::Sbb => return false,
-                Mnemonic::Add
-                | Mnemonic::Sub
-                | Mnemonic::Xor
-                | Mnemonic::Or
-                | Mnemonic::And
-                | Mnemonic::Cmp
-                | Mnemonic::Test => return true,
-                _ => {}
+    fn has_dead_flags(&self, instructions: &[Instruction]) -> bool {
+        let written_flags = instructions[0].rflags_written();
+
+        for i in 1..instructions.len() {
+            let instruction = &instructions[i];
+
+            if (instruction.rflags_read() & written_flags) != 0 {
+                return false;
+            }
+
+            if (instruction.rflags_written() & written_flags) == written_flags {
+                return true;
             }
         }
+
         true
     }
 }
@@ -107,7 +88,7 @@ impl Protection for Mutation {
             let mut mutated = false;
 
             for (index, instruction) in block.instructions.iter().enumerate() {
-                let dead_flags = self.has_dead_flags(&block.instructions, index + 1);
+                let dead_flags = self.has_dead_flags(&block.instructions[index..]);
                 let mnemonic = instruction.mnemonic();
                 let raw = instruction.op0_register();
 

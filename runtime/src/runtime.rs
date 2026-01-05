@@ -10,7 +10,7 @@ use crate::{
     vm::{
         self,
         bytecode::{VMOp, VMReg},
-        stack::VM_STACK_SIZE,
+        stack::VSTACK_SIZE,
     },
 };
 
@@ -227,7 +227,7 @@ impl Runtime {
         self.define_data_byte(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
 
         self.define_data_byte(DataDef::VmStackPointer, &0u64.to_le_bytes());
-        self.define_data_byte(DataDef::VmStackContent, &[0u8; VM_STACK_SIZE]);
+        self.define_data_byte(DataDef::VmStackContent, &[0u8; VSTACK_SIZE]);
 
         self.define_data_byte(DataDef::VmState, &[0u8; VMReg::COUNT * 8]);
         self.define_data_byte(DataDef::VmLock, &0u8.to_le_bytes());
