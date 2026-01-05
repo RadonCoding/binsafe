@@ -18,7 +18,7 @@ mapped! {
         AddSubRegMem,
         AddSubMemImm,
         AddSubMemReg,
-        BranchRel,
+        BranchImm,
         BranchReg,
         BranchMem,
         Jcc,
@@ -166,7 +166,19 @@ pub struct VMMem {
 }
 
 impl VMMem {
-    fn new(instruction: &Instruction) -> Self {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.push(mapper.index(self.base));
+        bytes.push(mapper.index(self.index));
+        bytes.push(self.scale);
+        bytes.extend_from_slice(&self.displacement.to_le_bytes());
+        bytes.push(mapper.index(self.seg));
+        bytes
+    }
+}
+
+impl From<&Instruction> for VMMem {
+    fn from(instruction: &Instruction) -> Self {
         let base = VMReg::from(instruction.memory_base());
         let index = VMReg::from(instruction.memory_index());
         let scale = instruction.memory_index_scale() as u8;
@@ -182,16 +194,6 @@ impl VMMem {
             displacement,
             seg,
         }
-    }
-
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        bytes.push(mapper.index(self.base));
-        bytes.push(mapper.index(self.index));
-        bytes.push(self.scale);
-        bytes.extend_from_slice(&self.displacement.to_le_bytes());
-        bytes.push(mapper.index(self.seg));
-        bytes
     }
 }
 
@@ -221,32 +223,32 @@ pub enum VMCmd<'a> {
         vop: VMOp,
         dst: VMReg,
     },
-    RegImm {
+    SetRegImm {
         vop: VMOp,
         dbits: VMBits,
         dst: VMReg,
         src: &'a [u8],
     },
-    RegReg {
+    SetRegReg {
         vop: VMOp,
         dbits: VMBits,
         dst: VMReg,
         sbits: VMBits,
         src: VMReg,
     },
-    RegMem {
+    SetRegMem {
         vop: VMOp,
         dbits: VMBits,
         load: bool,
         dst: VMReg,
         src: VMMem,
     },
-    MemImm {
+    SetMemImm {
         vop: VMOp,
         dst: VMMem,
         src: &'a [u8],
     },
-    MemReg {
+    SetMemReg {
         vop: VMOp,
         sbits: VMBits,
         dst: VMMem,
@@ -292,7 +294,7 @@ pub enum VMCmd<'a> {
         sbits: VMBits,
         src: VMReg,
     },
-    BranchRel {
+    BranchImm {
         vop: VMOp,
         ret: bool,
         dst: u32,
@@ -335,7 +337,7 @@ impl<'a> VMCmd<'a> {
                 let bytes = vec![mapper.index(*vop), mapper.index(*dst)];
                 bytes
             }
-            Self::RegImm {
+            Self::SetRegImm {
                 vop,
                 dbits,
                 dst,
@@ -345,7 +347,7 @@ impl<'a> VMCmd<'a> {
                 bytes.extend_from_slice(src);
                 bytes
             }
-            Self::RegReg {
+            Self::SetRegReg {
                 vop,
                 dbits,
                 dst,
@@ -361,7 +363,7 @@ impl<'a> VMCmd<'a> {
                 ];
                 bytes
             }
-            Self::RegMem {
+            Self::SetRegMem {
                 vop,
                 dbits,
                 load,
@@ -377,14 +379,14 @@ impl<'a> VMCmd<'a> {
                 bytes.extend_from_slice(&src.encode(mapper));
                 bytes
             }
-            Self::MemImm { vop, dst, src } => {
+            Self::SetMemImm { vop, dst, src } => {
                 let mut bytes = vec![mapper.index(*vop)];
                 bytes.extend_from_slice(&dst.encode(mapper));
                 bytes.push(src.len() as u8);
                 bytes.extend_from_slice(src);
                 bytes
             }
-            Self::MemReg {
+            Self::SetMemReg {
                 vop,
                 sbits,
                 dst,
@@ -480,7 +482,7 @@ impl<'a> VMCmd<'a> {
                 bytes.push(mapper.index(*src));
                 bytes
             }
-            Self::BranchRel { vop, ret, dst } => {
+            Self::BranchImm { vop, ret, dst } => {
                 let mut bytes = vec![mapper.index(*vop), *ret as u8];
                 bytes.extend_from_slice(&dst.to_le_bytes());
                 bytes
@@ -559,7 +561,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
             let bits = VMBits::from(reg);
             let dst = VMReg::from(reg);
             let src = instruction.immediate8();
-            VMCmd::RegImm {
+            VMCmd::SetRegImm {
                 vop: VMOp::SetRegImm,
                 dbits: bits,
                 dst,
@@ -570,7 +572,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
             let reg = instruction.op0_register();
             let dst = VMReg::from(reg);
             let src = instruction.immediate16();
-            VMCmd::RegImm {
+            VMCmd::SetRegImm {
                 vop: VMOp::SetRegImm,
                 dbits: VMBits::Lower16,
                 dst,
@@ -581,7 +583,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
             let reg = instruction.op0_register();
             let dst = VMReg::from(reg);
             let src = instruction.immediate32();
-            VMCmd::RegImm {
+            VMCmd::SetRegImm {
                 vop: VMOp::SetRegImm,
                 dbits: VMBits::Lower32,
                 dst,
@@ -592,7 +594,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
             let reg = instruction.op0_register();
             let dst = VMReg::from(reg);
             let src = instruction.immediate64();
-            VMCmd::RegImm {
+            VMCmd::SetRegImm {
                 vop: VMOp::SetRegImm,
                 dbits: VMBits::Lower64,
                 dst,
@@ -609,7 +611,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     let sreg = instruction.op1_register();
                     let sbits = VMBits::from(sreg);
                     let src = VMReg::from(sreg);
-                    VMCmd::RegReg {
+                    VMCmd::SetRegReg {
                         vop: VMOp::SetRegReg,
                         dbits,
                         dst,
@@ -618,8 +620,8 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     }
                 }
                 OpKind::Memory => {
-                    let src = VMMem::new(instruction);
-                    VMCmd::RegMem {
+                    let src = VMMem::from(instruction);
+                    VMCmd::SetRegMem {
                         vop: VMOp::SetRegMem,
                         dbits,
                         load: true,
@@ -640,7 +642,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     let dreg = instruction.op0_register();
                     let dbits = VMBits::from(dreg);
                     let dst = VMReg::from(dreg);
-                    VMCmd::RegReg {
+                    VMCmd::SetRegReg {
                         vop: VMOp::SetRegReg,
                         dbits,
                         dst,
@@ -649,8 +651,8 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(instruction);
-                    VMCmd::MemReg {
+                    let dst = VMMem::from(instruction);
+                    VMCmd::SetMemReg {
                         vop: VMOp::SetMemReg,
                         sbits,
                         dst,
@@ -674,7 +676,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     let reg = instruction.op0_register();
                     let bits = VMBits::from(reg);
                     let dst = VMReg::from(reg);
-                    VMCmd::RegImm {
+                    VMCmd::SetRegImm {
                         vop: VMOp::SetRegImm,
                         dbits: bits,
                         dst,
@@ -682,8 +684,8 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(instruction);
-                    VMCmd::MemImm {
+                    let dst = VMMem::from(instruction);
+                    VMCmd::SetMemImm {
                         vop: VMOp::SetMemImm,
                         dst,
                         src: &src.to_le_bytes()[..size],
@@ -730,7 +732,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(instruction);
+                    let dst = VMMem::from(instruction);
                     VMCmd::AddSubMemImm {
                         vop: VMOp::AddSubMemImm,
                         dst,
@@ -763,7 +765,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(instruction);
+                    let dst = VMMem::from(instruction);
                     VMCmd::AddSubMemImm {
                         vop: VMOp::AddSubMemImm,
                         dst,
@@ -805,7 +807,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(instruction);
+                    let dst = VMMem::from(instruction);
                     VMCmd::AddSubMemImm {
                         vop: VMOp::AddSubMemImm,
                         dst,
@@ -851,7 +853,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     }
                 }
                 OpKind::Memory => {
-                    let src = VMMem::new(instruction);
+                    let src = VMMem::from(instruction);
                     VMCmd::AddSubRegMem {
                         vop: VMOp::AddSubRegMem,
                         src,
@@ -898,7 +900,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
                     }
                 }
                 OpKind::Memory => {
-                    let dst = VMMem::new(instruction);
+                    let dst = VMMem::from(instruction);
                     VMCmd::AddSubMemReg {
                         vop: VMOp::AddSubMemReg,
                         dst,
@@ -915,9 +917,9 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
             let reg = instruction.op0_register();
             let bits = VMBits::from(reg);
             let dst = VMReg::from(reg);
-            let src = VMMem::new(instruction);
+            let src = VMMem::from(instruction);
 
-            VMCmd::RegMem {
+            VMCmd::SetRegMem {
                 vop: VMOp::SetRegMem,
                 dbits: bits,
                 load: false,
@@ -927,8 +929,8 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
         }
         Code::Call_rel32_64 => {
             let dst = instruction.memory_displacement64().try_into().unwrap();
-            VMCmd::BranchRel {
-                vop: VMOp::BranchRel,
+            VMCmd::BranchImm {
+                vop: VMOp::BranchImm,
                 ret: true,
                 dst,
             }
@@ -942,14 +944,14 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
             OpKind::Memory => VMCmd::BranchMem {
                 vop: VMOp::BranchMem,
                 ret: true,
-                dst: VMMem::new(instruction),
+                dst: VMMem::from(instruction),
             },
             _ => return None,
         },
         Code::Jmp_rel8_64 | Code::Jmp_rel32_64 => {
             let dst = instruction.memory_displacement64().try_into().unwrap();
-            VMCmd::BranchRel {
-                vop: VMOp::BranchRel,
+            VMCmd::BranchImm {
+                vop: VMOp::BranchImm,
                 ret: false,
                 dst,
             }
@@ -962,7 +964,7 @@ pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>
             },
             OpKind::Memory => VMCmd::BranchMem {
                 vop: VMOp::BranchMem,
-                dst: VMMem::new(instruction),
+                dst: VMMem::from(instruction),
                 ret: false,
             },
             _ => return None,

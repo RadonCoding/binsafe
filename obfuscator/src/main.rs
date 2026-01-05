@@ -7,7 +7,7 @@ use std::{fs, path::PathBuf};
 
 use crate::{
     engine::Engine,
-    protections::{mutation::Mutation, virtualization::virtualization::Virtualization},
+    protections::{mutation::Mutation, virtualization::Virtualization},
 };
 
 #[derive(Parser)]

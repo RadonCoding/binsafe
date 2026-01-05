@@ -1,7 +1,7 @@
 pub mod arithmetic;
+pub mod branchimm;
 pub mod branchmem;
 pub mod branchreg;
-pub mod branchrel;
 pub mod jcc;
 pub mod nop;
 pub mod popreg64;

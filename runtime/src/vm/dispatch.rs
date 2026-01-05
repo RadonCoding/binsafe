@@ -53,7 +53,7 @@ pub fn build(rt: &mut Runtime) {
         (VMOp::AddSubRegMem, FnDef::VmHandlerAddSubRegMem),
         (VMOp::AddSubMemImm, FnDef::VmHandlerAddSubMemImm),
         (VMOp::AddSubMemReg, FnDef::VmHandlerAddSubMemReg),
-        (VMOp::BranchRel, FnDef::VmHandlerBranchRel),
+        (VMOp::BranchImm, FnDef::VmHandlerBranchImm),
         (VMOp::BranchReg, FnDef::VmHandlerBranchReg),
         (VMOp::BranchMem, FnDef::VmHandlerBranchMem),
         (VMOp::Jcc, FnDef::VmHandlerJcc),

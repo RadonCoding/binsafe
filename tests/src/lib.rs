@@ -54,7 +54,7 @@ mod tests {
             // ret
             self.rt.asm.ret().unwrap();
 
-            self.rt.define_data(DataDef::VmCode, bytecode);
+            self.rt.define_data_byte(DataDef::VmCode, bytecode);
 
             let ip = self.mem as u64;
 

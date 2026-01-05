@@ -260,7 +260,7 @@ impl Protection for Mutation {
             }
 
             if mutated {
-                let bytes = asm.assemble(block.rva).unwrap();
+                let bytes = asm.assemble(block.rva as u64).unwrap();
 
                 if bytes.len() <= block.size {
                     info!("PRE-MUTATION:\n{}", engine.blocks[i]);

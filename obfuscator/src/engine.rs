@@ -14,7 +14,7 @@ use std::{
 use crate::protections::Protection;
 
 pub struct Block {
-    pub rva: u64,
+    pub rva: u32,
     pub offset: usize,
     pub size: usize,
     pub instructions: Vec<Instruction>,
@@ -47,7 +47,7 @@ pub struct Engine {
     pub pe: VecPE,
     pub bitness: u32,
     pub blocks: Vec<Block>,
-    pub xrefs: HashMap<u64, usize>,
+    pub xrefs: HashMap<u32, usize>,
     pub rt: Runtime,
     protections: Vec<Box<dyn Protection>>,
 }
@@ -104,7 +104,8 @@ impl Engine {
             .get_slice_ref::<u8>(block.offset, block.size)
             .unwrap();
 
-        let mut decoder = Decoder::with_ip(self.bitness, bytes, block.rva, DecoderOptions::NONE);
+        let mut decoder =
+            Decoder::with_ip(self.bitness, bytes, block.rva as u64, DecoderOptions::NONE);
 
         block.instructions.clear();
 
@@ -134,7 +135,7 @@ impl Engine {
         let code = section.read(&self.pe).unwrap();
 
         let mut jumps = HashSet::new();
-        jumps.insert(entry_point.0 as u64);
+        jumps.insert(entry_point.0);
 
         let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
 
@@ -151,9 +152,9 @@ impl Engine {
                 FlowControl::ConditionalBranch
                 | FlowControl::UnconditionalBranch
                 | FlowControl::Call => {
-                    let target = instruction.near_branch_target();
+                    let target = instruction.near_branch_target() as u32;
 
-                    if target >= ip && target < ip + code.len() as u64 {
+                    if section.has_rva(RVA(target)) {
                         jumps.insert(target);
 
                         *self.xrefs.entry(target).or_insert(0) += 1;
@@ -167,12 +168,12 @@ impl Engine {
 
         let mut block = Vec::<Instruction>::new();
 
-        let mut capture = |block: &mut Vec<Instruction>, end: u64| {
+        let mut capture = |block: &mut Vec<Instruction>, end: u32| {
             if block.is_empty() {
                 return;
             }
 
-            let start = block[0].ip();
+            let start = block[0].ip() as u32;
 
             let offset = self
                 .pe
@@ -189,7 +190,7 @@ impl Engine {
         };
 
         while decoder.can_decode() {
-            let current = decoder.ip();
+            let current = decoder.ip() as u32;
 
             if jumps.contains(&current) && !block.is_empty() {
                 capture(&mut block, current);
@@ -207,7 +208,7 @@ impl Engine {
                 continue;
             }
 
-            let next = instruction.next_ip();
+            let next = instruction.next_ip() as u32;
 
             capture(&mut block, next);
         }

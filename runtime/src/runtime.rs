@@ -35,7 +35,7 @@ pub enum FnDef {
     VmHandlerAddSubRegReg,
     VmHandlerAddSubMemImm,
     VmHandlerAddSubMemReg,
-    VmHandlerBranchRel,
+    VmHandlerBranchImm,
     VmHandlerBranchReg,
     VmHandlerBranchMem,
     VmHandlerJcc,
@@ -92,7 +92,7 @@ impl Runtime {
         func_labels.insert(FnDef::VmHandlerAddSubRegMem, asm.create_label());
         func_labels.insert(FnDef::VmHandlerAddSubMemReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerAddSubMemImm, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerBranchRel, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerBranchImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerBranchMem, asm.create_label());
         func_labels.insert(FnDef::VmHandlerJcc, asm.create_label());
@@ -146,9 +146,19 @@ impl Runtime {
         builder(self);
     }
 
-    pub fn define_data(&mut self, def: DataDef, data: &[u8]) {
+    pub fn define_data_byte(&mut self, def: DataDef, data: &[u8]) {
         self.set_data_label(def);
         self.asm.db(data).unwrap();
+    }
+
+    pub fn define_data_word(&mut self, def: DataDef, data: &[u16]) {
+        self.set_data_label(def);
+        self.asm.dw(data).unwrap();
+    }
+
+    pub fn define_data_dword(&mut self, def: DataDef, data: &[u32]) {
+        self.set_data_label(def);
+        self.asm.dd(data).unwrap();
     }
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
@@ -185,7 +195,7 @@ impl Runtime {
             FnDef::VmHandlerAddSubMemReg,
             vm::handlers::arithmetic::addsubmemreg::build,
         );
-        self.define_func(FnDef::VmHandlerBranchRel, vm::handlers::branchrel::build);
+        self.define_func(FnDef::VmHandlerBranchImm, vm::handlers::branchimm::build);
         self.define_func(FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build);
         self.define_func(FnDef::VmHandlerBranchMem, vm::handlers::branchmem::build);
         self.define_func(FnDef::VmHandlerJcc, vm::handlers::jcc::build);
@@ -214,13 +224,13 @@ impl Runtime {
 
         self.define_func(FnDef::InitializeStack, vm::stack::initialize);
 
-        self.define_data(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
+        self.define_data_byte(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
 
-        self.define_data(DataDef::VmStackPointer, &0u64.to_le_bytes());
-        self.define_data(DataDef::VmStackContent, &[0u8; VM_STACK_SIZE]);
+        self.define_data_byte(DataDef::VmStackPointer, &0u64.to_le_bytes());
+        self.define_data_byte(DataDef::VmStackContent, &[0u8; VM_STACK_SIZE]);
 
-        self.define_data(DataDef::VmState, &[0u8; VMReg::COUNT * 8]);
-        self.define_data(DataDef::VmLock, &0u8.to_le_bytes());
+        self.define_data_byte(DataDef::VmState, &[0u8; VMReg::COUNT * 8]);
+        self.define_data_byte(DataDef::VmLock, &0u8.to_le_bytes());
 
         let options = self
             .asm
