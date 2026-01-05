@@ -12,7 +12,7 @@ pub struct AntiDebug;
 impl AntiDebug {
     pub fn transform(
         mapper: &mut Mapper,
-        xrefs: &HashMap<u64, usize>,
+        xrefs: &HashMap<u32, usize>,
         block: &Block,
     ) -> Option<Vec<u8>> {
         const THRESHOLD: usize = 10;
@@ -33,14 +33,14 @@ impl AntiDebug {
 
     fn gen_peb_check() -> Vec<VMCmd<'static>> {
         vec![
-            VMCmd::RegReg {
+            VMCmd::SetRegReg {
                 vop: VMOp::SetRegReg,
                 dbits: VMBits::Lower64,
                 dst: VMReg::V1,
                 sbits: VMBits::Lower64,
                 src: VMReg::Flags,
             },
-            VMCmd::RegMem {
+            VMCmd::SetRegMem {
                 vop: VMOp::SetRegMem,
                 dbits: VMBits::Lower64,
                 load: true,
@@ -67,7 +67,7 @@ impl AntiDebug {
                     seg: VMSeg::None,
                 },
             },
-            VMCmd::RegReg {
+            VMCmd::SetRegReg {
                 vop: VMOp::SetRegReg,
                 dbits: VMBits::Lower64,
                 dst: VMReg::Flags,

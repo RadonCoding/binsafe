@@ -81,8 +81,17 @@ pub fn build(rt: &mut Runtime) {
     // mov [rax + ...], rcx
     utils::mov_vreg_reg_64(rt, rax, rdx, VMReg::VB);
 
+    // sub rcx, rdx
+    rt.asm.sub(rcx, rdx).unwrap();
+    // mov rdx, rcx
+    rt.asm.mov(rdx, rcx).unwrap();
+
     // pop rcx -> index
     rt.asm.pop(rcx).unwrap();
+    // xor rcx, rdx
+    rt.asm.xor(rcx, rdx).unwrap();
+    // and ecx, 0x0FFFFFFF
+    rt.asm.and(ecx, 0x0FFFFFFF).unwrap();
     // lea rdx, [...]
     rt.asm
         .lea(rdx, ptr(rt.data_labels[&DataDef::VmTable]))
