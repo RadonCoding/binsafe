@@ -35,8 +35,6 @@ impl Protection for Virtualization {
 
         let mut dedup = HashMap::new();
 
-        let xrefs = &engine.xrefs;
-
         'outer: for block in &mut engine.blocks {
             if block.size < VDISPATCH_SIZE {
                 continue;
@@ -56,7 +54,7 @@ impl Protection for Virtualization {
                 vblock.extend(bytecode);
             }
 
-            if let Some(bytecode) = AntiDebug::transform(&mut engine.rt.mapper, xrefs, block) {
+            if let Some(bytecode) = AntiDebug::transform(&mut engine.rt.mapper, block) {
                 vblock.splice(0..0, bytecode);
                 self.transforms += 1;
             }

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use runtime::{
     mapper::Mapper,
     vm::bytecode::{VMBits, VMCmd, VMMem, VMOp, VMReg, VMSeg},
@@ -10,14 +8,18 @@ use crate::engine::Block;
 pub struct AntiDebug;
 
 impl AntiDebug {
-    pub fn transform(
-        mapper: &mut Mapper,
-        xrefs: &HashMap<u32, usize>,
-        block: &Block,
-    ) -> Option<Vec<u8>> {
-        const THRESHOLD: usize = 10;
+    pub fn transform(mapper: &mut Mapper, block: &Block) -> Option<Vec<u8>> {
+        let mut is_relative = false;
 
-        if xrefs.get(&block.rva).map_or(0, |&c| c) < THRESHOLD {
+        for instruction in &block.instructions {
+            if instruction.is_ip_rel_memory_operand() {
+                is_relative = true;
+                break;
+            }
+        }
+
+        // Only blocks that have IP relative instructions are affected by the VB displacement.
+        if !is_relative {
             return None;
         }
 
@@ -58,7 +60,7 @@ impl AntiDebug {
                 sub: true,
                 store: true,
                 dbits: VMBits::Lower8,
-                dst: VMReg::Rsp,
+                dst: VMReg::VB,
                 src: VMMem {
                     base: VMReg::V0,
                     index: VMReg::None,
