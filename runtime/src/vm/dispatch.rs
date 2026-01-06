@@ -1,6 +1,7 @@
 use iced_x86::code_asm::{
     byte_ptr, ptr, r12, r13, r14, r15, r8, r9b, rax, rbx, rcx, rdx, word_ptr,
 };
+use rand::seq::SliceRandom;
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -90,7 +91,7 @@ pub fn build(rt: &mut Runtime) {
     // jnz ...
     rt.asm.jnz(execute_loop).unwrap();
 
-    let table = [
+    let mut table = [
         (VMOp::PushImm, FnDef::VmHandlerPushImm),
         (VMOp::PushReg64, FnDef::VmHandlerPushReg64),
         (VMOp::PopReg64, FnDef::VmHandlerPopReg64),
@@ -110,6 +111,9 @@ pub fn build(rt: &mut Runtime) {
         (VMOp::Jcc, FnDef::VmHandlerJcc),
         (VMOp::Nop, FnDef::VmHandlerNop),
     ];
+
+    let mut rng = rand::thread_rng();
+    table.shuffle(&mut rng);
 
     for (op, func) in table {
         // lea rcx, [...]
