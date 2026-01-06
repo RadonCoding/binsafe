@@ -7,12 +7,8 @@ use iced_x86::{
 use rand::seq::SliceRandom;
 
 use crate::{
-    mapper::{Mappable, Mapper},
-    vm::{
-        self,
-        bytecode::{VMOp, VMReg},
-        stack::VSTACK_SIZE,
-    },
+    mapper::Mapper,
+    vm::{self},
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -52,7 +48,7 @@ pub enum FnDef {
     InitializeStack,
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum DataDef {
     VmHandlers,
     VmLock,
@@ -66,11 +62,17 @@ pub enum DataDef {
     VmKeyAdd,
 }
 
+enum EmissionTask {
+    Function(FnDef, fn(&mut Runtime)),
+    Data(DataDef),
+}
+
 pub struct Runtime {
     pub asm: CodeAssembler,
     pub func_labels: HashMap<FnDef, CodeLabel>,
     pub addresses: HashMap<CodeLabel, u64>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
+    pub data: HashMap<DataDef, Vec<u8>>,
     pub mapper: Mapper,
 }
 
@@ -129,6 +131,7 @@ impl Runtime {
             func_labels,
             addresses: HashMap::new(),
             data_labels,
+            data: HashMap::new(),
             mapper: Mapper::new(),
         }
     }
@@ -147,36 +150,18 @@ impl Runtime {
         self.addresses[&label]
     }
 
-    pub fn define_func<F>(&mut self, def: FnDef, builder: F)
-    where
-        F: FnOnce(&mut Self),
-    {
-        self.set_func_label(def);
-        builder(self);
+    pub fn define_data_bytes(&mut self, def: DataDef, data: &[u8]) {
+        self.data.insert(def, data.to_vec());
     }
 
-    pub fn define_data_byte(&mut self, def: DataDef, data: &[u8]) {
-        self.set_data_label(def);
-        self.asm.db(data).unwrap();
-    }
-
-    pub fn define_data_word(&mut self, def: DataDef, data: &[u16]) {
-        self.set_data_label(def);
-        self.asm.dw(data).unwrap();
-    }
-
-    pub fn define_data_dword(&mut self, def: DataDef, data: &[u32]) {
-        self.set_data_label(def);
-        self.asm.dd(data).unwrap();
-    }
-
-    pub fn define_data_qword(&mut self, def: DataDef, data: &[u64]) {
-        self.set_data_label(def);
-        self.asm.dq(data).unwrap();
+    pub fn define_data_qword(&mut self, def: DataDef, data: u64) {
+        self.data.insert(def, data.to_le_bytes().to_vec());
     }
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
-        let mut fn_defs: Vec<(FnDef, fn(&mut Runtime))> = vec![
+        let mut tasks = Vec::new();
+
+        let functions: Vec<(FnDef, fn(&mut Runtime))> = vec![
             (FnDef::VmEntry, vm::entry::build),
             (FnDef::VmCrypt, vm::crypt::build),
             (FnDef::VmDispatch, vm::dispatch::build),
@@ -237,24 +222,34 @@ impl Runtime {
             (FnDef::InitializeStack, vm::stack::initialize),
         ];
 
-        let mut data_defs = vec![
-            (DataDef::VmHandlers, vec![0u8; VMOp::COUNT * 8]),
-            (DataDef::VmStackPointer, 0u64.to_le_bytes().to_vec()),
-            (DataDef::VmStackContent, vec![0u8; VSTACK_SIZE]),
-            (DataDef::VmState, vec![0u8; VMReg::COUNT * 8]),
-            (DataDef::VmLock, vec![0u8]),
-        ];
-
-        let mut rng = rand::thread_rng();
-        fn_defs.shuffle(&mut rng);
-        data_defs.shuffle(&mut rng);
-
-        for (def, builder) in fn_defs {
-            self.define_func(def, builder);
+        for (def, builder) in functions {
+            tasks.push(EmissionTask::Function(def, builder));
         }
 
-        for (def, bytes) in data_defs {
-            self.define_data_byte(def, &bytes);
+        for def in self.data.keys() {
+            tasks.push(EmissionTask::Data(*def));
+        }
+
+        let mut rng = rand::thread_rng();
+        tasks.shuffle(&mut rng);
+
+        for task in tasks {
+            let current_len = self.asm.instructions().len(); // Approximate check
+            let padding = (16 - (current_len % 16)) % 16;
+            if padding > 0 {
+                self.asm.db(&vec![0x90; padding]).unwrap(); // Add NOPs for alignment
+            }
+
+            match task {
+                EmissionTask::Function(def, builder) => {
+                    self.set_func_label(def);
+                    builder(self);
+                }
+                EmissionTask::Data(def) => {
+                    self.set_data_label(def);
+                    self.asm.db(&self.data[&def]).unwrap();
+                }
+            }
         }
 
         let options = self
@@ -262,13 +257,7 @@ impl Runtime {
             .assemble_options(ip, BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS)
             .unwrap();
 
-        for label in self.func_labels.values() {
-            if let Ok(ip) = options.label_ip(label) {
-                self.addresses.insert(*label, ip);
-            }
-        }
-
-        for label in self.data_labels.values() {
+        for label in self.func_labels.values().chain(self.data_labels.values()) {
             if let Ok(ip) = options.label_ip(label) {
                 self.addresses.insert(*label, ip);
             }

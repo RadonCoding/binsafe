@@ -99,12 +99,12 @@ impl Protection for Virtualization {
         }
 
         if !vcode.is_empty() {
-            engine.rt.define_data_byte(DataDef::VmTable, &vtable);
-            engine.rt.define_data_byte(DataDef::VmCode, &vcode);
+            engine.rt.define_data_bytes(DataDef::VmTable, &vtable);
+            engine.rt.define_data_bytes(DataDef::VmCode, &vcode);
 
-            engine.rt.define_data_qword(DataDef::VmKeySeed, &[key_seed]);
-            engine.rt.define_data_qword(DataDef::VmKeyMul, &[key_mul]);
-            engine.rt.define_data_qword(DataDef::VmKeyAdd, &[key_add]);
+            engine.rt.define_data_qword(DataDef::VmKeySeed, key_seed);
+            engine.rt.define_data_qword(DataDef::VmKeyMul, key_mul);
+            engine.rt.define_data_qword(DataDef::VmKeyAdd, key_add);
         }
     }
 
