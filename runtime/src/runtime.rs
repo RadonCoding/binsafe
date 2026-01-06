@@ -60,6 +60,7 @@ pub enum DataDef {
     VmStackContent,
     VmTable,
     VmCode,
+    VmKeySeed,
     VmKeyMul,
     VmKeyAdd,
 }
@@ -118,6 +119,7 @@ impl Runtime {
         data_labels.insert(DataDef::VmStackContent, asm.create_label());
         data_labels.insert(DataDef::VmTable, asm.create_label());
         data_labels.insert(DataDef::VmCode, asm.create_label());
+        data_labels.insert(DataDef::VmKeySeed, asm.create_label());
         data_labels.insert(DataDef::VmKeyMul, asm.create_label());
         data_labels.insert(DataDef::VmKeyAdd, asm.create_label());
 

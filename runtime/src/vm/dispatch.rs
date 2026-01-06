@@ -50,8 +50,10 @@ pub fn build(rt: &mut Runtime) {
     // jne ...
     rt.asm.jne(initialize_key).unwrap();
 
-    // xor r15, r15
-    rt.asm.xor(r15, r15).unwrap();
+    // mov r15, [...]
+    rt.asm
+        .mov(r15, ptr(rt.data_labels[&DataDef::VmKeySeed]))
+        .unwrap();
     // jmp ...
     rt.asm.jmp(decrypt_block).unwrap();
 
