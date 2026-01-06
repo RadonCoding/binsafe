@@ -12,11 +12,8 @@ use exe::{PETranslation, PE, RVA};
 use iced_x86::code_asm::CodeAssembler;
 use iced_x86::Mnemonic;
 use logger::info;
+use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::bytecode::{self};
-use runtime::{
-    runtime::{DataDef, FnDef},
-    vm::bytecode::VMOp,
-};
 
 #[derive(Default)]
 pub struct Virtualization {
@@ -59,7 +56,19 @@ impl Protection for Virtualization {
                 self.transforms += 1;
             }
 
-            vblock.push(engine.rt.mapper.index(VMOp::Invalid));
+            let mut key = if vcode.is_empty() {
+                0u64
+            } else {
+                vcode[vcode.len() - 1] as u64
+            };
+
+            for byte in &mut vblock {
+                *byte ^= key as u8;
+                key = (key << 8) | (*byte as u64);
+            }
+
+            let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
+            vblock.splice(0..0, length.to_le_bytes());
 
             let mut hasher = DefaultHasher::new();
             vblock.hash(&mut hasher);

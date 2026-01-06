@@ -1,4 +1,6 @@
-use iced_x86::code_asm::{byte_ptr, ptr, r12, r13, r14, r8, r8b, rax, rcx, rdx};
+use iced_x86::code_asm::{
+    byte_ptr, ptr, r12, r13, r14, r15, r8, r9b, rax, rbx, rcx, rdx, word_ptr,
+};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -10,6 +12,8 @@ use crate::{
 
 // void (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
+    let mut initialize_key = rt.asm.create_label();
+    let mut decrypt_block = rt.asm.create_label();
     let mut execute_loop = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
@@ -19,6 +23,10 @@ pub fn build(rt: &mut Runtime) {
     stack::push(rt, r13);
     // push r14
     stack::push(rt, r14);
+    // push r15
+    stack::push(rt, r15);
+    // push rbx
+    stack::push(rt, rbx);
 
     // mov r12, rcx
     rt.asm.mov(r12, rcx).unwrap();
@@ -27,6 +35,47 @@ pub fn build(rt: &mut Runtime) {
 
     // mov r14, [r12 + ...]
     utils::mov_reg_vreg_64(rt, r12, VMReg::Vip, r14);
+
+    // mov rbx, r13
+    rt.asm.mov(rbx, r13).unwrap();
+    // add r13, 0x2
+    rt.asm.add(r13, 0x2).unwrap();
+
+    // lea rax, [...]
+    rt.asm
+        .lea(rax, ptr(rt.data_labels[&DataDef::VmCode]))
+        .unwrap();
+    // cmp rbx, rax
+    rt.asm.cmp(rbx, rax).unwrap();
+    // jne ...
+    rt.asm.jne(initialize_key).unwrap();
+
+    // xor r15, r15
+    rt.asm.xor(r15, r15).unwrap();
+    // jmp ...
+    rt.asm.jmp(decrypt_block).unwrap();
+
+    rt.asm.set_label(&mut initialize_key).unwrap();
+    {
+        // movzx r15, [rbx - 0x1]
+        rt.asm.movzx(r15, byte_ptr(rbx - 0x1)).unwrap();
+    }
+
+    rt.asm.set_label(&mut decrypt_block).unwrap();
+    {
+        // mov rcx, r15
+        rt.asm.mov(rcx, r15).unwrap();
+        // mov rdx, rbx
+        rt.asm.mov(rdx, rbx).unwrap();
+        // add rdx, 0x2
+        rt.asm.add(rdx, 0x2).unwrap();
+        // movzx r8, [rbx] -> length
+        rt.asm.movzx(r8, word_ptr(rbx)).unwrap();
+        // mov r9b, 0x1
+        rt.asm.mov(r9b, 0x1u32).unwrap();
+        // call ...
+        stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
+    }
 
     // lea rax, [...]
     rt.asm
@@ -69,17 +118,19 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut execute_loop).unwrap();
     {
+        // movzx rax, [rbx] -> length
+        rt.asm.movzx(rax, word_ptr(rbx)).unwrap();
+        // lea rax, [rbx + rax + 0x2]
+        rt.asm.lea(rax, ptr(rbx + rax + 0x2)).unwrap();
+        // cmp r13, rax
+        rt.asm.cmp(r13, rax).unwrap();
+        // jae ...
+        rt.asm.jae(epilogue).unwrap();
+
         // movzx r8, [r13] -> op
         rt.asm.movzx(r8, byte_ptr(r13)).unwrap();
         // add r13, 0x1
         rt.asm.add(r13, 0x1).unwrap();
-
-        // cmp r8b, ...
-        rt.asm
-            .cmp(r8b, rt.mapper.index(VMOp::Invalid) as i32)
-            .unwrap();
-        // jz ...
-        rt.asm.jz(epilogue).unwrap();
 
         // lea rax, [...]
         rt.asm
@@ -109,6 +160,23 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
+        // mov rcx, r15
+        rt.asm.mov(rcx, r15).unwrap();
+        // mov rdx, rbx
+        rt.asm.mov(rdx, rbx).unwrap();
+        // add rdx, 0x2
+        rt.asm.add(rdx, 0x2).unwrap();
+        // movzx r8, [rbx] -> length
+        rt.asm.movzx(r8, word_ptr(rbx)).unwrap();
+        // xor r9b, r9b
+        rt.asm.xor(r9b, r9b).unwrap();
+        // call ...
+        stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
+
+        // pop rbx
+        stack::pop(rt, rbx);
+        // pop r15
+        stack::pop(rt, r15);
         // pop r14
         stack::pop(rt, r14);
         // pop r13
