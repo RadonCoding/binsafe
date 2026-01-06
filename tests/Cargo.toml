@@ -1,9 +1,0 @@
-[package]
-name = "tests"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-iced-x86 = { version = "1.21.0", features = ["code_asm"] }
-windows = { version = "0.62.2", features = ["Win32_System_Memory"] }
-runtime = { path = "../runtime" }

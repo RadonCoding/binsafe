@@ -24,9 +24,10 @@ pub enum FnDef {
     /* VM UTILS */
     ComputeAddress,
     /* VM HANDLERS */
+    VmHandlerPushPopRegs,
     VmHandlerPushImm,
-    VmHandlerPushReg64,
-    VmHandlerPopReg64,
+    VmHandlerPushReg,
+    VmHandlerPopReg,
     VmHandlerSetRegImm,
     VmHandlerSetRegReg,
     VmHandlerSetRegMem,
@@ -91,9 +92,10 @@ impl Runtime {
 
         func_labels.insert(FnDef::ComputeAddress, asm.create_label());
 
+        func_labels.insert(FnDef::VmHandlerPushPopRegs, asm.create_label());
         func_labels.insert(FnDef::VmHandlerPushImm, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerPushReg64, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerPopReg64, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerPushReg, asm.create_label());
+        func_labels.insert(FnDef::VmHandlerPopReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegImm, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegReg, asm.create_label());
         func_labels.insert(FnDef::VmHandlerSetRegMem, asm.create_label());
@@ -174,9 +176,13 @@ impl Runtime {
             (FnDef::VmCrypt, vm::crypt::build),
             (FnDef::VmDispatch, vm::dispatch::build),
             (FnDef::ComputeAddress, vm::utils::compute_address::build),
+            (
+                FnDef::VmHandlerPushPopRegs,
+                vm::handlers::pushpopregs::build,
+            ),
             (FnDef::VmHandlerPushImm, vm::handlers::pushimm::build),
-            (FnDef::VmHandlerPushReg64, vm::handlers::pushreg64::build),
-            (FnDef::VmHandlerPopReg64, vm::handlers::popreg64::build),
+            (FnDef::VmHandlerPushReg, vm::handlers::pushreg::build),
+            (FnDef::VmHandlerPopReg, vm::handlers::popreg::build),
             (FnDef::VmHandlerSetRegImm, vm::handlers::setregimm::build),
             (FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build),
             (FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build),
