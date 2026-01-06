@@ -10,7 +10,7 @@ mod tests {
         mapper::Mappable,
         runtime::{DataDef, FnDef, Runtime},
         vm::{
-            bytecode::{self, VMFlag, VMOp, VMReg},
+            bytecode::{self, VMFlag, VMReg},
             stack,
         },
     };
@@ -94,17 +94,18 @@ mod tests {
             registers[(executor.rt.mapper.index(*reg)) as usize] = *val;
         }
 
-        let mut bytecode = Vec::new();
+        let mut vinstructions = Vec::new();
 
         for instruction in instructions {
             let mut part = bytecode::convert(&mut executor.rt.mapper, &instruction).unwrap();
 
-            bytecode.append(&mut part);
+            vinstructions.append(&mut part);
         }
 
-        bytecode.push(executor.rt.mapper.index(VMOp::Invalid));
+        let length = TryInto::<u16>::try_into(vinstructions.len()).unwrap();
+        vinstructions.splice(0..0, length.to_le_bytes());
 
-        executor.run(&mut registers, &bytecode);
+        executor.run(&mut registers, &vinstructions);
 
         assert_eq!(
             registers[(executor.rt.mapper.index(target)) as usize],

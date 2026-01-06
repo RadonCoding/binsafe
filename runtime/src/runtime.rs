@@ -18,6 +18,7 @@ use crate::{
 pub enum FnDef {
     /* VM */
     VmEntry,
+    VmCrypt,
     VmDispatch,
     /* VM UTILS */
     ComputeAddress,
@@ -75,6 +76,7 @@ impl Runtime {
 
         let mut func_labels = HashMap::new();
         func_labels.insert(FnDef::VmEntry, asm.create_label());
+        func_labels.insert(FnDef::VmCrypt, asm.create_label());
         func_labels.insert(FnDef::VmDispatch, asm.create_label());
 
         func_labels.insert(FnDef::ComputeAddress, asm.create_label());
@@ -163,6 +165,7 @@ impl Runtime {
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
         self.define_func(FnDef::VmEntry, vm::entry::build);
+        self.define_func(FnDef::VmCrypt, vm::crypt::build);
         self.define_func(FnDef::VmDispatch, vm::dispatch::build);
 
         self.define_func(FnDef::ComputeAddress, vm::utils::compute_address::build);
