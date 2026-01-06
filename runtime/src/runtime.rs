@@ -4,6 +4,7 @@ use iced_x86::{
     code_asm::{CodeAssembler, CodeLabel},
     BlockEncoderOptions,
 };
+use rand::seq::SliceRandom;
 
 use crate::{
     mapper::{Mappable, Mapper},
@@ -175,76 +176,86 @@ impl Runtime {
     }
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
-        self.define_func(FnDef::VmEntry, vm::entry::build);
-        self.define_func(FnDef::VmCrypt, vm::crypt::build);
-        self.define_func(FnDef::VmDispatch, vm::dispatch::build);
+        let mut fn_defs: Vec<(FnDef, fn(&mut Runtime))> = vec![
+            (FnDef::VmEntry, vm::entry::build),
+            (FnDef::VmCrypt, vm::crypt::build),
+            (FnDef::VmDispatch, vm::dispatch::build),
+            (FnDef::ComputeAddress, vm::utils::compute_address::build),
+            (FnDef::VmHandlerPushImm, vm::handlers::pushimm::build),
+            (FnDef::VmHandlerPushReg64, vm::handlers::pushreg64::build),
+            (FnDef::VmHandlerPopReg64, vm::handlers::popreg64::build),
+            (FnDef::VmHandlerSetRegImm, vm::handlers::setregimm::build),
+            (FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build),
+            (FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build),
+            (FnDef::VmHandlerSetMemImm, vm::handlers::setmemimm::build),
+            (FnDef::VmHandlerSetMemReg, vm::handlers::setmemreg::build),
+            (
+                FnDef::VmHandlerAddSubRegImm,
+                vm::handlers::arithmetic::addsubregimm::build,
+            ),
+            (
+                FnDef::VmHandlerAddSubRegMem,
+                vm::handlers::arithmetic::addsubregmem::build,
+            ),
+            (
+                FnDef::VmHandlerAddSubRegReg,
+                vm::handlers::arithmetic::addsubregreg::build,
+            ),
+            (
+                FnDef::VmHandlerAddSubMemImm,
+                vm::handlers::arithmetic::addsubmemimm::build,
+            ),
+            (
+                FnDef::VmHandlerAddSubMemReg,
+                vm::handlers::arithmetic::addsubmemreg::build,
+            ),
+            (FnDef::VmHandlerBranchImm, vm::handlers::branchimm::build),
+            (FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build),
+            (FnDef::VmHandlerBranchMem, vm::handlers::branchmem::build),
+            (FnDef::VmHandlerJcc, vm::handlers::jcc::build),
+            (FnDef::VmHandlerNop, vm::handlers::nop::build),
+            (
+                FnDef::VmArithmeticFlags,
+                vm::handlers::arithmetic::flags::build,
+            ),
+            (
+                FnDef::VmArithmeticAddSub8,
+                vm::handlers::arithmetic::addsub8::build,
+            ),
+            (
+                FnDef::VmArithmeticAddSub16,
+                vm::handlers::arithmetic::addsub16::build,
+            ),
+            (
+                FnDef::VmArithmeticAddSub32,
+                vm::handlers::arithmetic::addsub32::build,
+            ),
+            (
+                FnDef::VmArithmeticAddSub64,
+                vm::handlers::arithmetic::addsub64::build,
+            ),
+            (FnDef::InitializeStack, vm::stack::initialize),
+        ];
 
-        self.define_func(FnDef::ComputeAddress, vm::utils::compute_address::build);
+        let mut data_defs = vec![
+            (DataDef::VmHandlers, vec![0u8; VMOp::COUNT * 8]),
+            (DataDef::VmStackPointer, 0u64.to_le_bytes().to_vec()),
+            (DataDef::VmStackContent, vec![0u8; VSTACK_SIZE]),
+            (DataDef::VmState, vec![0u8; VMReg::COUNT * 8]),
+            (DataDef::VmLock, vec![0u8]),
+        ];
 
-        self.define_func(FnDef::VmHandlerPushImm, vm::handlers::pushimm::build);
-        self.define_func(FnDef::VmHandlerPushReg64, vm::handlers::pushreg64::build);
-        self.define_func(FnDef::VmHandlerPopReg64, vm::handlers::popreg64::build);
-        self.define_func(FnDef::VmHandlerSetRegImm, vm::handlers::setregimm::build);
-        self.define_func(FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build);
-        self.define_func(FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build);
-        self.define_func(FnDef::VmHandlerSetMemImm, vm::handlers::setmemimm::build);
-        self.define_func(FnDef::VmHandlerSetMemReg, vm::handlers::setmemreg::build);
-        self.define_func(
-            FnDef::VmHandlerAddSubRegImm,
-            vm::handlers::arithmetic::addsubregimm::build,
-        );
-        self.define_func(
-            FnDef::VmHandlerAddSubRegMem,
-            vm::handlers::arithmetic::addsubregmem::build,
-        );
-        self.define_func(
-            FnDef::VmHandlerAddSubRegReg,
-            vm::handlers::arithmetic::addsubregreg::build,
-        );
-        self.define_func(
-            FnDef::VmHandlerAddSubMemImm,
-            vm::handlers::arithmetic::addsubmemimm::build,
-        );
-        self.define_func(
-            FnDef::VmHandlerAddSubMemReg,
-            vm::handlers::arithmetic::addsubmemreg::build,
-        );
-        self.define_func(FnDef::VmHandlerBranchImm, vm::handlers::branchimm::build);
-        self.define_func(FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build);
-        self.define_func(FnDef::VmHandlerBranchMem, vm::handlers::branchmem::build);
-        self.define_func(FnDef::VmHandlerJcc, vm::handlers::jcc::build);
-        self.define_func(FnDef::VmHandlerNop, vm::handlers::nop::build);
+        let mut rng = rand::thread_rng();
+        fn_defs.shuffle(&mut rng);
+        data_defs.shuffle(&mut rng);
 
-        self.define_func(
-            FnDef::VmArithmeticFlags,
-            vm::handlers::arithmetic::flags::build,
-        );
-        self.define_func(
-            FnDef::VmArithmeticAddSub8,
-            vm::handlers::arithmetic::addsub8::build,
-        );
-        self.define_func(
-            FnDef::VmArithmeticAddSub16,
-            vm::handlers::arithmetic::addsub16::build,
-        );
-        self.define_func(
-            FnDef::VmArithmeticAddSub32,
-            vm::handlers::arithmetic::addsub32::build,
-        );
-        self.define_func(
-            FnDef::VmArithmeticAddSub64,
-            vm::handlers::arithmetic::addsub64::build,
-        );
+        for (def, builder) in fn_defs {
+            self.define_func(def, builder);
+        }
 
-        self.define_func(FnDef::InitializeStack, vm::stack::initialize);
-
-        self.define_data_byte(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
-
-        self.define_data_byte(DataDef::VmStackPointer, &0u64.to_le_bytes());
-        self.define_data_byte(DataDef::VmStackContent, &[0u8; VSTACK_SIZE]);
-
-        self.define_data_byte(DataDef::VmState, &[0u8; VMReg::COUNT * 8]);
-        self.define_data_byte(DataDef::VmLock, &0u8.to_le_bytes());
+        for (def, bytes) in data_defs {
+            self.define_data_byte(def, &bytes);
+        }
 
         let options = self
             .asm
@@ -252,20 +263,14 @@ impl Runtime {
             .unwrap();
 
         for label in self.func_labels.values() {
-            match options.label_ip(label) {
-                Ok(ip) => {
-                    self.addresses.insert(*label, ip);
-                }
-                Err(_) => continue,
+            if let Ok(ip) = options.label_ip(label) {
+                self.addresses.insert(*label, ip);
             }
         }
 
         for label in self.data_labels.values() {
-            match options.label_ip(label) {
-                Ok(ip) => {
-                    self.addresses.insert(*label, ip);
-                }
-                Err(_) => continue,
+            if let Ok(ip) = options.label_ip(label) {
+                self.addresses.insert(*label, ip);
             }
         }
 
