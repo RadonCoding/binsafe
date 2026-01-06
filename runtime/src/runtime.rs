@@ -230,10 +230,10 @@ impl Runtime {
             (FnDef::InitializeStack, vm::stack::initialize),
         ];
 
-        self.define_data_bytes(DataDef::VmHandlers, &vec![0u8; VMOp::COUNT * 8]);
+        self.define_data_bytes(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
         self.define_data_qword(DataDef::VmStackPointer, 0);
-        self.define_data_bytes(DataDef::VmStackContent, &vec![0u8; VSTACK_SIZE]);
-        self.define_data_bytes(DataDef::VmState, &vec![0u8; VMReg::COUNT * 8]);
+        self.define_data_bytes(DataDef::VmStackContent, &[0u8; VSTACK_SIZE]);
+        self.define_data_bytes(DataDef::VmState, &[0u8; VMReg::COUNT * 8]);
         self.define_data_byte(DataDef::VmLock, 0);
 
         for (def, builder) in functions {
