@@ -62,16 +62,16 @@ impl Protection for Virtualization {
                 self.transforms += 1;
             }
 
-            let mut key = if vcode.is_empty() {
+            let mut vcode_key = if vcode.is_empty() {
                 key_seed
             } else {
                 vcode[vcode.len() - 1] as u64
             };
 
             for byte in &mut vblock {
-                *byte ^= key as u8;
-                key ^= *byte as u64;
-                key = key.wrapping_mul(key_mul).wrapping_add(key_add);
+                *byte ^= vcode_key as u8;
+                vcode_key ^= *byte as u64;
+                vcode_key = vcode_key.wrapping_mul(key_mul).wrapping_add(key_add);
             }
 
             let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
@@ -92,10 +92,20 @@ impl Protection for Virtualization {
                 offset
             };
 
-            self.vblocks.insert(block.rva, vtable.len());
+            let vtable_offset = vtable.len();
+
+            self.vblocks.insert(block.rva, vtable_offset);
+
+            let vtable_key = if vtable_offset == 0 {
+                key_seed as u32
+            } else {
+                u32::from_le_bytes(vtable[vtable_offset - 4..vtable_offset].try_into().unwrap())
+            };
+
+            let encrypted_vcode_offset = vcode_offset ^ vtable_key;
 
             vtable.extend_from_slice(&0u32.to_le_bytes());
-            vtable.extend_from_slice(&vcode_offset.to_le_bytes());
+            vtable.extend_from_slice(&encrypted_vcode_offset.to_le_bytes());
         }
 
         if !vcode.is_empty() {
@@ -125,11 +135,11 @@ impl Protection for Virtualization {
                 continue;
             }
 
-            let voffset = self.vblocks[&block.rva];
-            let vindex = (voffset / 8) as i32 | 0x10000000;
+            let vtable_offset = self.vblocks[&block.rva];
+            let vtable_index = (vtable_offset / 8) as i32 | 0x10000000;
 
             let mut asm = CodeAssembler::new(engine.bitness).unwrap();
-            asm.push(vindex).unwrap();
+            asm.push(vtable_index).unwrap();
             asm.call(ventry).unwrap();
             let dispatch1 = asm.assemble(block.rva as u64).unwrap();
 
@@ -139,7 +149,7 @@ impl Protection for Virtualization {
 
             let ret = block.rva as i32 + dispatch1.len() as i32;
 
-            asm.push(vindex ^ ret).unwrap();
+            asm.push(vtable_index ^ ret).unwrap();
             asm.call(ventry).unwrap();
             let dispatch2 = asm.assemble(block.rva as u64).unwrap();
 
@@ -148,7 +158,7 @@ impl Protection for Virtualization {
             unsafe {
                 let displ = (block.size - dispatch2.len()) as u32;
                 vtable
-                    .add(voffset)
+                    .add(vtable_offset)
                     .copy_from(displ.to_le_bytes().as_ptr(), mem::size_of::<u32>());
             }
 

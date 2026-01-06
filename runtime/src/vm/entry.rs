@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, ecx, ptr, r10, r11, r12, r13, r14, r15, r8, r9, rax, rbp, rbx, rcx, rdi, rdx,
-    rsi, rsp, AsmRegister64,
+    al, byte_ptr, ecx, ptr, r10, r11, r12, r13, r14, r15, r8, r8d, r9, rax, rbp, rbx, rcx, rdi,
+    rdx, rsi, rsp, AsmRegister64,
 };
 
 use crate::{
@@ -28,6 +28,8 @@ const VREG_TO_REG: &[(VMReg, AsmRegister64)] = &[
 // void (unsigned int)
 pub fn build(rt: &mut Runtime) {
     let mut wait_for_lock = rt.asm.create_label();
+    let mut initialize_key = rt.asm.create_label();
+    let mut decrypt_entry = rt.asm.create_label();
 
     // pushfq
     rt.asm.pushfq().unwrap();
@@ -96,14 +98,40 @@ pub fn build(rt: &mut Runtime) {
     rt.asm
         .lea(rdx, ptr(rt.data_labels[&DataDef::VmTable]))
         .unwrap();
+
     // lea rdx, [rdx + rcx*8]
     rt.asm.lea(rdx, ptr(rdx + rcx * 8)).unwrap();
-    // mov ecx, [rdx] -> displ
-    rt.asm.mov(ecx, ptr(rdx)).unwrap();
-    // add [rax + ...], rcx
-    utils::add_vreg_reg_64(rt, rax, rcx, VMReg::Vip);
-    // mov ecx, [rdx + 0x4] -> offset
-    rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();
+
+    // test ecx, ecx
+    rt.asm.test(ecx, ecx).unwrap();
+    // jne ...
+    rt.asm.jne(initialize_key).unwrap();
+
+    // mov r8d, [...]
+    rt.asm
+        .mov(r8d, ptr(rt.data_labels[&DataDef::VmKeySeed]))
+        .unwrap();
+    // jmp ...
+    rt.asm.jmp(decrypt_entry).unwrap();
+
+    rt.asm.set_label(&mut initialize_key).unwrap();
+    {
+        // mov r8d, [rdx - 0x4]
+        rt.asm.mov(r8d, ptr(rdx - 0x4)).unwrap();
+    }
+
+    rt.asm.set_label(&mut decrypt_entry).unwrap();
+    {
+        // mov ecx, [rdx] -> displ
+        rt.asm.mov(ecx, ptr(rdx)).unwrap();
+        // add [rax + ...], rcx
+        utils::add_vreg_reg_64(rt, rax, rcx, VMReg::Vip);
+
+        // mov ecx, [rdx + 0x4] -> offset
+        rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();
+        // xor ecx, r8d
+        rt.asm.xor(ecx, r8d).unwrap();
+    }
 
     // lea rdx, [...]
     rt.asm
