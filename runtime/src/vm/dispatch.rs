@@ -92,9 +92,10 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.jnz(execute_loop).unwrap();
 
     let mut table = [
+        (VMOp::PushPopRegs, FnDef::VmHandlerPushPopRegs),
         (VMOp::PushImm, FnDef::VmHandlerPushImm),
-        (VMOp::PushReg64, FnDef::VmHandlerPushReg64),
-        (VMOp::PopReg64, FnDef::VmHandlerPopReg64),
+        (VMOp::PushReg, FnDef::VmHandlerPushReg),
+        (VMOp::PopReg, FnDef::VmHandlerPopReg),
         (VMOp::SetRegImm, FnDef::VmHandlerSetRegImm),
         (VMOp::SetRegReg, FnDef::VmHandlerSetRegReg),
         (VMOp::SetRegMem, FnDef::VmHandlerSetRegMem),

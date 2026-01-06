@@ -5,9 +5,11 @@ use crate::mapper::{mapped, Mapper};
 mapped! {
     VMOp {
         Invalid,
+        PushPopRegs,
+        PopRegs,
         PushImm,
-        PushReg64,
-        PopReg64,
+        PushReg,
+        PopReg,
         SetRegImm,
         SetRegReg,
         SetRegMem,
@@ -211,15 +213,20 @@ impl VMCond {
 }
 
 pub enum VMCmd<'a> {
+    PushPopRegs {
+        vop: VMOp,
+        seq: u64,
+        pop: bool,
+    },
     PushImm {
         vop: VMOp,
         src: &'a [u8],
     },
-    PushReg64 {
+    PushReg {
         vop: VMOp,
         src: VMReg,
     },
-    PopReg64 {
+    PopReg {
         vop: VMOp,
         dst: VMReg,
     },
@@ -323,17 +330,23 @@ pub enum VMCmd<'a> {
 impl<'a> VMCmd<'a> {
     pub fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         match self {
+            Self::PushPopRegs { vop, seq, pop } => {
+                let mut bytes = vec![mapper.index(*vop)];
+                bytes.extend_from_slice(&seq.to_le_bytes());
+                bytes.push(*pop as u8);
+                bytes
+            }
             Self::PushImm { vop, src } => {
                 let mut bytes = vec![mapper.index(*vop)];
                 bytes.push(src.len() as u8);
                 bytes.extend_from_slice(src);
                 bytes
             }
-            Self::PushReg64 { vop, src } => {
+            Self::PushReg { vop, src } => {
                 let bytes = vec![mapper.index(*vop), mapper.index(*src)];
                 bytes
             }
-            Self::PopReg64 { vop, dst } => {
+            Self::PopReg { vop, dst } => {
                 let bytes = vec![mapper.index(*vop), mapper.index(*dst)];
                 bytes
             }
@@ -517,718 +530,777 @@ impl<'a> VMCmd<'a> {
     }
 }
 
-pub fn convert(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>> {
-    let bytecode = match instruction.code() {
-        Code::Pushq_imm8 => {
-            let src = instruction.immediate8();
-            VMCmd::PushImm {
-                vop: VMOp::PushImm,
-                src: &src.to_le_bytes(),
-            }
-        }
-        Code::Push_imm16 => {
-            let src = instruction.immediate16();
-            VMCmd::PushImm {
-                vop: VMOp::PushImm,
-                src: &src.to_le_bytes(),
-            }
-        }
-        Code::Pushq_imm32 => {
-            let src = instruction.immediate32();
-            VMCmd::PushImm {
-                vop: VMOp::PushImm,
-                src: &src.to_le_bytes(),
-            }
-        }
-        Code::Push_r64 => {
-            let reg = instruction.op0_register();
-            let src = VMReg::from(reg);
-            VMCmd::PushReg64 {
-                vop: VMOp::PushReg64,
-                src,
-            }
-        }
-        Code::Pop_r64 => {
-            let reg = instruction.op0_register();
-            let dst = VMReg::from(reg);
-            VMCmd::PopReg64 {
-                vop: VMOp::PopReg64,
-                dst,
-            }
-        }
-        Code::Mov_r8_imm8 => {
-            let reg = instruction.op0_register();
-            let bits = VMBits::from(reg);
-            let dst = VMReg::from(reg);
-            let src = instruction.immediate8();
-            VMCmd::SetRegImm {
-                vop: VMOp::SetRegImm,
-                dbits: bits,
-                dst,
-                src: &src.to_le_bytes(),
-            }
-        }
-        Code::Mov_r16_imm16 => {
-            let reg = instruction.op0_register();
-            let dst = VMReg::from(reg);
-            let src = instruction.immediate16();
-            VMCmd::SetRegImm {
-                vop: VMOp::SetRegImm,
-                dbits: VMBits::Lower16,
-                dst,
-                src: &src.to_le_bytes(),
-            }
-        }
-        Code::Mov_r32_imm32 => {
-            let reg = instruction.op0_register();
-            let dst = VMReg::from(reg);
-            let src = instruction.immediate32();
-            VMCmd::SetRegImm {
-                vop: VMOp::SetRegImm,
-                dbits: VMBits::Lower32,
-                dst,
-                src: &src.to_le_bytes(),
-            }
-        }
-        Code::Mov_r64_imm64 => {
-            let reg = instruction.op0_register();
-            let dst = VMReg::from(reg);
-            let src = instruction.immediate64();
-            VMCmd::SetRegImm {
-                vop: VMOp::SetRegImm,
-                dbits: VMBits::Lower64,
-                dst,
-                src: &src.to_le_bytes(),
-            }
-        }
-        Code::Mov_r64_rm64 | Code::Mov_r32_rm32 | Code::Mov_r16_rm16 | Code::Mov_r8_rm8 => {
-            let dreg = instruction.op0_register();
-            let dbits = VMBits::from(dreg);
-            let dst = VMReg::from(dreg);
+pub fn convert(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<u8>> {
+    let mut vinstructions = Vec::new();
 
-            match instruction.op1_kind() {
-                OpKind::Register => {
-                    let sreg = instruction.op1_register();
-                    let sbits = VMBits::from(sreg);
-                    let src = VMReg::from(sreg);
-                    VMCmd::SetRegReg {
-                        vop: VMOp::SetRegReg,
-                        dbits,
-                        dst,
-                        sbits,
-                        src,
+    let mut i = 0;
+
+    while i < instructions.len() {
+        let instruction = &instructions[i];
+        let code = instruction.code();
+
+        if code == Code::Push_r64 || code == Code::Pop_r64 {
+            let none = mapper.index(VMReg::None) as u64;
+
+            let mut seq = 0;
+
+            for k in 0..8 {
+                seq |= (none & 0xFF) << (k * 8);
+            }
+
+            let mut count = 0;
+            let mut j = i;
+
+            while j < instructions.len() && instructions[j].code() == code && count < 8 {
+                let vreg = VMReg::from(instructions[j].op0_register());
+                let idx = mapper.index(vreg) as u64;
+
+                let shift = count * 8;
+                seq &= !(0xFF << shift);
+                seq |= (idx & 0xFF) << shift;
+
+                count += 1;
+                j += 1;
+            }
+
+            let pop = instruction.mnemonic() == Mnemonic::Pop;
+
+            if count >= 2 {
+                vinstructions.extend_from_slice(
+                    &VMCmd::PushPopRegs {
+                        vop: VMOp::PushPopRegs,
+                        seq,
+                        pop,
                     }
+                    .encode(mapper),
+                );
+                i = j;
+                continue;
+            }
+        }
+
+        let bytecode = match code {
+            Code::Pushq_imm8 => {
+                let src = instruction.immediate8();
+                VMCmd::PushImm {
+                    vop: VMOp::PushImm,
+                    src: &src.to_le_bytes(),
                 }
-                OpKind::Memory => {
-                    let src = VMMem::from(instruction);
-                    VMCmd::SetRegMem {
-                        vop: VMOp::SetRegMem,
-                        dbits,
-                        load: true,
-                        dst,
-                        src,
+            }
+            Code::Push_imm16 => {
+                let src = instruction.immediate16();
+                VMCmd::PushImm {
+                    vop: VMOp::PushImm,
+                    src: &src.to_le_bytes(),
+                }
+            }
+            Code::Pushq_imm32 => {
+                let src = instruction.immediate32();
+                VMCmd::PushImm {
+                    vop: VMOp::PushImm,
+                    src: &src.to_le_bytes(),
+                }
+            }
+            Code::Push_r64 => {
+                let reg = instruction.op0_register();
+                let src = VMReg::from(reg);
+                VMCmd::PushReg {
+                    vop: VMOp::PushReg,
+                    src,
+                }
+            }
+            Code::Pop_r64 => {
+                let reg = instruction.op0_register();
+                let dst = VMReg::from(reg);
+                VMCmd::PopReg {
+                    vop: VMOp::PopReg,
+                    dst,
+                }
+            }
+            Code::Mov_r8_imm8 => {
+                let reg = instruction.op0_register();
+                let bits = VMBits::from(reg);
+                let dst = VMReg::from(reg);
+                let src = instruction.immediate8();
+                VMCmd::SetRegImm {
+                    vop: VMOp::SetRegImm,
+                    dbits: bits,
+                    dst,
+                    src: &src.to_le_bytes(),
+                }
+            }
+            Code::Mov_r16_imm16 => {
+                let reg = instruction.op0_register();
+                let dst = VMReg::from(reg);
+                let src = instruction.immediate16();
+                VMCmd::SetRegImm {
+                    vop: VMOp::SetRegImm,
+                    dbits: VMBits::Lower16,
+                    dst,
+                    src: &src.to_le_bytes(),
+                }
+            }
+            Code::Mov_r32_imm32 => {
+                let reg = instruction.op0_register();
+                let dst = VMReg::from(reg);
+                let src = instruction.immediate32();
+                VMCmd::SetRegImm {
+                    vop: VMOp::SetRegImm,
+                    dbits: VMBits::Lower32,
+                    dst,
+                    src: &src.to_le_bytes(),
+                }
+            }
+            Code::Mov_r64_imm64 => {
+                let reg = instruction.op0_register();
+                let dst = VMReg::from(reg);
+                let src = instruction.immediate64();
+                VMCmd::SetRegImm {
+                    vop: VMOp::SetRegImm,
+                    dbits: VMBits::Lower64,
+                    dst,
+                    src: &src.to_le_bytes(),
+                }
+            }
+            Code::Mov_r64_rm64 | Code::Mov_r32_rm32 | Code::Mov_r16_rm16 | Code::Mov_r8_rm8 => {
+                let dreg = instruction.op0_register();
+                let dbits = VMBits::from(dreg);
+                let dst = VMReg::from(dreg);
+
+                match instruction.op1_kind() {
+                    OpKind::Register => {
+                        let sreg = instruction.op1_register();
+                        let sbits = VMBits::from(sreg);
+                        let src = VMReg::from(sreg);
+                        VMCmd::SetRegReg {
+                            vop: VMOp::SetRegReg,
+                            dbits,
+                            dst,
+                            sbits,
+                            src,
+                        }
                     }
+                    OpKind::Memory => {
+                        let src = VMMem::from(instruction);
+                        VMCmd::SetRegMem {
+                            vop: VMOp::SetRegMem,
+                            dbits,
+                            load: true,
+                            dst,
+                            src,
+                        }
+                    }
+                    _ => return None,
                 }
+            }
+            Code::Mov_rm64_r64 | Code::Mov_rm32_r32 | Code::Mov_rm16_r16 | Code::Mov_rm8_r8 => {
+                let sreg = instruction.op1_register();
+                let sbits = VMBits::from(sreg);
+                let src = VMReg::from(sreg);
+
+                match instruction.op0_kind() {
+                    OpKind::Register => {
+                        let dreg = instruction.op0_register();
+                        let dbits = VMBits::from(dreg);
+                        let dst = VMReg::from(dreg);
+                        VMCmd::SetRegReg {
+                            vop: VMOp::SetRegReg,
+                            dbits,
+                            dst,
+                            sbits,
+                            src,
+                        }
+                    }
+                    OpKind::Memory => {
+                        let dst = VMMem::from(instruction);
+                        VMCmd::SetMemReg {
+                            vop: VMOp::SetMemReg,
+                            sbits,
+                            dst,
+                            src,
+                        }
+                    }
+                    _ => return None,
+                }
+            }
+            Code::Mov_rm64_imm32
+            | Code::Mov_rm32_imm32
+            | Code::Mov_rm16_imm16
+            | Code::Mov_rm8_imm8 => {
+                let (src, size) = match instruction.code() {
+                    Code::Mov_rm8_imm8 => (instruction.immediate8() as i64, 1),
+                    Code::Mov_rm16_imm16 => (instruction.immediate16() as i64, 2),
+                    Code::Mov_rm32_imm32 => (instruction.immediate32() as i64, 4),
+                    Code::Mov_rm64_imm32 => (instruction.immediate32to64() as i64, 8),
+                    _ => unreachable!(),
+                };
+
+                match instruction.op0_kind() {
+                    OpKind::Register => {
+                        let reg = instruction.op0_register();
+                        let bits = VMBits::from(reg);
+                        let dst = VMReg::from(reg);
+                        VMCmd::SetRegImm {
+                            vop: VMOp::SetRegImm,
+                            dbits: bits,
+                            dst,
+                            src: &src.to_le_bytes()[..size],
+                        }
+                    }
+                    OpKind::Memory => {
+                        let dst = VMMem::from(instruction);
+                        VMCmd::SetMemImm {
+                            vop: VMOp::SetMemImm,
+                            dst,
+                            src: &src.to_le_bytes()[..size],
+                        }
+                    }
+                    _ => return None,
+                }
+            }
+            Code::Add_rm8_imm8
+            | Code::Add_rm16_imm8
+            | Code::Add_rm32_imm8
+            | Code::Add_rm64_imm8
+            | Code::Sub_rm8_imm8
+            | Code::Sub_rm16_imm8
+            | Code::Sub_rm32_imm8
+            | Code::Sub_rm64_imm8
+            | Code::Cmp_rm8_imm8
+            | Code::Cmp_rm16_imm8
+            | Code::Cmp_rm32_imm8
+            | Code::Cmp_rm64_imm8 => {
+                let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
+                let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
+
+                let (src, size) = match instruction.op1_kind() {
+                    OpKind::Immediate8 => (instruction.immediate8() as i64, 1),
+                    OpKind::Immediate8to16 => (instruction.immediate8to16() as i64, 2),
+                    OpKind::Immediate8to32 => (instruction.immediate8to32() as i64, 4),
+                    OpKind::Immediate8to64 => (instruction.immediate8to64() as i64, 8),
+                    _ => unreachable!(),
+                };
+
+                match instruction.op0_kind() {
+                    OpKind::Register => {
+                        let dreg = instruction.op0_register();
+                        let dst = VMReg::from(dreg);
+                        let dbits = VMBits::from(dreg);
+                        VMCmd::AddSubRegImm {
+                            vop: VMOp::AddSubRegImm,
+                            dbits,
+                            dst,
+                            sub,
+                            store,
+                            src: &src.to_le_bytes()[..size],
+                        }
+                    }
+                    OpKind::Memory => {
+                        let dst = VMMem::from(instruction);
+                        VMCmd::AddSubMemImm {
+                            vop: VMOp::AddSubMemImm,
+                            dst,
+                            sub,
+                            store,
+                            src: &src.to_le_bytes()[..size],
+                        }
+                    }
+                    _ => return None,
+                }
+            }
+            Code::Add_rm16_imm16 | Code::Sub_rm16_imm16 | Code::Cmp_rm16_imm16 => {
+                let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
+                let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
+
+                let src = instruction.immediate16();
+
+                match instruction.op0_kind() {
+                    OpKind::Register => {
+                        let reg = instruction.op0_register();
+                        let dst = VMReg::from(reg);
+                        let bits = VMBits::from(reg);
+                        VMCmd::AddSubRegImm {
+                            vop: VMOp::AddSubRegImm,
+                            dbits: bits,
+                            dst,
+                            sub,
+                            store,
+                            src: &src.to_le_bytes(),
+                        }
+                    }
+                    OpKind::Memory => {
+                        let dst = VMMem::from(instruction);
+                        VMCmd::AddSubMemImm {
+                            vop: VMOp::AddSubMemImm,
+                            dst,
+                            sub,
+                            store,
+                            src: &src.to_le_bytes(),
+                        }
+                    }
+                    _ => return None,
+                }
+            }
+            Code::Add_rm64_imm32
+            | Code::Add_rm32_imm32
+            | Code::Sub_rm64_imm32
+            | Code::Sub_rm32_imm32
+            | Code::Cmp_rm64_imm32
+            | Code::Cmp_rm32_imm32 => {
+                let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
+                let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
+
+                let (src, size) = match instruction.op1_kind() {
+                    OpKind::Immediate32 => (instruction.immediate32() as i64, 4),
+                    OpKind::Immediate32to64 => (instruction.immediate32to64() as i64, 8),
+                    _ => unreachable!(),
+                };
+
+                match instruction.op0_kind() {
+                    OpKind::Register => {
+                        let reg = instruction.op0_register();
+                        let dst = VMReg::from(reg);
+                        let bits = VMBits::from(reg);
+                        VMCmd::AddSubRegImm {
+                            vop: VMOp::AddSubRegImm,
+                            dbits: bits,
+                            dst,
+                            sub,
+                            store,
+                            src: &src.to_le_bytes()[..size],
+                        }
+                    }
+                    OpKind::Memory => {
+                        let dst = VMMem::from(instruction);
+                        VMCmd::AddSubMemImm {
+                            vop: VMOp::AddSubMemImm,
+                            dst,
+                            sub,
+                            store,
+                            src: &src.to_le_bytes()[..size],
+                        }
+                    }
+                    _ => return None,
+                }
+            }
+            Code::Add_r64_rm64
+            | Code::Add_r32_rm32
+            | Code::Add_r16_rm16
+            | Code::Add_r8_rm8
+            | Code::Sub_r64_rm64
+            | Code::Sub_r32_rm32
+            | Code::Sub_r16_rm16
+            | Code::Sub_r8_rm8
+            | Code::Cmp_r64_rm64
+            | Code::Cmp_r32_rm32
+            | Code::Cmp_r16_rm16
+            | Code::Cmp_r8_rm8 => {
+                let dreg = instruction.op0_register();
+                let dbits = VMBits::from(dreg);
+                let dst = VMReg::from(dreg);
+                let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
+                let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
+
+                match instruction.op1_kind() {
+                    OpKind::Register => {
+                        let sreg = instruction.op1_register();
+                        let sbits = VMBits::from(sreg);
+                        let src = VMReg::from(instruction.op1_register());
+                        VMCmd::AddSubRegReg {
+                            vop: VMOp::AddSubRegReg,
+                            dbits,
+                            dst,
+                            sbits,
+                            src,
+                            sub,
+                            store,
+                        }
+                    }
+                    OpKind::Memory => {
+                        let src = VMMem::from(instruction);
+                        VMCmd::AddSubRegMem {
+                            vop: VMOp::AddSubRegMem,
+                            src,
+                            sub,
+                            store,
+                            dbits,
+                            dst,
+                        }
+                    }
+                    _ => return None,
+                }
+            }
+            Code::Add_rm64_r64
+            | Code::Add_rm32_r32
+            | Code::Add_rm16_r16
+            | Code::Add_rm8_r8
+            | Code::Sub_rm64_r64
+            | Code::Sub_rm32_r32
+            | Code::Sub_rm16_r16
+            | Code::Sub_rm8_r8
+            | Code::Cmp_rm64_r64
+            | Code::Cmp_rm32_r32
+            | Code::Cmp_rm16_r16
+            | Code::Cmp_rm8_r8 => {
+                let sreg = instruction.op1_register();
+                let sbits = VMBits::from(sreg);
+                let src = VMReg::from(sreg);
+                let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
+                let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
+
+                match instruction.op0_kind() {
+                    OpKind::Register => {
+                        let dreg = instruction.op0_register();
+                        let dbits = VMBits::from(dreg);
+                        let dst = VMReg::from(dreg);
+                        VMCmd::AddSubRegReg {
+                            vop: VMOp::AddSubRegReg,
+                            dbits,
+                            dst,
+                            sbits,
+                            src,
+                            sub,
+                            store,
+                        }
+                    }
+                    OpKind::Memory => {
+                        let dst = VMMem::from(instruction);
+                        VMCmd::AddSubMemReg {
+                            vop: VMOp::AddSubMemReg,
+                            dst,
+                            sub,
+                            store,
+                            sbits,
+                            src,
+                        }
+                    }
+                    _ => return None,
+                }
+            }
+            Code::Lea_r16_m | Code::Lea_r32_m | Code::Lea_r64_m => {
+                let reg = instruction.op0_register();
+                let bits = VMBits::from(reg);
+                let dst = VMReg::from(reg);
+                let src = VMMem::from(instruction);
+
+                VMCmd::SetRegMem {
+                    vop: VMOp::SetRegMem,
+                    dbits: bits,
+                    load: false,
+                    dst,
+                    src,
+                }
+            }
+            Code::Call_rel32_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                VMCmd::BranchImm {
+                    vop: VMOp::BranchImm,
+                    ret: true,
+                    dst,
+                }
+            }
+            Code::Call_rm64 => match instruction.op0_kind() {
+                OpKind::Register => VMCmd::BranchReg {
+                    vop: VMOp::BranchReg,
+                    ret: true,
+                    dst: VMReg::from(instruction.op0_register()),
+                },
+                OpKind::Memory => VMCmd::BranchMem {
+                    vop: VMOp::BranchMem,
+                    ret: true,
+                    dst: VMMem::from(instruction),
+                },
                 _ => return None,
-            }
-        }
-        Code::Mov_rm64_r64 | Code::Mov_rm32_r32 | Code::Mov_rm16_r16 | Code::Mov_rm8_r8 => {
-            let sreg = instruction.op1_register();
-            let sbits = VMBits::from(sreg);
-            let src = VMReg::from(sreg);
-
-            match instruction.op0_kind() {
-                OpKind::Register => {
-                    let dreg = instruction.op0_register();
-                    let dbits = VMBits::from(dreg);
-                    let dst = VMReg::from(dreg);
-                    VMCmd::SetRegReg {
-                        vop: VMOp::SetRegReg,
-                        dbits,
-                        dst,
-                        sbits,
-                        src,
-                    }
-                }
-                OpKind::Memory => {
-                    let dst = VMMem::from(instruction);
-                    VMCmd::SetMemReg {
-                        vop: VMOp::SetMemReg,
-                        sbits,
-                        dst,
-                        src,
-                    }
-                }
-                _ => return None,
-            }
-        }
-        Code::Mov_rm64_imm32 | Code::Mov_rm32_imm32 | Code::Mov_rm16_imm16 | Code::Mov_rm8_imm8 => {
-            let (src, size) = match instruction.code() {
-                Code::Mov_rm8_imm8 => (instruction.immediate8() as i64, 1),
-                Code::Mov_rm16_imm16 => (instruction.immediate16() as i64, 2),
-                Code::Mov_rm32_imm32 => (instruction.immediate32() as i64, 4),
-                Code::Mov_rm64_imm32 => (instruction.immediate32to64() as i64, 8),
-                _ => unreachable!(),
-            };
-
-            match instruction.op0_kind() {
-                OpKind::Register => {
-                    let reg = instruction.op0_register();
-                    let bits = VMBits::from(reg);
-                    let dst = VMReg::from(reg);
-                    VMCmd::SetRegImm {
-                        vop: VMOp::SetRegImm,
-                        dbits: bits,
-                        dst,
-                        src: &src.to_le_bytes()[..size],
-                    }
-                }
-                OpKind::Memory => {
-                    let dst = VMMem::from(instruction);
-                    VMCmd::SetMemImm {
-                        vop: VMOp::SetMemImm,
-                        dst,
-                        src: &src.to_le_bytes()[..size],
-                    }
-                }
-                _ => return None,
-            }
-        }
-        Code::Add_rm8_imm8
-        | Code::Add_rm16_imm8
-        | Code::Add_rm32_imm8
-        | Code::Add_rm64_imm8
-        | Code::Sub_rm8_imm8
-        | Code::Sub_rm16_imm8
-        | Code::Sub_rm32_imm8
-        | Code::Sub_rm64_imm8
-        | Code::Cmp_rm8_imm8
-        | Code::Cmp_rm16_imm8
-        | Code::Cmp_rm32_imm8
-        | Code::Cmp_rm64_imm8 => {
-            let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
-            let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
-
-            let (src, size) = match instruction.op1_kind() {
-                OpKind::Immediate8 => (instruction.immediate8() as i64, 1),
-                OpKind::Immediate8to16 => (instruction.immediate8to16() as i64, 2),
-                OpKind::Immediate8to32 => (instruction.immediate8to32() as i64, 4),
-                OpKind::Immediate8to64 => (instruction.immediate8to64() as i64, 8),
-                _ => unreachable!(),
-            };
-
-            match instruction.op0_kind() {
-                OpKind::Register => {
-                    let dreg = instruction.op0_register();
-                    let dst = VMReg::from(dreg);
-                    let dbits = VMBits::from(dreg);
-                    VMCmd::AddSubRegImm {
-                        vop: VMOp::AddSubRegImm,
-                        dbits,
-                        dst,
-                        sub,
-                        store,
-                        src: &src.to_le_bytes()[..size],
-                    }
-                }
-                OpKind::Memory => {
-                    let dst = VMMem::from(instruction);
-                    VMCmd::AddSubMemImm {
-                        vop: VMOp::AddSubMemImm,
-                        dst,
-                        sub,
-                        store,
-                        src: &src.to_le_bytes()[..size],
-                    }
-                }
-                _ => return None,
-            }
-        }
-        Code::Add_rm16_imm16 | Code::Sub_rm16_imm16 | Code::Cmp_rm16_imm16 => {
-            let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
-            let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
-
-            let src = instruction.immediate16();
-
-            match instruction.op0_kind() {
-                OpKind::Register => {
-                    let reg = instruction.op0_register();
-                    let dst = VMReg::from(reg);
-                    let bits = VMBits::from(reg);
-                    VMCmd::AddSubRegImm {
-                        vop: VMOp::AddSubRegImm,
-                        dbits: bits,
-                        dst,
-                        sub,
-                        store,
-                        src: &src.to_le_bytes(),
-                    }
-                }
-                OpKind::Memory => {
-                    let dst = VMMem::from(instruction);
-                    VMCmd::AddSubMemImm {
-                        vop: VMOp::AddSubMemImm,
-                        dst,
-                        sub,
-                        store,
-                        src: &src.to_le_bytes(),
-                    }
-                }
-                _ => return None,
-            }
-        }
-        Code::Add_rm64_imm32
-        | Code::Add_rm32_imm32
-        | Code::Sub_rm64_imm32
-        | Code::Sub_rm32_imm32
-        | Code::Cmp_rm64_imm32
-        | Code::Cmp_rm32_imm32 => {
-            let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
-            let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
-
-            let (src, size) = match instruction.op1_kind() {
-                OpKind::Immediate32 => (instruction.immediate32() as i64, 4),
-                OpKind::Immediate32to64 => (instruction.immediate32to64() as i64, 8),
-                _ => unreachable!(),
-            };
-
-            match instruction.op0_kind() {
-                OpKind::Register => {
-                    let reg = instruction.op0_register();
-                    let dst = VMReg::from(reg);
-                    let bits = VMBits::from(reg);
-                    VMCmd::AddSubRegImm {
-                        vop: VMOp::AddSubRegImm,
-                        dbits: bits,
-                        dst,
-                        sub,
-                        store,
-                        src: &src.to_le_bytes()[..size],
-                    }
-                }
-                OpKind::Memory => {
-                    let dst = VMMem::from(instruction);
-                    VMCmd::AddSubMemImm {
-                        vop: VMOp::AddSubMemImm,
-                        dst,
-                        sub,
-                        store,
-                        src: &src.to_le_bytes()[..size],
-                    }
-                }
-                _ => return None,
-            }
-        }
-        Code::Add_r64_rm64
-        | Code::Add_r32_rm32
-        | Code::Add_r16_rm16
-        | Code::Add_r8_rm8
-        | Code::Sub_r64_rm64
-        | Code::Sub_r32_rm32
-        | Code::Sub_r16_rm16
-        | Code::Sub_r8_rm8
-        | Code::Cmp_r64_rm64
-        | Code::Cmp_r32_rm32
-        | Code::Cmp_r16_rm16
-        | Code::Cmp_r8_rm8 => {
-            let dreg = instruction.op0_register();
-            let dbits = VMBits::from(dreg);
-            let dst = VMReg::from(dreg);
-            let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
-            let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
-
-            match instruction.op1_kind() {
-                OpKind::Register => {
-                    let sreg = instruction.op1_register();
-                    let sbits = VMBits::from(sreg);
-                    let src = VMReg::from(instruction.op1_register());
-                    VMCmd::AddSubRegReg {
-                        vop: VMOp::AddSubRegReg,
-                        dbits,
-                        dst,
-                        sbits,
-                        src,
-                        sub,
-                        store,
-                    }
-                }
-                OpKind::Memory => {
-                    let src = VMMem::from(instruction);
-                    VMCmd::AddSubRegMem {
-                        vop: VMOp::AddSubRegMem,
-                        src,
-                        sub,
-                        store,
-                        dbits,
-                        dst,
-                    }
-                }
-                _ => return None,
-            }
-        }
-        Code::Add_rm64_r64
-        | Code::Add_rm32_r32
-        | Code::Add_rm16_r16
-        | Code::Add_rm8_r8
-        | Code::Sub_rm64_r64
-        | Code::Sub_rm32_r32
-        | Code::Sub_rm16_r16
-        | Code::Sub_rm8_r8
-        | Code::Cmp_rm64_r64
-        | Code::Cmp_rm32_r32
-        | Code::Cmp_rm16_r16
-        | Code::Cmp_rm8_r8 => {
-            let sreg = instruction.op1_register();
-            let sbits = VMBits::from(sreg);
-            let src = VMReg::from(sreg);
-            let sub = matches!(instruction.mnemonic(), Mnemonic::Sub | Mnemonic::Cmp);
-            let store = matches!(instruction.mnemonic(), Mnemonic::Add | Mnemonic::Sub);
-
-            match instruction.op0_kind() {
-                OpKind::Register => {
-                    let dreg = instruction.op0_register();
-                    let dbits = VMBits::from(dreg);
-                    let dst = VMReg::from(dreg);
-                    VMCmd::AddSubRegReg {
-                        vop: VMOp::AddSubRegReg,
-                        dbits,
-                        dst,
-                        sbits,
-                        src,
-                        sub,
-                        store,
-                    }
-                }
-                OpKind::Memory => {
-                    let dst = VMMem::from(instruction);
-                    VMCmd::AddSubMemReg {
-                        vop: VMOp::AddSubMemReg,
-                        dst,
-                        sub,
-                        store,
-                        sbits,
-                        src,
-                    }
-                }
-                _ => return None,
-            }
-        }
-        Code::Lea_r16_m | Code::Lea_r32_m | Code::Lea_r64_m => {
-            let reg = instruction.op0_register();
-            let bits = VMBits::from(reg);
-            let dst = VMReg::from(reg);
-            let src = VMMem::from(instruction);
-
-            VMCmd::SetRegMem {
-                vop: VMOp::SetRegMem,
-                dbits: bits,
-                load: false,
-                dst,
-                src,
-            }
-        }
-        Code::Call_rel32_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            VMCmd::BranchImm {
-                vop: VMOp::BranchImm,
-                ret: true,
-                dst,
-            }
-        }
-        Code::Call_rm64 => match instruction.op0_kind() {
-            OpKind::Register => VMCmd::BranchReg {
-                vop: VMOp::BranchReg,
-                ret: true,
-                dst: VMReg::from(instruction.op0_register()),
             },
-            OpKind::Memory => VMCmd::BranchMem {
-                vop: VMOp::BranchMem,
-                ret: true,
-                dst: VMMem::from(instruction),
-            },
-            _ => return None,
-        },
-        Code::Jmp_rel8_64 | Code::Jmp_rel32_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            VMCmd::BranchImm {
-                vop: VMOp::BranchImm,
-                ret: false,
-                dst,
+            Code::Jmp_rel8_64 | Code::Jmp_rel32_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                VMCmd::BranchImm {
+                    vop: VMOp::BranchImm,
+                    ret: false,
+                    dst,
+                }
             }
-        }
-        Code::Jmp_rm64 => match instruction.op0_kind() {
-            OpKind::Register => VMCmd::BranchReg {
-                vop: VMOp::BranchReg,
-                dst: VMReg::from(instruction.op0_register()),
-                ret: false,
+            Code::Jmp_rm64 => match instruction.op0_kind() {
+                OpKind::Register => VMCmd::BranchReg {
+                    vop: VMOp::BranchReg,
+                    dst: VMReg::from(instruction.op0_register()),
+                    ret: false,
+                },
+                OpKind::Memory => VMCmd::BranchMem {
+                    vop: VMOp::BranchMem,
+                    dst: VMMem::from(instruction),
+                    ret: false,
+                },
+                _ => return None,
             },
-            OpKind::Memory => VMCmd::BranchMem {
-                vop: VMOp::BranchMem,
-                dst: VMMem::from(instruction),
-                ret: false,
-            },
-            _ => return None,
-        },
-        Code::Ja_rel32_64 | Code::Ja_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JA = CF=0 AND ZF=0
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![
-                    VMCond {
+            Code::Ja_rel32_64 | Code::Ja_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JA = CF=0 AND ZF=0
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![
+                        VMCond {
+                            cmp: VMTest::CMP,
+                            lhs: VMFlag::Carry as u8,
+                            rhs: 0,
+                        },
+                        VMCond {
+                            cmp: VMTest::CMP,
+                            lhs: VMFlag::Zero as u8,
+                            rhs: 0,
+                        },
+                    ],
+                    dst,
+                }
+            }
+            Code::Jae_rel32_64 | Code::Jae_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JAE = CF=0
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
                         cmp: VMTest::CMP,
                         lhs: VMFlag::Carry as u8,
                         rhs: 0,
-                    },
-                    VMCond {
-                        cmp: VMTest::CMP,
-                        lhs: VMFlag::Zero as u8,
-                        rhs: 0,
-                    },
-                ],
-                dst,
+                    }],
+                    dst,
+                }
             }
-        }
-        Code::Jae_rel32_64 | Code::Jae_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JAE = CF=0
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Carry as u8,
-                    rhs: 0,
-                }],
-                dst,
-            }
-        }
-        Code::Jb_rel32_64 | Code::Jb_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JB = CF=1
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Carry as u8,
-                    rhs: 1,
-                }],
-                dst,
-            }
-        }
-        Code::Jbe_rel32_64 | Code::Jbe_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JBE = CF=1 OR ZF=1
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::OR,
-                conds: vec![
-                    VMCond {
+            Code::Jb_rel32_64 | Code::Jb_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JB = CF=1
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
                         cmp: VMTest::CMP,
                         lhs: VMFlag::Carry as u8,
                         rhs: 1,
-                    },
-                    VMCond {
+                    }],
+                    dst,
+                }
+            }
+            Code::Jbe_rel32_64 | Code::Jbe_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JBE = CF=1 OR ZF=1
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::OR,
+                    conds: vec![
+                        VMCond {
+                            cmp: VMTest::CMP,
+                            lhs: VMFlag::Carry as u8,
+                            rhs: 1,
+                        },
+                        VMCond {
+                            cmp: VMTest::CMP,
+                            lhs: VMFlag::Zero as u8,
+                            rhs: 1,
+                        },
+                    ],
+                    dst,
+                }
+            }
+            Code::Je_rel32_64 | Code::Je_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JE = ZF=1
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
                         cmp: VMTest::CMP,
                         lhs: VMFlag::Zero as u8,
                         rhs: 1,
-                    },
-                ],
-                dst,
+                    }],
+                    dst,
+                }
             }
-        }
-        Code::Je_rel32_64 | Code::Je_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JE = ZF=1
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Zero as u8,
-                    rhs: 1,
-                }],
-                dst,
+            Code::Jg_rel32_64 | Code::Jg_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JG = ZF=0 AND SF=OF
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![
+                        VMCond {
+                            cmp: VMTest::CMP,
+                            lhs: VMFlag::Zero as u8,
+                            rhs: 0,
+                        },
+                        VMCond {
+                            cmp: VMTest::EQ,
+                            lhs: VMFlag::Sign as u8,
+                            rhs: VMFlag::Overflow as u8,
+                        },
+                    ],
+                    dst,
+                }
             }
-        }
-        Code::Jg_rel32_64 | Code::Jg_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JG = ZF=0 AND SF=OF
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![
-                    VMCond {
-                        cmp: VMTest::CMP,
-                        lhs: VMFlag::Zero as u8,
-                        rhs: 0,
-                    },
-                    VMCond {
+            Code::Jge_rel32_64 | Code::Jge_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JGE = SF=OF
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
                         cmp: VMTest::EQ,
                         lhs: VMFlag::Sign as u8,
                         rhs: VMFlag::Overflow as u8,
-                    },
-                ],
-                dst,
+                    }],
+                    dst,
+                }
             }
-        }
-        Code::Jge_rel32_64 | Code::Jge_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JGE = SF=OF
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::EQ,
-                    lhs: VMFlag::Sign as u8,
-                    rhs: VMFlag::Overflow as u8,
-                }],
-                dst,
-            }
-        }
-        Code::Jl_rel32_64 | Code::Jl_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JL = SF<>OF
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::NEQ,
-                    lhs: VMFlag::Sign as u8,
-                    rhs: VMFlag::Overflow as u8,
-                }],
-                dst,
-            }
-        }
-        Code::Jle_rel32_64 | Code::Jle_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JLE = ZF=1 OR SF<>OF
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::OR,
-                conds: vec![
-                    VMCond {
-                        cmp: VMTest::CMP,
-                        lhs: VMFlag::Zero as u8,
-                        rhs: 1,
-                    },
-                    VMCond {
+            Code::Jl_rel32_64 | Code::Jl_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JL = SF<>OF
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
                         cmp: VMTest::NEQ,
                         lhs: VMFlag::Sign as u8,
                         rhs: VMFlag::Overflow as u8,
-                    },
-                ],
-                dst,
+                    }],
+                    dst,
+                }
             }
-        }
-        Code::Jne_rel32_64 | Code::Jne_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JNE = ZF=0
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Zero as u8,
-                    rhs: 0,
-                }],
-                dst,
+            Code::Jle_rel32_64 | Code::Jle_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JLE = ZF=1 OR SF<>OF
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::OR,
+                    conds: vec![
+                        VMCond {
+                            cmp: VMTest::CMP,
+                            lhs: VMFlag::Zero as u8,
+                            rhs: 1,
+                        },
+                        VMCond {
+                            cmp: VMTest::NEQ,
+                            lhs: VMFlag::Sign as u8,
+                            rhs: VMFlag::Overflow as u8,
+                        },
+                    ],
+                    dst,
+                }
             }
-        }
-        Code::Jno_rel32_64 | Code::Jno_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JNO = OF=0
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Overflow as u8,
-                    rhs: 0,
-                }],
-                dst,
+            Code::Jne_rel32_64 | Code::Jne_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JNE = ZF=0
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Zero as u8,
+                        rhs: 0,
+                    }],
+                    dst,
+                }
             }
-        }
-        Code::Jnp_rel32_64 | Code::Jnp_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JNP = PF=0
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Parity as u8,
-                    rhs: 0,
-                }],
-                dst,
+            Code::Jno_rel32_64 | Code::Jno_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JNO = OF=0
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Overflow as u8,
+                        rhs: 0,
+                    }],
+                    dst,
+                }
             }
-        }
-        Code::Jns_rel32_64 | Code::Jns_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JNS = SF=0
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Sign as u8,
-                    rhs: 0,
-                }],
-                dst,
+            Code::Jnp_rel32_64 | Code::Jnp_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JNP = PF=0
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Parity as u8,
+                        rhs: 0,
+                    }],
+                    dst,
+                }
             }
-        }
-        Code::Jo_rel32_64 | Code::Jo_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JO = OF=1
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Overflow as u8,
-                    rhs: 1,
-                }],
-                dst,
+            Code::Jns_rel32_64 | Code::Jns_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JNS = SF=0
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Sign as u8,
+                        rhs: 0,
+                    }],
+                    dst,
+                }
             }
-        }
-        Code::Jp_rel32_64 | Code::Jp_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JP = PF=1
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Parity as u8,
-                    rhs: 1,
-                }],
-                dst,
+            Code::Jo_rel32_64 | Code::Jo_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JO = OF=1
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Overflow as u8,
+                        rhs: 1,
+                    }],
+                    dst,
+                }
             }
-        }
-        Code::Js_rel32_64 | Code::Js_rel8_64 => {
-            let dst = instruction.memory_displacement64().try_into().unwrap();
-            // JS = SF=1
-            VMCmd::Jcc {
-                vop: VMOp::Jcc,
-                logic: VMLogic::AND,
-                conds: vec![VMCond {
-                    cmp: VMTest::CMP,
-                    lhs: VMFlag::Sign as u8,
-                    rhs: 1,
-                }],
-                dst,
+            Code::Jp_rel32_64 | Code::Jp_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JP = PF=1
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Parity as u8,
+                        rhs: 1,
+                    }],
+                    dst,
+                }
             }
-        }
-        Code::Nopw | Code::Nopd | Code::Nopq | Code::Nop_rm16 | Code::Nop_rm32 | Code::Nop_rm64 => {
-            VMCmd::Nop { vop: VMOp::Nop }
-        }
-        _ => {
-            // println!("{instruction} -> {:?}", instruction.code());
-            return None;
-        }
-    };
+            Code::Js_rel32_64 | Code::Js_rel8_64 => {
+                let dst = instruction.memory_displacement64().try_into().unwrap();
+                // JS = SF=1
+                VMCmd::Jcc {
+                    vop: VMOp::Jcc,
+                    logic: VMLogic::AND,
+                    conds: vec![VMCond {
+                        cmp: VMTest::CMP,
+                        lhs: VMFlag::Sign as u8,
+                        rhs: 1,
+                    }],
+                    dst,
+                }
+            }
+            Code::Nopw
+            | Code::Nopd
+            | Code::Nopq
+            | Code::Nop_rm16
+            | Code::Nop_rm32
+            | Code::Nop_rm64 => VMCmd::Nop { vop: VMOp::Nop },
+            _ => {
+                // println!("{instruction} -> {:?}", instruction.code());
+                return None;
+            }
+        };
 
-    Some(bytecode.encode(mapper))
+        vinstructions.extend_from_slice(&bytecode.encode(mapper));
+
+        i += 1;
+    }
+
+    Some(vinstructions)
 }

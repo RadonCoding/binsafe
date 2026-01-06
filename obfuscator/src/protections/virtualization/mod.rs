@@ -10,7 +10,6 @@ use crate::protections::Protection;
 use exe::Buffer;
 use exe::{PETranslation, PE, RVA};
 use iced_x86::code_asm::CodeAssembler;
-use iced_x86::Mnemonic;
 use logger::info;
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
@@ -19,7 +18,6 @@ use runtime::vm::bytecode::{self};
 #[derive(Default)]
 pub struct Virtualization {
     vblocks: HashMap<u32, usize>,
-    failures: HashMap<Mnemonic, u32>,
     transforms: usize,
     dedupes: usize,
 }
@@ -43,19 +41,10 @@ impl Protection for Virtualization {
                 continue;
             }
 
-            let mut vblock = Vec::new();
-
-            for instruction in &block.instructions {
-                let bytecode = match bytecode::convert(&mut engine.rt.mapper, instruction) {
-                    Some(virtualized) => virtualized,
-                    None => {
-                        let mnemonic = instruction.mnemonic();
-                        *self.failures.entry(mnemonic).or_insert(0) += 1;
-                        continue 'outer;
-                    }
-                };
-                vblock.extend(bytecode);
-            }
+            let mut vblock = match bytecode::convert(&mut engine.rt.mapper, &block.instructions) {
+                Some(virtualized) => virtualized,
+                None => continue 'outer,
+            };
 
             if let Some(bytecode) = AntiDebug::transform(&mut engine.rt.mapper, block) {
                 vblock.splice(0..0, bytecode);
@@ -169,25 +158,9 @@ impl Protection for Virtualization {
         let virtualized = self.vblocks.len();
         let percentage = (virtualized as f64 / total.max(1) as f64) * 100.0;
 
-        let mut output = format!(
+        info!(
             "VIRTUALIZED: {}/{} blocks ({:.2}%) [transforms: {}] [dedupes: {}]",
             virtualized, total, percentage, self.transforms, self.dedupes
         );
-
-        if !self.failures.is_empty() {
-            let mut sorted = self.failures.iter().collect::<Vec<_>>();
-            sorted.sort_by(|a, b| b.1.cmp(a.1));
-
-            let top = sorted
-                .iter()
-                .take(10)
-                .map(|(m, n)| format!("{:?}={}", m, n).to_lowercase())
-                .collect::<Vec<String>>()
-                .join(", ");
-            output.push(' ');
-            output.push_str(&format!("(most failures: {})", top));
-        }
-
-        info!("{}", output);
     }
 }
