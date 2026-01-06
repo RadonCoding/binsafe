@@ -60,6 +60,8 @@ pub enum DataDef {
     VmStackContent,
     VmTable,
     VmCode,
+    VmKeyMul,
+    VmKeyAdd,
 }
 
 pub struct Runtime {
@@ -116,6 +118,8 @@ impl Runtime {
         data_labels.insert(DataDef::VmStackContent, asm.create_label());
         data_labels.insert(DataDef::VmTable, asm.create_label());
         data_labels.insert(DataDef::VmCode, asm.create_label());
+        data_labels.insert(DataDef::VmKeyMul, asm.create_label());
+        data_labels.insert(DataDef::VmKeyAdd, asm.create_label());
 
         Self {
             asm,
@@ -161,6 +165,11 @@ impl Runtime {
     pub fn define_data_dword(&mut self, def: DataDef, data: &[u32]) {
         self.set_data_label(def);
         self.asm.dd(data).unwrap();
+    }
+
+    pub fn define_data_qword(&mut self, def: DataDef, data: &[u64]) {
+        self.set_data_label(def);
+        self.asm.dq(data).unwrap();
     }
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {

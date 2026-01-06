@@ -12,6 +12,7 @@ use exe::{PETranslation, PE, RVA};
 use iced_x86::code_asm::CodeAssembler;
 use iced_x86::Mnemonic;
 use logger::info;
+use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::bytecode::{self};
 
@@ -31,6 +32,10 @@ impl Protection for Virtualization {
         let mut vcode = Vec::new();
 
         let mut dedup = HashMap::new();
+
+        let mut rng = rand::thread_rng();
+        let key_mul = rng.gen::<u64>();
+        let key_add = rng.gen::<u64>();
 
         'outer: for block in &mut engine.blocks {
             if block.size < VDISPATCH_SIZE {
@@ -64,7 +69,8 @@ impl Protection for Virtualization {
 
             for byte in &mut vblock {
                 *byte ^= key as u8;
-                key = (key << 8) | (*byte as u64);
+                key ^= *byte as u64;
+                key = key.wrapping_mul(key_mul).wrapping_add(key_add);
             }
 
             let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
@@ -94,6 +100,9 @@ impl Protection for Virtualization {
         if !vcode.is_empty() {
             engine.rt.define_data_byte(DataDef::VmTable, &vtable);
             engine.rt.define_data_byte(DataDef::VmCode, &vcode);
+
+            engine.rt.define_data_qword(DataDef::VmKeyMul, &[key_mul]);
+            engine.rt.define_data_qword(DataDef::VmKeyAdd, &[key_add]);
         }
     }
 

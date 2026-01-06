@@ -1,6 +1,9 @@
-use iced_x86::code_asm::{al, cl, ptr, r8, r9b, rcx, rdx};
+use iced_x86::code_asm::{al, byte_ptr, cl, ptr, r8, r9b, rax, rcx, rdx};
 
-use crate::{runtime::Runtime, vm::stack};
+use crate::{
+    runtime::{DataDef, Runtime},
+    vm::stack,
+};
 
 // void (unsigned long, unsigned char*, unsigned short, bool)
 pub fn build(rt: &mut Runtime) {
@@ -25,27 +28,41 @@ pub fn build(rt: &mut Runtime) {
         // xor [rdx], cl
         rt.asm.xor(ptr(rdx), cl).unwrap();
 
-        // shl rcx, 0x8
-        rt.asm.shl(rcx, 0x8).unwrap();
-
         // test r9b, r9b
         rt.asm.test(r9b, r9b).unwrap();
         // jnz ...
         rt.asm.jnz(update_key_decrypt).unwrap();
 
-        // mov cl, [rdx]
-        rt.asm.mov(cl, ptr(rdx)).unwrap();
+        // movzx rax, byte ptr [rdx]
+        rt.asm.movzx(rax, byte_ptr(rdx)).unwrap();
         // jmp ...
         rt.asm.jmp(continue_loop).unwrap();
 
         rt.asm.set_label(&mut update_key_decrypt).unwrap();
         {
-            // mov cl, al
-            rt.asm.mov(cl, al).unwrap();
+            // movzx rax, al
+            rt.asm.movzx(rax, al).unwrap();
         }
 
         rt.asm.set_label(&mut continue_loop).unwrap();
         {
+            // xor rcx, rax
+            rt.asm.xor(rcx, rax).unwrap();
+
+            // mov rax, [...]
+            rt.asm
+                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyMul]))
+                .unwrap();
+            // imul rcx, rax
+            rt.asm.imul_2(rcx, rax).unwrap();
+
+            // mov rcx, [...]
+            rt.asm
+                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyAdd]))
+                .unwrap();
+            // add rcx, rax
+            rt.asm.add(rcx, rax).unwrap();
+
             // inc rdx
             rt.asm.inc(rdx).unwrap();
             // jmp ...
