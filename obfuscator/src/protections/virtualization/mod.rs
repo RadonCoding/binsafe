@@ -34,6 +34,7 @@ impl Protection for Virtualization {
         let mut dedup = HashMap::new();
 
         let mut rng = rand::thread_rng();
+        let key_seed = rng.gen::<u64>();
         let key_mul = rng.gen::<u64>();
         let key_add = rng.gen::<u64>();
 
@@ -62,7 +63,7 @@ impl Protection for Virtualization {
             }
 
             let mut key = if vcode.is_empty() {
-                0u64
+                key_seed
             } else {
                 vcode[vcode.len() - 1] as u64
             };
@@ -101,6 +102,7 @@ impl Protection for Virtualization {
             engine.rt.define_data_byte(DataDef::VmTable, &vtable);
             engine.rt.define_data_byte(DataDef::VmCode, &vcode);
 
+            engine.rt.define_data_qword(DataDef::VmKeySeed, &[key_seed]);
             engine.rt.define_data_qword(DataDef::VmKeyMul, &[key_mul]);
             engine.rt.define_data_qword(DataDef::VmKeyAdd, &[key_add]);
         }
