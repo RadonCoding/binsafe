@@ -215,8 +215,8 @@ impl VMCond {
 pub enum VMCmd<'a> {
     PushPopRegs {
         vop: VMOp,
-        seq: u64,
         pop: bool,
+        seq: Vec<u8>,
     },
     PushImm {
         vop: VMOp,
@@ -330,10 +330,11 @@ pub enum VMCmd<'a> {
 impl<'a> VMCmd<'a> {
     pub fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         match self {
-            Self::PushPopRegs { vop, seq, pop } => {
+            Self::PushPopRegs { vop, pop, seq } => {
                 let mut bytes = vec![mapper.index(*vop)];
-                bytes.extend_from_slice(&seq.to_le_bytes());
                 bytes.push(*pop as u8);
+                bytes.push(seq.len() as u8);
+                bytes.extend_from_slice(seq);
                 bytes
             }
             Self::PushImm { vop, src } => {
@@ -540,40 +541,29 @@ pub fn convert(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<
         let code = instruction.code();
 
         if code == Code::Push_r64 || code == Code::Pop_r64 {
-            let none = mapper.index(VMReg::None) as u64;
+            let mut seq = Vec::new();
 
-            let mut seq = 0;
-
-            for k in 0..8 {
-                seq |= (none & 0xFF) << (k * 8);
-            }
-
-            let mut count = 0;
             let mut j = i;
 
-            while j < instructions.len() && instructions[j].code() == code && count < 8 {
+            while j < instructions.len() && instructions[j].code() == code {
                 let vreg = VMReg::from(instructions[j].op0_register());
-                let idx = mapper.index(vreg) as u64;
-
-                let shift = count * 8;
-                seq &= !(0xFF << shift);
-                seq |= (idx & 0xFF) << shift;
-
-                count += 1;
+                let idx = mapper.index(vreg);
+                seq.push(idx);
                 j += 1;
             }
 
-            let pop = instruction.mnemonic() == Mnemonic::Pop;
+            if seq.len() >= 2 {
+                let pop = instruction.mnemonic() == Mnemonic::Pop;
 
-            if count >= 2 {
                 vinstructions.extend_from_slice(
                     &VMCmd::PushPopRegs {
                         vop: VMOp::PushPopRegs,
-                        seq,
                         pop,
+                        seq,
                     }
                     .encode(mapper),
                 );
+
                 i = j;
                 continue;
             }
