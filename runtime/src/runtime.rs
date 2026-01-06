@@ -7,8 +7,12 @@ use iced_x86::{
 use rand::seq::SliceRandom;
 
 use crate::{
-    mapper::Mapper,
-    vm::{self},
+    mapper::{Mappable, Mapper},
+    vm::{
+        self,
+        bytecode::{VMOp, VMReg},
+        stack::VSTACK_SIZE,
+    },
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -150,6 +154,10 @@ impl Runtime {
         self.addresses[&label]
     }
 
+    pub fn define_data_byte(&mut self, def: DataDef, data: u8) {
+        self.data.insert(def, vec![data]);
+    }
+
     pub fn define_data_bytes(&mut self, def: DataDef, data: &[u8]) {
         self.data.insert(def, data.to_vec());
     }
@@ -222,6 +230,12 @@ impl Runtime {
             (FnDef::InitializeStack, vm::stack::initialize),
         ];
 
+        self.define_data_bytes(DataDef::VmHandlers, &vec![0u8; VMOp::COUNT * 8]);
+        self.define_data_qword(DataDef::VmStackPointer, 0);
+        self.define_data_bytes(DataDef::VmStackContent, &vec![0u8; VSTACK_SIZE]);
+        self.define_data_bytes(DataDef::VmState, &vec![0u8; VMReg::COUNT * 8]);
+        self.define_data_byte(DataDef::VmLock, 0);
+
         for (def, builder) in functions {
             tasks.push(EmissionTask::Function(def, builder));
         }
@@ -234,12 +248,6 @@ impl Runtime {
         tasks.shuffle(&mut rng);
 
         for task in tasks {
-            let current_len = self.asm.instructions().len(); // Approximate check
-            let padding = (16 - (current_len % 16)) % 16;
-            if padding > 0 {
-                self.asm.db(&vec![0x90; padding]).unwrap(); // Add NOPs for alignment
-            }
-
             match task {
                 EmissionTask::Function(def, builder) => {
                     self.set_func_label(def);
