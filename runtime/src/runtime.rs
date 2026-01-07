@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use iced_x86::{
-    code_asm::{CodeAssembler, CodeLabel},
+    code_asm::{ptr, rcx, rdx, CodeAssembler, CodeLabel},
     BlockEncoderOptions,
 };
 use rand::seq::SliceRandom;
 
 use crate::{
+    functions,
     mapper::{Mappable, Mapper},
     vm::{
         self,
@@ -14,11 +15,14 @@ use crate::{
         stack::VSTACK_SIZE,
     },
 };
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
 pub enum FnDef {
     /* VM */
     VmEntry,
+    VmExit,
     VmCrypt,
     VmDispatch,
     /* VM UTILS */
@@ -49,14 +53,21 @@ pub enum FnDef {
     VmArithmeticAddSub16,
     VmArithmeticAddSub32,
     VmArithmeticAddSub64,
+    /* VM VEH */
+    VmVehInitialize,
+    VmVehHandler,
     /* VM STACK */
-    InitializeStack,
+    VmStackInitialize,
+    /* CORE */
+    CompareUnicodeToAnsi,
+    CompareAnsi,
+    GetProcAddress,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
 pub enum DataDef {
+    VehStart,
     VmHandlers,
-    VmLock,
     VmState,
     VmStackPointer,
     VmStackContent,
@@ -65,11 +76,26 @@ pub enum DataDef {
     VmKeySeed,
     VmKeyMul,
     VmKeyAdd,
+    VehEnd,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
+pub enum BoolDef {
+    VmIsLocked,
+    VmHasVeh,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
+pub enum StringDef {
+    Ntdll,
+    RtlAddVectoredExceptionHandler,
 }
 
 enum EmissionTask {
     Function(FnDef, fn(&mut Runtime)),
     Data(DataDef),
+    Bool(BoolDef),
+    String(StringDef),
 }
 
 pub struct Runtime {
@@ -78,6 +104,10 @@ pub struct Runtime {
     pub addresses: HashMap<CodeLabel, u64>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
     pub data: HashMap<DataDef, Vec<u8>>,
+    pub bool_labels: HashMap<BoolDef, CodeLabel>,
+    pub bools: HashMap<BoolDef, bool>,
+    pub string_labels: HashMap<StringDef, CodeLabel>,
+    pub strings: HashMap<StringDef, Vec<u8>>,
     pub mapper: Mapper,
 }
 
@@ -86,51 +116,28 @@ impl Runtime {
         let mut asm = CodeAssembler::new(bitness).unwrap();
 
         let mut func_labels = HashMap::new();
-        func_labels.insert(FnDef::VmEntry, asm.create_label());
-        func_labels.insert(FnDef::VmCrypt, asm.create_label());
-        func_labels.insert(FnDef::VmDispatch, asm.create_label());
 
-        func_labels.insert(FnDef::ComputeAddress, asm.create_label());
-
-        func_labels.insert(FnDef::VmHandlerPushPopRegs, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerPushImm, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerPushReg, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerPopReg, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerSetRegImm, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerSetRegReg, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerSetRegMem, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerSetMemImm, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerSetMemReg, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerAddSubRegImm, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerAddSubRegReg, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerAddSubRegMem, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerAddSubMemReg, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerAddSubMemImm, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerBranchImm, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerBranchReg, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerBranchMem, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerJcc, asm.create_label());
-        func_labels.insert(FnDef::VmHandlerNop, asm.create_label());
-
-        func_labels.insert(FnDef::VmArithmeticFlags, asm.create_label());
-        func_labels.insert(FnDef::VmArithmeticAddSub8, asm.create_label());
-        func_labels.insert(FnDef::VmArithmeticAddSub16, asm.create_label());
-        func_labels.insert(FnDef::VmArithmeticAddSub32, asm.create_label());
-        func_labels.insert(FnDef::VmArithmeticAddSub64, asm.create_label());
-
-        func_labels.insert(FnDef::InitializeStack, asm.create_label());
+        for def in FnDef::iter() {
+            func_labels.insert(def, asm.create_label());
+        }
 
         let mut data_labels = HashMap::new();
-        data_labels.insert(DataDef::VmHandlers, asm.create_label());
-        data_labels.insert(DataDef::VmState, asm.create_label());
-        data_labels.insert(DataDef::VmLock, asm.create_label());
-        data_labels.insert(DataDef::VmStackPointer, asm.create_label());
-        data_labels.insert(DataDef::VmStackContent, asm.create_label());
-        data_labels.insert(DataDef::VmTable, asm.create_label());
-        data_labels.insert(DataDef::VmCode, asm.create_label());
-        data_labels.insert(DataDef::VmKeySeed, asm.create_label());
-        data_labels.insert(DataDef::VmKeyMul, asm.create_label());
-        data_labels.insert(DataDef::VmKeyAdd, asm.create_label());
+
+        for def in DataDef::iter() {
+            data_labels.insert(def, asm.create_label());
+        }
+
+        let mut bool_labels = HashMap::new();
+
+        for def in BoolDef::iter() {
+            bool_labels.insert(def, asm.create_label());
+        }
+
+        let mut string_labels = HashMap::new();
+
+        for def in StringDef::iter() {
+            string_labels.insert(def, asm.create_label());
+        }
 
         Self {
             asm,
@@ -138,6 +145,10 @@ impl Runtime {
             addresses: HashMap::new(),
             data_labels,
             data: HashMap::new(),
+            bool_labels,
+            bools: HashMap::new(),
+            string_labels,
+            strings: HashMap::new(),
             mapper: Mapper::new(),
         }
     }
@@ -149,6 +160,16 @@ impl Runtime {
 
     fn set_data_label(&mut self, def: DataDef) {
         let label = self.data_labels.get_mut(&def).unwrap();
+        self.asm.set_label(label).unwrap();
+    }
+
+    fn set_bool_label(&mut self, def: BoolDef) {
+        let label = self.bool_labels.get_mut(&def).unwrap();
+        self.asm.set_label(label).unwrap();
+    }
+
+    fn set_string_label(&mut self, def: StringDef) {
+        let label = self.string_labels.get_mut(&def).unwrap();
         self.asm.set_label(label).unwrap();
     }
 
@@ -168,11 +189,37 @@ impl Runtime {
         self.data.insert(def, data.to_le_bytes().to_vec());
     }
 
+    pub fn define_bool(&mut self, def: BoolDef, value: bool) {
+        self.bools.insert(def, value);
+    }
+
+    fn define_string(&mut self, def: StringDef, string: &str) {
+        let mut bytes = string.as_bytes().to_vec();
+        bytes.push(0);
+        self.strings.insert(def, bytes);
+    }
+
+    pub fn get_proc_address(&mut self, module_name: StringDef, export_name: StringDef) {
+        // lea rcx, [...]
+        self.asm
+            .lea(rcx, ptr(self.string_labels[&module_name]))
+            .unwrap();
+        // lea rdx, [...]
+        self.asm
+            .lea(rdx, ptr(self.string_labels[&export_name]))
+            .unwrap();
+        // call ...
+        self.asm
+            .call(self.func_labels[&FnDef::GetProcAddress])
+            .unwrap();
+    }
+
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
-        let mut tasks = Vec::new();
+        let mut shuffled = Vec::new();
 
         let functions: Vec<(FnDef, fn(&mut Runtime))> = vec![
             (FnDef::VmEntry, vm::entry::build),
+            (FnDef::VmExit, vm::exit::build),
             (FnDef::VmCrypt, vm::crypt::build),
             (FnDef::VmDispatch, vm::dispatch::build),
             (FnDef::ComputeAddress, vm::utils::compute_address::build),
@@ -233,25 +280,70 @@ impl Runtime {
                 FnDef::VmArithmeticAddSub64,
                 vm::handlers::arithmetic::addsub64::build,
             ),
-            (FnDef::InitializeStack, vm::stack::initialize),
+            (FnDef::VmVehInitialize, vm::veh::initialize),
+            (FnDef::VmStackInitialize, vm::stack::initialize),
+            (
+                FnDef::CompareUnicodeToAnsi,
+                functions::compare_unicode_to_ansi::build,
+            ),
+            (FnDef::CompareAnsi, functions::compare_ansi::build),
+            (FnDef::GetProcAddress, functions::get_proc_address::build),
         ];
+
+        self.define_data_byte(DataDef::VehStart, 0x90);
+        self.define_data_byte(DataDef::VehEnd, 0x90);
 
         self.define_data_bytes(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
         self.define_data_qword(DataDef::VmStackPointer, 0);
         self.define_data_bytes(DataDef::VmStackContent, &[0u8; VSTACK_SIZE]);
         self.define_data_bytes(DataDef::VmState, &[0u8; VMReg::COUNT * 8]);
-        self.define_data_byte(DataDef::VmLock, 0);
+
+        self.define_bool(BoolDef::VmIsLocked, false);
+        self.define_bool(BoolDef::VmHasVeh, false);
+
+        self.define_string(StringDef::Ntdll, "ntdll.dll");
+        self.define_string(
+            StringDef::RtlAddVectoredExceptionHandler,
+            "RtlAddVectoredExceptionHandler",
+        );
 
         for (def, builder) in functions {
-            tasks.push(EmissionTask::Function(def, builder));
+            shuffled.push(EmissionTask::Function(def, builder));
         }
 
-        for def in self.data.keys() {
-            tasks.push(EmissionTask::Data(*def));
+        for def in DataDef::iter() {
+            if def == DataDef::VehStart || def == DataDef::VehEnd {
+                continue;
+            }
+
+            if self.data.contains_key(&def) {
+                shuffled.push(EmissionTask::Data(def));
+            }
+        }
+
+        for def in BoolDef::iter() {
+            if self.bools.contains_key(&def) {
+                shuffled.push(EmissionTask::Bool(def));
+            }
+        }
+
+        for def in StringDef::iter() {
+            if self.strings.contains_key(&def) {
+                shuffled.push(EmissionTask::String(def));
+            }
         }
 
         let mut rng = rand::thread_rng();
-        tasks.shuffle(&mut rng);
+        shuffled.shuffle(&mut rng);
+
+        let mut tasks = Vec::new();
+        tasks.push(EmissionTask::Function(
+            FnDef::VmVehHandler,
+            vm::veh::handler,
+        ));
+        tasks.push(EmissionTask::Data(DataDef::VehStart));
+        tasks.extend(shuffled);
+        tasks.push(EmissionTask::Data(DataDef::VehEnd));
 
         for task in tasks {
             match task {
@@ -263,6 +355,14 @@ impl Runtime {
                     self.set_data_label(def);
                     self.asm.db(&self.data[&def]).unwrap();
                 }
+                EmissionTask::Bool(def) => {
+                    self.set_bool_label(def);
+                    self.asm.db(&[self.bools[&def] as u8]).unwrap();
+                }
+                EmissionTask::String(def) => {
+                    self.set_string_label(def);
+                    self.asm.db(&self.strings[&def]).unwrap();
+                }
             }
         }
 
@@ -271,7 +371,12 @@ impl Runtime {
             .assemble_options(ip, BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS)
             .unwrap();
 
-        for label in self.func_labels.values().chain(self.data_labels.values()) {
+        for label in self
+            .func_labels
+            .values()
+            .chain(self.data_labels.values())
+            .chain(self.string_labels.values())
+        {
             if let Ok(ip) = options.label_ip(label) {
                 self.addresses.insert(*label, ip);
             }
