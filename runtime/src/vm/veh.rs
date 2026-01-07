@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, eax, ecx, ptr, qword_ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, rsp,
+    al, byte_ptr, ecx, ptr, qword_ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, rsp,
 };
 
 use crate::{
