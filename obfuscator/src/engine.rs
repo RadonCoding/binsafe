@@ -11,7 +11,7 @@ use std::{
     path::Path,
 };
 
-use crate::protections::Protection;
+use crate::{exceptions, protections::Protection};
 
 pub struct Block {
     pub rva: u32,
@@ -136,6 +136,9 @@ impl Engine {
 
         let mut jumps = HashSet::new();
         jumps.insert(entry_point.0);
+
+        let handlers = exceptions::get_exception_handlers(&self.pe);
+        jumps.extend(handlers);
 
         let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
 

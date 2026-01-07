@@ -1,4 +1,5 @@
 mod engine;
+mod exceptions;
 mod protections;
 
 use clap::Parser;

@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 iced-x86 = { version = "1.21.0", features = ["code_asm"] }
 rand = "0.8.5"
+strum = "0.27.2"
+strum_macros = "0.27.2"

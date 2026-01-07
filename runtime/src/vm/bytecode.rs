@@ -4,7 +4,6 @@ use crate::mapper::{mapped, Mapper};
 
 mapped! {
     VMOp {
-        Invalid,
         PushPopRegs,
         PopRegs,
         PushImm,
@@ -78,6 +77,10 @@ mapped! {
         R15,
         Vip,
         Flags,
+        Veh,
+        Vbp,
+        Vbl,
+        Vbk,
         VB,
         V0,
         V1,
