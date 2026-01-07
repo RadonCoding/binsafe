@@ -1,3 +1,3 @@
 [workspace]
-members = ["logger", "obfuscator", "runtime"]
+members = ["logger", "obfuscator", "runtime", "tests"]
 resolver = "2"
