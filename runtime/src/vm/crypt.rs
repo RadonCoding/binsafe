@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, eax, ptr, r12, r13, r13b, r14, r14b, r8b, r9b, rax, rcx, rdx,
+    al, byte_ptr, eax, ptr, r12, r13, r13b, r14, r14b, r15, r8b, r9b, rax, rcx, rdx,
 };
 
 use crate::{
@@ -24,18 +24,34 @@ pub fn build(rt: &mut Runtime) {
     stack::push(rt, r13);
     // push r14
     stack::push(rt, r14);
+    // push r15
+    stack::push(rt, r15);
 
     // mov r12, rcx
     rt.asm.mov(r12, rcx).unwrap();
-    // mov r14b, r8b
-    rt.asm.mov(r14b, r8b).unwrap();
+    // mov r13b, r8b
+    rt.asm.mov(r13b, r8b).unwrap();
     // add rcx, 0x2
     rt.asm.add(rcx, 0x2).unwrap();
     // add rdx, rcx
     rt.asm.add(rdx, rcx).unwrap();
 
+    // lea rax, [...]
+    rt.asm
+        .lea(rax, ptr(rt.data_labels[&DataDef::VmCode]))
+        .unwrap();
+    // mov r15, r12
+    rt.asm.mov(r15, r12).unwrap();
+    // sub r15, rax
+    rt.asm.sub(r15, rax).unwrap();
+
     // test r8b, r8b
     rt.asm.test(r8b, r8b).unwrap();
+    // jz ...
+    rt.asm.jz(derive_key).unwrap();
+
+    // test r15, r15
+    rt.asm.test(r15, r15).unwrap();
     // jz ...
     rt.asm.jz(derive_key).unwrap();
 
@@ -67,25 +83,22 @@ pub fn build(rt: &mut Runtime) {
     {
         let mut load_key = rt.asm.create_label();
 
-        // lea rax, [...]
+        // test r15, r15
+        rt.asm.test(r15, r15).unwrap();
+        // jnz ...
+        rt.asm.jnz(load_key).unwrap();
+
+        // mov r14, [...]
         rt.asm
-            .lea(rax, ptr(rt.data_labels[&DataDef::VmCode]))
-            .unwrap();
-        // cmp r12, rax
-        rt.asm.cmp(r12, rax).unwrap();
-        // jne ...
-        rt.asm.jne(load_key).unwrap();
-        // mov r13, [...]
-        rt.asm
-            .mov(r13, ptr(rt.data_labels[&DataDef::VmKeySeed]))
+            .mov(r14, ptr(rt.data_labels[&DataDef::VmKeySeed]))
             .unwrap();
         // jmp ...
         rt.asm.jmp(crypt_loop).unwrap();
 
         rt.asm.set_label(&mut load_key).unwrap();
         {
-            // movzx r13, [r12 - 0x2]
-            rt.asm.movzx(r13, byte_ptr(r12 - 0x2)).unwrap();
+            // movzx r14, [r12 - 0x2]
+            rt.asm.movzx(r14, byte_ptr(r12 - 0x2)).unwrap();
         }
     }
 
@@ -97,10 +110,10 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.je(unlock).unwrap();
         // mov al, [rcx]
         rt.asm.mov(al, byte_ptr(rcx)).unwrap();
-        // xor [rcx], r13b
-        rt.asm.xor(byte_ptr(rcx), r13b).unwrap();
-        // test r14b, r14b
-        rt.asm.test(r14b, r14b).unwrap();
+        // xor [rcx], r14b
+        rt.asm.xor(byte_ptr(rcx), r14b).unwrap();
+        // test r13b, r13b
+        rt.asm.test(r13b, r13b).unwrap();
         // jnz ...
         rt.asm.jnz(is_decrypt).unwrap();
         // movzx rax, [rcx]
@@ -116,20 +129,20 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut continue_loop).unwrap();
         {
-            // xor r13, rax
-            rt.asm.xor(r13, rax).unwrap();
+            // xor r14, rax
+            rt.asm.xor(r14, rax).unwrap();
             // mov rax, [...]
             rt.asm
                 .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyMul]))
                 .unwrap();
-            // imul r13, rax
-            rt.asm.imul_2(r13, rax).unwrap();
+            // imul r14, rax
+            rt.asm.imul_2(r14, rax).unwrap();
             // mov rax, [...]
             rt.asm
                 .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyAdd]))
                 .unwrap();
-            // add r13, rax
-            rt.asm.add(r13, rax).unwrap();
+            // add r14, rax
+            rt.asm.add(r14, rax).unwrap();
             // inc rcx
             rt.asm.inc(rcx).unwrap();
             // jmp ...
@@ -139,10 +152,15 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut unlock).unwrap();
     {
-        // test r14b, r14b
-        rt.asm.test(r14b, r14b).unwrap();
+        // test r13b, r13b
+        rt.asm.test(r13b, r13b).unwrap();
         // jnz ...
         rt.asm.jnz(epilogue).unwrap();
+
+        // test r15, r15
+        rt.asm.test(r15, r15).unwrap();
+        // jz ...
+        rt.asm.jz(epilogue).unwrap();
 
         // mov [r12 - 0x1], 0x0
         rt.asm.mov(byte_ptr(r12 - 0x1), 0x0u32).unwrap();
@@ -152,6 +170,8 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
+        // pop r15
+        stack::pop(rt, r15);
         // pop r14
         stack::pop(rt, r14);
         // pop r13
