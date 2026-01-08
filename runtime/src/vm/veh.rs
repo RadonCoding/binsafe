@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, ecx, ptr, qword_ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, rsp,
+    al, byte_ptr, eax, ecx, ptr, r12, r13, r14, r8, r8b, r9b, rax, rcx, rdx, rsp,
 };
 
 use crate::{
@@ -112,10 +112,12 @@ pub fn handler(rt: &mut Runtime) {
     // jae ...
     rt.asm.jae(search).unwrap();
 
-    // lea rax, [...]
+    // mov eax, [...]
     rt.asm
-        .lea(rax, ptr(rt.data_labels[&DataDef::VmState]))
+        .mov(eax, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
         .unwrap();
+    // mov rax, gs:[0x1480 + rax*8]
+    rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
 
     for (vreg, offset) in VM_TO_CONTEXT {
         // mov rcx, [rax + ...]
@@ -136,25 +138,13 @@ pub fn handler(rt: &mut Runtime) {
     }
 
     // mov rcx, [rax + ...]
-    utils::mov_reg_vreg_64(rt, rax, VMReg::Vbk, rcx);
+    utils::mov_reg_vreg_64(rt, rax, VMReg::Vbp, rcx);
     // mov rdx, [rax + ...]
-    utils::mov_reg_vreg_64(rt, rax, VMReg::Vbp, rdx);
-    // mov r8, [rax + ...]
-    utils::mov_reg_vreg_64(rt, rax, VMReg::Vbl, r8);
-    // xor r9b, r9b
-    rt.asm.xor(r9b, r9b).unwrap();
+    utils::mov_reg_vreg_64(rt, rax, VMReg::Vbl, rdx);
+    // xor r8b, r8b
+    rt.asm.xor(r8b, r8b).unwrap();
     // call ...
     stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
-
-    // mov [...], 0x0
-    rt.asm
-        .mov(qword_ptr(rt.data_labels[&DataDef::VmStackPointer]), 0x0)
-        .unwrap();
-
-    // mov [...], 0x0
-    rt.asm
-        .mov(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
-        .unwrap();
 
     // mov rax, -0x1 -> EXCEPTION_CONTINUE_EXECUTION
     rt.asm.mov(rax, 0x1i64 as u64).unwrap();

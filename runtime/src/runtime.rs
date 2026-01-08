@@ -12,7 +12,6 @@ use crate::{
     vm::{
         self,
         bytecode::{VMOp, VMReg},
-        stack::VSTACK_SIZE,
     },
 };
 use strum::IntoEnumIterator;
@@ -21,10 +20,13 @@ use strum_macros::EnumIter;
 #[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
 pub enum FnDef {
     /* VM */
+    VmGInit,
+    VmTInit,
     VmEntry,
     VmExit,
     VmCrypt,
     VmDispatch,
+    VmCleanup,
     /* VM UTILS */
     ComputeAddress,
     /* VM HANDLERS */
@@ -68,9 +70,10 @@ pub enum FnDef {
 pub enum DataDef {
     VehStart,
     VmHandlers,
-    VmState,
-    VmStackPointer,
-    VmStackContent,
+    VmGlobalState,
+    VmStateTlsIndex,
+    VmStackTlsIndex,
+    VmCleanupFlsIndex,
     VmTable,
     VmCode,
     VmKeySeed,
@@ -88,7 +91,14 @@ pub enum BoolDef {
 #[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
 pub enum StringDef {
     Ntdll,
+    KERNEL32,
+    KERNELBASE,
     RtlAddVectoredExceptionHandler,
+    TlsAlloc,
+    RtlFlsAlloc,
+    RtlFlsSetValue,
+    GetProcessHeap,
+    RtlAllocateHeap,
 }
 
 enum EmissionTask {
@@ -185,6 +195,10 @@ impl Runtime {
         self.data.insert(def, data.to_vec());
     }
 
+    pub fn define_data_dword(&mut self, def: DataDef, data: u32) {
+        self.data.insert(def, data.to_le_bytes().to_vec());
+    }
+
     pub fn define_data_qword(&mut self, def: DataDef, data: u64) {
         self.data.insert(def, data.to_le_bytes().to_vec());
     }
@@ -218,6 +232,8 @@ impl Runtime {
         let mut shuffled = Vec::new();
 
         let functions: Vec<(FnDef, fn(&mut Runtime))> = vec![
+            (FnDef::VmGInit, vm::ginit::build),
+            (FnDef::VmTInit, vm::tinit::build),
             (FnDef::VmEntry, vm::entry::build),
             (FnDef::VmExit, vm::exit::build),
             (FnDef::VmCrypt, vm::crypt::build),
@@ -281,7 +297,6 @@ impl Runtime {
                 vm::handlers::arithmetic::addsub64::build,
             ),
             (FnDef::VmVehInitialize, vm::veh::initialize),
-            (FnDef::VmStackInitialize, vm::stack::initialize),
             (
                 FnDef::CompareUnicodeToAnsi,
                 functions::compare_unicode_to_ansi::build,
@@ -294,18 +309,27 @@ impl Runtime {
         self.define_data_byte(DataDef::VehEnd, 0x90);
 
         self.define_data_bytes(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
-        self.define_data_qword(DataDef::VmStackPointer, 0);
-        self.define_data_bytes(DataDef::VmStackContent, &[0u8; VSTACK_SIZE]);
-        self.define_data_bytes(DataDef::VmState, &[0u8; VMReg::COUNT * 8]);
+        self.define_data_bytes(DataDef::VmGlobalState, &[0u8; VMReg::COUNT * 8]);
+
+        self.define_data_dword(DataDef::VmStateTlsIndex, 0);
+        self.define_data_dword(DataDef::VmStackTlsIndex, 0);
+        self.define_data_dword(DataDef::VmCleanupFlsIndex, 0);
 
         self.define_bool(BoolDef::VmIsLocked, false);
         self.define_bool(BoolDef::VmHasVeh, false);
 
         self.define_string(StringDef::Ntdll, "ntdll.dll");
+        self.define_string(StringDef::KERNEL32, "KERNEL32.DLL");
+        self.define_string(StringDef::KERNELBASE, "KERNELBASE.DLL");
         self.define_string(
             StringDef::RtlAddVectoredExceptionHandler,
             "RtlAddVectoredExceptionHandler",
         );
+        self.define_string(StringDef::TlsAlloc, "TlsAlloc");
+        self.define_string(StringDef::RtlFlsAlloc, "RtlFlsAlloc");
+        self.define_string(StringDef::RtlFlsSetValue, "RtlFlsSetValue");
+        self.define_string(StringDef::GetProcessHeap, "GetProcessHeap");
+        self.define_string(StringDef::RtlAllocateHeap, "RtlAllocateHeap");
 
         for (def, builder) in functions {
             shuffled.push(EmissionTask::Function(def, builder));

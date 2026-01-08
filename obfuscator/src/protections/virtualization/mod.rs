@@ -54,7 +54,7 @@ impl Protection for Virtualization {
             let mut vcode_key = if vcode.is_empty() {
                 key_seed
             } else {
-                vcode[vcode.len() - 1] as u64
+                vcode[vcode.len() - 2] as u64
             };
 
             for byte in &mut vblock {
@@ -65,6 +65,8 @@ impl Protection for Virtualization {
 
             let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
             vblock.splice(0..0, length.to_le_bytes());
+
+            vblock.push(0);
 
             let mut hasher = DefaultHasher::new();
             vblock.hash(&mut hasher);
