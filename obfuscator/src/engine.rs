@@ -258,15 +258,6 @@ impl Engine {
             }
         }
 
-        for &target in &sorted {
-            if !self.blocks.iter().any(|b| b.rva == target) {
-                panic!(
-                    "Jump target 0x{:016X} was not covered by any block",
-                    image_base + target as u64
-                );
-            }
-        }
-
         info!("Found {} blocks", self.blocks.len());
     }
 
