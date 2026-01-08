@@ -98,7 +98,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.set_label(&mut load_key).unwrap();
         {
             // mov r14, [r12 - 0x4]
-            rt.asm.mov(r14d, ptr(r12 - 0x4)).unwrap();
+            rt.asm.mov(r14d, ptr(r12 - 0x5)).unwrap();
         }
     }
 
