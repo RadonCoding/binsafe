@@ -54,7 +54,7 @@ impl Protection for Virtualization {
             let mut vcode_key = if vcode.is_empty() {
                 key_seed
             } else {
-                vcode[vcode.len() - 2] as u64
+                u32::from_le_bytes(vcode[vcode.len() - 4..].try_into().unwrap()) as u64
             };
 
             for byte in &mut vblock {
