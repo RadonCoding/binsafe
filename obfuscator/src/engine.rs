@@ -135,7 +135,12 @@ impl Engine {
         jumps.insert(entry_point.0);
 
         let handlers = exceptions::get_exception_handlers(&self.pe);
-        jumps.extend(handlers);
+
+        for handler in handlers {
+            if code_section.has_rva(RVA(handler)) {
+                jumps.insert(handler);
+            }
+        }
 
         if let Ok(relocs) = RelocationDirectory::parse(&self.pe) {
             if let Ok(entries) = relocs.relocations(&self.pe, image_base) {
@@ -151,42 +156,6 @@ impl Engine {
                     if code_section.has_rva(RVA(target_rva)) {
                         jumps.insert(target_rva);
                     }
-                }
-            }
-        }
-
-        for section in self.pe.get_section_table().unwrap() {
-            if section
-                .characteristics
-                .contains(SectionCharacteristics::CNT_CODE)
-            {
-                continue;
-            }
-
-            if !section
-                .characteristics
-                .contains(SectionCharacteristics::CNT_INITIALIZED_DATA)
-            {
-                continue;
-            }
-
-            let data = section.read(&self.pe).unwrap();
-
-            for (offset, window) in data.windows(4).enumerate() {
-                let current_rva = section.virtual_address.0 + offset as u32;
-
-                let value = u32::from_le_bytes(window.try_into().unwrap());
-
-                let direct_rva = value;
-
-                if code_section.has_rva(RVA(direct_rva)) {
-                    jumps.insert(direct_rva);
-                }
-
-                let relative_rva = (current_rva as i64).wrapping_add(value as i64) as u32;
-
-                if code_section.has_rva(RVA(relative_rva)) {
-                    jumps.insert(relative_rva);
                 }
             }
         }
@@ -218,14 +187,6 @@ impl Engine {
 
         let mut sorted = jumps.into_iter().collect::<Vec<u32>>();
         sorted.sort();
-
-        let target = 0x27E9;
-        let found = sorted.binary_search(&target);
-        assert!(
-            found.is_ok(),
-            "FAILED: Block starting at 0x{:08X} was not identified!",
-            target
-        );
 
         let mut capture = |block: &mut Vec<Instruction>, end: u32| {
             if block.is_empty() {
@@ -294,6 +255,15 @@ impl Engine {
                 let next = instruction.next_ip() as u32;
                 capture(&mut block, next);
                 inblock = false;
+            }
+        }
+
+        for &target in &sorted {
+            if !self.blocks.iter().any(|b| b.rva == target) {
+                panic!(
+                    "Jump target 0x{:016X} was not covered by any block",
+                    image_base + target as u64
+                );
             }
         }
 
