@@ -1,15 +1,11 @@
 use exe::{
-    Arch, Buffer, ImageSectionHeader, Offset, PETranslation, SectionCharacteristics, VecPE, PE, RVA,
+    Arch, Buffer, ImageSectionHeader, Offset, PETranslation, RelocationDirectory, RelocationValue,
+    SectionCharacteristics, VecPE, PE, RVA,
 };
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};
 use logger::info;
-use rand::Rng;
 use runtime::runtime::Runtime;
-use std::{
-    collections::{HashMap, HashSet},
-    fmt, mem,
-    path::Path,
-};
+use std::{collections::HashSet, fmt, mem, path::Path};
 
 use crate::{exceptions, protections::Protection};
 
@@ -47,7 +43,6 @@ pub struct Engine {
     pub pe: VecPE,
     pub bitness: u32,
     pub blocks: Vec<Block>,
-    pub xrefs: HashMap<u32, usize>,
     pub rt: Runtime,
     protections: Vec<Box<dyn Protection>>,
 }
@@ -71,7 +66,6 @@ impl Engine {
             pe,
             bitness,
             blocks: Vec::new(),
-            xrefs: HashMap::new(),
             rt: Runtime::new(bitness),
             protections: Vec::new(),
         }
@@ -91,8 +85,9 @@ impl Engine {
         let remaining = block.size - padded.len();
 
         if remaining > 0 {
-            let mut junk = vec![0u8; remaining];
-            rand::thread_rng().fill(&mut junk[..]);
+            // let mut junk = vec![0u8; remaining];
+            // rand::thread_rng().fill(&mut junk[..]);
+            let junk = vec![0xCCu8; remaining];
 
             padded.extend(junk);
         }
@@ -121,24 +116,80 @@ impl Engine {
     }
 
     pub fn scan(&mut self) {
+        let image_base = self.pe.get_image_base().unwrap();
+
         let entry_point = self.pe.get_entrypoint().unwrap();
 
-        let section = self.pe.get_section_by_rva(entry_point).unwrap();
+        let code_section = self.pe.get_section_by_rva(entry_point).unwrap();
 
         info!(
             "Protecting section '{}' at 0x{:08X}",
-            Self::get_section_name(section),
-            section.virtual_address.0
+            Self::get_section_name(code_section),
+            code_section.virtual_address.0
         );
 
-        let ip = section.virtual_address.0 as u64;
-        let code = section.read(&self.pe).unwrap();
+        let ip = code_section.virtual_address.0 as u64;
+        let code = code_section.read(&self.pe).unwrap();
 
         let mut jumps = HashSet::new();
         jumps.insert(entry_point.0);
 
         let handlers = exceptions::get_exception_handlers(&self.pe);
         jumps.extend(handlers);
+
+        if let Ok(relocs) = RelocationDirectory::parse(&self.pe) {
+            if let Ok(entries) = relocs.relocations(&self.pe, image_base) {
+                for (_, value) in entries {
+                    let target_va = match value {
+                        RelocationValue::Relocation32(v) => v as u64,
+                        RelocationValue::Relocation64(v) => v,
+                        _ => continue,
+                    };
+
+                    let target_rva = (target_va - image_base) as u32;
+
+                    if code_section.has_rva(RVA(target_rva)) {
+                        jumps.insert(target_rva);
+                    }
+                }
+            }
+        }
+
+        for section in self.pe.get_section_table().unwrap() {
+            if section
+                .characteristics
+                .contains(SectionCharacteristics::CNT_CODE)
+            {
+                continue;
+            }
+
+            if !section
+                .characteristics
+                .contains(SectionCharacteristics::CNT_INITIALIZED_DATA)
+            {
+                continue;
+            }
+
+            let data = section.read(&self.pe).unwrap();
+
+            for (offset, window) in data.windows(4).enumerate() {
+                let current_rva = section.virtual_address.0 + offset as u32;
+
+                let value = u32::from_le_bytes(window.try_into().unwrap());
+
+                let direct_rva = value;
+
+                if code_section.has_rva(RVA(direct_rva)) {
+                    jumps.insert(direct_rva);
+                }
+
+                let relative_rva = (current_rva as i64).wrapping_add(value as i64) as u32;
+
+                if code_section.has_rva(RVA(relative_rva)) {
+                    jumps.insert(relative_rva);
+                }
+            }
+        }
 
         let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
 
@@ -157,33 +208,35 @@ impl Engine {
                 | FlowControl::Call => {
                     let target = instruction.near_branch_target() as u32;
 
-                    if section.has_rva(RVA(target)) {
+                    if code_section.has_rva(RVA(target)) {
                         jumps.insert(target);
-
-                        *self.xrefs.entry(target).or_insert(0) += 1;
                     }
                 }
                 _ => {}
             }
         }
 
-        let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
+        let mut sorted = jumps.into_iter().collect::<Vec<u32>>();
+        sorted.sort();
 
-        let mut block = Vec::<Instruction>::new();
+        let target = 0x27E9;
+        let found = sorted.binary_search(&target);
+        assert!(
+            found.is_ok(),
+            "FAILED: Block starting at 0x{:08X} was not identified!",
+            target
+        );
 
         let mut capture = |block: &mut Vec<Instruction>, end: u32| {
             if block.is_empty() {
                 return;
             }
-
             let start = block[0].ip() as u32;
-
             let offset = self
                 .pe
                 .translate(PETranslation::Memory(RVA(start as u32)))
                 .unwrap();
             let size = (end - start) as usize;
-
             self.blocks.push(Block {
                 rva: start,
                 offset,
@@ -192,28 +245,56 @@ impl Engine {
             });
         };
 
+        let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
+        let mut block = Vec::<Instruction>::new();
+        let mut inblock = false;
+
         while decoder.can_decode() {
             let current = decoder.ip() as u32;
 
-            if jumps.contains(&current) && !block.is_empty() {
-                capture(&mut block, current);
+            if sorted.binary_search(&current).is_ok() {
+                if inblock {
+                    capture(&mut block, current);
+                }
+                inblock = true;
+            }
+
+            if !inblock {
+                decoder.decode_out(&mut instruction);
+                continue;
             }
 
             decoder.decode_out(&mut instruction);
 
             if instruction.is_invalid() {
-                break;
+                inblock = false;
+                continue;
+            }
+
+            let start = instruction.ip() as u32;
+            let end = instruction.next_ip() as u32;
+
+            let pos = sorted.binary_search(&end).unwrap_or_else(|e| e);
+
+            let overlaps = if pos > 0 && sorted[pos - 1] > start && sorted[pos - 1] < end {
+                true
+            } else {
+                false
+            };
+
+            if overlaps {
+                capture(&mut block, start);
+                inblock = false;
+                continue;
             }
 
             block.push(instruction);
 
-            if instruction.flow_control() == FlowControl::Next {
-                continue;
+            if instruction.flow_control() != FlowControl::Next {
+                let next = instruction.next_ip() as u32;
+                capture(&mut block, next);
+                inblock = false;
             }
-
-            let next = instruction.next_ip() as u32;
-
-            capture(&mut block, next);
         }
 
         info!("Found {} blocks", self.blocks.len());
