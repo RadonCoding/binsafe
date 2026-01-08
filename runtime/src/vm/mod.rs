@@ -1,4 +1,5 @@
 pub mod bytecode;
+pub mod cleanup;
 pub mod crypt;
 pub mod dispatch;
 pub mod entry;

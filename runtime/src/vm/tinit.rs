@@ -4,9 +4,8 @@ use crate::{
     mapper::Mappable,
     runtime::{DataDef, Runtime, StringDef},
     vm::bytecode::VMReg,
+    VM_STACK_SIZE,
 };
-
-const STACK_SIZE: u64 = 0x100;
 
 pub fn build(rt: &mut Runtime) {
     // push r12
@@ -65,12 +64,12 @@ pub fn build(rt: &mut Runtime) {
     // mov rdx, 0x00000008 -> HEAP_ZERO_MEMORY
     rt.asm.mov(rdx, 0x00000008u64).unwrap();
     // mov r8, ...
-    rt.asm.mov(r8, STACK_SIZE).unwrap();
+    rt.asm.mov(r8, VM_STACK_SIZE).unwrap();
     // call r13
     rt.asm.call(r13).unwrap();
 
     // add rax, ...
-    rt.asm.add(rax, STACK_SIZE as i32).unwrap();
+    rt.asm.add(rax, VM_STACK_SIZE as i32).unwrap();
 
     // mov ecx, [...]
     rt.asm
@@ -79,16 +78,16 @@ pub fn build(rt: &mut Runtime) {
     // mov [0x1480 + rcx*8], rax
     rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();
 
-    // // lea rcx, [...]; lea rdx, [...]; call ...
-    // rt.get_proc_address(StringDef::Ntdll, StringDef::RtlFlsSetValue);
-    // // mov ecx, [...]
-    // rt.asm
-    //     .mov(ecx, ptr(rt.data_labels[&DataDef::VmCleanupFlsIndex]))
-    //     .unwrap();
-    // // mov rdx, 0x1
-    // rt.asm.mov(rdx, 0x1u64).unwrap();
-    // // call rax
-    // rt.asm.call(rax).unwrap();
+    // lea rcx, [...]; lea rdx, [...]; call ...
+    rt.get_proc_address(StringDef::Ntdll, StringDef::RtlFlsSetValue);
+    // mov ecx, [...]
+    rt.asm
+        .mov(ecx, ptr(rt.data_labels[&DataDef::VmCleanupFlsIndex]))
+        .unwrap();
+    // mov rdx, 0x1
+    rt.asm.mov(rdx, 0x1u64).unwrap();
+    // call rax
+    rt.asm.call(rax).unwrap();
 
     // add rsp, 0x28
     rt.asm.add(rsp, 0x28).unwrap();
