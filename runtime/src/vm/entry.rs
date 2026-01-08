@@ -5,25 +5,6 @@ use crate::{
     vm::{bytecode::VMReg, stack, utils, VREG_TO_REG},
 };
 
-/// TODO: Multi-Threading
-/// VmEntry:
-///     1. Check if VmStateTlsIndex == 0 (implies all indices uninitialized)
-///     2. If zero, acquire VmIsLocked and double-check VmStateTlsIndex:
-///         - Call TlsAlloc twice, store in VmStateTlsIndex and VmStackTlsIndex
-///         - Call RtlFlsAlloc with cleanup callback, store in VmFreeFlsIndex
-///         - Release lock
-///     3. Check gs:[0x1480 + VmStateTlsIndex*8], if zero:
-///         - HeapAlloc VM state and store in gs:[0x1480 + VmStateTlsIndex*8]
-///         - HeapAlloc VM stack and store in gs:[0x1480 + VmStackTlsIndex*8]  
-///         - RtlFlsSetValue(VmFreeFlsIndex, 1) to register cleanup
-///     4. Load r12 from gs:[0x1480 + VmStateTlsIndex*8] (thread-local VM state)
-///     5. Continue with existing register save logic using r12
-///
-/// VmDispatcher:
-///     1. Each virtualized block stores a lock byte at the end
-///     2. Spinlock on previous block, read key seed, unlock
-///     3. Spinlock on current block, decrypt, execute, re-encrypt, unlock
-
 // void (unsigned int)
 pub fn build(rt: &mut Runtime) {
     let mut wait_for_global_lock = rt.asm.create_label();

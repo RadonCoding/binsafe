@@ -1,6 +1,4 @@
-use iced_x86::code_asm::{
-    al, byte_ptr, eax, ecx, ptr, r12, r13, r14, r8, r8b, r9b, rax, rcx, rdx, rsp,
-};
+use iced_x86::code_asm::{al, byte_ptr, eax, ecx, ptr, r12, r13, r14, r8b, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{BoolDef, DataDef, FnDef, Runtime, StringDef},
