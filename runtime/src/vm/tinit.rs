@@ -13,6 +13,10 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.push(r12).unwrap();
     // push r13
     rt.asm.push(r13).unwrap();
+    // push rsi
+    rt.asm.push(rsi).unwrap();
+    // push rdi
+    rt.asm.push(rdi).unwrap();
 
     // sub rsp, 0x28
     rt.asm.sub(rsp, 0x28).unwrap();
@@ -89,6 +93,10 @@ pub fn build(rt: &mut Runtime) {
     // add rsp, 0x28
     rt.asm.add(rsp, 0x28).unwrap();
 
+    // pop rdi
+    rt.asm.pop(rdi).unwrap();
+    // pop rsi
+    rt.asm.pop(rsi).unwrap();
     // pop r13
     rt.asm.pop(r13).unwrap();
     // pop r12
