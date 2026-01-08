@@ -18,7 +18,7 @@ impl AntiDebug {
             }
         }
 
-        // Only blocks that have IP relative instructions are affected by the VB displacement.
+        // Only blocks that have IP-relative instructions are affected by the VB displacement.
         if !is_relative {
             return None;
         }

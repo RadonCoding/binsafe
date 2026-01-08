@@ -1,15 +1,17 @@
-use iced_x86::code_asm::{byte_ptr, ptr, r12, rsp};
+use iced_x86::code_asm::{ptr, r12, r12d, rsp};
 
 use crate::{
-    runtime::{BoolDef, DataDef, Runtime},
+    runtime::{DataDef, Runtime},
     vm::{bytecode::VMReg, utils, VREG_TO_REG},
 };
 
 pub fn build(rt: &mut Runtime) {
-    // lea r12, [...]
+    // mov r12d, [...]
     rt.asm
-        .lea(r12, ptr(rt.data_labels[&DataDef::VmState]))
+        .mov(r12d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
         .unwrap();
+    // mov r12, gs:[0x1480 + r12*8]
+    rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
 
     // mov rsp, [r12 + ...]
     utils::mov_reg_vreg_64(rt, r12, VMReg::Rsp, rsp);
@@ -29,11 +31,6 @@ pub fn build(rt: &mut Runtime) {
 
     // mov r12, [r12 + ...]
     utils::mov_reg_vreg_64(rt, r12, VMReg::R12, r12);
-
-    // mov [...], 0x0
-    rt.asm
-        .mov(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
-        .unwrap();
 
     // ret
     rt.asm.ret().unwrap();

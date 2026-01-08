@@ -3,8 +3,10 @@ pub mod crypt;
 pub mod dispatch;
 pub mod entry;
 pub mod exit;
+pub mod ginit;
 pub mod handlers;
 pub mod stack;
+pub mod tinit;
 pub mod utils;
 pub mod veh;
 

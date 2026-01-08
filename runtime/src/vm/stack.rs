@@ -1,69 +1,34 @@
 use iced_x86::code_asm::{
-    al, asm_traits::CodeAsmJmp, ptr, r10, r11, r11b, rax, AsmRegister64, CodeAssembler, CodeLabel,
+    al, asm_traits::CodeAsmJmp, ptr, qword_ptr, r10, r10d, r11, r11b, r11d, rax, AsmRegister64,
+    CodeAssembler, CodeLabel,
 };
 
 use crate::runtime::{DataDef, Runtime};
 
-pub const VSTACK_SIZE: usize = 0x100;
-
-pub fn initialize(rt: &mut Runtime) {
-    let mut initialized = rt.asm.create_label();
-
-    // mov r11, [...]
-    rt.asm
-        .mov(r11, ptr(rt.data_labels[&DataDef::VmStackPointer]))
-        .unwrap();
-    // test r11, r11
-    rt.asm.test(r11, r11).unwrap();
-    // jnz ...
-    rt.asm.jnz(initialized).unwrap();
-
-    // lea r11, [...]
-    rt.asm
-        .lea(r11, ptr(rt.data_labels[&DataDef::VmStackContent]))
-        .unwrap();
-    // add r11, ...
-    rt.asm.add(r11, VSTACK_SIZE as i32).unwrap();
-    // mov [...], r11
-    rt.asm
-        .mov(ptr(rt.data_labels[&DataDef::VmStackPointer]), r11)
-        .unwrap();
-
-    rt.asm.set_label(&mut initialized).unwrap();
-    {
-        // ret
-        rt.asm.ret().unwrap();
-    }
-}
-
 pub fn push(rt: &mut Runtime, src: AsmRegister64) {
-    // mov r11, [...]
+    // mov r11d, [...]
     rt.asm
-        .mov(r11, ptr(rt.data_labels[&DataDef::VmStackPointer]))
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmStackTlsIndex]))
         .unwrap();
-    // sub r11, 0x8
-    rt.asm.sub(r11, 0x8).unwrap();
-    // mov [...], r11
-    rt.asm
-        .mov(ptr(rt.data_labels[&DataDef::VmStackPointer]), r11)
-        .unwrap();
+    // sub gs:[0x1480 + r11*8], 0x8
+    rt.asm.sub(qword_ptr(0x1480 + r11 * 8).gs(), 0x8).unwrap();
+    // mov r11, gs:[0x1480 + r11*8]
+    rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
     // mov [r11], ...
     rt.asm.mov(ptr(r11), src).unwrap();
 }
 
 pub fn pop(rt: &mut Runtime, dst: AsmRegister64) {
-    // mov r11, [...]
+    // mov r11d, [...]
     rt.asm
-        .mov(r11, ptr(rt.data_labels[&DataDef::VmStackPointer]))
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmStackTlsIndex]))
         .unwrap();
-    // mov ..., [r11]
-    rt.asm.mov(dst, ptr(r11)).unwrap();
-    // add r11, 0x8
-    rt.asm.add(r11, 0x8).unwrap();
-    // mov [...], r11
-    rt.asm
-        .mov(ptr(rt.data_labels[&DataDef::VmStackPointer]), r11)
-        .unwrap();
+    // add gs:[0x1480 + r11*8], 0x8
+    rt.asm.add(qword_ptr(0x1480 + r11 * 8).gs(), 0x8).unwrap();
+    // mov r11, gs:[0x1480 + r11*8]
+    rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
+    // mov ..., [r11 - 0x8]
+    rt.asm.mov(dst, ptr(r11 - 0x8)).unwrap();
 }
 
 // NOTE: Hopefully this does not cause problems :D
@@ -91,18 +56,16 @@ pub fn pushfq(rt: &mut Runtime) {
     // mov rax, r10
     rt.asm.mov(rax, r10).unwrap();
 
-    // mov r10, [...]
+    // mov r10d, [...]
     rt.asm
-        .mov(r10, ptr(rt.data_labels[&DataDef::VmStackPointer]))
+        .mov(r10d, ptr(rt.data_labels[&DataDef::VmStackTlsIndex]))
         .unwrap();
-    // sub r10, 0x8
-    rt.asm.sub(r10, 0x8).unwrap();
+    // sub gs:[0x1480 + r10*8], 0x8
+    rt.asm.sub(qword_ptr(0x1480 + r10 * 8).gs(), 0x8).unwrap();
+    // mov r10, gs:[0x1480 + r10*8]
+    rt.asm.mov(r10, ptr(0x1480 + r10 * 8).gs()).unwrap();
     // mov [r10], r11
     rt.asm.mov(ptr(r10), r11).unwrap();
-    // mov [...], r10
-    rt.asm
-        .mov(ptr(rt.data_labels[&DataDef::VmStackPointer]), r10)
-        .unwrap();
 }
 
 pub fn call<T>(rt: &mut Runtime, target: T)
