@@ -4,6 +4,7 @@ use exe::{
 };
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};
 use logger::info;
+use rand::Rng;
 use runtime::runtime::Runtime;
 use std::{collections::HashSet, fmt, mem, path::Path};
 
@@ -85,9 +86,8 @@ impl Engine {
         let remaining = block.size - padded.len();
 
         if remaining > 0 {
-            // let mut junk = vec![0u8; remaining];
-            // rand::thread_rng().fill(&mut junk[..]);
-            let junk = vec![0xCCu8; remaining];
+            let mut junk = vec![0u8; remaining];
+            rand::thread_rng().fill(&mut junk[..]);
 
             padded.extend(junk);
         }
