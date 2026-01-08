@@ -99,6 +99,7 @@ pub enum StringDef {
     RtlFlsSetValue,
     GetProcessHeap,
     RtlAllocateHeap,
+    RtlFreeHeap,
 }
 
 enum EmissionTask {
@@ -238,6 +239,7 @@ impl Runtime {
             (FnDef::VmExit, vm::exit::build),
             (FnDef::VmCrypt, vm::crypt::build),
             (FnDef::VmDispatch, vm::dispatch::build),
+            (FnDef::VmCleanup, vm::cleanup::build),
             (FnDef::ComputeAddress, vm::utils::compute_address::build),
             (
                 FnDef::VmHandlerPushPopRegs,
@@ -330,6 +332,7 @@ impl Runtime {
         self.define_string(StringDef::RtlFlsSetValue, "RtlFlsSetValue");
         self.define_string(StringDef::GetProcessHeap, "GetProcessHeap");
         self.define_string(StringDef::RtlAllocateHeap, "RtlAllocateHeap");
+        self.define_string(StringDef::RtlFreeHeap, "RtlFreeHeap");
 
         for (def, builder) in functions {
             shuffled.push(EmissionTask::Function(def, builder));
