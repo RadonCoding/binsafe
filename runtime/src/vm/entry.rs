@@ -92,6 +92,16 @@ pub fn build(rt: &mut Runtime) {
         .mov(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
         .unwrap();
 
+    // mov r12d, [...]
+    rt.asm
+        .mov(r12d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .unwrap();
+    // mov r12, [0x1480 + r12*8]
+    rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
+
+    // jmp ...
+    rt.asm.jmp(initialize_execution).unwrap();
+
     rt.asm.set_label(&mut initialize_state).unwrap();
     {
         // mov r12d, [...]
