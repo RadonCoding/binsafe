@@ -88,11 +88,6 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.call(rt.func_labels[&FnDef::VmTInit]).unwrap();
     }
 
-    // mov [...], 0x0
-    rt.asm
-        .mov(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
-        .unwrap();
-
     // mov r12d, [...]
     rt.asm
         .mov(r12d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
@@ -110,6 +105,11 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(rcx, VMReg::COUNT as u64).unwrap();
     // rep movsq
     rt.asm.rep().movsq().unwrap();
+
+    // mov [...], 0x0
+    rt.asm
+        .mov(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
+        .unwrap();
 
     // jmp ...
     rt.asm.jmp(initialize_execution).unwrap();
