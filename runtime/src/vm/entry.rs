@@ -1,6 +1,7 @@
-use iced_x86::code_asm::{byte_ptr, ecx, ptr, r12, r12b, r12d, r8d, rcx, rdx, rsp};
+use iced_x86::code_asm::{byte_ptr, ecx, ptr, r12, r12b, r12d, r8d, rcx, rdi, rdx, rsi, rsp};
 
 use crate::{
+    mapper::Mappable as _,
     runtime::{BoolDef, DataDef, FnDef, Runtime},
     vm::{bytecode::VMReg, stack, utils, VREG_TO_REG},
 };
@@ -98,6 +99,17 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
     // mov r12, [0x1480 + r12*8]
     rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
+
+    // lea rsi, [...]
+    rt.asm
+        .lea(rsi, ptr(rt.data_labels[&DataDef::VmGlobalState]))
+        .unwrap();
+    // mov rdi, r12
+    rt.asm.mov(rdi, r12).unwrap();
+    // mov rcx, ...
+    rt.asm.mov(rcx, VMReg::COUNT as u64).unwrap();
+    // rep movsq
+    rt.asm.rep().movsq().unwrap();
 
     // jmp ...
     rt.asm.jmp(initialize_execution).unwrap();
