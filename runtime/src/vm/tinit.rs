@@ -41,17 +41,6 @@ pub fn build(rt: &mut Runtime) {
     // call r13
     rt.asm.call(r13).unwrap();
 
-    // lea rsi, [...]
-    rt.asm
-        .lea(rsi, ptr(rt.data_labels[&DataDef::VmGlobalState]))
-        .unwrap();
-    // mov rdi, rax
-    rt.asm.mov(rdi, rax).unwrap();
-    // mov rcx, ...
-    rt.asm.mov(rcx, VMReg::COUNT as u64).unwrap();
-    // rep movsq
-    rt.asm.rep().movsq().unwrap();
-
     // mov ecx, [...]
     rt.asm
         .mov(ecx, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
