@@ -114,16 +114,16 @@ pub struct Runtime {
     pub asm: CodeAssembler,
     pub func_labels: HashMap<FnDef, CodeLabel>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
-    pub data: HashMap<DataDef, Vec<u8>>,
+    data: HashMap<DataDef, Vec<u8>>,
     pub bool_labels: HashMap<BoolDef, CodeLabel>,
-    pub bools: HashMap<BoolDef, bool>,
-    pub string_labels: HashMap<StringDef, CodeLabel>,
-    pub strings: HashMap<StringDef, Vec<u8>>,
-    pub addresses: HashMap<CodeLabel, u64>,
-    pub fixups: HashMap<CodeLabel, (CodeLabel, u64, Option<usize>)>,
-    pub mapper: Mapper,
+    bools: HashMap<BoolDef, bool>,
+    string_labels: HashMap<StringDef, CodeLabel>,
+    strings: HashMap<StringDef, Vec<u8>>,
+    addresses: HashMap<CodeLabel, u64>,
+    fixups: HashMap<CodeLabel, (CodeLabel, u64, Option<usize>)>,
     current_chain: Option<usize>,
     next_chain_id: usize,
+    pub mapper: Mapper,
 }
 
 impl Runtime {
@@ -171,12 +171,15 @@ impl Runtime {
         }
     }
 
-    pub fn start_chain(&mut self) {
+    pub fn with_chain<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut Self),
+    {
         self.current_chain = Some(self.next_chain_id);
         self.next_chain_id += 1;
-    }
 
-    pub fn stop_chain(&mut self) {
+        f(self);
+
         self.current_chain = None;
     }
 

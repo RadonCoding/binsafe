@@ -124,8 +124,6 @@ pub fn build(rt: &mut Runtime) {
 
     // lea rcx, [...]; lea rdx, [...]; call ...
     rt.get_proc_address(StringDef::Ntdll, StringDef::NtQueryInformationProcess);
-    // movzx rax, [rax]
-    rt.asm.movzx(rax, byte_ptr(rax)).unwrap();
     // mov [...], rax
     utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vsk);
 
@@ -159,31 +157,30 @@ pub fn build(rt: &mut Runtime) {
         .lea(rax, ptr(rt.data_labels[&DataDef::VmHandlers]))
         .unwrap();
 
-    rt.start_chain();
+    rt.with_chain(|rt| {
+        // xor rcx, rcx
+        rt.asm.xor(rcx, rcx).unwrap();
 
-    // xor rcx, rcx
-    rt.asm.xor(rcx, rcx).unwrap();
+        for (op, def) in table {
+            let key = rt.mark_as_encrypted(rt.func_labels[&def]);
+            // mov rdx, ...
+            rt.asm.mov(rdx, 0x0u64).unwrap();
+            // xor rcx, rdx
+            rt.asm.xor(rcx, rdx).unwrap();
+            // mov rdx, ...
+            rt.asm.mov(rdx, key).unwrap();
+            // xor rcx, rdx
+            rt.asm.xor(rcx, rdx).unwrap();
 
-    for (op, def) in table {
-        let key = rt.mark_as_encrypted(rt.func_labels[&def]);
-        // mov rdx, ...
-        rt.asm.mov(rdx, 0x0u64).unwrap();
-        // xor rcx, rdx
-        rt.asm.xor(rcx, rdx).unwrap();
-        // mov rdx, ...
-        rt.asm.mov(rdx, key).unwrap();
-        // xor rcx, rdx
-        rt.asm.xor(rcx, rdx).unwrap();
+            // mov rdx, rcx
+            rt.asm.mov(rdx, rcx).unwrap();
 
-        // mov rdx, rcx
-        rt.asm.mov(rdx, rcx).unwrap();
-
-        // add rdx, [...]
-        utils::add_reg_vreg_64(rt, r12, VMReg::VB, rdx);
-        // mov [rax + ...], rdx
-        rt.asm.mov(ptr(rax + rt.mapper.index(op) * 8), rdx).unwrap();
-    }
-    rt.stop_chain();
+            // add rdx, [...]
+            utils::add_reg_vreg_64(rt, r12, VMReg::VB, rdx);
+            // mov [rax + ...], rdx
+            rt.asm.mov(ptr(rax + rt.mapper.index(op) * 8), rdx).unwrap();
+        }
+    });
 
     // mov [...], 0x0
     rt.asm
