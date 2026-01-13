@@ -2,6 +2,7 @@ use iced_x86::code_asm::{byte_ptr, ptr, r8, r8b, r8d, rax, rcx, rdx, word_ptr};
 
 use crate::{
     runtime::Runtime,
+
     vm::{bytecode::VMReg, stack, utils},
 };
 

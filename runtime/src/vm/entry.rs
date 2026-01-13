@@ -106,6 +106,11 @@ pub fn build(rt: &mut Runtime) {
     // rep movsq
     rt.asm.rep().movsq().unwrap();
 
+    // call ...
+    rt.asm
+        .call(rt.func_labels[&FnDef::VmVehInitialize])
+        .unwrap();
+
     // mov [...], 0x0
     rt.asm
         .mov(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
@@ -133,11 +138,6 @@ pub fn build(rt: &mut Runtime) {
     {
         let mut initialize_key = rt.asm.create_label();
         let mut decrypt_entry = rt.asm.create_label();
-
-        // call ...
-        rt.asm
-            .call(rt.func_labels[&FnDef::VmVehInitialize])
-            .unwrap();
 
         // pop rcx -> r12
         rt.asm.pop(rcx).unwrap();

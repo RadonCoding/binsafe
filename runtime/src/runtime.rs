@@ -112,13 +112,13 @@ enum EmissionTask {
 pub struct Runtime {
     pub asm: CodeAssembler,
     pub func_labels: HashMap<FnDef, CodeLabel>,
-    pub addresses: HashMap<CodeLabel, u64>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
     pub data: HashMap<DataDef, Vec<u8>>,
     pub bool_labels: HashMap<BoolDef, CodeLabel>,
     pub bools: HashMap<BoolDef, bool>,
     pub string_labels: HashMap<StringDef, CodeLabel>,
     pub strings: HashMap<StringDef, Vec<u8>>,
+    pub addresses: HashMap<CodeLabel, u64>,
     pub mapper: Mapper,
 }
 
@@ -393,22 +393,24 @@ impl Runtime {
             }
         }
 
-        let options = self
+        let result = self
             .asm
             .assemble_options(ip, BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS)
             .unwrap();
 
-        for label in self
+        let labels = self
             .func_labels
             .values()
             .chain(self.data_labels.values())
-            .chain(self.string_labels.values())
-        {
-            if let Ok(ip) = options.label_ip(label) {
+            .chain(self.bool_labels.values())
+            .chain(self.string_labels.values());
+
+        for label in labels {
+            if let Ok(ip) = result.label_ip(label) {
                 self.addresses.insert(*label, ip);
             }
         }
 
-        options.inner.code_buffer
+        result.inner.code_buffer
     }
 }

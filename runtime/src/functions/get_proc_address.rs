@@ -162,10 +162,14 @@ pub fn build(rt: &mut Runtime) {
             // call ...
             rt.asm.call(rt.func_labels[&FnDef::CompareAnsi]).unwrap();
 
+            // test rax, rax
             rt.asm.test(rax, rax).unwrap();
+            // jnz ...
             rt.asm.jnz(found).unwrap();
 
+            // inc r15
             rt.asm.inc(r15).unwrap();
+            // jmp ...
             rt.asm.jmp(export_loop).unwrap();
         }
     }

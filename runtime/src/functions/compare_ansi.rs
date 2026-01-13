@@ -1,4 +1,5 @@
 use crate::runtime::Runtime;
+
 use iced_x86::code_asm::{al, byte_ptr, r8b, rax, rcx, rdx, word_ptr};
 
 // bool (const char*, const char*)
@@ -42,7 +43,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut not_equal).unwrap();
     {
         // mov rax, 0x0
-        rt.asm.mov(rax, 0u64).unwrap();
+        rt.asm.mov(rax, 0x0u64).unwrap();
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
@@ -50,7 +51,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut is_equal).unwrap();
     {
         // mov rax, 0x1
-        rt.asm.mov(rax, 1u64).unwrap();
+        rt.asm.mov(rax, 0x1u64).unwrap();
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
