@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, cl, eax, ecx, ptr, qword_ptr, r12, r13, r14, r8b, rax, rcx, rdx, rsp,
+    al, byte_ptr, cl, eax, ecx, ptr, qword_ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, rsp,
 };
 
 use crate::{
@@ -65,7 +65,7 @@ const VM_TO_CONTEXT: &[(VMReg, i32)] = &[
     (VMReg::R13, 0xE0),
     (VMReg::R14, 0xE8),
     (VMReg::R15, 0xF0),
-    (VMReg::Veh, 0xF8),
+    (VMReg::Vea, 0xF8),
     (VMReg::Flags, 0x44),
 ];
 
@@ -157,7 +157,7 @@ pub fn handler(rt: &mut Runtime) {
             rt.asm.mov(ptr(r14 + *offset), rcx).unwrap();
         }
 
-        if *vreg == VMReg::Veh {
+        if *vreg == VMReg::Vea {
             // mov [r13 + 0x10], rcx -> PVOID EXCEPTION_RECORD->ExceptionAddress
             rt.asm.mov(ptr(r13 + 0x10), rcx).unwrap();
         }
@@ -167,8 +167,10 @@ pub fn handler(rt: &mut Runtime) {
     utils::mov_reg_vreg_64(rt, rax, VMReg::Vbp, rcx);
     // mov rdx, [rax + ...]
     utils::mov_reg_vreg_64(rt, rax, VMReg::Vbl, rdx);
-    // xor r8b, r8b
-    rt.asm.xor(r8b, r8b).unwrap();
+    // mov r8, [r14 + ...]
+    utils::mov_reg_vreg_64(rt, r12, VMReg::Vsk, r8);
+    // xor r9b, r9b
+    rt.asm.xor(r9b, r9b).unwrap();
     // call ...
     stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 

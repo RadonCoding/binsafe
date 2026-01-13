@@ -24,6 +24,8 @@ pub struct Virtualization {
 
 const VDISPATCH_SIZE: usize = 10;
 
+const NTQIP_SIGNATURE: u8 = 0x4C;
+
 impl Protection for Virtualization {
     fn initialize(&mut self, engine: &mut Engine) {
         let mut vtable = Vec::new();
@@ -59,7 +61,7 @@ impl Protection for Virtualization {
 
             for byte in &mut vblock {
                 *byte ^= vcode_key as u8;
-                vcode_key ^= *byte as u64;
+                vcode_key ^= (*byte ^ NTQIP_SIGNATURE) as u64;
                 vcode_key = vcode_key.wrapping_mul(key_mul).wrapping_add(key_add);
             }
 

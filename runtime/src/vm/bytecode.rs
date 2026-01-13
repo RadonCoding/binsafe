@@ -75,14 +75,15 @@ mapped! {
         R13,
         R14,
         R15,
-        Vip,
+        Vra, // Native Return
         Flags,
-        Veh,
-        Vbp,
-        Vbl,
-        VB,
-        V0,
-        V1,
+        Vea, // Native Entry
+        Vbp, // Block Pointer
+        Vbl, // Block Length
+        VB, // Image Base
+        Vsk, // System Key
+        V0, // Scratch 0
+        V1, // Scratch 1
     }
 }
 
