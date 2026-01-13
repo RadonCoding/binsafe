@@ -168,7 +168,7 @@ impl Engine {
             decoder.decode_out(&mut instruction);
 
             if instruction.is_invalid() {
-                break;
+                continue;
             }
 
             match instruction.flow_control() {

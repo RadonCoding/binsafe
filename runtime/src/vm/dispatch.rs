@@ -48,7 +48,7 @@ pub fn build(rt: &mut Runtime) {
     // mov rdx, [r14 + ...]
     utils::mov_reg_vreg_64(rt, r12, VMReg::Vbl, rdx);
     // mov r8b, 0x1
-    rt.asm.mov(r8b, 0x1u32).unwrap();
+    rt.asm.mov(r8b, 0x1).unwrap();
     // call ...
     stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 

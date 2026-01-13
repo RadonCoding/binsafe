@@ -60,7 +60,7 @@ pub fn build(rt: &mut Runtime) {
         // xor eax, eax
         rt.asm.xor(eax, eax).unwrap();
         // mov r9b, 0x1
-        rt.asm.mov(r9b, 0x1u32).unwrap();
+        rt.asm.mov(r9b, 0x1).unwrap();
         // lock cmpxchg [r12 - 0x1], r9b
         rt.asm.lock().cmpxchg(byte_ptr(r12 - 0x1), r9b).unwrap();
         // jnz ...
@@ -72,7 +72,7 @@ pub fn build(rt: &mut Runtime) {
         // xor eax, eax
         rt.asm.xor(eax, eax).unwrap();
         // mov r9b, 0x1
-        rt.asm.mov(r9b, 0x1u32).unwrap();
+        rt.asm.mov(r9b, 0x1).unwrap();
         // lock cmpxchg [rdx], r9b
         rt.asm.lock().cmpxchg(byte_ptr(rdx), r9b).unwrap();
         // jnz ...
@@ -163,9 +163,9 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jz(epilogue).unwrap();
 
         // mov [r12 - 0x1], 0x0
-        rt.asm.mov(byte_ptr(r12 - 0x1), 0x0u32).unwrap();
+        rt.asm.mov(byte_ptr(r12 - 0x1), 0x0).unwrap();
         // mov [rdx], 0x0
-        rt.asm.mov(byte_ptr(rdx), 0x0u32).unwrap();
+        rt.asm.mov(byte_ptr(rdx), 0x0).unwrap();
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();

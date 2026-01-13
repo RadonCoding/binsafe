@@ -2,6 +2,7 @@ use iced_x86::code_asm::{r8, rax, rcx, rdx};
 
 use crate::{
     runtime::Runtime,
+
     vm::{
         bytecode::{VMFlag, VMReg},
         stack, utils,
