@@ -89,16 +89,8 @@ impl Protection for Virtualization {
 
             self.vblocks.insert(block.rva, vtable_offset);
 
-            let vtable_key = if vtable_offset == 0 {
-                key_seed as u32
-            } else {
-                u32::from_le_bytes(vtable[vtable_offset - 4..vtable_offset].try_into().unwrap())
-            };
-
-            let encrypted_vcode_offset = vcode_offset ^ vtable_key;
-
             vtable.extend_from_slice(&0u32.to_le_bytes());
-            vtable.extend_from_slice(&encrypted_vcode_offset.to_le_bytes());
+            vtable.extend_from_slice(&vcode_offset.to_le_bytes());
         }
 
         if !vcode.is_empty() {
