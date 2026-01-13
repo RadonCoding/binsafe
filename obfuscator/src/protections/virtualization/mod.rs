@@ -39,6 +39,8 @@ impl Protection for Virtualization {
         let key_mul = rng.gen::<u64>();
         let key_add = rng.gen::<u64>();
 
+        let anti_debug = AntiDebug::new(&engine.blocks);
+
         'outer: for block in &mut engine.blocks {
             if block.size < VDISPATCH_SIZE {
                 continue;
@@ -49,7 +51,7 @@ impl Protection for Virtualization {
                 None => continue 'outer,
             };
 
-            if let Some(bytecode) = AntiDebug::transform(&mut engine.rt.mapper, block) {
+            if let Some(bytecode) = anti_debug.transform(&mut engine.rt.mapper, block) {
                 vblock.splice(0..0, bytecode);
                 self.transforms += 1;
             }

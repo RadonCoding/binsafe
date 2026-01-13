@@ -75,7 +75,7 @@ mapped! {
         R13,
         R14,
         R15,
-        Vra, // Native Return
+        Vra, // Native Exit
         Flags,
         Vea, // Native Entry
         Vbp, // Block Pointer
