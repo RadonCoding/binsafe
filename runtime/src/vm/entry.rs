@@ -111,6 +111,13 @@ pub fn build(rt: &mut Runtime) {
         .call(rt.func_labels[&FnDef::VmVehInitialize])
         .unwrap();
 
+    // mov rax, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
+    rt.asm.mov(rax, ptr(0x60).gs()).unwrap();
+    // mov rax, [rax + 0x10] -> PVOID PEB->ImageBaseAddress
+    rt.asm.mov(rax, ptr(rax + 0x10)).unwrap();
+    // mov [r12 + ...], rax
+    utils::mov_vreg_reg_64(rt, r12, rax, VMReg::VB);
+
     // lea rcx, [...]; lea rdx, [...]; call ...
     rt.get_proc_address(StringDef::Ntdll, StringDef::NtQueryInformationProcess);
     // movzx rax, [rax]
@@ -154,23 +161,14 @@ pub fn build(rt: &mut Runtime) {
         utils::mov_vreg_reg_64(rt, r12, rcx, VMReg::Flags);
 
         // pop rcx -> ret
-        rt.asm.pop(rcx).unwrap();
+        rt.asm.pop(rdx).unwrap();
         // mov [r12 + ...], rcx
-        utils::mov_vreg_reg_64(rt, r12, rcx, VMReg::Vra);
+        utils::mov_vreg_reg_64(rt, r12, rdx, VMReg::Vra);
         // mov [r12 + ...], rcx
-        utils::mov_vreg_reg_64(rt, r12, rcx, VMReg::Vea);
+        utils::mov_vreg_reg_64(rt, r12, rdx, VMReg::Vea);
 
-        // mov rdx, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
-        rt.asm.mov(rdx, ptr(0x60).gs()).unwrap();
-        // mov rdx, [rdx + 0x10] -> PVOID PEB->ImageBaseAddress
-        rt.asm.mov(rdx, ptr(rdx + 0x10)).unwrap();
-        // mov [r12 + ...], rcx
-        utils::mov_vreg_reg_64(rt, r12, rdx, VMReg::VB);
-
-        // sub rcx, rdx
-        rt.asm.sub(rcx, rdx).unwrap();
-        // mov rdx, rcx
-        rt.asm.mov(rdx, rcx).unwrap();
+        // sub rdx, [...]
+        utils::sub_reg_vreg_64(rt, r12, VMReg::VB, rdx);
 
         // pop rcx -> index
         rt.asm.pop(rcx).unwrap();
