@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use iced_x86::{
     code_asm::{ptr, rcx, rdx, CodeAssembler, CodeLabel},
-    BlockEncoderOptions,
+    BlockEncoderOptions, Decoder, DecoderOptions, Encoder,
 };
 use rand::seq::SliceRandom;
 
@@ -120,7 +120,10 @@ pub struct Runtime {
     pub string_labels: HashMap<StringDef, CodeLabel>,
     pub strings: HashMap<StringDef, Vec<u8>>,
     pub addresses: HashMap<CodeLabel, u64>,
+    pub fixups: HashMap<CodeLabel, (CodeLabel, u64, Option<usize>)>,
     pub mapper: Mapper,
+    current_chain: Option<usize>,
+    next_chain_id: usize,
 }
 
 impl Runtime {
@@ -154,15 +157,35 @@ impl Runtime {
         Self {
             asm,
             func_labels,
-            addresses: HashMap::new(),
             data_labels,
             data: HashMap::new(),
             bool_labels,
             bools: HashMap::new(),
             string_labels,
             strings: HashMap::new(),
+            addresses: HashMap::new(),
+            fixups: HashMap::new(),
             mapper: Mapper::new(),
+            current_chain: None,
+            next_chain_id: 0,
         }
+    }
+
+    pub fn start_chain(&mut self) {
+        self.current_chain = Some(self.next_chain_id);
+        self.next_chain_id += 1;
+    }
+
+    pub fn stop_chain(&mut self) {
+        self.current_chain = None;
+    }
+
+    pub fn mark_as_encrypted(&mut self, target: CodeLabel) -> u64 {
+        let mut label = self.asm.create_label();
+        self.asm.set_label(&mut label).unwrap();
+        let key = rand::random::<u64>();
+        self.fixups.insert(label, (target, key, self.current_chain));
+        key
     }
 
     fn set_func_label(&mut self, def: FnDef) {
@@ -411,11 +434,60 @@ impl Runtime {
             .chain(self.string_labels.values());
 
         for label in labels {
-            if let Ok(ip) = result.label_ip(label) {
-                self.addresses.insert(*label, ip);
+            if let Ok(rva) = result.label_ip(label) {
+                self.addresses.insert(*label, rva);
             }
         }
 
-        result.inner.code_buffer
+        let mut code = result.inner.code_buffer.clone();
+
+        let mut states = HashMap::new();
+
+        let mut fixups = self
+            .fixups
+            .iter()
+            .collect::<Vec<(&CodeLabel, &(CodeLabel, u64, Option<usize>))>>();
+        fixups.sort_by_key(|(src, _)| result.label_ip(src).unwrap());
+
+        for (&src, &(target, key, chain)) in fixups {
+            let rva = result.label_ip(&src).unwrap();
+            let offset = (rva - ip) as usize;
+
+            let mut decoder = Decoder::with_ip(
+                self.asm.bitness(),
+                &code[offset..],
+                rva,
+                DecoderOptions::NONE,
+            );
+            let instruction = decoder.decode();
+
+            let dst = self.addresses[&target];
+
+            let encrypted = if let Some(id) = chain {
+                let previous = *states.get(&id).unwrap_or(&0);
+                states.insert(id, dst);
+                dst ^ key ^ previous
+            } else {
+                dst ^ key
+            };
+
+            let mut encoder = Encoder::new(self.asm.bitness());
+            encoder.encode(&instruction, rva).unwrap();
+
+            let mut encoded = encoder.take_buffer();
+            let constants = encoder.get_constant_offsets();
+
+            assert!(constants.has_immediate());
+
+            let imm_offset = constants.immediate_offset();
+            let imm_size = constants.immediate_size();
+
+            encoded[imm_offset..imm_offset + imm_size]
+                .copy_from_slice(&encrypted.to_le_bytes()[..imm_size]);
+
+            code[offset..offset + instruction.len()].copy_from_slice(&encoded);
+        }
+
+        code
     }
 }

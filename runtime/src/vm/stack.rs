@@ -77,7 +77,7 @@ where
     rt.asm.set_label(&mut ret).unwrap();
 }
 
-pub fn call_with_label<T>(rt: &mut Runtime, target: T, ret: &mut CodeLabel)
+pub fn call_with_label<T>(rt: &mut Runtime, target: T, ret: &CodeLabel)
 where
     CodeAssembler: CodeAsmJmp<T>,
 {
