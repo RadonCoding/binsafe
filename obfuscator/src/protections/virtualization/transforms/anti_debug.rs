@@ -74,6 +74,9 @@ impl AntiDebug {
         let mut junk = vec![0u8; skip as usize];
         rng.fill(&mut junk[..]);
 
+        // Set the first type of the junk to a valid operation
+        junk[0] = rng.gen_range(0..mapper.count::<VMOp>()) as u8;
+
         let entropy: u16 = rng.gen();
 
         let displacement: i32 =
