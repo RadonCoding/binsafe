@@ -1,4 +1,6 @@
-use rand::Rng;
+use std::collections::HashMap;
+
+use rand::{seq::SliceRandom, Rng};
 use runtime::{
     mapper::Mapper,
     vm::{
@@ -9,33 +11,59 @@ use runtime::{
 
 use crate::engine::Block;
 
-pub struct AntiDebug;
+pub struct AntiDebug {
+    traps: HashMap<u32, TrapType>,
+}
+
+#[derive(Clone, Copy)]
+enum TrapType {
+    FakeException,
+    PebCheck,
+}
 
 impl AntiDebug {
-    pub fn transform(mapper: &mut Mapper, block: &Block) -> Option<Vec<u8>> {
-        let mut is_relative = false;
+    pub fn new(blocks: &[Block]) -> Self {
+        let mut traps = HashMap::new();
 
-        for instruction in &block.instructions {
-            if instruction.is_ip_rel_memory_operand() {
-                is_relative = true;
+        let mut all = blocks.iter().map(|b| b.rva).collect::<Vec<u32>>();
+        let mut relative = blocks
+            .iter()
+            .filter(|b| b.instructions.iter().any(|i| i.is_ip_rel_memory_operand()))
+            .map(|b| b.rva)
+            .collect::<Vec<u32>>();
+
+        let exception_quota = (blocks.len() * 5 / 100).max(1);
+        let peb_quota = (relative.len() * 25 / 100).max(1);
+
+        let mut rng = rand::thread_rng();
+        all.shuffle(&mut rng);
+        relative.shuffle(&mut rng);
+
+        for &idx in all.iter().take(exception_quota) {
+            traps.insert(idx, TrapType::FakeException);
+        }
+
+        let mut peb_traps = 0;
+
+        for &idx in &relative {
+            if peb_traps >= peb_quota {
                 break;
+            }
+            if !traps.contains_key(&idx) {
+                traps.insert(idx, TrapType::PebCheck);
+                peb_traps += 1;
             }
         }
 
-        // Only blocks that have IP-relative instructions are affected by the VB displacement.
-        if !is_relative {
-            return None;
+        Self { traps }
+    }
+
+    pub fn transform(&self, mapper: &mut Mapper, block: &Block) -> Option<Vec<u8>> {
+        match self.traps.get(&block.rva) {
+            Some(TrapType::FakeException) => Some(Self::fake_exception(mapper)),
+            Some(TrapType::PebCheck) => Some(Self::peb_check(mapper)),
+            None => None,
         }
-
-        let mut rng = rand::thread_rng();
-
-        let transform = if rng.gen() {
-            Self::peb_check(mapper)
-        } else {
-            Self::fake_exception(mapper)
-        };
-
-        Some(transform)
     }
 
     fn fake_exception(mapper: &mut Mapper) -> Vec<u8> {
