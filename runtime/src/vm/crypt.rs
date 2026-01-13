@@ -7,7 +7,7 @@ use crate::{
     vm::stack,
 };
 
-// void (unsigned char*, unsigned short, unsigned long, bool)
+// void (unsigned char*, unsigned short, unsigned char*, bool)
 pub fn build(rt: &mut Runtime) {
     let mut derive_key = rt.asm.create_label();
     let mut wait_for_previous = rt.asm.create_label();
@@ -129,8 +129,8 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut continue_loop).unwrap();
         {
-            // xor rax, r8
-            rt.asm.xor(rax, r8).unwrap();
+            // xor rax, [r8]
+            rt.asm.xor(rax, byte_ptr(r8)).unwrap();
             // xor r14, rax
             rt.asm.xor(r14, rax).unwrap();
             // mov rax, [...]
