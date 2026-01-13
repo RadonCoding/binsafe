@@ -24,6 +24,7 @@ pub struct Virtualization {
 
 const VDISPATCH_SIZE: usize = 10;
 
+// First byte of NtQueryInformationProcess which is hooked by many anti-anti-debug implementations
 const NTQIP_SIGNATURE: u8 = 0x4C;
 
 impl Protection for Virtualization {

@@ -59,6 +59,13 @@ pub fn sub_vreg_imm_64(rt: &mut Runtime, src: AsmRegister64, from: i32, to: VMRe
         .unwrap();
 }
 
+pub fn sub_reg_vreg_64(rt: &mut Runtime, src: AsmRegister64, from: VMReg, to: AsmRegister64) {
+    // sub ..., [...]
+    rt.asm
+        .sub(to, ptr(src + rt.mapper.index(from) * 8))
+        .unwrap();
+}
+
 pub fn cmp_vreg_reg_64(rt: &mut Runtime, src: AsmRegister64, a: VMReg, b: AsmRegister64) {
     // cmp [...], ...
     rt.asm.cmp(ptr(src + rt.mapper.index(a) * 8), b).unwrap();
