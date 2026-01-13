@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{byte_ptr, ecx, ptr, r12, r12b, r12d, r8d, rax, rcx, rdi, rdx, rsi, rsp};
+use iced_x86::code_asm::{byte_ptr, ecx, ptr, r12, r12b, r12d, rax, rcx, rdi, rdx, rsi, rsp};
 
 use crate::{
     mapper::Mappable as _,
@@ -143,9 +143,6 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut initialize_execution).unwrap();
     {
-        let mut initialize_key = rt.asm.create_label();
-        let mut decrypt_entry = rt.asm.create_label();
-
         // pop rcx -> r12
         rt.asm.pop(rcx).unwrap();
         // mov [r12 + ...], ...
@@ -189,18 +186,15 @@ pub fn build(rt: &mut Runtime) {
         // lea rdx, [rdx + rcx*8]
         rt.asm.lea(rdx, ptr(rdx + rcx * 8)).unwrap();
 
-        rt.asm.set_label(&mut decrypt_entry).unwrap();
-        {
-            // mov ecx, [rdx] -> displ
-            rt.asm.mov(ecx, ptr(rdx)).unwrap();
-            // sub [r12 + ...], rcx
-            utils::sub_vreg_reg_64(rt, r12, rcx, VMReg::Vea);
-            // add [r12 + ...], rcx
-            utils::add_vreg_reg_64(rt, r12, rcx, VMReg::Vra);
+        // mov ecx, [rdx] -> displ
+        rt.asm.mov(ecx, ptr(rdx)).unwrap();
+        // sub [r12 + ...], rcx
+        utils::sub_vreg_reg_64(rt, r12, rcx, VMReg::Vea);
+        // add [r12 + ...], rcx
+        utils::add_vreg_reg_64(rt, r12, rcx, VMReg::Vra);
 
-            // mov ecx, [rdx + 0x4] -> offset
-            rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();
-        }
+        // mov ecx, [rdx + 0x4] -> offset
+        rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();
 
         // lea rdx, [...]
         rt.asm
