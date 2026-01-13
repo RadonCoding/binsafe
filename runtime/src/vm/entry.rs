@@ -189,24 +189,6 @@ pub fn build(rt: &mut Runtime) {
         // lea rdx, [rdx + rcx*8]
         rt.asm.lea(rdx, ptr(rdx + rcx * 8)).unwrap();
 
-        // test ecx, ecx
-        rt.asm.test(ecx, ecx).unwrap();
-        // jne ...
-        rt.asm.jne(initialize_key).unwrap();
-
-        // mov r8d, [...]
-        rt.asm
-            .mov(r8d, ptr(rt.data_labels[&DataDef::VmKeySeed]))
-            .unwrap();
-        // jmp ...
-        rt.asm.jmp(decrypt_entry).unwrap();
-
-        rt.asm.set_label(&mut initialize_key).unwrap();
-        {
-            // mov r8d, [rdx - 0x4]
-            rt.asm.mov(r8d, ptr(rdx - 0x4)).unwrap();
-        }
-
         rt.asm.set_label(&mut decrypt_entry).unwrap();
         {
             // mov ecx, [rdx] -> displ
@@ -218,8 +200,6 @@ pub fn build(rt: &mut Runtime) {
 
             // mov ecx, [rdx + 0x4] -> offset
             rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();
-            // xor ecx, r8d
-            rt.asm.xor(ecx, r8d).unwrap();
         }
 
         // lea rdx, [...]
