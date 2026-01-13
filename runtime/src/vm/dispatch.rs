@@ -1,12 +1,8 @@
 use iced_x86::code_asm::{byte_ptr, ptr, r12, r13, r14, r15, r8, r9b, rax, rcx, rdx, word_ptr};
-use rand::seq::SliceRandom;
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
-    vm::{
-        bytecode::{VMOp, VMReg},
-        stack, utils,
-    },
+    vm::{bytecode::VMReg, stack, utils},
 };
 
 // void (unsigned long*, unsigned char*)
@@ -52,50 +48,7 @@ pub fn build(rt: &mut Runtime) {
     // mov r9b, 0x1
     rt.asm.mov(r9b, 0x1).unwrap();
     // call ...
-    stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
-
-    // lea rax, [...]
-    rt.asm
-        .lea(rax, ptr(rt.data_labels[&DataDef::VmHandlers]))
-        .unwrap();
-    // mov rcx, [rax]
-    rt.asm.mov(rcx, ptr(rax)).unwrap();
-    // test rcx, rcx
-    rt.asm.test(rcx, rcx).unwrap();
-    // jnz ...
-    rt.asm.jnz(execute_loop).unwrap();
-
-    let mut table = [
-        (VMOp::PushPopRegs, FnDef::VmHandlerPushPopRegs),
-        (VMOp::PushImm, FnDef::VmHandlerPushImm),
-        (VMOp::PushReg, FnDef::VmHandlerPushReg),
-        (VMOp::PopReg, FnDef::VmHandlerPopReg),
-        (VMOp::SetRegImm, FnDef::VmHandlerSetRegImm),
-        (VMOp::SetRegReg, FnDef::VmHandlerSetRegReg),
-        (VMOp::SetRegMem, FnDef::VmHandlerSetRegMem),
-        (VMOp::SetMemImm, FnDef::VmHandlerSetMemImm),
-        (VMOp::SetMemReg, FnDef::VmHandlerSetMemReg),
-        (VMOp::AddSubRegImm, FnDef::VmHandlerAddSubRegImm),
-        (VMOp::AddSubRegReg, FnDef::VmHandlerAddSubRegReg),
-        (VMOp::AddSubRegMem, FnDef::VmHandlerAddSubRegMem),
-        (VMOp::AddSubMemImm, FnDef::VmHandlerAddSubMemImm),
-        (VMOp::AddSubMemReg, FnDef::VmHandlerAddSubMemReg),
-        (VMOp::BranchImm, FnDef::VmHandlerBranchImm),
-        (VMOp::BranchReg, FnDef::VmHandlerBranchReg),
-        (VMOp::BranchMem, FnDef::VmHandlerBranchMem),
-        (VMOp::Jcc, FnDef::VmHandlerJcc),
-        (VMOp::Nop, FnDef::VmHandlerNop),
-    ];
-
-    let mut rng = rand::thread_rng();
-    table.shuffle(&mut rng);
-
-    for (op, func) in table {
-        // lea rcx, [...]
-        rt.asm.lea(rcx, ptr(rt.func_labels[&func])).unwrap();
-        // mov [rax + ...], rcx
-        rt.asm.mov(ptr(rax + rt.mapper.index(op) * 8), rcx).unwrap();
-    }
+    stack::call_with_label(rt, rt.func_labels[&FnDef::VmCrypt], &execute_loop);
 
     rt.asm.set_label(&mut execute_loop).unwrap();
     {
