@@ -1,8 +1,8 @@
-use iced_x86::code_asm::{byte_ptr, ecx, ptr, r12, r12b, r12d, r8d, rcx, rdi, rdx, rsi, rsp};
+use iced_x86::code_asm::{byte_ptr, ecx, ptr, r12, r12b, r12d, r8d, rax, rcx, rdi, rdx, rsi, rsp};
 
 use crate::{
     mapper::Mappable as _,
-    runtime::{BoolDef, DataDef, FnDef, Runtime},
+    runtime::{BoolDef, DataDef, FnDef, Runtime, StringDef},
     vm::{bytecode::VMReg, stack, utils, VREG_TO_REG},
 };
 
@@ -111,6 +111,13 @@ pub fn build(rt: &mut Runtime) {
         .call(rt.func_labels[&FnDef::VmVehInitialize])
         .unwrap();
 
+    // lea rcx, [...]; lea rdx, [...]; call ...
+    rt.get_proc_address(StringDef::Ntdll, StringDef::NtQueryInformationProcess);
+    // movzx rax, [rax]
+    rt.asm.movzx(rax, byte_ptr(rax)).unwrap();
+    // mov [...], rax
+    utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vsk);
+
     // mov [...], 0x0
     rt.asm
         .mov(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
@@ -152,9 +159,9 @@ pub fn build(rt: &mut Runtime) {
         // pop rcx -> ret
         rt.asm.pop(rcx).unwrap();
         // mov [r12 + ...], rcx
-        utils::mov_vreg_reg_64(rt, r12, rcx, VMReg::Vip);
+        utils::mov_vreg_reg_64(rt, r12, rcx, VMReg::Vra);
         // mov [r12 + ...], rcx
-        utils::mov_vreg_reg_64(rt, r12, rcx, VMReg::Veh);
+        utils::mov_vreg_reg_64(rt, r12, rcx, VMReg::Vea);
 
         // mov rdx, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
         rt.asm.mov(rdx, ptr(0x60).gs()).unwrap();
@@ -205,9 +212,9 @@ pub fn build(rt: &mut Runtime) {
             // mov ecx, [rdx] -> displ
             rt.asm.mov(ecx, ptr(rdx)).unwrap();
             // sub [r12 + ...], rcx
-            utils::sub_vreg_reg_64(rt, r12, rcx, VMReg::Veh);
+            utils::sub_vreg_reg_64(rt, r12, rcx, VMReg::Vea);
             // add [r12 + ...], rcx
-            utils::add_vreg_reg_64(rt, r12, rcx, VMReg::Vip);
+            utils::add_vreg_reg_64(rt, r12, rcx, VMReg::Vra);
 
             // mov ecx, [rdx + 0x4] -> offset
             rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();

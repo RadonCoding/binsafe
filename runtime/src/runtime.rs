@@ -93,6 +93,7 @@ pub enum StringDef {
     Ntdll,
     KERNEL32,
     KERNELBASE,
+    NtQueryInformationProcess,
     RtlAddVectoredExceptionHandler,
     TlsAlloc,
     RtlFlsAlloc,
@@ -323,6 +324,10 @@ impl Runtime {
         self.define_string(StringDef::Ntdll, "ntdll.dll");
         self.define_string(StringDef::KERNEL32, "KERNEL32.DLL");
         self.define_string(StringDef::KERNELBASE, "KERNELBASE.DLL");
+        self.define_string(
+            StringDef::NtQueryInformationProcess,
+            "NtQueryInformationProcess",
+        );
         self.define_string(
             StringDef::RtlAddVectoredExceptionHandler,
             "RtlAddVectoredExceptionHandler",

@@ -1,7 +1,6 @@
 use crate::vm::stack;
 use crate::{
     runtime::Runtime,
-
     vm::{
         bytecode::{VMLogic, VMReg, VMTest},
         utils,
@@ -199,7 +198,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jz(skip_jump).unwrap();
 
         // mov [rcx + ...], rax
-        utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Vip);
+        utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Vra);
     }
 
     rt.asm.set_label(&mut skip_jump).unwrap();

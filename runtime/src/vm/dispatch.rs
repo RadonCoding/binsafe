@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{byte_ptr, ptr, r12, r13, r14, r15, r8, r8b, rax, rcx, rdx, word_ptr};
+use iced_x86::code_asm::{byte_ptr, ptr, r12, r13, r14, r15, r8, r9b, rax, rcx, rdx, word_ptr};
 use rand::seq::SliceRandom;
 
 use crate::{
@@ -29,7 +29,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r13, rdx).unwrap();
 
     // mov r14, [r12 + ...]
-    utils::mov_reg_vreg_64(rt, r12, VMReg::Vip, r14);
+    utils::mov_reg_vreg_64(rt, r12, VMReg::Vra, r14);
 
     // mov [r12 + ...], r13
     utils::mov_vreg_reg_64(rt, r12, r13, VMReg::Vbp);
@@ -47,8 +47,10 @@ pub fn build(rt: &mut Runtime) {
     utils::mov_reg_vreg_64(rt, r12, VMReg::Vbp, rcx);
     // mov rdx, [r14 + ...]
     utils::mov_reg_vreg_64(rt, r12, VMReg::Vbl, rdx);
-    // mov r8b, 0x1
-    rt.asm.mov(r8b, 0x1).unwrap();
+    // mov r8, [r14 + ...]
+    utils::mov_reg_vreg_64(rt, r12, VMReg::Vsk, r8);
+    // mov r9b, 0x1
+    rt.asm.mov(r9b, 0x1).unwrap();
     // call ...
     stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 
@@ -125,7 +127,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(r13, rax).unwrap();
 
         // cmp [r12 + ...], r14
-        utils::cmp_vreg_reg_64(rt, r12, VMReg::Vip, r14);
+        utils::cmp_vreg_reg_64(rt, r12, VMReg::Vra, r14);
         // jne ...
         rt.asm.jne(epilogue).unwrap();
 
@@ -139,8 +141,10 @@ pub fn build(rt: &mut Runtime) {
         utils::mov_reg_vreg_64(rt, r12, VMReg::Vbp, rcx);
         // mov rdx, [r14 + ...]
         utils::mov_reg_vreg_64(rt, r12, VMReg::Vbl, rdx);
-        // xor r8b, r8b
-        rt.asm.xor(r8b, r8b).unwrap();
+        // mov r8, [r14 + ...]
+        utils::mov_reg_vreg_64(rt, r12, VMReg::Vsk, r8);
+        // xor r9b, r9b
+        rt.asm.xor(r9b, r9b).unwrap();
         // call ...
         stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 

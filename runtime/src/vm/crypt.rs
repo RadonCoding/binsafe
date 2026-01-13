@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, eax, ptr, r12, r13, r13b, r14, r14b, r14d, r15, r8b, r9b, rax, rcx, rdx,
+    al, byte_ptr, eax, ptr, r12, r13, r13b, r14, r14b, r14d, r15, r8, r9b, rax, rcx, rdx,
 };
 
 use crate::{
@@ -7,7 +7,7 @@ use crate::{
     vm::stack,
 };
 
-// void (unsigned char*, unsigned short, bool)
+// void (unsigned char*, unsigned short, unsigned long, bool)
 pub fn build(rt: &mut Runtime) {
     let mut derive_key = rt.asm.create_label();
     let mut wait_for_previous = rt.asm.create_label();
@@ -29,8 +29,8 @@ pub fn build(rt: &mut Runtime) {
 
     // mov r12, rcx
     rt.asm.mov(r12, rcx).unwrap();
-    // mov r13b, r8b
-    rt.asm.mov(r13b, r8b).unwrap();
+    // mov r13b, r9b
+    rt.asm.mov(r13b, r9b).unwrap();
     // add rcx, 0x2
     rt.asm.add(rcx, 0x2).unwrap();
     // add rdx, rcx
@@ -45,8 +45,8 @@ pub fn build(rt: &mut Runtime) {
     // sub r15, rax
     rt.asm.sub(r15, rax).unwrap();
 
-    // test r8b, r8b
-    rt.asm.test(r8b, r8b).unwrap();
+    // test r13b, r13b
+    rt.asm.test(r13b, r13b).unwrap();
     // jz ...
     rt.asm.jz(derive_key).unwrap();
 
@@ -129,6 +129,8 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut continue_loop).unwrap();
         {
+            // xor rax, r8
+            rt.asm.xor(rax, r8).unwrap();
             // xor r14, rax
             rt.asm.xor(r14, rax).unwrap();
             // mov rax, [...]

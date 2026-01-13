@@ -27,7 +27,7 @@ pub fn build(rt: &mut Runtime) {
     }
 
     // push [r12 + ...]
-    utils::push_vreg_64(rt, r12, VMReg::Vip);
+    utils::push_vreg_64(rt, r12, VMReg::Vra);
 
     // mov r12, [r12 + ...]
     utils::mov_reg_vreg_64(rt, r12, VMReg::R12, r12);
