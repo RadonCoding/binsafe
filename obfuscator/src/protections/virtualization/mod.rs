@@ -22,7 +22,8 @@ pub struct Virtualization {
     dedupes: usize,
 }
 
-const VDISPATCH_SIZE: usize = 10;
+// PUSH imm32 + CALL rel32
+const DISPATCH_SIZE: usize = 10;
 
 // First byte of NtQueryInformationProcess which is hooked by many anti-anti-debug implementations
 const NTQIP_SIGNATURE: u8 = 0x4C;
@@ -42,7 +43,7 @@ impl Protection for Virtualization {
         let anti_debug = AntiDebug::new(&engine.blocks);
 
         'outer: for block in &mut engine.blocks {
-            if block.size < VDISPATCH_SIZE {
+            if block.size < DISPATCH_SIZE {
                 continue;
             }
 
@@ -51,8 +52,9 @@ impl Protection for Virtualization {
                 None => continue 'outer,
             };
 
-            if let Some(bytecode) = anti_debug.transform(&mut engine.rt.mapper, block) {
-                vblock.splice(0..0, bytecode);
+            // Check if eligible for anti-debug transform
+            if let Some(transform) = anti_debug.transform(&mut engine.rt.mapper, block) {
+                vblock.splice(0..0, transform);
                 self.transforms += 1;
             }
 
@@ -68,15 +70,18 @@ impl Protection for Virtualization {
                 vcode_key = vcode_key.wrapping_mul(key_mul).wrapping_add(key_add);
             }
 
+            // WORD - length of the VM-block [0..2]
             let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
             vblock.splice(0..0, length.to_le_bytes());
 
+            // BYTE - lock state of the VM-block [..1]
             vblock.push(0);
 
             let mut hasher = DefaultHasher::new();
             vblock.hash(&mut hasher);
             let hash = hasher.finish();
 
+            // Check if the block already exists to avoid duplication
             let vcode_offset = if let Some(&offset) = dedup.get(&hash) {
                 self.dedupes += 1;
 
@@ -88,10 +93,11 @@ impl Protection for Virtualization {
                 offset
             };
 
+            // Store the offset of this VM-block's VM-table entry
             let vtable_offset = vtable.len();
-
             self.vblocks.insert(block.rva, vtable_offset);
 
+            // Store the placeholder for stub displacement and offset in the linear VM-code
             vtable.extend_from_slice(&0u32.to_le_bytes());
             vtable.extend_from_slice(&vcode_offset.to_le_bytes());
         }
@@ -107,7 +113,7 @@ impl Protection for Virtualization {
     }
 
     fn apply(&self, engine: &mut Engine) {
-        let ventry = engine.rt.lookup(engine.rt.func_labels[&FnDef::VmEntry]);
+        let ventry_rva = engine.rt.lookup(engine.rt.func_labels[&FnDef::VmEntry]);
 
         let vtable_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmTable]);
         let vtable_offset = engine
@@ -124,25 +130,29 @@ impl Protection for Virtualization {
             }
 
             let vtable_offset = self.vblocks[&block.rva];
+            // OR with 0x10000000 to force PUSH imm32, to ensure consistent size after encrypting
             let vtable_index = (vtable_offset / 8) as i32 | 0x10000000;
 
             let mut asm = CodeAssembler::new(engine.bitness).unwrap();
+
             asm.push(vtable_index).unwrap();
-            asm.call(ventry).unwrap();
+            asm.call(ventry_rva).unwrap();
             let dispatch1 = asm.assemble(block.rva as u64).unwrap();
 
-            assert!(dispatch1.len() <= VDISPATCH_SIZE);
+            assert!(dispatch1.len() <= DISPATCH_SIZE);
 
             asm.reset();
 
-            let ret = block.rva as i32 + dispatch1.len() as i32;
+            // Stub has to be assembled twice so that the runtime return address can be calculated
+            let return_address = block.rva as i32 + dispatch1.len() as i32;
 
-            asm.push(vtable_index ^ ret).unwrap();
-            asm.call(ventry).unwrap();
+            asm.push(vtable_index ^ return_address).unwrap();
+            asm.call(ventry_rva).unwrap();
             let dispatch2 = asm.assemble(block.rva as u64).unwrap();
 
             assert_eq!(dispatch1.len(), dispatch2.len());
 
+            // Patch the stub displacement placeholder in the VM-table
             unsafe {
                 let displ = (block.size - dispatch2.len()) as u32;
                 vtable

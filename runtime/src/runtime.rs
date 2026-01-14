@@ -30,6 +30,7 @@ pub enum FnDef {
     /* VM UTILS */
     ComputeAddress,
     /* VM HANDLERS */
+    VmHandlersInitialize,
     VmHandlerPushPopRegs,
     VmHandlerPushImm,
     VmHandlerPushReg,
@@ -58,12 +59,16 @@ pub enum FnDef {
     /* VM VEH */
     VmVehInitialize,
     VmVehHandler,
-    /* VM STACK */
-    VmStackInitialize,
     /* CORE */
     CompareUnicodeToAnsi,
     CompareAnsi,
     GetProcAddress,
+    #[cfg(debug_assertions)]
+    Strlen,
+    #[cfg(debug_assertions)]
+    Print,
+    #[cfg(debug_assertions)]
+    Fmtdec,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
@@ -101,6 +106,7 @@ pub enum StringDef {
     GetProcessHeap,
     RtlAllocateHeap,
     RtlFreeHeap,
+    NtWriteFile,
 }
 
 enum EmissionTask {
@@ -268,6 +274,7 @@ impl Runtime {
             (FnDef::VmDispatch, vm::dispatch::build),
             (FnDef::VmCleanup, vm::cleanup::build),
             (FnDef::ComputeAddress, vm::utils::compute_address::build),
+            (FnDef::VmHandlersInitialize, vm::handlers::initialize),
             (
                 FnDef::VmHandlerPushPopRegs,
                 vm::handlers::pushpopregs::build,
@@ -332,10 +339,16 @@ impl Runtime {
             ),
             (FnDef::CompareAnsi, functions::compare_ansi::build),
             (FnDef::GetProcAddress, functions::get_proc_address::build),
+            #[cfg(debug_assertions)]
+            (FnDef::Strlen, functions::strlen::build),
+            #[cfg(debug_assertions)]
+            (FnDef::Print, functions::print::build),
+            #[cfg(debug_assertions)]
+            (FnDef::Fmtdec, functions::fmtdec::build),
         ];
 
-        self.define_data_byte(DataDef::VehStart, 0x90);
-        self.define_data_byte(DataDef::VehEnd, 0x90);
+        self.define_data_byte(DataDef::VehStart, 0x0);
+        self.define_data_byte(DataDef::VehEnd, 0x0);
 
         self.define_data_bytes(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
         self.define_data_bytes(DataDef::VmGlobalState, &[0u8; VMReg::COUNT * 8]);
@@ -364,6 +377,8 @@ impl Runtime {
         self.define_string(StringDef::GetProcessHeap, "GetProcessHeap");
         self.define_string(StringDef::RtlAllocateHeap, "RtlAllocateHeap");
         self.define_string(StringDef::RtlFreeHeap, "RtlFreeHeap");
+        #[cfg(debug_assertions)]
+        self.define_string(StringDef::NtWriteFile, "NtWriteFile");
 
         for (def, builder) in functions {
             shuffled.push(EmissionTask::Function(def, builder));
