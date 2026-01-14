@@ -1,14 +1,7 @@
 pub mod compute_address;
 
-use std::mem;
-
-use crate::{
-    runtime::{FnDef, Runtime},
-    vm::bytecode::VMReg,
-};
-use iced_x86::code_asm::{
-    ptr, qword_ptr, r8, r9, rax, rcx, rdx, rsp, AsmRegister32, AsmRegister64,
-};
+use crate::{runtime::Runtime, vm::bytecode::VMReg};
+use iced_x86::code_asm::{ptr, qword_ptr, AsmRegister32, AsmRegister64};
 
 pub fn mov_reg_vreg_64(rt: &mut Runtime, src: AsmRegister64, from: VMReg, to: AsmRegister64) {
     // mov ..., [...]
@@ -117,6 +110,12 @@ pub fn push_vreg_64(rt: &mut Runtime, src: AsmRegister64, from: VMReg) {
 
 #[cfg(debug_assertions)]
 pub fn print_s(rt: &mut Runtime, s: &str) {
+    use std::mem;
+
+    use iced_x86::code_asm::{r8, r9, rax, rcx, rdx, rsp};
+
+    use crate::runtime::FnDef;
+
     // push rax
     rt.asm.push(rax).unwrap();
     // push rcx
@@ -175,6 +174,10 @@ pub fn print_s(rt: &mut Runtime, s: &str) {
 
 #[cfg(debug_assertions)]
 pub fn print_q(rt: &mut Runtime, reg: AsmRegister64) {
+    use iced_x86::code_asm::{r8, r9, rax, rcx, rdx, rsp};
+
+    use crate::runtime::FnDef;
+
     // push rax
     rt.asm.push(rax).unwrap();
     // push rcx
@@ -223,6 +226,8 @@ pub fn print_q(rt: &mut Runtime, reg: AsmRegister64) {
 
 #[cfg(debug_assertions)]
 pub fn start_profiling(rt: &mut Runtime, message: &str) {
+    use iced_x86::code_asm::{rax, rdx};
+
     use crate::vm::{stack, utils};
 
     // push rdx
@@ -254,6 +259,8 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
 
 #[cfg(debug_assertions)]
 pub fn stop_profiling(rt: &mut Runtime, message: &str) {
+    use iced_x86::code_asm::{rax, rdx};
+
     use crate::vm::{stack, utils};
 
     // push rdx
