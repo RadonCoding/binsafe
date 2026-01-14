@@ -33,14 +33,8 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jne(convert_loop).unwrap();
     }
 
-    // mov [r8], 0xa
-    rt.asm.mov(byte_ptr(r8), 0xa).unwrap();
-    // inc r8
-    rt.asm.inc(r8).unwrap();
     // mov [r8], 0x0
     rt.asm.mov(byte_ptr(r8), 0x0).unwrap();
-    // dec r8
-    rt.asm.dec(r8).unwrap();
     // dec r8
     rt.asm.dec(r8).unwrap();
 
