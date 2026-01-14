@@ -206,7 +206,7 @@ pub fn print_q(rt: &mut Runtime, reg: AsmRegister64) {
 
     // mov rcx, rsp
     rt.asm.mov(rcx, rsp).unwrap();
-    // call Print
+    // call ...
     rt.asm.call(rt.func_labels[&FnDef::Print]).unwrap();
 
     // add rsp, ...
@@ -225,6 +225,45 @@ pub fn print_q(rt: &mut Runtime, reg: AsmRegister64) {
 }
 
 #[cfg(debug_assertions)]
+fn acquire_global_lock(rt: &mut Runtime) {
+    use iced_x86::code_asm::al;
+
+    use crate::runtime::BoolDef;
+
+    let mut wait = rt.asm.create_label();
+
+    rt.asm.set_label(&mut wait).unwrap();
+    {
+        // mov al, 0x1
+        rt.asm.mov(al, 0x1).unwrap();
+        // lock xchg [...], al
+        rt.asm
+            .lock()
+            .xchg(ptr(rt.bool_labels[&BoolDef::VmIsLocked]), al)
+            .unwrap();
+        // test al, al
+        rt.asm.test(al, al).unwrap();
+        // jnz ...
+        rt.asm.jnz(wait).unwrap();
+    }
+}
+
+#[cfg(debug_assertions)]
+fn release_global_lock(rt: &mut Runtime) {
+    use iced_x86::code_asm::al;
+
+    use crate::runtime::BoolDef;
+
+    // xor al, al
+    rt.asm.xor(al, al).unwrap();
+    // lock xchg [...], al
+    rt.asm
+        .lock()
+        .xchg(ptr(rt.bool_labels[&BoolDef::VmIsLocked]), al)
+        .unwrap();
+}
+
+#[cfg(debug_assertions)]
 pub fn start_profiling(rt: &mut Runtime, message: &str) {
     use iced_x86::code_asm::{rax, rdx};
 
@@ -235,12 +274,14 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
     // push rax
     rt.asm.push(rax).unwrap();
 
+    acquire_global_lock(rt);
+
     // mov rax, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
     rt.asm.mov(rax, ptr(0x48).gs()).unwrap();
 
     utils::print_s(rt, &format!("Thread "));
     utils::print_q(rt, rax);
-    utils::print_s(rt, &format!(" | Starting {}: ", message));
+    utils::print_s(rt, &format!(" | Starting {}...\n", message));
 
     // rdtsc
     rt.asm.rdtsc().unwrap();
@@ -250,6 +291,8 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
     rt.asm.or(rax, rdx).unwrap();
     // push rax
     stack::push(rt, rax);
+
+    release_global_lock(rt);
 
     // pop rax
     rt.asm.pop(rax).unwrap();
@@ -267,6 +310,8 @@ pub fn stop_profiling(rt: &mut Runtime, message: &str) {
     rt.asm.push(rdx).unwrap();
     // push rax
     rt.asm.push(rax).unwrap();
+
+    acquire_global_lock(rt);
 
     // mov rax, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
     rt.asm.mov(rax, ptr(0x48).gs()).unwrap();
@@ -287,6 +332,9 @@ pub fn stop_profiling(rt: &mut Runtime, message: &str) {
     rt.asm.sub(rax, rdx).unwrap();
 
     utils::print_q(rt, rax);
+    utils::print_s(rt, "\n");
+
+    release_global_lock(rt);
 
     // pop rax
     rt.asm.pop(rax).unwrap();
