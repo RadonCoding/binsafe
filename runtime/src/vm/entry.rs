@@ -1,13 +1,9 @@
 use iced_x86::code_asm::{byte_ptr, ecx, ptr, r12, r12b, r12d, rax, rcx, rdi, rdx, rsi, rsp};
-use rand::seq::SliceRandom;
 
 use crate::{
     mapper::Mappable as _,
     runtime::{BoolDef, DataDef, FnDef, Runtime, StringDef},
-    vm::{
-        bytecode::{VMOp, VMReg},
-        stack, utils, VREG_TO_REG,
-    },
+    vm::{bytecode::VMReg, stack, utils, VREG_TO_REG},
 };
 
 // void (unsigned int)
@@ -127,60 +123,10 @@ pub fn build(rt: &mut Runtime) {
     // mov [...], rax
     utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vsk);
 
-    let mut table = [
-        (VMOp::PushPopRegs, FnDef::VmHandlerPushPopRegs),
-        (VMOp::PushImm, FnDef::VmHandlerPushImm),
-        (VMOp::PushReg, FnDef::VmHandlerPushReg),
-        (VMOp::PopReg, FnDef::VmHandlerPopReg),
-        (VMOp::SetRegImm, FnDef::VmHandlerSetRegImm),
-        (VMOp::SetRegReg, FnDef::VmHandlerSetRegReg),
-        (VMOp::SetRegMem, FnDef::VmHandlerSetRegMem),
-        (VMOp::SetMemImm, FnDef::VmHandlerSetMemImm),
-        (VMOp::SetMemReg, FnDef::VmHandlerSetMemReg),
-        (VMOp::AddSubRegImm, FnDef::VmHandlerAddSubRegImm),
-        (VMOp::AddSubRegReg, FnDef::VmHandlerAddSubRegReg),
-        (VMOp::AddSubRegMem, FnDef::VmHandlerAddSubRegMem),
-        (VMOp::AddSubMemImm, FnDef::VmHandlerAddSubMemImm),
-        (VMOp::AddSubMemReg, FnDef::VmHandlerAddSubMemReg),
-        (VMOp::BranchImm, FnDef::VmHandlerBranchImm),
-        (VMOp::BranchReg, FnDef::VmHandlerBranchReg),
-        (VMOp::BranchMem, FnDef::VmHandlerBranchMem),
-        (VMOp::Jcc, FnDef::VmHandlerJcc),
-        (VMOp::Nop, FnDef::VmHandlerNop),
-    ];
-
-    let mut rng = rand::thread_rng();
-    table.shuffle(&mut rng);
-
-    // lea rax, [...]
+    // call ...
     rt.asm
-        .lea(rax, ptr(rt.data_labels[&DataDef::VmHandlers]))
+        .call(rt.func_labels[&FnDef::VmHandlersInitialize])
         .unwrap();
-
-    rt.with_chain(|rt| {
-        // xor rcx, rcx
-        rt.asm.xor(rcx, rcx).unwrap();
-
-        for (op, def) in table {
-            let key = rt.mark_as_encrypted(rt.func_labels[&def]);
-            // mov rdx, ...
-            rt.asm.mov(rdx, 0x0u64).unwrap();
-            // xor rcx, rdx
-            rt.asm.xor(rcx, rdx).unwrap();
-            // mov rdx, ...
-            rt.asm.mov(rdx, key).unwrap();
-            // xor rcx, rdx
-            rt.asm.xor(rcx, rdx).unwrap();
-
-            // mov rdx, rcx
-            rt.asm.mov(rdx, rcx).unwrap();
-
-            // add rdx, [...]
-            utils::add_reg_vreg_64(rt, r12, VMReg::VB, rdx);
-            // mov [rax + ...], rdx
-            rt.asm.mov(ptr(rax + rt.mapper.index(op) * 8), rdx).unwrap();
-        }
-    });
 
     // mov [...], 0x0
     rt.asm
@@ -261,6 +207,9 @@ pub fn build(rt: &mut Runtime) {
         // mov [r12 + ...], rsp
         utils::mov_vreg_reg_64(rt, r12, rsp, VMReg::Rsp);
     }
+
+    #[cfg(debug_assertions)]
+    utils::start_profiling(rt, "VmDispatch");
 
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();

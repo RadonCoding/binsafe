@@ -192,14 +192,14 @@ impl Engine {
             if block.is_empty() {
                 return;
             }
-            let start = block[0].ip() as u32;
+            let rva = block[0].ip() as u32;
             let offset = self
                 .pe
-                .translate(PETranslation::Memory(RVA(start as u32)))
+                .translate(PETranslation::Memory(RVA(rva as u32)))
                 .unwrap();
-            let size = (end - start) as usize;
+            let size = (end - rva) as usize;
             self.blocks.push(Block {
-                rva: start,
+                rva,
                 offset,
                 size,
                 instructions: mem::take(block),

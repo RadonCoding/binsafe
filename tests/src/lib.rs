@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use std::{ffi::c_void, mem, ptr};
+    use std::{ffi::c_void, mem, ptr, thread};
 
     use iced_x86::{
-        code_asm::{ptr, rcx, rdx},
+        code_asm::{ecx, esi, ptr, rax, rcx, rdi, rdx, rsi},
         Code, Instruction, MemoryOperand, Register,
     };
     use runtime::{
@@ -28,7 +28,9 @@ mod tests {
         pub const TEST_KEY_MUL: u64 = 0xFEDCBA0987654321;
         pub const TEST_KEY_ADD: u64 = 0x0123456789ABCDEF;
 
-        pub const SIZE: usize = 0x3000;
+        pub const TEST_VSK: u8 = 0x4C;
+
+        pub const SIZE: usize = 0x10000;
 
         fn new() -> Self {
             let mut rt = Runtime::new(64);
@@ -49,17 +51,55 @@ mod tests {
             Self { rt, mem }
         }
 
-        fn run(&mut self, registers: &mut [u64], bytecode: &[u8]) {
+        fn run(&mut self, setup: &[(VMReg, u64)], bytecode: &[u8]) -> [u64; VMReg::COUNT] {
             let dispatch = self.rt.func_labels[&FnDef::VmDispatch];
 
             // call ...
             self.rt
                 .asm
-                .call(self.rt.func_labels[&FnDef::VmStackInitialize])
+                .call(self.rt.func_labels[&FnDef::VmGInit])
+                .unwrap();
+            // call ...
+            self.rt
+                .asm
+                .call(self.rt.func_labels[&FnDef::VmTInit])
                 .unwrap();
 
-            // mov rcx, ...
-            self.rt.asm.mov(rcx, registers.as_mut_ptr() as u64).unwrap();
+            // call ...
+            self.rt
+                .asm
+                .call(self.rt.func_labels[&FnDef::VmHandlersInitialize])
+                .unwrap();
+
+            // mov ecx, [...]
+            self.rt
+                .asm
+                .mov(ecx, ptr(self.rt.data_labels[&DataDef::VmStateTlsIndex]))
+                .unwrap();
+            // mov rcx, [0x1480 + rcx*8]
+            self.rt.asm.mov(rcx, ptr(0x1480 + rcx * 8).gs()).unwrap();
+
+            for &(reg, val) in setup {
+                // mov rax, ...
+                self.rt.asm.mov(rax, val).unwrap();
+                // mov [rcx + ...], rax
+                self.rt
+                    .asm
+                    .mov(ptr(rcx + self.rt.mapper.index(reg) * 8), rax)
+                    .unwrap();
+            }
+
+            // mov rax, ...
+            self.rt
+                .asm
+                .mov(rax, &Self::TEST_VSK as *const u8 as u64)
+                .unwrap();
+            // mov [rcx + ...], rax
+            self.rt
+                .asm
+                .mov(ptr(rcx + self.rt.mapper.index(VMReg::Vsk) * 8), rax)
+                .unwrap();
+
             // lea rdx, [...]
             self.rt
                 .asm
@@ -67,6 +107,23 @@ mod tests {
                 .unwrap();
             // call ...
             stack::call(&mut self.rt, dispatch);
+
+            let mut state = [0u64; VMReg::COUNT];
+
+            // mov esi, [...]
+            self.rt
+                .asm
+                .mov(esi, ptr(self.rt.data_labels[&DataDef::VmStateTlsIndex]))
+                .unwrap();
+            // mov rsi, [0x1480 + rsi*8]
+            self.rt.asm.mov(rsi, ptr(0x1480 + rsi * 8).gs()).unwrap();
+            // mov rdi, ...
+            self.rt.asm.mov(rdi, state.as_mut_ptr() as u64).unwrap();
+            // mov rcx, ...
+            self.rt.asm.mov(rcx, VMReg::COUNT as u64).unwrap();
+            // rep movsq
+            self.rt.asm.rep().movsq().unwrap();
+
             // ret
             self.rt.asm.ret().unwrap();
 
@@ -80,11 +137,15 @@ mod tests {
 
             unsafe {
                 ptr::copy_nonoverlapping(code.as_ptr(), self.mem as *mut u8, code.len());
-
-                let entry_point: extern "C" fn() = mem::transmute(self.mem);
-
-                entry_point();
             }
+
+            let entry_point = unsafe { mem::transmute::<*mut c_void, extern "C" fn()>(self.mem) };
+
+            let handle = thread::spawn(move || entry_point());
+
+            handle.join().unwrap();
+
+            state
         }
     }
 
@@ -104,36 +165,43 @@ mod tests {
     ) {
         let mut executor = Executor::new();
 
-        let mut registers = [0u64; VMReg::COUNT];
-
-        for (reg, val) in setup {
-            registers[(executor.rt.mapper.index(*reg)) as usize] = *val;
-        }
-
-        let mut vblock = bytecode::convert(&mut executor.rt.mapper, &instructions).unwrap();
+        let mut bytecode = bytecode::convert(&mut executor.rt.mapper, &instructions).unwrap();
 
         let mut key = Executor::TEST_KEY_SEED;
 
-        for byte in &mut vblock {
+        for byte in &mut bytecode {
             *byte ^= key as u8;
-            key ^= *byte as u64;
+            key ^= (*byte ^ Executor::TEST_VSK) as u64;
             key = key
                 .wrapping_mul(Executor::TEST_KEY_MUL)
                 .wrapping_add(Executor::TEST_KEY_ADD);
         }
 
-        let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
-        vblock.splice(0..0, length.to_le_bytes());
+        let length = TryInto::<u16>::try_into(bytecode.len()).unwrap();
+        bytecode.splice(0..0, length.to_le_bytes());
 
-        executor.run(&mut registers, &vblock);
+        bytecode.push(0);
+
+        let state = executor.run(&setup, &bytecode);
+
+        let mut dump = Vec::new();
+
+        for reg in VMReg::VARIANTS {
+            dump.push(format!(
+                "{:?}=0x{:X}",
+                reg,
+                state[executor.rt.mapper.index(*reg) as usize]
+            ));
+        }
 
         assert_eq!(
-            registers[(executor.rt.mapper.index(target)) as usize],
+            state[(executor.rt.mapper.index(target)) as usize],
             expected,
-            "Failed: {:?} | Expected: 0x{:X}, Got: 0x{:X}",
-            instructions[0],
+            "{:?} | Expected: 0x{:X}, Got: 0x{:X}\n{}",
+            instructions[0].code(),
             expected,
-            registers[(executor.rt.mapper.index(target)) as usize]
+            state[(executor.rt.mapper.index(target)) as usize],
+            dump.join("\n")
         );
     }
 

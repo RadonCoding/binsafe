@@ -1,6 +1,6 @@
 use crate::runtime::Runtime;
 
-use iced_x86::code_asm::{al, byte_ptr, r8b, rax, rcx, rdx, word_ptr};
+use iced_x86::code_asm::{al, ptr, r8b, rax, rcx, rdx};
 
 // bool (const char*, const char*)
 pub fn build(rt: &mut Runtime) {
@@ -9,10 +9,10 @@ pub fn build(rt: &mut Runtime) {
     let mut is_equal = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
-    // mov al, byte ptr [rcx]
-    rt.asm.mov(al, word_ptr(rcx)).unwrap();
-    // mov r8b, byte ptr [rdx]
-    rt.asm.mov(r8b, byte_ptr(rdx)).unwrap();
+    // mov al, [rcx]
+    rt.asm.mov(al, ptr(rcx)).unwrap();
+    // mov r8b, [rdx]
+    rt.asm.mov(r8b, ptr(rdx)).unwrap();
 
     rt.asm.set_label(&mut compare_loop).unwrap();
     {
@@ -31,10 +31,10 @@ pub fn build(rt: &mut Runtime) {
         // inc rdx
         rt.asm.inc(rdx).unwrap();
 
-        // mov al, byte ptr [rcx]
-        rt.asm.mov(al, word_ptr(rcx)).unwrap();
-        // mov r8b, byte ptr [rdx]
-        rt.asm.mov(r8b, byte_ptr(rdx)).unwrap();
+        // mov al, [rcx]
+        rt.asm.mov(al, ptr(rcx)).unwrap();
+        // mov r8b, [rdx]
+        rt.asm.mov(r8b, ptr(rdx)).unwrap();
 
         // jmp ...
         rt.asm.jmp(compare_loop).unwrap();

@@ -29,10 +29,12 @@ pub fn build(rt: &mut Runtime) {
 
     // mov [r12 + ...], r13
     utils::mov_vreg_reg_64(rt, r12, r13, VMReg::Vbp);
+
     // movzx rax, [r13]
     rt.asm.movzx(rax, word_ptr(r13)).unwrap();
     // add r13, 0x2
     rt.asm.add(r13, 0x2).unwrap();
+
     // mov [r12 + ...], rax
     utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vbl);
 
@@ -47,6 +49,17 @@ pub fn build(rt: &mut Runtime) {
     utils::mov_reg_vreg_64(rt, r12, VMReg::Vsk, r8);
     // mov r9b, 0x1
     rt.asm.mov(r9b, 0x1).unwrap();
+
+    #[cfg(debug_assertions)]
+    {
+        utils::start_profiling(rt, "VmCrypt");
+
+        // call ...
+        stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
+
+        utils::stop_profiling(rt, "VmCrypt");
+    }
+    #[cfg(not(debug_assertions))]
     // call ...
     stack::call_with_label(rt, rt.func_labels[&FnDef::VmCrypt], &execute_loop);
 

@@ -14,7 +14,7 @@ Code virtualizer for compiled 64-bit portable executables.
 
 - **Dispatch**: When a virtualized block is executed, the dispatch stub transfers CPU state to the VM, which interprets the corresponding bytecode sequence.
 - **Handling**: The VM maintains its own register state and shadow stack, executing bytecode through a interpreter with indirect dispatch to handler functions.
-- **Anti-Debug**: Bytecode sequences can be injected with transforms that silently corrupt execution state when debuggers are detected.
+- **Anti-Debug**: Virtualized sequences are injected to specific VM blocks to hinder debugging.
 
 ## Usage
 
