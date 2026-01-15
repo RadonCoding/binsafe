@@ -1,7 +1,7 @@
 use iced_x86::code_asm::{ptr, r12, r13, r8, r8d, rax, rcx, rdx, rsp};
 
 use crate::{
-    runtime::{DataDef, Runtime, StringDef},
+    runtime::{DataDef, ImportDef, Runtime},
     VM_STACK_SIZE,
 };
 
@@ -15,14 +15,14 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.sub(rsp, 0x28).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(StringDef::KERNEL32, StringDef::GetProcessHeap);
+    rt.get_proc_address(ImportDef::GetProcessHeap);
     // call rax
     rt.asm.call(rax).unwrap();
     // mov r12, rax
     rt.asm.mov(r12, rax).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(StringDef::Ntdll, StringDef::RtlFreeHeap);
+    rt.get_proc_address(ImportDef::RtlFreeHeap);
     // mov r13, rax
     rt.asm.mov(r13, rax).unwrap();
 

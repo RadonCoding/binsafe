@@ -2,7 +2,7 @@ use iced_x86::code_asm::{ecx, ptr, r12, r13, r8, rax, rcx, rdx, rsp};
 
 use crate::{
     mapper::Mappable,
-    runtime::{DataDef, Runtime, StringDef},
+    runtime::{DataDef, ImportDef, Runtime},
     vm::bytecode::VMReg,
     VM_STACK_SIZE,
 };
@@ -17,14 +17,14 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.sub(rsp, 0x28).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(StringDef::KERNEL32, StringDef::GetProcessHeap);
+    rt.get_proc_address(ImportDef::GetProcessHeap);
     // call rax
     rt.asm.call(rax).unwrap();
     // mov r12, rax
     rt.asm.mov(r12, rax).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(StringDef::Ntdll, StringDef::RtlAllocateHeap);
+    rt.get_proc_address(ImportDef::RtlAllocateHeap);
     // mov r13, rax
     rt.asm.mov(r13, rax).unwrap();
 
@@ -64,7 +64,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(StringDef::Ntdll, StringDef::RtlFlsSetValue);
+    rt.get_proc_address(ImportDef::RtlFlsSetValue);
     // mov ecx, [...]
     rt.asm
         .mov(ecx, ptr(rt.data_labels[&DataDef::VmCleanupFlsIndex]))
