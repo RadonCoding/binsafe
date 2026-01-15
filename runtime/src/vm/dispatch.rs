@@ -45,17 +45,6 @@ pub fn build(rt: &mut Runtime) {
     utils::mov_reg_vreg_64(rt, r12, VMReg::Vsk, r8);
     // mov r9b, 0x1
     rt.asm.mov(r9b, 0x1).unwrap();
-
-    #[cfg(debug_assertions)]
-    {
-        utils::start_profiling(rt, "DECRYPT");
-
-        // call ...
-        stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
-
-        utils::stop_profiling(rt, "DECRYPT");
-    }
-    #[cfg(not(debug_assertions))]
     // call ...
     stack::call_with_label(rt, rt.func_labels[&FnDef::VmCrypt], &execute_loop);
 

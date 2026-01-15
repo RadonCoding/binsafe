@@ -195,9 +195,6 @@ pub fn build(rt: &mut Runtime) {
         utils::mov_vreg_reg_64(rt, r12, rsp, VMReg::Rsp);
     }
 
-    #[cfg(debug_assertions)]
-    utils::start_profiling(rt, "DISPATCH");
-
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();
     // call ...

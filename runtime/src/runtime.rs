@@ -108,6 +108,7 @@ pub enum StringDef {
     GetProcessHeap,
     RtlAllocateHeap,
     RtlFreeHeap,
+    #[cfg(debug_assertions)]
     NtWriteFile,
 }
 
@@ -121,6 +122,7 @@ pub enum ImportDef {
     GetProcessHeap,
     RtlAllocateHeap,
     RtlFreeHeap,
+    #[cfg(debug_assertions)]
     NtWriteFile,
 }
 
@@ -139,6 +141,7 @@ impl ImportDef {
             ImportDef::GetProcessHeap => (StringDef::KERNEL32, StringDef::GetProcessHeap),
             ImportDef::RtlAllocateHeap => (StringDef::Ntdll, StringDef::RtlAllocateHeap),
             ImportDef::RtlFreeHeap => (StringDef::Ntdll, StringDef::RtlFreeHeap),
+            #[cfg(debug_assertions)]
             ImportDef::NtWriteFile => (StringDef::Ntdll, StringDef::NtWriteFile),
         }
     }
@@ -163,8 +166,7 @@ pub struct Runtime {
     imports: HashMap<ImportDef, usize>,
     addresses: HashMap<CodeLabel, u64>,
     fixups: HashMap<CodeLabel, (CodeLabel, u64, Option<usize>)>,
-    current_chain: Option<usize>,
-    next_chain_id: usize,
+    chains: Vec<usize>,
     pub mapper: Mapper,
 }
 
@@ -215,8 +217,7 @@ impl Runtime {
             addresses: HashMap::new(),
             fixups: HashMap::new(),
             mapper: Mapper::new(),
-            current_chain: None,
-            next_chain_id: 0,
+            chains: Vec::new(),
         }
     }
 
@@ -224,19 +225,21 @@ impl Runtime {
     where
         F: FnOnce(&mut Self),
     {
-        self.current_chain = Some(self.next_chain_id);
-        self.next_chain_id += 1;
+        let id = self.fixups.len();
+
+        self.chains.push(id);
 
         f(self);
 
-        self.current_chain = None;
+        self.chains.pop();
     }
 
     pub fn mark_as_encrypted(&mut self, target: CodeLabel) -> u64 {
         let mut label = self.asm.create_label();
         self.asm.set_label(&mut label).unwrap();
         let key = rand::random::<u64>();
-        self.fixups.insert(label, (target, key, self.current_chain));
+        let chain = self.chains.last().copied();
+        self.fixups.insert(label, (target, key, chain));
         key
     }
 

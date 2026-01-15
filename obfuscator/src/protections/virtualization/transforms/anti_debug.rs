@@ -89,7 +89,7 @@ impl AntiDebug {
     }
 
     fn peb_check(mapper: &mut Mapper) -> Vec<u8> {
-        let vinstructions: Vec<VMCmd<'static>> = vec![
+        let transform: Vec<VMCmd<'static>> = vec![
             VMCmd::SetRegReg {
                 vop: VMOp::SetRegReg,
                 dbits: VMBits::Lower64,
@@ -135,7 +135,7 @@ impl AntiDebug {
             },
         ];
 
-        vinstructions
+        transform
             .into_iter()
             .flat_map(|cmd| cmd.encode(mapper))
             .collect()

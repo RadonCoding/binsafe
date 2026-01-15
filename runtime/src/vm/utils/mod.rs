@@ -289,10 +289,55 @@ pub fn release_global_lock(rt: &mut Runtime) {
 }
 
 #[cfg(debug_assertions)]
+pub fn with_stack_pivot<F>(rt: &mut Runtime, src: AsmRegister64, f: F)
+where
+    F: FnOnce(&mut Runtime),
+{
+    use iced_x86::code_asm::{rax, rsp};
+
+    use crate::vm::stack;
+
+    // push rsp
+    stack::push(rt, rsp);
+    // mov rsp, [...]
+    rt.asm
+        .mov(rsp, ptr(src + rt.mapper.index(VMReg::Rsp) * 8))
+        .unwrap();
+    // push rax
+    rt.asm.push(rax).unwrap();
+    // pop rax
+    stack::pop(rt, rax);
+
+    f(rt);
+
+    // pop rsp
+    rt.asm.pop(rsp).unwrap();
+}
+
+#[cfg(debug_assertions)]
+fn print_thread_prefix(rt: &mut Runtime) {
+    use crate::vm::utils;
+    use iced_x86::code_asm::rax;
+
+    // push rax
+    rt.asm.push(rax).unwrap();
+
+    // mov rax, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
+    rt.asm.mov(rax, ptr(0x48).gs()).unwrap();
+
+    utils::print_s(rt, "Thread ");
+    utils::print_q(rt, rax);
+    utils::print_s(rt, " | ");
+
+    // pop rax
+    rt.asm.pop(rax).unwrap();
+}
+
+#[cfg(debug_assertions)]
 pub fn start_profiling(rt: &mut Runtime, message: &str) {
     use iced_x86::code_asm::{al, rax, rdx};
 
-    use crate::vm::{stack, utils};
+    use crate::vm::stack;
 
     // push rax
     rt.asm.push(rax).unwrap();
@@ -300,14 +345,8 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
     rt.asm.push(rdx).unwrap();
 
     acquire_global_lock(rt, al, None);
-
-    // mov rax, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
-    rt.asm.mov(rax, ptr(0x48).gs()).unwrap();
-
-    utils::print_s(rt, &format!("Thread "));
-    utils::print_q(rt, rax);
-    utils::print_s(rt, &format!(" | Starting {}...\n", message));
-
+    print_thread_prefix(rt);
+    print_s(rt, &format!("Starting {}...\n", message));
     release_global_lock(rt);
 
     // rdtsc
@@ -329,7 +368,7 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
 pub fn stop_profiling(rt: &mut Runtime, message: &str) {
     use iced_x86::code_asm::{al, rax, rdx};
 
-    use crate::vm::{stack, utils};
+    use crate::vm::stack;
 
     // push rdx
     rt.asm.push(rdx).unwrap();
@@ -342,24 +381,16 @@ pub fn stop_profiling(rt: &mut Runtime, message: &str) {
     rt.asm.shl(rdx, 0x20).unwrap();
     // or rax, rdx
     rt.asm.or(rax, rdx).unwrap();
-    // mov rdx, rax
-    rt.asm.mov(rdx, rax).unwrap();
-    // pop rax
-    stack::pop(rt, rax);
-    // sub rdx, rax
-    rt.asm.sub(rdx, rax).unwrap();
+    // pop rdx
+    stack::pop(rt, rdx);
+    // sub rax, rdx
+    rt.asm.sub(rax, rdx).unwrap();
 
     acquire_global_lock(rt, al, None);
-
-    // mov rdx, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
-    rt.asm.mov(rax, ptr(0x48).gs()).unwrap();
-
-    utils::print_s(rt, &format!("Thread "));
-    utils::print_q(rt, rax);
-    utils::print_s(rt, &format!(" | Cycles for {}: ", message));
-    utils::print_q(rt, rdx);
-    utils::print_s(rt, "\n");
-
+    print_thread_prefix(rt);
+    print_s(rt, &format!("Cycles for {}: ", message));
+    print_q(rt, rax);
+    print_s(rt, "\n");
     release_global_lock(rt);
 
     // pop rax
