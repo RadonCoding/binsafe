@@ -1,19 +1,18 @@
-use iced_x86::code_asm::{
-    al, byte_ptr, eax, ptr, r12, r13, r13b, r14, r14b, r14d, r15, r8, r9b, rax, rcx, rdx,
-};
+use iced_x86::code_asm::{byte_ptr, eax, ptr, r12, r13, r13b, r14, r15, r8, r9b, rax, rcx, rdx};
 
 use crate::{
     runtime::{DataDef, Runtime},
     vm::stack,
 };
 
-// void (unsigned char*, unsigned short, unsigned char*, bool)
+// void (unsigned char*, unsigned long, unsigned char*, bool)
 pub fn build(rt: &mut Runtime) {
+    let mut wait_for_previous_spin = rt.asm.create_label();
+    let mut wait_for_previous_cas = rt.asm.create_label();
+    let mut wait_for_current_spin = rt.asm.create_label();
+    let mut wait_for_current_cas = rt.asm.create_label();
     let mut derive_key = rt.asm.create_label();
-    let mut wait_for_previous = rt.asm.create_label();
-    let mut wait_for_current = rt.asm.create_label();
     let mut crypt_loop = rt.asm.create_label();
-    let mut is_decrypt = rt.asm.create_label();
     let mut continue_loop = rt.asm.create_label();
     let mut unlock = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
@@ -31,8 +30,14 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r12, rcx).unwrap();
     // mov r13b, r9b
     rt.asm.mov(r13b, r9b).unwrap();
+
     // add rcx, 0x2
     rt.asm.add(rcx, 0x2).unwrap();
+
+    // add rdx, 0x7
+    rt.asm.add(rdx, 0x7).unwrap();
+    // and rdx, -0x8
+    rt.asm.and(rdx, -0x8).unwrap();
     // add rdx, rcx
     rt.asm.add(rdx, rcx).unwrap();
 
@@ -53,9 +58,17 @@ pub fn build(rt: &mut Runtime) {
     // test r15, r15
     rt.asm.test(r15, r15).unwrap();
     // jz ...
-    rt.asm.jz(derive_key).unwrap();
+    rt.asm.jz(wait_for_current_spin).unwrap();
 
-    rt.asm.set_label(&mut wait_for_previous).unwrap();
+    rt.asm.set_label(&mut wait_for_previous_spin).unwrap();
+    {
+        // cmp byte [r12 - 0x1], 0x0
+        rt.asm.cmp(byte_ptr(r12 - 0x1), 0x0).unwrap();
+        // jne ...
+        rt.asm.jne(wait_for_previous_spin).unwrap();
+    }
+
+    rt.asm.set_label(&mut wait_for_previous_cas).unwrap();
     {
         // xor eax, eax
         rt.asm.xor(eax, eax).unwrap();
@@ -64,10 +77,18 @@ pub fn build(rt: &mut Runtime) {
         // lock cmpxchg [r12 - 0x1], r9b
         rt.asm.lock().cmpxchg(byte_ptr(r12 - 0x1), r9b).unwrap();
         // jnz ...
-        rt.asm.jnz(wait_for_previous).unwrap();
+        rt.asm.jnz(wait_for_previous_spin).unwrap();
     }
 
-    rt.asm.set_label(&mut wait_for_current).unwrap();
+    rt.asm.set_label(&mut wait_for_current_spin).unwrap();
+    {
+        // cmp [rdx], 0x0
+        rt.asm.cmp(byte_ptr(rdx), 0x0).unwrap();
+        // jne ...
+        rt.asm.jne(wait_for_current_spin).unwrap();
+    }
+
+    rt.asm.set_label(&mut wait_for_current_cas).unwrap();
     {
         // xor eax, eax
         rt.asm.xor(eax, eax).unwrap();
@@ -76,7 +97,7 @@ pub fn build(rt: &mut Runtime) {
         // lock cmpxchg [rdx], r9b
         rt.asm.lock().cmpxchg(byte_ptr(rdx), r9b).unwrap();
         // jnz ...
-        rt.asm.jnz(wait_for_current).unwrap();
+        rt.asm.jnz(wait_for_current_spin).unwrap();
     }
 
     rt.asm.set_label(&mut derive_key).unwrap();
@@ -97,8 +118,12 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut load_key).unwrap();
         {
-            // mov r14, [r12 - 0x4]
-            rt.asm.mov(r14d, ptr(r12 - 0x4)).unwrap();
+            // mov r14, [r12 - 0x8]
+            rt.asm.mov(r14, ptr(r12 - 0x8)).unwrap();
+            // mov rax, 0xFFFFFFFFFFFFFF00
+            rt.asm.mov(rax, 0x00FFFFFFFFFFFFFFu64).unwrap();
+            // and r14, rax
+            rt.asm.and(r14, rax).unwrap();
         }
     }
 
@@ -108,31 +133,30 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.cmp(rcx, rdx).unwrap();
         // je ...
         rt.asm.je(unlock).unwrap();
-        // mov al, [rcx]
-        rt.asm.mov(al, byte_ptr(rcx)).unwrap();
-        // xor [rcx], r14b
-        rt.asm.xor(byte_ptr(rcx), r14b).unwrap();
+
+        // mov rax, [rcx]
+        rt.asm.mov(rax, ptr(rcx)).unwrap();
+        // xor [rcx], r14
+        rt.asm.xor(ptr(rcx), r14).unwrap();
+
         // test r13b, r13b
         rt.asm.test(r13b, r13b).unwrap();
         // jnz ...
-        rt.asm.jnz(is_decrypt).unwrap();
-        // movzx rax, [rcx]
-        rt.asm.movzx(rax, byte_ptr(rcx)).unwrap();
-        // jmp ...
-        rt.asm.jmp(continue_loop).unwrap();
+        rt.asm.jnz(continue_loop).unwrap();
 
-        rt.asm.set_label(&mut is_decrypt).unwrap();
-        {
-            // movzx rax, al
-            rt.asm.movzx(rax, al).unwrap();
-        }
+        // mov rax, [rcx]
+        rt.asm.mov(rax, ptr(rcx)).unwrap();
 
         rt.asm.set_label(&mut continue_loop).unwrap();
         {
-            // xor rax, [r8]
-            rt.asm.xor(rax, byte_ptr(r8)).unwrap();
             // xor r14, rax
             rt.asm.xor(r14, rax).unwrap();
+
+            // movzx rax, [r8]
+            rt.asm.movzx(rax, byte_ptr(r8)).unwrap();
+            // xor r14, rax
+            rt.asm.xor(r14, rax).unwrap();
+
             // mov rax, [...]
             rt.asm
                 .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyMul]))
@@ -145,8 +169,9 @@ pub fn build(rt: &mut Runtime) {
                 .unwrap();
             // add r14, rax
             rt.asm.add(r14, rax).unwrap();
-            // inc rcx
-            rt.asm.inc(rcx).unwrap();
+
+            // add rcx, 0x8
+            rt.asm.add(rcx, 0x8).unwrap();
             // jmp ...
             rt.asm.jmp(crypt_loop).unwrap();
         }
@@ -159,6 +184,9 @@ pub fn build(rt: &mut Runtime) {
         // jnz ...
         rt.asm.jnz(epilogue).unwrap();
 
+        // mov [rdx], 0x0
+        rt.asm.mov(byte_ptr(rdx), 0x0).unwrap();
+
         // test r15, r15
         rt.asm.test(r15, r15).unwrap();
         // jz ...
@@ -166,8 +194,6 @@ pub fn build(rt: &mut Runtime) {
 
         // mov [r12 - 0x1], 0x0
         rt.asm.mov(byte_ptr(r12 - 0x1), 0x0).unwrap();
-        // mov [rdx], 0x0
-        rt.asm.mov(byte_ptr(rdx), 0x0).unwrap();
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();
