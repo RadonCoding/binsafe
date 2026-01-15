@@ -78,6 +78,7 @@ pub enum DataDef {
     VmGlobalState,
     VmStateTlsIndex,
     VmStackTlsIndex,
+    VmCacheTlsIndex,
     VmCleanupFlsIndex,
     VmTable,
     VmCode,
@@ -355,6 +356,7 @@ impl Runtime {
 
         self.define_data_dword(DataDef::VmStateTlsIndex, 0);
         self.define_data_dword(DataDef::VmStackTlsIndex, 0);
+        self.define_data_dword(DataDef::VmCacheTlsIndex, 0);
         self.define_data_dword(DataDef::VmCleanupFlsIndex, 0);
 
         self.define_bool(BoolDef::VmIsLocked, false);

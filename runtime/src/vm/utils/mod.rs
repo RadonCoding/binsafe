@@ -242,6 +242,8 @@ pub fn acquire_global_lock(rt: &mut Runtime, scratch: AsmRegister8, label: Optio
         rt.asm
             .cmp(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
             .unwrap();
+        // pause
+        rt.asm.pause().unwrap();
         // jne ...
         rt.asm.jne(*spin).unwrap();
     }
@@ -279,10 +281,10 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
 
     use crate::vm::{stack, utils};
 
-    // push rdx
-    rt.asm.push(rdx).unwrap();
     // push rax
     rt.asm.push(rax).unwrap();
+    // push rdx
+    rt.asm.push(rdx).unwrap();
 
     acquire_global_lock(rt, al, None);
 
@@ -293,6 +295,8 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
     utils::print_q(rt, rax);
     utils::print_s(rt, &format!(" | Starting {}...\n", message));
 
+    release_global_lock(rt);
+
     // rdtsc
     rt.asm.rdtsc().unwrap();
     // shl rdx, 0x20
@@ -302,12 +306,10 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
     // push rax
     stack::push(rt, rax);
 
-    release_global_lock(rt);
-
-    // pop rax
-    rt.asm.pop(rax).unwrap();
     // pop rdx
     rt.asm.pop(rdx).unwrap();
+    // pop rax
+    rt.asm.pop(rax).unwrap();
 }
 
 #[cfg(debug_assertions)]
@@ -321,27 +323,28 @@ pub fn stop_profiling(rt: &mut Runtime, message: &str) {
     // push rax
     rt.asm.push(rax).unwrap();
 
-    acquire_global_lock(rt, al, None);
-
-    // mov rax, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
-    rt.asm.mov(rax, ptr(0x48).gs()).unwrap();
-
-    utils::print_s(rt, &format!("Thread "));
-    utils::print_q(rt, rax);
-    utils::print_s(rt, &format!(" | Cycles for {}: ", message));
-
     // rdtsc
     rt.asm.rdtsc().unwrap();
     // shl rdx, 0x20
     rt.asm.shl(rdx, 0x20).unwrap();
     // or rax, rdx
     rt.asm.or(rax, rdx).unwrap();
-    // pop rdx
-    stack::pop(rt, rdx);
-    // sub rax, rdx
-    rt.asm.sub(rax, rdx).unwrap();
+    // mov rdx, rax
+    rt.asm.mov(rdx, rax).unwrap();
+    // pop rax
+    stack::pop(rt, rax);
+    // sub rdx, rax
+    rt.asm.sub(rdx, rax).unwrap();
 
+    acquire_global_lock(rt, al, None);
+
+    // mov rdx, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
+    rt.asm.mov(rax, ptr(0x48).gs()).unwrap();
+
+    utils::print_s(rt, &format!("Thread "));
     utils::print_q(rt, rax);
+    utils::print_s(rt, &format!(" | Cycles for {}: ", message));
+    utils::print_q(rt, rdx);
     utils::print_s(rt, "\n");
 
     release_global_lock(rt);
