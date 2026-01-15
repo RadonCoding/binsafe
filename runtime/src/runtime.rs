@@ -248,6 +248,7 @@ impl Runtime {
         self.strings.insert(def, bytes);
     }
 
+    // TODO: Implement compile-time generated cache
     pub fn get_proc_address(&mut self, module_name: StringDef, export_name: StringDef) {
         // lea rcx, [...]
         self.asm

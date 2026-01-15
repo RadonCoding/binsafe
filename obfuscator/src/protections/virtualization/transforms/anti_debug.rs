@@ -25,34 +25,20 @@ impl AntiDebug {
     pub fn new(blocks: &[Block]) -> Self {
         let mut traps = HashMap::new();
 
-        let mut all = blocks.iter().map(|b| b.rva).collect::<Vec<u32>>();
-        let mut relative = blocks
-            .iter()
-            .filter(|b| b.instructions.iter().any(|i| i.is_ip_rel_memory_operand()))
-            .map(|b| b.rva)
-            .collect::<Vec<u32>>();
-
-        let exception_quota = (blocks.len() * 5 / 100).max(1);
-        let peb_quota = (relative.len() * 25 / 100).max(1);
+        let mut targets = blocks.iter().map(|b| b.rva).collect::<Vec<u32>>();
 
         let mut rng = rand::thread_rng();
-        all.shuffle(&mut rng);
-        relative.shuffle(&mut rng);
+        targets.shuffle(&mut rng);
 
-        for &idx in all.iter().take(exception_quota) {
-            traps.insert(idx, TrapType::FakeException);
+        let exception_quota = (blocks.len() * 5 / 100).max(1);
+        let peb_quota = (blocks.len() * 25 / 100).max(1);
+
+        for &rva in targets.iter().take(exception_quota) {
+            traps.insert(rva, TrapType::FakeException);
         }
 
-        let mut peb_traps = 0;
-
-        for &idx in &relative {
-            if peb_traps >= peb_quota {
-                break;
-            }
-            if !traps.contains_key(&idx) {
-                traps.insert(idx, TrapType::PebCheck);
-                peb_traps += 1;
-            }
+        for &rva in targets.iter().skip(exception_quota).take(peb_quota) {
+            traps.insert(rva, TrapType::PebCheck);
         }
 
         Self { traps }
