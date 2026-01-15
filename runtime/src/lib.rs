@@ -12,4 +12,4 @@ macro_rules! define_offset {
 
 pub(crate) use define_offset;
 
-pub const VM_STACK_SIZE: u64 = 0x100;
+pub const VM_STACK_SIZE: u64 = 0x80;
