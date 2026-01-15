@@ -324,6 +324,15 @@ impl Runtime {
             .call(self.func_labels[&FnDef::GetProcAddress])
             .unwrap();
 
+        // lea rcx, [...]
+        self.asm
+            .lea(rcx, ptr(self.data_labels[&DataDef::Imports]))
+            .unwrap();
+        // mov [rcx + ...], rax
+        self.asm
+            .mov(ptr(rcx + self.imports[&def] * 8), rax)
+            .unwrap();
+
         self.asm.set_label(&mut initialized).unwrap();
     }
 
