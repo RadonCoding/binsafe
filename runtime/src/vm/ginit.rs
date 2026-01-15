@@ -28,6 +28,13 @@ pub fn build(rt: &mut Runtime) {
         .mov(ptr(rt.data_labels[&DataDef::VmStackTlsIndex]), eax)
         .unwrap();
 
+    // call r12
+    rt.asm.call(r12).unwrap();
+    // mov [...], eax
+    rt.asm
+        .mov(ptr(rt.data_labels[&DataDef::VmCacheTlsIndex]), eax)
+        .unwrap();
+
     // lea rcx, [...]; lea rdx, [...]; call ...
     rt.get_proc_address(StringDef::Ntdll, StringDef::RtlFlsAlloc);
     // lea rcx, [...]
