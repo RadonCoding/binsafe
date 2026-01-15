@@ -86,7 +86,7 @@ impl AntiDebug {
             vop: VMOp::SetRegMem,
             dbits: VMBits::Lower64,
             load: true,
-            dst: VMReg::V0,
+            dst: VMReg::Vs0,
             src: VMMem {
                 base: VMReg::None,
                 index: VMReg::None,
@@ -107,7 +107,7 @@ impl AntiDebug {
             VMCmd::SetRegReg {
                 vop: VMOp::SetRegReg,
                 dbits: VMBits::Lower64,
-                dst: VMReg::V1,
+                dst: VMReg::Vs1,
                 sbits: VMBits::Lower64,
                 src: VMReg::Flags,
             },
@@ -116,7 +116,7 @@ impl AntiDebug {
                 vop: VMOp::SetRegMem,
                 dbits: VMBits::Lower64,
                 load: true,
-                dst: VMReg::V0,
+                dst: VMReg::Vs0,
                 src: VMMem {
                     base: VMReg::None,
                     index: VMReg::None,
@@ -131,9 +131,9 @@ impl AntiDebug {
                 sub: true,
                 store: true,
                 dbits: VMBits::Lower8,
-                dst: VMReg::VB,
+                dst: VMReg::Vib,
                 src: VMMem {
-                    base: VMReg::V0,
+                    base: VMReg::Vs0,
                     index: VMReg::None,
                     scale: 1,
                     displ: 0x02,
@@ -145,7 +145,7 @@ impl AntiDebug {
                 dbits: VMBits::Lower64,
                 dst: VMReg::Flags,
                 sbits: VMBits::Lower64,
-                src: VMReg::V1,
+                src: VMReg::Vs1,
             },
         ];
 

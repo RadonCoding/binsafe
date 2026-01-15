@@ -305,7 +305,7 @@ mod tests {
                 Instruction::with_branch(Code::Je_rel8_64, 0xDEAD).unwrap(),
             ],
             &[(VMReg::Rax, 0x1)],
-            VMReg::Vra,
+            VMReg::Vex,
             0xDEAD,
         );
         template(
@@ -314,7 +314,7 @@ mod tests {
                 Instruction::with_branch(Code::Jne_rel8_64, 0xDEAD).unwrap(),
             ],
             &[(VMReg::Rax, 0x1)],
-            VMReg::Vra,
+            VMReg::Vex,
             0xDEAD,
         );
     }

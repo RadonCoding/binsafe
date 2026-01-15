@@ -22,7 +22,7 @@ pub fn build(rt: &mut Runtime) {
     // sub [rcx + ...], 0x8
     utils::sub_vreg_imm_64(rt, rcx, 0x8, VMReg::Rsp);
     // mov r8, [rcx + ...]
-    utils::mov_reg_vreg_64(rt, rcx, VMReg::Vra, r8);
+    utils::mov_reg_vreg_64(rt, rcx, VMReg::Vex, r8);
     // mov rax, [rcx + ...]; mov [rax], r8
     utils::store_vreg_mem_64(rt, rcx, rax, r8, VMReg::Rsp);
 
@@ -37,7 +37,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(rax, ptr(rcx + r8 * 8)).unwrap();
 
         // mov [rcx + ...], rax
-        utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Vra);
+        utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Vbr);
 
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
