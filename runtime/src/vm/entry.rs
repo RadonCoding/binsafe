@@ -1,14 +1,14 @@
-use iced_x86::code_asm::{byte_ptr, ecx, ptr, r12, r12b, r12d, rax, rcx, rdi, rdx, rsi, rsp};
+use iced_x86::code_asm::{ecx, ptr, r12, r12b, r12d, rax, rcx, rdi, rdx, rsi, rsp};
 
 use crate::{
     mapper::Mappable as _,
-    runtime::{BoolDef, DataDef, FnDef, Runtime, StringDef},
+    runtime::{DataDef, FnDef, Runtime, StringDef},
     vm::{bytecode::VMReg, stack, utils, VREG_TO_REG},
 };
 
 // void (unsigned int)
 pub fn build(rt: &mut Runtime) {
-    let mut wait_for_global_lock = rt.asm.create_label();
+    let mut acquire_global_lock = rt.asm.create_label();
     let mut save_global_state = rt.asm.create_label();
     let mut invoke_ginit = rt.asm.create_label();
     let mut invoke_tinit = rt.asm.create_label();
@@ -27,32 +27,19 @@ pub fn build(rt: &mut Runtime) {
     // test r12d, r12d
     rt.asm.test(r12d, r12d).unwrap();
     // jz ...
-    rt.asm.jz(wait_for_global_lock).unwrap();
+    rt.asm.jz(acquire_global_lock).unwrap();
 
     // mov r12, [0x1480 + r12*8]
     rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
     // test r12, r12
     rt.asm.test(r12, r12).unwrap();
     // jz ...
-    rt.asm.jz(wait_for_global_lock).unwrap();
+    rt.asm.jz(acquire_global_lock).unwrap();
 
     // jmp ...
     rt.asm.jmp(initialize_state).unwrap();
 
-    rt.asm.set_label(&mut wait_for_global_lock).unwrap();
-    {
-        // mov r12b, 0x1
-        rt.asm.mov(r12b, 0x1).unwrap();
-        // lock xchg [...], r12b
-        rt.asm
-            .lock()
-            .xchg(ptr(rt.bool_labels[&BoolDef::VmIsLocked]), r12b)
-            .unwrap();
-        // test r12b, r12b
-        rt.asm.test(r12b, r12b).unwrap();
-        // jnz ...
-        rt.asm.jnz(wait_for_global_lock).unwrap();
-    }
+    utils::acquire_global_lock(rt, r12b, Some(&mut acquire_global_lock));
 
     rt.asm.set_label(&mut save_global_state).unwrap();
     {
@@ -128,10 +115,7 @@ pub fn build(rt: &mut Runtime) {
         .call(rt.func_labels[&FnDef::VmHandlersInitialize])
         .unwrap();
 
-    // mov [...], 0x0
-    rt.asm
-        .mov(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
-        .unwrap();
+    utils::release_global_lock(rt);
 
     // jmp ...
     rt.asm.jmp(initialize_execution).unwrap();

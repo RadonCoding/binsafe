@@ -157,6 +157,53 @@ mod tests {
         }
     }
 
+    fn encrypt(bytecode: &mut Vec<u8>) {
+        let mut key = Executor::TEST_KEY_SEED;
+
+        let length = TryInto::<u16>::try_into(bytecode.len()).unwrap();
+
+        while bytecode.len() % 8 != 0 {
+            bytecode.push(0);
+        }
+
+        for chunk in bytecode.chunks_exact_mut(8) {
+            let mut qword = u64::from_le_bytes(chunk.try_into().unwrap());
+            qword ^= key;
+            chunk.copy_from_slice(&qword.to_le_bytes());
+
+            key ^= (qword ^ (Executor::TEST_VSK as u64)) as u64;
+            key = key
+                .wrapping_mul(Executor::TEST_KEY_MUL)
+                .wrapping_add(Executor::TEST_KEY_ADD);
+        }
+
+        bytecode.splice(0..0, length.to_le_bytes());
+        bytecode.push(0);
+    }
+
+    fn decrypt(block: &mut Vec<u8>) -> Vec<u8> {
+        let mut key = Executor::TEST_KEY_SEED;
+
+        let length =
+            u16::from_le_bytes(block.drain(0..2).collect::<Vec<u8>>().try_into().unwrap()) as usize;
+
+        block.pop();
+
+        for chunk in block.chunks_exact_mut(8) {
+            let qword = u64::from_le_bytes(chunk.try_into().unwrap());
+            let original = qword ^ key;
+            chunk.copy_from_slice(&original.to_le_bytes());
+
+            key ^= (qword ^ (Executor::TEST_VSK as u64)) as u64;
+            key = key
+                .wrapping_mul(Executor::TEST_KEY_MUL)
+                .wrapping_add(Executor::TEST_KEY_ADD);
+        }
+
+        block.truncate(length);
+        block.clone()
+    }
+
     fn template(
         instructions: &[Instruction],
         setup: &[(VMReg, u64)],
@@ -167,20 +214,7 @@ mod tests {
 
         let mut bytecode = bytecode::convert(&mut executor.rt.mapper, &instructions).unwrap();
 
-        let mut key = Executor::TEST_KEY_SEED;
-
-        for byte in &mut bytecode {
-            *byte ^= key as u8;
-            key ^= (*byte ^ Executor::TEST_VSK) as u64;
-            key = key
-                .wrapping_mul(Executor::TEST_KEY_MUL)
-                .wrapping_add(Executor::TEST_KEY_ADD);
-        }
-
-        let length = TryInto::<u16>::try_into(bytecode.len()).unwrap();
-        bytecode.splice(0..0, length.to_le_bytes());
-
-        bytecode.push(0);
+        encrypt(&mut bytecode);
 
         let state = executor.run(&setup, &bytecode);
 
@@ -207,6 +241,19 @@ mod tests {
 
     fn flag(f: VMFlag) -> u64 {
         1 << (f as u64)
+    }
+
+    #[test]
+    fn test_crypt() {
+        let mut buffer = vec![0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE];
+
+        let original = buffer.clone();
+
+        encrypt(&mut buffer);
+
+        let result = decrypt(&mut buffer);
+
+        assert_eq!(original, result);
     }
 
     #[test]

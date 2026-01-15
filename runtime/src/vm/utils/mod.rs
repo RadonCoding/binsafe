@@ -1,7 +1,8 @@
 pub mod compute_address;
 
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
-use iced_x86::code_asm::{ptr, qword_ptr, AsmRegister32, AsmRegister64};
+
+use iced_x86::code_asm::{ptr, qword_ptr, AsmRegister32, AsmRegister64, AsmRegister8, CodeLabel};
 
 pub fn mov_reg_vreg_64(rt: &mut Runtime, src: AsmRegister64, from: VMReg, to: AsmRegister64) {
     // mov ..., [...]
@@ -224,48 +225,57 @@ pub fn print_q(rt: &mut Runtime, reg: AsmRegister64) {
     rt.asm.pop(rax).unwrap();
 }
 
-#[cfg(debug_assertions)]
-fn acquire_global_lock(rt: &mut Runtime) {
-    use iced_x86::code_asm::al;
-
+pub fn acquire_global_lock(rt: &mut Runtime, scratch: AsmRegister8, label: Option<&mut CodeLabel>) {
     use crate::runtime::BoolDef;
+    use iced_x86::code_asm::{byte_ptr, ptr};
 
-    let mut wait = rt.asm.create_label();
+    let spin = if let Some(label) = label {
+        label
+    } else {
+        &mut rt.asm.create_label()
+    };
+    let mut acquire = rt.asm.create_label();
 
-    rt.asm.set_label(&mut wait).unwrap();
+    rt.asm.set_label(spin).unwrap();
     {
-        // mov al, 0x1
-        rt.asm.mov(al, 0x1).unwrap();
-        // lock xchg [...], al
+        // cmp byte [...], 0x0
+        rt.asm
+            .cmp(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
+            .unwrap();
+        // jne ...
+        rt.asm.jne(*spin).unwrap();
+    }
+
+    rt.asm.set_label(&mut acquire).unwrap();
+    {
+        // mov ..., 0x1
+        rt.asm.mov(scratch, 0x1).unwrap();
+        // lock xchg [...], ...
         rt.asm
             .lock()
-            .xchg(ptr(rt.bool_labels[&BoolDef::VmIsLocked]), al)
+            .xchg(ptr(rt.bool_labels[&BoolDef::VmIsLocked]), scratch)
             .unwrap();
-        // test al, al
-        rt.asm.test(al, al).unwrap();
+        // test ..., ...
+        rt.asm.test(scratch, scratch).unwrap();
         // jnz ...
-        rt.asm.jnz(wait).unwrap();
+        rt.asm.jnz(*spin).unwrap();
     }
 }
 
-#[cfg(debug_assertions)]
-fn release_global_lock(rt: &mut Runtime) {
-    use iced_x86::code_asm::al;
+pub fn release_global_lock(rt: &mut Runtime) {
+    use iced_x86::code_asm::byte_ptr;
 
     use crate::runtime::BoolDef;
 
-    // xor al, al
-    rt.asm.xor(al, al).unwrap();
-    // lock xchg [...], al
+    // mov [...], 0x0
     rt.asm
-        .lock()
-        .xchg(ptr(rt.bool_labels[&BoolDef::VmIsLocked]), al)
+        .mov(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)
         .unwrap();
 }
 
 #[cfg(debug_assertions)]
 pub fn start_profiling(rt: &mut Runtime, message: &str) {
-    use iced_x86::code_asm::{rax, rdx};
+    use iced_x86::code_asm::{al, rax, rdx};
 
     use crate::vm::{stack, utils};
 
@@ -274,7 +284,7 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
     // push rax
     rt.asm.push(rax).unwrap();
 
-    acquire_global_lock(rt);
+    acquire_global_lock(rt, al, None);
 
     // mov rax, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
     rt.asm.mov(rax, ptr(0x48).gs()).unwrap();
@@ -302,7 +312,7 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
 
 #[cfg(debug_assertions)]
 pub fn stop_profiling(rt: &mut Runtime, message: &str) {
-    use iced_x86::code_asm::{rax, rdx};
+    use iced_x86::code_asm::{al, rax, rdx};
 
     use crate::vm::{stack, utils};
 
@@ -311,7 +321,7 @@ pub fn stop_profiling(rt: &mut Runtime, message: &str) {
     // push rax
     rt.asm.push(rax).unwrap();
 
-    acquire_global_lock(rt);
+    acquire_global_lock(rt, al, None);
 
     // mov rax, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
     rt.asm.mov(rax, ptr(0x48).gs()).unwrap();

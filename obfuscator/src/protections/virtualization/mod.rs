@@ -61,22 +61,30 @@ impl Protection for Virtualization {
             let mut vcode_key = if vcode.is_empty() {
                 key_seed
             } else {
-                u32::from_le_bytes(vcode[vcode.len() - 4..].try_into().unwrap()) as u64
+                u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap())
             };
 
-            for byte in &mut vblock {
-                *byte ^= vcode_key as u8;
-                vcode_key ^= (*byte ^ NTQIP_SIGNATURE) as u64;
+            let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
+
+            while vblock.len() % 8 != 0 {
+                vblock.push(rng.gen::<u8>());
+            }
+
+            for chunk in vblock.chunks_exact_mut(8) {
+                let mut qword = u64::from_le_bytes(chunk.try_into().unwrap());
+                qword ^= vcode_key;
+                chunk.copy_from_slice(&qword.to_le_bytes());
+
+                vcode_key ^= qword ^ NTQIP_SIGNATURE as u64;
                 vcode_key = vcode_key.wrapping_mul(key_mul).wrapping_add(key_add);
             }
 
             // WORD - length of the VM-block [0..2]
-            let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
             vblock.splice(0..0, length.to_le_bytes());
-
             // BYTE - lock state of the VM-block [..1]
             vblock.push(0);
 
+            // TODO: Fix hash being computed after encryption
             let mut hasher = DefaultHasher::new();
             vblock.hash(&mut hasher);
             let hash = hasher.finish();
