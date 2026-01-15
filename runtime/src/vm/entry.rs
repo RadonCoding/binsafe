@@ -2,7 +2,7 @@ use iced_x86::code_asm::{ecx, ptr, r12, r12b, r12d, rax, rcx, rdi, rdx, rsi, rsp
 
 use crate::{
     mapper::Mappable as _,
-    runtime::{DataDef, FnDef, Runtime, StringDef},
+    runtime::{DataDef, FnDef, ImportDef, Runtime},
     vm::{bytecode::VMReg, stack, utils, VREG_TO_REG},
 };
 
@@ -106,7 +106,7 @@ pub fn build(rt: &mut Runtime) {
     utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vib);
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(StringDef::Ntdll, StringDef::NtQueryInformationProcess);
+    rt.get_proc_address(ImportDef::NtQueryInformationProcess);
     // mov [...], rax
     utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vsk);
 

@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{ptr, qword_ptr, r12, r13, r14, r8, r9, rax, rcx, rdx, rsp};
 
-use crate::runtime::{FnDef, Runtime, StringDef};
+use crate::runtime::{FnDef, ImportDef, Runtime};
 
 // void (char*)
 pub fn build(rt: &mut Runtime) {
@@ -25,7 +25,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r13, rax).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(StringDef::Ntdll, StringDef::NtWriteFile);
+    rt.get_proc_address(ImportDef::NtWriteFile);
     // mov r14, rax
     rt.asm.mov(r14, rax).unwrap();
 

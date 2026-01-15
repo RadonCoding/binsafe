@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use iced_x86::{
-    code_asm::{ptr, rcx, rdx, CodeAssembler, CodeLabel},
+    code_asm::{ptr, rax, rcx, rdx, CodeAssembler, CodeLabel},
     BlockEncoderOptions, Decoder, DecoderOptions, Encoder,
 };
 use rand::seq::SliceRandom;
@@ -86,6 +86,7 @@ pub enum DataDef {
     VmKeyMul,
     VmKeyAdd,
     VehEnd,
+    Imports,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
@@ -110,6 +111,39 @@ pub enum StringDef {
     NtWriteFile,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
+pub enum ImportDef {
+    NtQueryInformationProcess,
+    RtlAddVectoredExceptionHandler,
+    TlsAlloc,
+    RtlFlsAlloc,
+    RtlFlsSetValue,
+    GetProcessHeap,
+    RtlAllocateHeap,
+    RtlFreeHeap,
+    NtWriteFile,
+}
+
+impl ImportDef {
+    pub fn get(&self) -> (StringDef, StringDef) {
+        match self {
+            ImportDef::NtQueryInformationProcess => {
+                (StringDef::Ntdll, StringDef::NtQueryInformationProcess)
+            }
+            ImportDef::RtlAddVectoredExceptionHandler => {
+                (StringDef::Ntdll, StringDef::RtlAddVectoredExceptionHandler)
+            }
+            ImportDef::TlsAlloc => (StringDef::KERNEL32, StringDef::TlsAlloc),
+            ImportDef::RtlFlsAlloc => (StringDef::Ntdll, StringDef::RtlFlsAlloc),
+            ImportDef::RtlFlsSetValue => (StringDef::Ntdll, StringDef::RtlFlsSetValue),
+            ImportDef::GetProcessHeap => (StringDef::KERNEL32, StringDef::GetProcessHeap),
+            ImportDef::RtlAllocateHeap => (StringDef::Ntdll, StringDef::RtlAllocateHeap),
+            ImportDef::RtlFreeHeap => (StringDef::Ntdll, StringDef::RtlFreeHeap),
+            ImportDef::NtWriteFile => (StringDef::Ntdll, StringDef::NtWriteFile),
+        }
+    }
+}
+
 enum EmissionTask {
     Function(FnDef, fn(&mut Runtime)),
     Data(DataDef),
@@ -126,6 +160,7 @@ pub struct Runtime {
     bools: HashMap<BoolDef, bool>,
     string_labels: HashMap<StringDef, CodeLabel>,
     strings: HashMap<StringDef, Vec<u8>>,
+    imports: HashMap<ImportDef, usize>,
     addresses: HashMap<CodeLabel, u64>,
     fixups: HashMap<CodeLabel, (CodeLabel, u64, Option<usize>)>,
     current_chain: Option<usize>,
@@ -161,6 +196,12 @@ impl Runtime {
             string_labels.insert(def, asm.create_label());
         }
 
+        let mut imports = HashMap::new();
+
+        for (i, def) in ImportDef::iter().enumerate() {
+            imports.insert(def, i);
+        }
+
         Self {
             asm,
             func_labels,
@@ -170,6 +211,7 @@ impl Runtime {
             bools: HashMap::new(),
             string_labels,
             strings: HashMap::new(),
+            imports,
             addresses: HashMap::new(),
             fixups: HashMap::new(),
             mapper: Mapper::new(),
@@ -248,8 +290,24 @@ impl Runtime {
         self.strings.insert(def, bytes);
     }
 
-    // TODO: Implement compile-time generated cache
-    pub fn get_proc_address(&mut self, module_name: StringDef, export_name: StringDef) {
+    pub fn get_proc_address(&mut self, def: ImportDef) {
+        let mut initialized = self.asm.create_label();
+
+        // lea rax, [...]
+        self.asm
+            .lea(rax, ptr(self.data_labels[&DataDef::Imports]))
+            .unwrap();
+        // mov rax, [rax + ...]
+        self.asm
+            .mov(rax, ptr(rax + self.imports[&def] * 8))
+            .unwrap();
+        // test rax, rax
+        self.asm.test(rax, rax).unwrap();
+        // jnz ...
+        self.asm.jnz(initialized).unwrap();
+
+        let (module_name, export_name) = def.get();
+
         // lea rcx, [...]
         self.asm
             .lea(rcx, ptr(self.string_labels[&module_name]))
@@ -262,6 +320,8 @@ impl Runtime {
         self.asm
             .call(self.func_labels[&FnDef::GetProcAddress])
             .unwrap();
+
+        self.asm.set_label(&mut initialized).unwrap();
     }
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
@@ -359,6 +419,8 @@ impl Runtime {
         self.define_data_dword(DataDef::VmStackTlsIndex, 0);
         self.define_data_dword(DataDef::VmCacheTlsIndex, 0);
         self.define_data_dword(DataDef::VmCleanupFlsIndex, 0);
+
+        self.define_data_bytes(DataDef::Imports, &vec![0u8; self.imports.len() * 8]);
 
         self.define_bool(BoolDef::VmIsLocked, false);
         self.define_bool(BoolDef::VmHasVeh, false);

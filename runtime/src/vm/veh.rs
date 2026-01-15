@@ -3,7 +3,7 @@ use iced_x86::code_asm::{
 };
 
 use crate::{
-    runtime::{BoolDef, DataDef, FnDef, Runtime, StringDef},
+    runtime::{BoolDef, DataDef, FnDef, ImportDef, Runtime},
     vm::{bytecode::VMReg, stack, utils},
 };
 
@@ -23,7 +23,7 @@ pub fn initialize(rt: &mut Runtime) {
     rt.asm.jnz(epilogue).unwrap();
 
     // lea rcx, [...]; lea rdx, [...], call ...
-    rt.get_proc_address(StringDef::Ntdll, StringDef::RtlAddVectoredExceptionHandler);
+    rt.get_proc_address(ImportDef::RtlAddVectoredExceptionHandler);
 
     // mov rcx, 0x1
     rt.asm.mov(rcx, 0x1u64).unwrap();

@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{eax, ptr, r12, rax, rcx, rdx, rsp};
 
-use crate::runtime::{DataDef, FnDef, Runtime, StringDef};
+use crate::runtime::{DataDef, FnDef, ImportDef, Runtime};
 
 pub fn build(rt: &mut Runtime) {
     // push r12
@@ -10,7 +10,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.sub(rsp, 0x28).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(StringDef::KERNEL32, StringDef::TlsAlloc);
+    rt.get_proc_address(ImportDef::TlsAlloc);
     // mov r12, rax
     rt.asm.mov(r12, rax).unwrap();
 
@@ -36,7 +36,7 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(StringDef::Ntdll, StringDef::RtlFlsAlloc);
+    rt.get_proc_address(ImportDef::RtlFlsAlloc);
     // lea rcx, [...]
     rt.asm
         .lea(rcx, ptr(rt.func_labels[&FnDef::VmCleanup]))
