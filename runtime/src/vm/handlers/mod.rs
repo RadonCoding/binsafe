@@ -82,7 +82,7 @@ pub fn initialize(rt: &mut Runtime) {
             rt.asm.mov(r8, rdx).unwrap();
 
             // add r8, [...]
-            utils::add_reg_vreg_64(rt, rax, VMReg::VB, r8);
+            utils::add_reg_vreg_64(rt, rax, VMReg::Vib, r8);
 
             // mov [rcx + ...], r8
             rt.asm.mov(ptr(rcx + rt.mapper.index(op) * 8), r8).unwrap();

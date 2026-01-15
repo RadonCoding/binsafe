@@ -25,6 +25,13 @@ pub fn mov_vreg_reg_64(rt: &mut Runtime, src: AsmRegister64, from: AsmRegister64
         .unwrap();
 }
 
+pub fn mov_vreg_imm_64(rt: &mut Runtime, src: AsmRegister64, from: i32, to: VMReg) {
+    // mov [...], ...
+    rt.asm
+        .mov(qword_ptr(src + rt.mapper.index(to) * 8), from)
+        .unwrap();
+}
+
 pub fn add_vreg_reg_64(rt: &mut Runtime, src: AsmRegister64, from: AsmRegister64, to: VMReg) {
     // add [...], ...
     rt.asm
@@ -70,6 +77,13 @@ pub fn sub_reg_vreg_64(rt: &mut Runtime, src: AsmRegister64, from: VMReg, to: As
 pub fn cmp_vreg_reg_64(rt: &mut Runtime, src: AsmRegister64, a: VMReg, b: AsmRegister64) {
     // cmp [...], ...
     rt.asm.cmp(ptr(src + rt.mapper.index(a) * 8), b).unwrap();
+}
+
+pub fn cmp_vreg_imm_64(rt: &mut Runtime, src: AsmRegister64, a: VMReg, b: i32) {
+    // cmp [...], ...
+    rt.asm
+        .cmp(qword_ptr(src + rt.mapper.index(a) * 8), b)
+        .unwrap();
 }
 
 pub fn store_vreg_mem_64(
@@ -252,9 +266,8 @@ pub fn acquire_global_lock(rt: &mut Runtime, scratch: AsmRegister8, label: Optio
     {
         // mov ..., 0x1
         rt.asm.mov(scratch, 0x1).unwrap();
-        // lock xchg [...], ...
+        // xchg [...], ...
         rt.asm
-            .lock()
             .xchg(ptr(rt.bool_labels[&BoolDef::VmIsLocked]), scratch)
             .unwrap();
         // test ..., ...

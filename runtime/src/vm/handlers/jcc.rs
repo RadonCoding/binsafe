@@ -190,7 +190,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.add(rdx, 0x4).unwrap();
 
         // add rax, [rcx + ...]
-        utils::add_reg_vreg_64(rt, rcx, VMReg::VB, rax);
+        utils::add_reg_vreg_64(rt, rcx, VMReg::Vib, rax);
 
         // test r12b, r12b
         rt.asm.test(r12b, r12b).unwrap();
@@ -198,7 +198,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jz(skip_jump).unwrap();
 
         // mov [rcx + ...], rax
-        utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Vra);
+        utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Vex);
     }
 
     rt.asm.set_label(&mut skip_jump).unwrap();

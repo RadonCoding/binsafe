@@ -65,7 +65,7 @@ const VM_TO_CONTEXT: &[(VMReg, i32)] = &[
     (VMReg::R13, 0xE0),
     (VMReg::R14, 0xE8),
     (VMReg::R15, 0xF0),
-    (VMReg::Vea, 0xF8),
+    (VMReg::Ven, 0xF8),
     (VMReg::Flags, 0x44),
 ];
 
@@ -157,7 +157,7 @@ pub fn handler(rt: &mut Runtime) {
             rt.asm.mov(ptr(r14 + *offset), rcx).unwrap();
         }
 
-        if *vreg == VMReg::Vea {
+        if *vreg == VMReg::Ven {
             // mov [r13 + 0x10], rcx -> PVOID EXCEPTION_RECORD->ExceptionAddress
             rt.asm.mov(ptr(r13 + 0x10), rcx).unwrap();
         }

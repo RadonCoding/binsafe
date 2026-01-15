@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{byte_ptr, ptr, r12, r13, r14, r15, r8, r9b, rax, rcx, rdx, word_ptr};
+use iced_x86::code_asm::{byte_ptr, ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, word_ptr};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -8,6 +8,7 @@ use crate::{
 // void (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
     let mut execute_loop = rt.asm.create_label();
+    let mut check_branch = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // push r12
@@ -16,16 +17,11 @@ pub fn build(rt: &mut Runtime) {
     stack::push(rt, r13);
     // push r14
     stack::push(rt, r14);
-    // push r15
-    stack::push(rt, r15);
 
     // mov r12, rcx
     rt.asm.mov(r12, rcx).unwrap();
     // mov r13, rdx
     rt.asm.mov(r13, rdx).unwrap();
-
-    // mov r14, [r12 + ...]
-    utils::mov_reg_vreg_64(rt, r12, VMReg::Vra, r14);
 
     // mov [r12 + ...], r13
     utils::mov_vreg_reg_64(rt, r12, r13, VMReg::Vbp);
@@ -38,8 +34,8 @@ pub fn build(rt: &mut Runtime) {
     // mov [r12 + ...], rax
     utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vbl);
 
-    // lea r15, [r13 + rax]
-    rt.asm.lea(r15, ptr(r13 + rax)).unwrap();
+    // lea r14, [r13 + rax]
+    rt.asm.lea(r14, ptr(r13 + rax)).unwrap();
 
     // mov rcx, [r14 + ...]
     utils::mov_reg_vreg_64(rt, r12, VMReg::Vbp, rcx);
@@ -65,10 +61,10 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut execute_loop).unwrap();
     {
-        // cmp r13, r15
-        rt.asm.cmp(r13, r15).unwrap();
+        // cmp r13, r14
+        rt.asm.cmp(r13, r14).unwrap();
         // je ...
-        rt.asm.je(epilogue).unwrap();
+        rt.asm.je(check_branch).unwrap();
 
         // movzx r8, [r13] -> op
         rt.asm.movzx(r8, byte_ptr(r13)).unwrap();
@@ -92,11 +88,21 @@ pub fn build(rt: &mut Runtime) {
         // mov r13, rax
         rt.asm.mov(r13, rax).unwrap();
 
-        // cmp [r12 + ...], r14
-        utils::cmp_vreg_reg_64(rt, r12, VMReg::Vra, r14);
+        // jmp ...
+        rt.asm.jmp(execute_loop).unwrap();
+    }
+
+    rt.asm.set_label(&mut check_branch).unwrap();
+    {
+        // mov rax, [...]
+        utils::mov_reg_vreg_64(rt, r12, VMReg::Ven, rax);
+        // cmp [...],
+        utils::cmp_vreg_reg_64(rt, r12, VMReg::Vbr, rax);
         // jne ...
         rt.asm.jne(epilogue).unwrap();
 
+        // mov r13, [...]
+        utils::mov_reg_vreg_64(rt, r12, VMReg::Vbp, r13);
         // jmp ...
         rt.asm.jmp(execute_loop).unwrap();
     }
@@ -114,8 +120,6 @@ pub fn build(rt: &mut Runtime) {
         // call ...
         stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 
-        // pop r15
-        stack::pop(rt, r15);
         // pop r14
         stack::pop(rt, r14);
         // pop r13

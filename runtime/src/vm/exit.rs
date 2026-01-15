@@ -6,6 +6,9 @@ use crate::{
 };
 
 pub fn build(rt: &mut Runtime) {
+    let mut use_vex = rt.asm.create_label();
+    let mut epilogue = rt.asm.create_label();
+
     // mov r12d, [...]
     rt.asm
         .mov(r12d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
@@ -26,15 +29,31 @@ pub fn build(rt: &mut Runtime) {
         utils::mov_reg_vreg_64(rt, r12, *vreg, *reg);
     }
 
+    // cmp [r12 + ...], 0x0
+    utils::cmp_vreg_imm_64(rt, r12, VMReg::Vbr, 0x0);
+    // je ...
+    rt.asm.je(use_vex).unwrap();
+
     // push [r12 + ...]
-    utils::push_vreg_64(rt, r12, VMReg::Vra);
+    utils::push_vreg_64(rt, r12, VMReg::Vbr);
+    // jmp ...
+    rt.asm.jmp(epilogue).unwrap();
 
-    // mov r12, [r12 + ...]
-    utils::mov_reg_vreg_64(rt, r12, VMReg::R12, r12);
+    rt.asm.set_label(&mut use_vex).unwrap();
+    {
+        // push [r12 + ...]
+        utils::push_vreg_64(rt, r12, VMReg::Vex);
+    }
 
-    #[cfg(debug_assertions)]
-    utils::stop_profiling(rt, "DISPATCH");
+    rt.asm.set_label(&mut epilogue).unwrap();
+    {
+        // mov r12, [r12 + ...]
+        utils::mov_reg_vreg_64(rt, r12, VMReg::R12, r12);
 
-    // ret
-    rt.asm.ret().unwrap();
+        #[cfg(debug_assertions)]
+        utils::stop_profiling(rt, "DISPATCH");
+
+        // ret
+        rt.asm.ret().unwrap();
+    }
 }

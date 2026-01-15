@@ -75,15 +75,16 @@ mapped! {
         R13,
         R14,
         R15,
-        Vra, // Native Exit
         Flags,
-        Vea, // Native Entry
+        Ven, // Native Entry
+        Vex, // Native Exit
         Vbp, // Block Pointer
         Vbl, // Block Length
-        VB, // Image Base
+        Vbr, // Virtual Branch
+        Vib, // Image Base
         Vsk, // System Key
-        V0, // Scratch 0
-        V1, // Scratch 1
+        Vs0, // Scratch 0
+        Vs1, // Scratch 1
     }
 }
 
@@ -107,7 +108,7 @@ impl From<Register> for VMReg {
             Register::R13 | Register::R13D | Register::R13W | Register::R13L => Self::R13,
             Register::R14 | Register::R14D | Register::R14W | Register::R14L => Self::R14,
             Register::R15 | Register::R15D | Register::R15W | Register::R15L => Self::R15,
-            Register::RIP => Self::VB,
+            Register::RIP => Self::Vib,
             _ => panic!("unsupported register: {reg:?}"),
         }
     }
