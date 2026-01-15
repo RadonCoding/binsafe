@@ -193,7 +193,7 @@ pub fn build(rt: &mut Runtime) {
     }
 
     #[cfg(debug_assertions)]
-    utils::start_profiling(rt, "VmDispatch");
+    utils::start_profiling(rt, "DISPATCH");
 
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();

@@ -58,47 +58,48 @@ impl Protection for Virtualization {
                 self.transforms += 1;
             }
 
-            let mut vcode_key = if vcode.is_empty() {
-                key_seed
-            } else {
-                u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap())
-            };
-
-            let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
-
-            while vblock.len() % 8 != 0 {
-                vblock.push(rng.gen::<u8>());
-            }
-
-            for chunk in vblock.chunks_exact_mut(8) {
-                let mut qword = u64::from_le_bytes(chunk.try_into().unwrap());
-                qword ^= vcode_key;
-                chunk.copy_from_slice(&qword.to_le_bytes());
-
-                vcode_key ^= qword ^ NTQIP_SIGNATURE as u64;
-                vcode_key = vcode_key.wrapping_mul(key_mul).wrapping_add(key_add);
-            }
-
-            // WORD - length of the VM-block [0..2]
-            vblock.splice(0..0, length.to_le_bytes());
-            // BYTE - lock state of the VM-block [..1]
-            vblock.push(0);
-
-            // TODO: Fix hash being computed after encryption
             let mut hasher = DefaultHasher::new();
             vblock.hash(&mut hasher);
             let hash = hasher.finish();
 
             // Check if the block already exists to avoid duplication
-            let vcode_offset = if let Some(&offset) = dedup.get(&hash) {
+            let vcode_offset = if dedup.contains_key(&hash) {
                 self.dedupes += 1;
 
-                offset
+                dedup[&hash]
             } else {
-                let offset = vcode.len() as u32;
+                let mut vcode_key = if vcode.is_empty() {
+                    key_seed
+                } else {
+                    u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap())
+                };
+
+                let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
+
+                while vblock.len() % 8 != 0 {
+                    vblock.push(rng.gen::<u8>());
+                }
+
+                for chunk in vblock.chunks_exact_mut(8) {
+                    let mut qword = u64::from_le_bytes(chunk.try_into().unwrap());
+                    qword ^= vcode_key;
+                    chunk.copy_from_slice(&qword.to_le_bytes());
+
+                    vcode_key ^= qword ^ NTQIP_SIGNATURE as u64;
+                    vcode_key = vcode_key.wrapping_mul(key_mul).wrapping_add(key_add);
+                }
+
+                // WORD - length of the VM-block [0..2]
+                vblock.splice(0..0, length.to_le_bytes());
+                // BYTE - lock state of the VM-block [..1]
+                vblock.push(0);
+
+                let vcode_offset = TryInto::<u32>::try_into(vcode.len()).unwrap();
                 vcode.extend_from_slice(&vblock);
-                dedup.insert(hash, offset);
-                offset
+
+                dedup.insert(hash, vcode_offset);
+
+                vcode_offset
             };
 
             // Store the offset of this VM-block's VM-table entry
