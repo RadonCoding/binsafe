@@ -52,12 +52,12 @@ pub fn build(rt: &mut Runtime) {
 
     #[cfg(debug_assertions)]
     {
-        utils::start_profiling(rt, "VmCrypt");
+        utils::start_profiling(rt, "CRYPT");
 
         // call ...
         stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 
-        utils::stop_profiling(rt, "VmCrypt");
+        utils::stop_profiling(rt, "CRYPT");
     }
     #[cfg(not(debug_assertions))]
     // call ...
