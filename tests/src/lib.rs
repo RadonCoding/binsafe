@@ -3,7 +3,7 @@ mod tests {
     use std::{ffi::c_void, mem, ptr, thread};
 
     use iced_x86::{
-        code_asm::{ecx, esi, ptr, rax, rcx, rdi, rdx, rsi},
+        code_asm::{ecx, esi, ptr, qword_ptr, rax, rcx, rdi, rdx, rsi},
         Code, Instruction, MemoryOperand, Register,
     };
     use runtime::{
@@ -88,6 +88,12 @@ mod tests {
                     .mov(ptr(rcx + self.rt.mapper.index(reg) * 8), rax)
                     .unwrap();
             }
+
+            // mov [rcx + ...], -0x1
+            self.rt
+                .asm
+                .mov(qword_ptr(rcx + self.rt.mapper.index(VMReg::Ven) * 8), -0x1)
+                .unwrap();
 
             // mov rax, ...
             self.rt
@@ -316,6 +322,15 @@ mod tests {
             &[(VMReg::Rax, 0x1)],
             VMReg::Vex,
             0xDEAD,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm8, Register::RAX, 0x2).unwrap(),
+                Instruction::with_branch(Code::Ja_rel8_64, 0xDEAD).unwrap(),
+            ],
+            &[(VMReg::Rax, 0x2)],
+            VMReg::Vex,
+            0x0,
         );
     }
 
