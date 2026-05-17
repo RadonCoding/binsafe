@@ -289,32 +289,6 @@ pub fn release_global_lock(rt: &mut Runtime) {
 }
 
 #[cfg(debug_assertions)]
-pub fn with_stack_pivot<F>(rt: &mut Runtime, src: AsmRegister64, f: F)
-where
-    F: FnOnce(&mut Runtime),
-{
-    use iced_x86::code_asm::{rax, rsp};
-
-    use crate::vm::stack;
-
-    // push rsp
-    stack::push(rt, rsp);
-    // mov rsp, [...]
-    rt.asm
-        .mov(rsp, ptr(src + rt.mapper.index(VMReg::Rsp) * 8))
-        .unwrap();
-    // push rax
-    rt.asm.push(rax).unwrap();
-    // pop rax
-    stack::pop(rt, rax);
-
-    f(rt);
-
-    // pop rsp
-    rt.asm.pop(rsp).unwrap();
-}
-
-#[cfg(debug_assertions)]
 fn print_thread_prefix(rt: &mut Runtime) {
     use crate::vm::utils;
     use iced_x86::code_asm::rax;

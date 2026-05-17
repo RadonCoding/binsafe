@@ -2,7 +2,6 @@ use crate::engine::Engine;
 use crate::protections::Protection;
 use iced_x86::code_asm::*;
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
-use logger::info;
 use rand::Rng;
 
 #[derive(Default)]
@@ -11,6 +10,7 @@ pub struct Mutation;
 impl Mutation {
     fn resolve_gpr32(&self, reg: Register) -> Option<AsmRegister32> {
         use iced_x86::code_asm::registers::gpr32::*;
+
         match reg {
             Register::EAX => Some(eax),
             Register::ECX => Some(ecx),
@@ -34,6 +34,7 @@ impl Mutation {
 
     fn resolve_gpr64(&self, reg: Register) -> Option<AsmRegister64> {
         use iced_x86::code_asm::registers::gpr64::*;
+
         match reg {
             Register::RAX => Some(rax),
             Register::RCX => Some(rcx),
@@ -93,10 +94,7 @@ impl Protection for Mutation {
                 let raw = instruction.op0_register();
 
                 // MOV reg, imm -> MOV reg, (imm^key); XOR reg, key
-                if mnemonic == Mnemonic::Mov
-                    && instruction.op1_kind() == OpKind::Immediate32
-                    && dead_flags
-                {
+                if mnemonic == Mnemonic::Mov && instruction.try_immediate(1).is_ok() && dead_flags {
                     let imm = instruction.immediate(1);
                     let key = rng.gen::<u32>();
 
@@ -244,9 +242,7 @@ impl Protection for Mutation {
                 let bytes = asm.assemble(block.rva as u64).unwrap();
 
                 if bytes.len() <= block.size {
-                    info!("PRE-MUTATION:\n{}", engine.blocks[i]);
                     engine.replace(i, &bytes);
-                    info!("POST-MUTATION:\n{}", engine.blocks[i]);
                 }
             }
         }
