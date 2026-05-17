@@ -89,6 +89,7 @@ mod tests {
                     .unwrap();
             }
 
+            // Set the native entry to point to a value different than the virtual branch for the dispatcher.
             // mov [rcx + ...], -0x1
             self.rt
                 .asm
@@ -328,9 +329,9 @@ mod tests {
                 Instruction::with2(Code::Cmp_rm64_imm8, Register::RAX, 0x2).unwrap(),
                 Instruction::with_branch(Code::Ja_rel8_64, 0xDEAD).unwrap(),
             ],
-            &[(VMReg::Rax, 0x2)],
+            &[(VMReg::Rax, 0x3)],
             VMReg::Vex,
-            0x0,
+            0xDEAD,
         );
     }
 

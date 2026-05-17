@@ -164,6 +164,7 @@ pub fn build(rt: &mut Runtime) {
             // and r12b, r8b
             rt.asm.and(r12b, r8b).unwrap();
 
+            // For AND conditions do not check the rest if the condition was false.
             // test r12b, r12b
             rt.asm.test(r12b, r12b).unwrap();
             // jz ...
