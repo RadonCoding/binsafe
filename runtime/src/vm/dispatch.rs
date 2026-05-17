@@ -23,20 +23,21 @@ pub fn build(rt: &mut Runtime) {
     // mov r13, rdx
     rt.asm.mov(r13, rdx).unwrap();
 
+    // Initialize block pointer and block length.
     // mov [r12 + ...], r13
     utils::mov_vreg_reg_64(rt, r12, r13, VMReg::Vbp);
-
     // movzx rax, [r13]
     rt.asm.movzx(rax, word_ptr(r13)).unwrap();
     // add r13, 0x2
     rt.asm.add(r13, 0x2).unwrap();
-
     // mov [r12 + ...], rax
     utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vbl);
 
+    // Store the end of the block.
     // lea r14, [r13 + rax]
     rt.asm.lea(r14, ptr(r13 + rax)).unwrap();
 
+    // Dectypt the block.
     // mov rcx, [r14 + ...]
     utils::mov_reg_vreg_64(rt, r12, VMReg::Vbp, rcx);
     // mov rdx, [r14 + ...]
@@ -90,6 +91,7 @@ pub fn build(rt: &mut Runtime) {
         // jne ...
         rt.asm.jne(epilogue).unwrap();
 
+        // If the virtual branch points to the native entry then re-execute the block.
         // mov r13, [...]
         utils::mov_reg_vreg_64(rt, r12, VMReg::Vbp, r13);
         // jmp ...
@@ -98,6 +100,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
+        // Encrypt the block.
         // mov rcx, [r14 + ...]
         utils::mov_reg_vreg_64(rt, r12, VMReg::Vbp, rcx);
         // mov rdx, [r14 + ...]
