@@ -12,7 +12,7 @@ use crate::{
 pub fn build(rt: &mut Runtime) {
     let mut add_base = rt.asm.create_label();
     let mut check_index = rt.asm.create_label();
-    let mut add_displ = rt.asm.create_label();
+    let mut add_displacement = rt.asm.create_label();
     let mut add_seg = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
@@ -50,7 +50,7 @@ pub fn build(rt: &mut Runtime) {
         // cmp r8, ...
         rt.asm.cmp(r8, rt.mapper.index(VMReg::None) as i32).unwrap();
         // je ...
-        rt.asm.je(add_displ).unwrap();
+        rt.asm.je(add_displacement).unwrap();
     }
 
     // mov r8, [rcx + r8*8]
@@ -60,9 +60,9 @@ pub fn build(rt: &mut Runtime) {
     // add rax, r8
     rt.asm.add(rax, r8).unwrap();
 
-    rt.asm.set_label(&mut add_displ).unwrap();
+    rt.asm.set_label(&mut add_displacement).unwrap();
     {
-        // movsxd r8, [rdx] -> displ
+        // movsxd r8, [rdx] -> displacement
         rt.asm.movsxd(r8, ptr(rdx)).unwrap();
         // add rdx, 0x4
         rt.asm.add(rdx, 0x4).unwrap();

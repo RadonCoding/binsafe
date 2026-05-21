@@ -89,7 +89,7 @@ mod tests {
                     .unwrap();
             }
 
-            // Set the native entry to point to a value different than the virtual branch for the dispatcher.
+            // Set the native entry to point to a value different than the virtual branch for the dispatcher:
             // mov [rcx + ...], -0x1
             self.rt
                 .asm

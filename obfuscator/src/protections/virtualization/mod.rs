@@ -163,10 +163,10 @@ impl Protection for Virtualization {
 
             // Patch the stub displacement placeholder in the VM-table
             unsafe {
-                let displ = (block.size - dispatch2.len()) as u32;
+                let displacement = (block.size - dispatch2.len()) as u32;
                 vtable
                     .add(vtable_offset)
-                    .copy_from(displ.to_le_bytes().as_ptr(), mem::size_of::<u32>());
+                    .copy_from(displacement.to_le_bytes().as_ptr(), mem::size_of::<u32>());
             }
 
             engine.replace(i, &dispatch2);

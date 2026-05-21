@@ -167,7 +167,7 @@ pub struct VMMem {
     pub base: VMReg,
     pub index: VMReg,
     pub scale: u8,
-    pub displ: i32,
+    pub displacement: i32,
     pub seg: VMSeg,
 }
 
@@ -177,7 +177,7 @@ impl VMMem {
         bytes.push(mapper.index(self.base));
         bytes.push(mapper.index(self.index));
         bytes.push(self.scale);
-        bytes.extend_from_slice(&self.displ.to_le_bytes());
+        bytes.extend_from_slice(&self.displacement.to_le_bytes());
         bytes.push(mapper.index(self.seg));
         bytes
     }
@@ -197,7 +197,7 @@ impl From<&Instruction> for VMMem {
             base,
             index,
             scale,
-            displ: displacement,
+            displacement,
             seg,
         }
     }
