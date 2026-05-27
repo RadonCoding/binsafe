@@ -43,6 +43,14 @@ pub fn read_dword(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
     rt.asm.add(base, 0x4).unwrap();
 }
 
+/// `movsxd {to}, [{base}]`; `add {base}, 0x4`
+pub fn read_dword_sx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister64) {
+    // movsxd ..., [...]
+    rt.asm.movsxd(to, ptr(base)).unwrap();
+    // add ..., 0x4
+    rt.asm.add(base, 0x4).unwrap();
+}
+
 /// `mov {to}, [{base}]`; `add {base}, 0x8`
 pub fn read_qword(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister64) {
     // mov ..., [...]

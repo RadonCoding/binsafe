@@ -1,10 +1,10 @@
-use iced_x86::code_asm::{byte_ptr, ptr, r8, r9, rax, rcx, rdx};
+use iced_x86::code_asm::{ptr, r8, r8d, r9, r9d, rax, rcx, rdx};
 
 use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{VMReg, VMSeg},
-        stack,
+        stack, utils,
     },
 };
 
@@ -19,10 +19,8 @@ pub fn build(rt: &mut Runtime) {
     // xor rax, rax
     rt.asm.xor(rax, rax).unwrap();
 
-    // movzx r8, [rdx] -> base
-    rt.asm.movzx(r8, byte_ptr(rdx)).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
+    // movzx r8, [rdx]; add rdx, 0x1 -> base
+    utils::bytecode::read_byte_zx(rt, rdx, r8d);
 
     // cmp r8, ...
     rt.asm.cmp(r8, rt.mapper.index(VMReg::None) as i32).unwrap();
@@ -37,16 +35,10 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut check_index).unwrap();
     {
-        // movzx r8, [rdx] -> index
-        rt.asm.movzx(r8, byte_ptr(rdx)).unwrap();
-        // add rdx, 0x1
-        rt.asm.add(rdx, 0x1).unwrap();
-
-        // movzx r9, [rdx] -> scale
-        rt.asm.movzx(r9, byte_ptr(rdx)).unwrap();
-        // add rdx, 0x1
-        rt.asm.add(rdx, 0x1).unwrap();
-
+        // movzx r8, [rdx]; add rdx, 0x1 -> index
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        // movzx r9, [rdx]; add rdx, 0x1 -> scale
+        utils::bytecode::read_byte_zx(rt, rdx, r9d);
         // cmp r8, ...
         rt.asm.cmp(r8, rt.mapper.index(VMReg::None) as i32).unwrap();
         // je ...
@@ -62,19 +54,15 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut add_displacement).unwrap();
     {
-        // movsxd r8, [rdx] -> displacement
-        rt.asm.movsxd(r8, ptr(rdx)).unwrap();
-        // add rdx, 0x4
-        rt.asm.add(rdx, 0x4).unwrap();
+        // movsxd r8, [rdx]; add rdx, 0x4 -> displacement
+        utils::bytecode::read_dword_sx(rt, rdx, r8);
 
         // add rax, r8
         rt.asm.add(rax, r8).unwrap();
     }
 
-    // movzx r8, [rdx] -> seg
-    rt.asm.movzx(r8, byte_ptr(rdx)).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
+    // movzx r8, [rdx]; add rdx, 0x1 -> seg
+    utils::bytecode::read_byte_zx(rt, rdx, r8d);
 
     // cmp r8, ...
     rt.asm.cmp(r8, rt.mapper.index(VMSeg::None) as i32).unwrap();
