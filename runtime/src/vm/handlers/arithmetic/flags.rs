@@ -1,18 +1,18 @@
-use iced_x86::code_asm::{r8, rax, rcx, rdx};
+use crate::vm::utils;
+use iced_x86::code_asm::{eax, r8, rax, rcx, rdx};
 
 use crate::{
     runtime::Runtime,
-
     vm::{
         bytecode::{VMFlag, VMReg},
-        stack, utils,
+        stack,
     },
 };
 
 // void (unsigned long*, unsigned long)
 pub fn build(rt: &mut Runtime) {
-    // mov rax, [rcx + ...]
-    utils::mov_reg_vreg_64(rt, rcx, VMReg::Flags, rax);
+    // mov eax, [rcx + ...]
+    utils::vreg::load_reg32(rt, rcx, VMReg::Flags, eax);
 
     const FLAG_MASK: u64 = (1 << VMFlag::Carry as u64)
         | (1 << VMFlag::Parity as u64)
@@ -33,8 +33,8 @@ pub fn build(rt: &mut Runtime) {
     // or rax, rdx
     rt.asm.or(rax, rdx).unwrap();
 
-    // mov [rcx + ...], rax
-    utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Flags);
+    // mov [rcx + ...], eax
+    utils::vreg::store_reg32(rt, rcx, eax, VMReg::Flags);
 
     // ret
     stack::ret(rt);

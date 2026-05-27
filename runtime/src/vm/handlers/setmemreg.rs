@@ -2,8 +2,7 @@ use iced_x86::code_asm::{al, ax, bl, byte_ptr, eax, ptr, r12, r13, r14, r15, rax
 
 use crate::{
     runtime::{FnDef, Runtime},
-    vm::bytecode::VMBits,
-    vm::stack,
+    vm::{bytecode::VMBits, stack, utils},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -31,17 +30,15 @@ pub fn build(rt: &mut Runtime) {
     // mov r13, rdx
     rt.asm.mov(r13, rdx).unwrap();
 
-    // mov bl, [r13] -> bits
-    rt.asm.mov(bl, ptr(r13)).unwrap();
-    // add r13, 0x1
-    rt.asm.add(r13, 0x1).unwrap();
+    // mov bl, [r13]; add r13, 0x1 -> bits
+    utils::bytecode::read_byte(rt, r13, bl);
 
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();
     // mov rdx, r13
     rt.asm.mov(rdx, r13).unwrap();
     // call ...
-    stack::call(rt, rt.func_labels[&FnDef::ComputeAddress]);
+    stack::call(rt, rt.func_labels[&FnDef::VmSib]);
 
     // mov r14, rax -> dst
     rt.asm.mov(r14, rax).unwrap();

@@ -27,8 +27,7 @@ pub enum FnDef {
     VmCrypt,
     VmDispatch,
     VmCleanup,
-    /* VM UTILS */
-    ComputeAddress,
+    VmSib,
     /* VM HANDLERS */
     VmHandlersInitialize,
     VmHandlerPushPopRegs,
@@ -62,7 +61,7 @@ pub enum FnDef {
     /* CORE */
     CompareUnicodeToAnsi,
     CompareAnsi,
-    GetProcAddress,
+    Resolve,
     #[cfg(debug_assertions)]
     Strlen,
     #[cfg(debug_assertions)]
@@ -293,7 +292,7 @@ impl Runtime {
         self.strings.insert(def, bytes);
     }
 
-    pub fn get_proc_address(&mut self, def: ImportDef) {
+    pub fn resolve(&mut self, def: ImportDef) {
         let mut initialized = self.asm.create_label();
 
         // lea rax, [...]
@@ -320,9 +319,7 @@ impl Runtime {
             .lea(rdx, ptr(self.string_labels[&export_name]))
             .unwrap();
         // call ...
-        self.asm
-            .call(self.func_labels[&FnDef::GetProcAddress])
-            .unwrap();
+        self.asm.call(self.func_labels[&FnDef::Resolve]).unwrap();
 
         // lea rcx, [...]
         self.asm
@@ -347,7 +344,7 @@ impl Runtime {
             (FnDef::VmCrypt, vm::crypt::build),
             (FnDef::VmDispatch, vm::dispatch::build),
             (FnDef::VmCleanup, vm::cleanup::build),
-            (FnDef::ComputeAddress, vm::utils::compute_address::build),
+            (FnDef::VmSib, vm::sib::build),
             (FnDef::VmHandlersInitialize, vm::handlers::initialize),
             (
                 FnDef::VmHandlerPushPopRegs,
@@ -412,7 +409,7 @@ impl Runtime {
                 functions::compare_unicode_to_ansi::build,
             ),
             (FnDef::CompareAnsi, functions::compare_ansi::build),
-            (FnDef::GetProcAddress, functions::get_proc_address::build),
+            (FnDef::Resolve, functions::resolve::build),
             #[cfg(debug_assertions)]
             (FnDef::Strlen, functions::strlen::build),
             #[cfg(debug_assertions)]

@@ -333,6 +333,15 @@ mod tests {
             VMReg::Vex,
             0xDEAD,
         );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm8, Register::RAX, 0x2).unwrap(),
+                Instruction::with_branch(Code::Ja_rel8_64, 0xDEAD).unwrap(),
+            ],
+            &[(VMReg::Rax, 0x1)],
+            VMReg::Vex,
+            0,
+        );
     }
 
     #[test]

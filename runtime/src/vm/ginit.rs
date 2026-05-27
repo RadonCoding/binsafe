@@ -10,7 +10,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.sub(rsp, 0x28).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(ImportDef::TlsAlloc);
+    rt.resolve(ImportDef::TlsAlloc);
     // mov r12, rax
     rt.asm.mov(r12, rax).unwrap();
 
@@ -36,7 +36,7 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(ImportDef::RtlFlsAlloc);
+    rt.resolve(ImportDef::RtlFlsAlloc);
     // lea rcx, [...]
     rt.asm
         .lea(rcx, ptr(rt.func_labels[&FnDef::VmCleanup]))
