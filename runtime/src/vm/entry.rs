@@ -1,9 +1,10 @@
+use crate::vm::utils;
 use iced_x86::code_asm::{ecx, ptr, r12, r12b, r12d, rax, rcx, rdi, rdx, rsi, rsp};
 
 use crate::{
     mapper::Mappable as _,
     runtime::{DataDef, FnDef, ImportDef, Runtime},
-    vm::{bytecode::VMReg, stack, utils, VREG_TO_REG},
+    vm::{bytecode::VMReg, stack, utils::lock, VREG_TO_REG},
 };
 
 // void (unsigned int)
@@ -39,7 +40,7 @@ pub fn build(rt: &mut Runtime) {
     // jmp ...
     rt.asm.jmp(initialize_state).unwrap();
 
-    utils::acquire_global_lock(rt, r12b, Some(&mut acquire_global_lock));
+    lock::acquire_global(rt, r12b, Some(&mut acquire_global_lock));
 
     rt.asm.set_label(&mut save_global_state).unwrap();
     {
@@ -50,7 +51,7 @@ pub fn build(rt: &mut Runtime) {
 
         for (vreg, reg) in VREG_TO_REG {
             // mov [r12 + ...], ...
-            utils::mov_vreg_reg_64(rt, r12, *reg, *vreg);
+            utils::vreg::store_reg(rt, r12, *reg, *vreg);
         }
     }
 
@@ -103,19 +104,19 @@ pub fn build(rt: &mut Runtime) {
     // mov rax, [rax + 0x10] -> PVOID PEB->ImageBaseAddress
     rt.asm.mov(rax, ptr(rax + 0x10)).unwrap();
     // mov [r12 + ...], rax
-    utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vib);
+    utils::vreg::store_reg(rt, r12, rax, VMReg::Vib);
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(ImportDef::NtQueryInformationProcess);
+    rt.resolve(ImportDef::NtQueryInformationProcess);
     // mov [...], rax
-    utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vsk);
+    utils::vreg::store_reg(rt, r12, rax, VMReg::Vsk);
 
     // call ...
     rt.asm
         .call(rt.func_labels[&FnDef::VmHandlersInitialize])
         .unwrap();
 
-    utils::release_global_lock(rt);
+    lock::release_global(rt);
 
     // jmp ...
     rt.asm.jmp(initialize_execution).unwrap();
@@ -131,7 +132,7 @@ pub fn build(rt: &mut Runtime) {
 
         for (vreg, reg) in VREG_TO_REG {
             // mov [r12 + ...], ...
-            utils::mov_vreg_reg_64(rt, r12, *reg, *vreg);
+            utils::vreg::store_reg(rt, r12, *reg, *vreg);
         }
     }
 
@@ -140,25 +141,25 @@ pub fn build(rt: &mut Runtime) {
         // pop rcx -> r12
         rt.asm.pop(rcx).unwrap();
         // mov [r12 + ...], ...
-        utils::mov_vreg_reg_64(rt, r12, rcx, VMReg::R12);
+        utils::vreg::store_reg(rt, r12, rcx, VMReg::R12);
 
         // pop rcx -> flags
         rt.asm.pop(rcx).unwrap();
         // mov [r12 + ...], rcx
-        utils::mov_vreg_reg_64(rt, r12, rcx, VMReg::Flags);
+        utils::vreg::store_reg(rt, r12, rcx, VMReg::Flags);
 
         // mov [r12 + ...], rcx
-        utils::mov_vreg_imm_64(rt, r12, 0x0, VMReg::Vbr);
+        utils::vreg::store_imm(rt, r12, 0x0, VMReg::Vbr);
 
         // pop rcx -> ret
         rt.asm.pop(rdx).unwrap();
         // mov [r12 + ...], rcx
-        utils::mov_vreg_reg_64(rt, r12, rdx, VMReg::Vex);
+        utils::vreg::store_reg(rt, r12, rdx, VMReg::Vex);
         // mov [r12 + ...], rcx
-        utils::mov_vreg_reg_64(rt, r12, rdx, VMReg::Ven);
+        utils::vreg::store_reg(rt, r12, rdx, VMReg::Ven);
 
         // sub rdx, [...]
-        utils::sub_reg_vreg_64(rt, r12, VMReg::Vib, rdx);
+        utils::vreg::reg_sub(rt, r12, VMReg::Vib, rdx);
 
         // pop rcx -> index
         rt.asm.pop(rcx).unwrap();
@@ -177,9 +178,9 @@ pub fn build(rt: &mut Runtime) {
         // mov ecx, [rdx] -> displ
         rt.asm.mov(ecx, ptr(rdx)).unwrap();
         // sub [r12 + ...], rcx
-        utils::sub_vreg_reg_64(rt, r12, rcx, VMReg::Ven);
+        utils::vreg::sub_reg(rt, r12, rcx, VMReg::Ven);
         // add [r12 + ...], rcx
-        utils::add_vreg_reg_64(rt, r12, rcx, VMReg::Vex);
+        utils::vreg::add_reg(rt, r12, rcx, VMReg::Vex);
 
         // mov ecx, [rdx + 0x4] -> offset
         rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();
@@ -192,7 +193,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.add(rdx, rcx).unwrap();
 
         // mov [r12 + ...], rsp
-        utils::mov_vreg_reg_64(rt, r12, rsp, VMReg::Rsp);
+        utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
     }
 
     // mov rcx, r12

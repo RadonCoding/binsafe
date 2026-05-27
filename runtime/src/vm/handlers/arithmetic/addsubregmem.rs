@@ -4,7 +4,7 @@ use iced_x86::code_asm::{
 
 use crate::{
     runtime::{FnDef, Runtime},
-    vm::{bytecode::VMBits, stack},
+    vm::{bytecode::VMBits, stack, utils},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -29,7 +29,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r13, rdx).unwrap();
 
     // call ...
-    stack::call(rt, rt.func_labels[&FnDef::ComputeAddress]);
+    stack::call(rt, rt.func_labels[&FnDef::VmSib]);
 
     // mov r13, rdx
     rt.asm.mov(r13, rdx).unwrap();
@@ -37,26 +37,20 @@ pub fn build(rt: &mut Runtime) {
     // xor r14b, r14b
     rt.asm.xor(r14b, r14b).unwrap();
 
-    // mov r8b, [r13] -> sub
-    rt.asm.mov(r8b, ptr(r13)).unwrap();
-    // add r13, 0x1
-    rt.asm.add(r13, 0x1).unwrap();
+    // mov r8b, [r13]; add r13, 0x1 -> sub
+    utils::bytecode::read_byte(rt, r13, r8b);
     // or r14b, r8b
     rt.asm.or(r14b, r8b).unwrap();
 
-    // mov r8b, [r13] -> store
-    rt.asm.mov(r8b, ptr(r13)).unwrap();
-    // add r13, 0x1
-    rt.asm.add(r13, 0x1).unwrap();
+    // mov r8b, [r13]; add r13, 0x1 -> store
+    utils::bytecode::read_byte(rt, r13, r8b);
     // shl r8b, 0x1
     rt.asm.shl(r8b, 0x1).unwrap();
     // or r14b, r8b
     rt.asm.or(r14b, r8b).unwrap();
 
-    // mov r8b, [r13] -> dbits
-    rt.asm.mov(r8b, ptr(r13)).unwrap();
-    // add r13, 0x1
-    rt.asm.add(r13, 0x1).unwrap();
+    // mov r8b, [r13]; add r13, 0x1 -> dbits
+    utils::bytecode::read_byte(rt, r13, r8b);
 
     // movzx r9, [r13] -> dst
     rt.asm.movzx(r9, byte_ptr(r13)).unwrap();

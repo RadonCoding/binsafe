@@ -4,8 +4,7 @@ use iced_x86::code_asm::{
 
 use crate::{
     runtime::{FnDef, Runtime},
-
-    vm::{bytecode::VMBits, stack},
+    vm::{bytecode::VMBits, stack, utils},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -27,10 +26,8 @@ pub fn build(rt: &mut Runtime) {
     // mov r12, rdx
     rt.asm.mov(r12, rdx).unwrap();
 
-    // mov r13b, [r12] -> dbits
-    rt.asm.mov(r13b, ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
+    // mov r13b, [r12]; add r12, 0x1 -> dbits
+    utils::bytecode::read_byte(rt, r12, r13b);
 
     // movzx r8, [r12] -> dst
     rt.asm.movzx(r8, byte_ptr(r12)).unwrap();
@@ -40,17 +37,13 @@ pub fn build(rt: &mut Runtime) {
     // xor r14b, r14b
     rt.asm.xor(r14b, r14b).unwrap();
 
-    // mov al, [r12] -> sub
-    rt.asm.mov(al, ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
+    // mov al, [r12]; add r12, 0x1 -> sub
+    utils::bytecode::read_byte(rt, r12, al);
     // or r14b, al
     rt.asm.or(r14b, al).unwrap();
 
-    // mov al, [r12] -> store
-    rt.asm.mov(al, ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
+    // mov al, [r12]; add r12, 0x1 -> store
+    utils::bytecode::read_byte(rt, r12, al);
     // shl al, 0x1
     rt.asm.shl(al, 0x1).unwrap();
     // or r14b, al
@@ -85,10 +78,9 @@ pub fn build(rt: &mut Runtime) {
     {
         // lea rdx, [rcx + r8*8]
         rt.asm.lea(rdx, ptr(rcx + r8 * 8)).unwrap();
-        // mov r8b, [r12]
-        rt.asm.mov(r8b, ptr(r12)).unwrap();
-        // add r12, 0x1
-        rt.asm.add(r12, 0x1).unwrap();
+
+        // mov r8b, [r12]; add r12, 0x1
+        utils::bytecode::read_byte(rt, r12, r8b);
         // mov r9b, r14b
         rt.asm.mov(r9b, r14b).unwrap();
         // call ...
@@ -103,10 +95,9 @@ pub fn build(rt: &mut Runtime) {
     {
         // lea rdx, [rcx + r8*8 + 0x1]
         rt.asm.lea(rdx, ptr(rcx + r8 * 8 + 0x1)).unwrap();
-        // mov r8b, [r12]
-        rt.asm.mov(r8b, ptr(r12)).unwrap();
-        // add r12, 0x1
-        rt.asm.add(r12, 0x1).unwrap();
+
+        // mov r8b, [r12]; add r12, 0x1
+        utils::bytecode::read_byte(rt, r12, r8b);
         // mov r9b, r14b
         rt.asm.mov(r9b, r14b).unwrap();
         // call ...
@@ -121,10 +112,9 @@ pub fn build(rt: &mut Runtime) {
     {
         // lea rdx, [rcx + r8*8]
         rt.asm.lea(rdx, ptr(rcx + r8 * 8)).unwrap();
-        // mov r8w, [r12]
-        rt.asm.mov(r8w, ptr(r12)).unwrap();
-        // add r12, 0x2
-        rt.asm.add(r12, 0x2).unwrap();
+
+        // mov r8w, [r12]; add r12, 0x2
+        utils::bytecode::read_word(rt, r12, r8w);
         // mov r9b, r14b
         rt.asm.mov(r9b, r14b).unwrap();
         // call ...
@@ -139,10 +129,9 @@ pub fn build(rt: &mut Runtime) {
     {
         // lea rdx, [rcx + r8*8]
         rt.asm.lea(rdx, ptr(rcx + r8 * 8)).unwrap();
-        // mov r8d, [r12]
-        rt.asm.mov(r8d, ptr(r12)).unwrap();
-        // add r12, 0x4
-        rt.asm.add(r12, 0x4).unwrap();
+
+        // mov r8d, [r12]; add r12, 0x4
+        utils::bytecode::read_dword(rt, r12, r8d);
         // mov r9b, r14b
         rt.asm.mov(r9b, r14b).unwrap();
         // call ...
@@ -157,10 +146,9 @@ pub fn build(rt: &mut Runtime) {
     {
         // lea rdx, [rcx + r8*8]
         rt.asm.lea(rdx, ptr(rcx + r8 * 8)).unwrap();
-        // mov r8, [r12]
-        rt.asm.mov(r8, ptr(r12)).unwrap();
-        // add r12, 0x8
-        rt.asm.add(r12, 0x8).unwrap();
+
+        // mov r8, [r12]; add r12, 0x8
+        utils::bytecode::read_qword(rt, r12, r8);
         // mov r9b, r14b
         rt.asm.mov(r9b, r14b).unwrap();
         // call ...

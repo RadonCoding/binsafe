@@ -17,14 +17,14 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.sub(rsp, 0x28).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(ImportDef::GetProcessHeap);
+    rt.resolve(ImportDef::GetProcessHeap);
     // call rax
     rt.asm.call(rax).unwrap();
     // mov r12, rax
     rt.asm.mov(r12, rax).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(ImportDef::RtlAllocateHeap);
+    rt.resolve(ImportDef::RtlAllocateHeap);
     // mov r13, rax
     rt.asm.mov(r13, rax).unwrap();
 
@@ -64,7 +64,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(ImportDef::RtlFlsSetValue);
+    rt.resolve(ImportDef::RtlFlsSetValue);
     // mov ecx, [...]
     rt.asm
         .mov(ecx, ptr(rt.data_labels[&DataDef::VmCleanupFlsIndex]))

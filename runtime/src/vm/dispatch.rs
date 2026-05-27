@@ -1,8 +1,9 @@
+use crate::vm::utils;
 use iced_x86::code_asm::{byte_ptr, ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, word_ptr};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
-    vm::{bytecode::VMReg, stack, utils},
+    vm::{bytecode::VMReg, stack},
 };
 
 // void (unsigned long*, unsigned char*)
@@ -25,13 +26,13 @@ pub fn build(rt: &mut Runtime) {
 
     // Initialize block pointer and block length:
     // mov [r12 + ...], r13
-    utils::mov_vreg_reg_64(rt, r12, r13, VMReg::Vbp);
+    utils::vreg::store_reg(rt, r12, r13, VMReg::Vbp);
     // movzx rax, [r13]
     rt.asm.movzx(rax, word_ptr(r13)).unwrap();
     // add r13, 0x2
     rt.asm.add(r13, 0x2).unwrap();
     // mov [r12 + ...], rax
-    utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vbl);
+    utils::vreg::store_reg(rt, r12, rax, VMReg::Vbl);
 
     // Store the end of the block:
     // lea r14, [r13 + rax]
@@ -39,11 +40,11 @@ pub fn build(rt: &mut Runtime) {
 
     // Decrypt the block:
     // mov rcx, [r14 + ...]
-    utils::mov_reg_vreg_64(rt, r12, VMReg::Vbp, rcx);
+    utils::vreg::load_reg(rt, r12, VMReg::Vbp, rcx);
     // mov rdx, [r14 + ...]
-    utils::mov_reg_vreg_64(rt, r12, VMReg::Vbl, rdx);
+    utils::vreg::load_reg(rt, r12, VMReg::Vbl, rdx);
     // mov r8, [r14 + ...]
-    utils::mov_reg_vreg_64(rt, r12, VMReg::Vsk, r8);
+    utils::vreg::load_reg(rt, r12, VMReg::Vsk, r8);
     // mov r9b, 0x1
     rt.asm.mov(r9b, 0x1).unwrap();
     // call ...
@@ -85,15 +86,15 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut check_branch).unwrap();
     {
         // mov rax, [...]
-        utils::mov_reg_vreg_64(rt, r12, VMReg::Ven, rax);
+        utils::vreg::load_reg(rt, r12, VMReg::Ven, rax);
         // cmp [...],
-        utils::cmp_vreg_reg_64(rt, r12, VMReg::Vbr, rax);
+        utils::vreg::cmp_reg(rt, r12, VMReg::Vbr, rax);
         // jne ...
         rt.asm.jne(epilogue).unwrap();
 
         // If the virtual branch points to the native entry then re-execute the block:
         // mov r13, [...]
-        utils::mov_reg_vreg_64(rt, r12, VMReg::Vbp, r13);
+        utils::vreg::load_reg(rt, r12, VMReg::Vbp, r13);
         // jmp ...
         rt.asm.jmp(execute_loop).unwrap();
     }
@@ -102,11 +103,11 @@ pub fn build(rt: &mut Runtime) {
     {
         // Encrypt the block:
         // mov rcx, [r14 + ...]
-        utils::mov_reg_vreg_64(rt, r12, VMReg::Vbp, rcx);
+        utils::vreg::load_reg(rt, r12, VMReg::Vbp, rcx);
         // mov rdx, [r14 + ...]
-        utils::mov_reg_vreg_64(rt, r12, VMReg::Vbl, rdx);
+        utils::vreg::load_reg(rt, r12, VMReg::Vbl, rdx);
         // mov r8, [r14 + ...]
-        utils::mov_reg_vreg_64(rt, r12, VMReg::Vsk, r8);
+        utils::vreg::load_reg(rt, r12, VMReg::Vsk, r8);
         // xor r9b, r9b
         rt.asm.xor(r9b, r9b).unwrap();
         // call ...

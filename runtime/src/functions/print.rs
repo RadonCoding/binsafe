@@ -25,7 +25,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r13, rax).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(ImportDef::NtWriteFile);
+    rt.resolve(ImportDef::NtWriteFile);
     // mov r14, rax
     rt.asm.mov(r14, rax).unwrap();
 

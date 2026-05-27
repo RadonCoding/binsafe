@@ -1,12 +1,10 @@
+use crate::vm::utils;
 use iced_x86::code_asm::{eax, ptr, r8, rax, rcx, rdx};
 use rand::seq::SliceRandom;
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
-    vm::{
-        bytecode::{VMOp, VMReg},
-        utils,
-    },
+    vm::bytecode::{VMOp, VMReg},
 };
 
 pub mod arithmetic;
@@ -82,7 +80,7 @@ pub fn initialize(rt: &mut Runtime) {
             rt.asm.mov(r8, rdx).unwrap();
 
             // add r8, [...]
-            utils::add_reg_vreg_64(rt, rax, VMReg::Vib, r8);
+            utils::vreg::reg_add(rt, rax, VMReg::Vib, r8);
 
             // mov [rcx + ...], r8
             rt.asm.mov(ptr(rcx + rt.mapper.index(op) * 8), r8).unwrap();

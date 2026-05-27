@@ -33,6 +33,9 @@ fn main() {
     engine.scan();
 
     if args.virtualize {
+        if args.mutate {
+            engine.apply::<Mutation>();
+        }
         engine.apply::<Virtualization>();
     }
 

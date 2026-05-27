@@ -1,7 +1,7 @@
+use crate::vm::utils;
 use crate::{
     runtime::Runtime,
-
-    vm::{bytecode::VMReg, stack, utils},
+    vm::{bytecode::VMReg, stack},
 };
 use iced_x86::code_asm::*;
 
@@ -17,10 +17,8 @@ pub fn build(rt: &mut Runtime) {
     // push r13
     stack::push(rt, r13);
 
-    // mov r12b, [rdx] -> pop
-    rt.asm.mov(r12b, ptr(rdx)).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
+    // mov r12b, [rdx]; add rdx, 0x1 -> pop
+    utils::bytecode::read_byte(rt, rdx, r12b);
 
     // movzx r13, byte [rdx] -> count
     rt.asm.movzx(r13, byte_ptr(rdx)).unwrap();
@@ -45,20 +43,20 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jnz(is_pop).unwrap();
 
         // sub [rcx + ...], 0x8
-        utils::sub_vreg_imm_64(rt, rcx, 0x8, VMReg::Rsp);
+        utils::vreg::sub_imm(rt, rcx, 0x8, VMReg::Rsp);
         // mov r9, [rcx + r8*8]
         rt.asm.mov(r9, ptr(rcx + r8 * 8)).unwrap();
         // mov rax, [rcx + ...]; mov [rax], r9
-        utils::store_vreg_mem_64(rt, rcx, rax, r9, VMReg::Rsp);
+        utils::vreg::store_mem(rt, rcx, rax, r9, VMReg::Rsp);
         // jmp ...
         rt.asm.jmp(continue_loop).unwrap();
 
         rt.asm.set_label(&mut is_pop).unwrap();
         {
             // mov rax, [rcx + ...]; mov rax, [rax]
-            utils::load_reg_mem_64(rt, rcx, rax, VMReg::Rsp, rax);
+            utils::vreg::load_mem(rt, rcx, rax, VMReg::Rsp, rax);
             // add [rcx + ...], 0x8
-            utils::add_vreg_imm_64(rt, rcx, 0x8, VMReg::Rsp);
+            utils::vreg::add_imm(rt, rcx, 0x8, VMReg::Rsp);
             // mov [rcx + ...], rax
             rt.asm.mov(ptr(rcx + r8 * 8), rax).unwrap();
         }
