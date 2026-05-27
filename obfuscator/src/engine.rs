@@ -1,6 +1,6 @@
 use exe::{
-    Arch, Buffer, ImageSectionHeader, Offset, PETranslation, RelocationDirectory, RelocationValue,
-    SectionCharacteristics, VecPE, PE, RVA,
+    Arch, Buffer, CCharString, ImageSectionHeader, Offset, PETranslation, RelocationDirectory,
+    RelocationValue, SectionCharacteristics, VecPE, HDR32_MAGIC, HDR64_MAGIC, PE, RVA,
 };
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};
 use logger::info;
@@ -124,7 +124,7 @@ impl Engine {
 
         info!(
             "Protecting section '{}' at 0x{:08X}",
-            Self::get_section_name(code_section),
+            Self::get_section_name(&code_section),
             code_section.virtual_address.0
         );
 
@@ -261,7 +261,7 @@ impl Engine {
         info!("Found {} blocks", self.blocks.len());
     }
 
-    pub fn get_start_of_next_section(&self) -> u32 {
+    pub fn get_end_of_last_section(&self) -> u32 {
         let sections = self.pe.get_section_table().unwrap();
         let last_section = sections[sections.len() - 1];
         self.pe
@@ -290,21 +290,28 @@ impl Engine {
         let virtual_size = self.pe.align_to_section(RVA(size)).unwrap().0;
         let raw_size = self.pe.align_to_file(Offset(size)).unwrap().0;
 
-        let section = self
-            .pe
-            .append_section(&ImageSectionHeader::default())
-            .unwrap();
+        let mut section = ImageSectionHeader::default();
         section.set_name(name);
         section.virtual_size = virtual_size;
         section.size_of_raw_data = raw_size;
         section.characteristics = characteristics;
 
-        let section = *section;
+        let section = self.pe.append_section(&section).unwrap();
 
         self.pe.append(content);
         self.pe.pad_to_alignment().unwrap();
 
-        self.pe.fix_image_size().unwrap();
+        let size_of_image = self.pe.calculate_memory_size().unwrap() as u32;
+
+        let magic = self.pe.get_nt_magic().unwrap();
+
+        if magic == HDR32_MAGIC {
+            let h32 = self.pe.get_mut_nt_headers_32_ref().unwrap();
+            h32.optional_header.size_of_image = size_of_image;
+        } else if magic == HDR64_MAGIC {
+            let h64 = self.pe.get_mut_nt_headers_64_ref().unwrap();
+            h64.optional_header.size_of_image = size_of_image;
+        }
 
         section
     }
@@ -316,16 +323,22 @@ impl Engine {
             protection.initialize(self);
         }
 
-        let ip = self.get_start_of_next_section();
+        let ip: u32 = self.get_end_of_last_section();
 
         let code = self.rt.assemble(ip as u64);
-        self.create_section(
+        let new_section = self.create_section(
             Some("💀"),
             &code,
             SectionCharacteristics::CNT_CODE
                 | SectionCharacteristics::MEM_EXECUTE
                 | SectionCharacteristics::MEM_READ
                 | SectionCharacteristics::MEM_WRITE,
+        );
+
+        info!(
+            "Created new section '{}' at 0x{:08X}",
+            new_section.name.as_str().unwrap(),
+            new_section.virtual_address.0
         );
 
         for protection in &protections {

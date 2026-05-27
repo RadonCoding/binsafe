@@ -27,14 +27,18 @@ pub fn print_s(rt: &mut Runtime, s: &str) {
     rt.asm.sub(rsp, stack_size as i32).unwrap();
 
     let mut offset = 0;
+
     for chunk in bytes.chunks(mem::size_of::<u64>()) {
         let mut buf = [0u8; 8];
         buf[..chunk.len()].copy_from_slice(chunk);
+
         let value = u64::from_le_bytes(buf);
+
         // mov rax, ...
         rt.asm.mov(rax, value).unwrap();
         // mov [rsp + ...], rax
         rt.asm.mov(qword_ptr(rsp + offset), rax).unwrap();
+
         offset += mem::size_of::<u64>();
     }
 
