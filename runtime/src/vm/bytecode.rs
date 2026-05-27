@@ -1,29 +1,14 @@
-use iced_x86::{Instruction, Mnemonic, OpKind, Register};
+use core::panic;
+
+use iced_x86::{Instruction, Mnemonic, Register};
 
 use crate::mapper::{mapped, Mapper};
-use crate::vm::encoders::{arithmetic, branch, jcc, load, nop, stack, store, Encode};
+use crate::vm::encoders::{jcc, nop, Encode};
 
 mapped! {
     VMOp {
-        PushPopRegs,
-        PopRegs,
-        PushImm,
-        PushReg,
-        PopReg,
-        SetRegImm,
-        SetRegReg,
-        SetRegMem,
-        SetMemImm,
-        SetMemReg,
-        AddSubRegImm,
-        AddSubRegReg,
-        AddSubRegMem,
-        AddSubMemImm,
-        AddSubMemReg,
-        BranchImm,
-        BranchReg,
-        BranchMem,
         Jcc,
+        // Store
         Nop,
     }
 }
@@ -84,8 +69,6 @@ mapped! {
         Vbr, // Virtual Branch
         Vib, // Image Base
         Vsk, // System Key
-        Vs0, // Scratch 0
-        Vs1, // Scratch 1
     }
 }
 
@@ -169,17 +152,17 @@ pub struct VMMem {
     pub index: VMReg,
     pub scale: u8,
     pub displacement: i32,
-    pub seg: VMSeg,
+    pub segment: VMSeg,
 }
 
 impl Encode for VMMem {
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.push(mapper.index(self.base));
         bytes.push(mapper.index(self.index));
         bytes.push(self.scale);
         bytes.extend_from_slice(&self.displacement.to_le_bytes());
-        bytes.push(mapper.index(self.seg));
+        bytes.push(mapper.index(self.segment));
         bytes
     }
 }
@@ -192,28 +175,28 @@ impl From<&Instruction> for VMMem {
         let displacement = (instruction.memory_displacement64() as i64)
             .try_into()
             .unwrap();
-        let seg = VMSeg::from(instruction.segment_prefix());
+        let segment = VMSeg::from(instruction.segment_prefix());
 
         Self {
             base,
             index,
             scale,
             displacement,
-            seg,
+            segment,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct VMCond {
-    pub cmp: VMTest,
+pub struct VMCondition {
+    pub test: VMTest,
     pub lhs: u8,
     pub rhs: u8,
 }
 
-impl Encode for VMCond {
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(self.cmp), self.lhs, self.rhs]
+impl Encode for VMCondition {
+    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+        vec![mapper.index(self.test), self.lhs, self.rhs]
     }
 }
 
@@ -223,25 +206,9 @@ pub fn convert(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<
     let mut i = 0;
 
     while i < instructions.len() {
-        if let Some((bytes, consumed)) = stack::try_emit_push_pop_regs(mapper, &instructions[i..]) {
-            output.extend_from_slice(&bytes);
-            i += consumed;
-            continue;
-        }
-
         let instruction = &instructions[i];
 
         let bytes = match instruction.mnemonic() {
-            Mnemonic::Push | Mnemonic::Pop => stack::encode(mapper, instruction)?,
-            Mnemonic::Mov => match instruction.op0_kind() {
-                OpKind::Memory => store::encode(mapper, instruction)?,
-                _ => load::encode(mapper, instruction)?,
-            },
-            Mnemonic::Lea => load::encode(mapper, instruction)?,
-            Mnemonic::Add | Mnemonic::Sub | Mnemonic::Cmp => {
-                arithmetic::encode(mapper, instruction)?
-            }
-            Mnemonic::Call | Mnemonic::Jmp => branch::encode(mapper, instruction)?,
             Mnemonic::Ja
             | Mnemonic::Jae
             | Mnemonic::Jb

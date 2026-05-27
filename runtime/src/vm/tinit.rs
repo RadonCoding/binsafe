@@ -4,7 +4,7 @@ use crate::{
     mapper::Mappable,
     runtime::{DataDef, ImportDef, Runtime},
     vm::bytecode::VMReg,
-    VM_STACK_SIZE,
+    VM_SCRATCH_SIZE, VM_STACK_SIZE,
 };
 
 pub fn build(rt: &mut Runtime) {
@@ -59,6 +59,25 @@ pub fn build(rt: &mut Runtime) {
     // mov ecx, [...]
     rt.asm
         .mov(ecx, ptr(rt.data_labels[&DataDef::VmStackTlsIndex]))
+        .unwrap();
+    // mov [0x1480 + rcx*8], rax
+    rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();
+
+    // mov rcx, r12
+    rt.asm.mov(rcx, r12).unwrap();
+    // mov rdx, 0x00000008 -> HEAP_ZERO_MEMORY
+    rt.asm.mov(rdx, 0x00000008u64).unwrap();
+    // mov r8, ...
+    rt.asm.mov(r8, VM_SCRATCH_SIZE).unwrap();
+    // call r13
+    rt.asm.call(r13).unwrap();
+
+    // add rax, ...
+    rt.asm.add(rax, VM_SCRATCH_SIZE as i32).unwrap();
+
+    // mov ecx, [...]
+    rt.asm
+        .mov(ecx, ptr(rt.data_labels[&DataDef::VmScratchTlsIndex]))
         .unwrap();
     // mov [0x1480 + rcx*8], rax
     rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();

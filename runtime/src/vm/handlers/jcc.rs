@@ -33,7 +33,7 @@ pub fn build(rt: &mut Runtime) {
     // mov al, [rdx]; add rdx, 0x1 -> logic
     utils::bytecode::read_byte(rt, rdx, al);
 
-    // mov r14b, [rdx]; add rdx, 0x1 -> number of conditions
+    // mov r14b, [rdx]; add rdx, 0x1 -> conditions
     utils::bytecode::read_byte(rt, rdx, r14b);
 
     // cmp al, ...
@@ -50,7 +50,7 @@ pub fn build(rt: &mut Runtime) {
         // jz ...
         rt.asm.jz(epilogue).unwrap();
 
-        // mov r8b, [rdx]; add rdx, 0x1 -> cmp
+        // mov r8b, [rdx]; add rdx, 0x1 -> test
         utils::bytecode::read_byte(rt, rdx, r8b);
 
         // cmp r8b, ...
@@ -161,7 +161,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
-        // mov eax, [rdx]; add rdx, 0x4 -> dst
+        // mov eax, [rdx]; add rdx, 0x4 -> destination
         utils::bytecode::read_dword(rt, rdx, eax);
 
         // add rax, [rcx + ...]

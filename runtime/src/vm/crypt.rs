@@ -62,7 +62,7 @@ pub fn build(rt: &mut Runtime) {
 
     // mov eax, [...]
     rt.asm
-        .mov(eax, ptr(rt.data_labels[&DataDef::VmCacheTlsIndex]))
+        .mov(eax, ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]))
         .unwrap();
     // mov r14, gs:[0x1480 + rax * 8]
     rt.asm.mov(r14, ptr(0x1480 + rax * 8).gs()).unwrap();
@@ -127,7 +127,7 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov eax, [...]
         rt.asm
-            .mov(eax, ptr(rt.data_labels[&DataDef::VmCacheTlsIndex]))
+            .mov(eax, ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]))
             .unwrap();
         // mov gs:[0x1480 + rax * 8], r14
         rt.asm.mov(ptr(0x1480 + rax * 8).gs(), r14).unwrap();

@@ -2,7 +2,7 @@ use iced_x86::code_asm::{ptr, r12, r13, r8, r8d, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{DataDef, ImportDef, Runtime},
-    VM_STACK_SIZE,
+    VM_SCRATCH_SIZE, VM_STACK_SIZE,
 };
 
 pub fn build(rt: &mut Runtime) {
@@ -51,6 +51,21 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();
     // sub r8, ...
     rt.asm.sub(r8, VM_STACK_SIZE as i32).unwrap();
+    // call r14
+    rt.asm.call(r13).unwrap();
+
+    // mov rcx, r12
+    rt.asm.mov(rcx, r12).unwrap();
+    // xor rdx, rdx
+    rt.asm.xor(rdx, rdx).unwrap();
+    // mov r8d, [...]
+    rt.asm
+        .mov(r8d, ptr(rt.data_labels[&DataDef::VmScratchTlsIndex]))
+        .unwrap();
+    // mov r8, gs:[0x1480 + r8*8]
+    rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();
+    // sub r8, ...
+    rt.asm.sub(r8, VM_SCRATCH_SIZE as i32).unwrap();
     // call r14
     rt.asm.call(r13).unwrap();
 
