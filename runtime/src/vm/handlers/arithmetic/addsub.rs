@@ -35,21 +35,21 @@ fn build(rt: &mut Runtime, size: OperandSize) {
     let mut done = rt.asm.create_label();
 
     match size {
-        OperandSize::Byte(reg_a, _) => {
+        OperandSize::Byte(a, _) => {
             // mov al, [rdx]
-            rt.asm.mov(reg_a, ptr(rdx)).unwrap();
+            rt.asm.mov(a, ptr(rdx)).unwrap();
         }
-        OperandSize::Word(reg_a, _) => {
+        OperandSize::Word(a, _) => {
             // mov ax, [rdx]
-            rt.asm.mov(reg_a, ptr(rdx)).unwrap();
+            rt.asm.mov(a, ptr(rdx)).unwrap();
         }
-        OperandSize::Dword(reg_a, _) => {
+        OperandSize::Dword(a, _) => {
             // mov eax, [rdx]
-            rt.asm.mov(reg_a, ptr(rdx)).unwrap();
+            rt.asm.mov(a, ptr(rdx)).unwrap();
         }
-        OperandSize::Qword(reg_a, _) => {
+        OperandSize::Qword(a, _) => {
             // mov rax, [rdx]
-            rt.asm.mov(reg_a, ptr(rdx)).unwrap();
+            rt.asm.mov(a, ptr(rdx)).unwrap();
         }
     };
 
@@ -59,21 +59,21 @@ fn build(rt: &mut Runtime, size: OperandSize) {
     rt.asm.jnz(sub).unwrap();
 
     match size {
-        OperandSize::Byte(reg_a, reg_b) => {
+        OperandSize::Byte(a, b) => {
             // add al, r8b
-            rt.asm.add(reg_a, reg_b).unwrap();
+            rt.asm.add(a, b).unwrap();
         }
-        OperandSize::Word(reg_a, reg_b) => {
+        OperandSize::Word(a, b) => {
             // add ax, r8b
-            rt.asm.add(reg_a, reg_b).unwrap();
+            rt.asm.add(a, b).unwrap();
         }
-        OperandSize::Dword(reg_a, reg_b) => {
+        OperandSize::Dword(a, b) => {
             // add eax, r8d
-            rt.asm.add(reg_a, reg_b).unwrap();
+            rt.asm.add(a, b).unwrap();
         }
-        OperandSize::Qword(reg_a, reg_b) => {
+        OperandSize::Qword(a, b) => {
             // add rax, r8
-            rt.asm.add(reg_a, reg_b).unwrap();
+            rt.asm.add(a, b).unwrap();
         }
     };
     // jmp ...
@@ -81,21 +81,21 @@ fn build(rt: &mut Runtime, size: OperandSize) {
 
     rt.asm.set_label(&mut sub).unwrap();
     match size {
-        OperandSize::Byte(reg_a, reg_b) => {
+        OperandSize::Byte(a, b) => {
             // sub al, r8b
-            rt.asm.sub(reg_a, reg_b).unwrap();
+            rt.asm.sub(a, b).unwrap();
         }
-        OperandSize::Word(reg_a, reg_b) => {
+        OperandSize::Word(a, b) => {
             // sub ax, r8b
-            rt.asm.sub(reg_a, reg_b).unwrap();
+            rt.asm.sub(a, b).unwrap();
         }
-        OperandSize::Dword(reg_a, reg_b) => {
+        OperandSize::Dword(a, b) => {
             // sub eax, r8d
-            rt.asm.sub(reg_a, reg_b).unwrap();
+            rt.asm.sub(a, b).unwrap();
         }
-        OperandSize::Qword(reg_a, reg_b) => {
+        OperandSize::Qword(a, b) => {
             // sub rax, r8
-            rt.asm.sub(reg_a, reg_b).unwrap();
+            rt.asm.sub(a, b).unwrap();
         }
     };
 
@@ -112,15 +112,15 @@ fn build(rt: &mut Runtime, size: OperandSize) {
         rt.asm.jz(flags).unwrap();
 
         match size {
-            OperandSize::Byte(reg_a, _) => {
+            OperandSize::Byte(a, _) => {
                 // mov [rdx], al
-                rt.asm.mov(ptr(rdx), reg_a).unwrap();
+                rt.asm.mov(ptr(rdx), a).unwrap();
             }
-            OperandSize::Word(reg_a, _) => {
+            OperandSize::Word(a, _) => {
                 // mov [rdx], ax
-                rt.asm.mov(ptr(rdx), reg_a).unwrap();
+                rt.asm.mov(ptr(rdx), a).unwrap();
             }
-            OperandSize::Dword(reg_a, _) => {
+            OperandSize::Dword(a, _) => {
                 let mut extend = rt.asm.create_label();
 
                 // test r9b, 0x4 -> memory
@@ -129,7 +129,7 @@ fn build(rt: &mut Runtime, size: OperandSize) {
                 rt.asm.jz(extend).unwrap();
 
                 // mov [rdx], eax
-                rt.asm.mov(ptr(rdx), reg_a).unwrap();
+                rt.asm.mov(ptr(rdx), a).unwrap();
                 // jmp ...
                 rt.asm.jmp(flags).unwrap();
 
@@ -139,9 +139,9 @@ fn build(rt: &mut Runtime, size: OperandSize) {
                     rt.asm.mov(ptr(rdx), rax).unwrap();
                 }
             }
-            OperandSize::Qword(reg_a, _) => {
+            OperandSize::Qword(a, _) => {
                 // mov [rdx], rax
-                rt.asm.mov(ptr(rdx), reg_a).unwrap();
+                rt.asm.mov(ptr(rdx), a).unwrap();
             }
         };
 
