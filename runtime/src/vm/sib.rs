@@ -13,7 +13,7 @@ pub fn build(rt: &mut Runtime) {
     let mut add_base = rt.asm.create_label();
     let mut check_index = rt.asm.create_label();
     let mut add_displacement = rt.asm.create_label();
-    let mut add_seg = rt.asm.create_label();
+    let mut add_segment = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // xor rax, rax
@@ -61,7 +61,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.add(rax, r8).unwrap();
     }
 
-    // movzx r8, [rdx]; add rdx, 0x1 -> seg
+    // movzx r8, [rdx]; add rdx, 0x1 -> segment
     utils::bytecode::read_byte_zx(rt, rdx, r8d);
 
     // cmp r8, ...
@@ -69,7 +69,7 @@ pub fn build(rt: &mut Runtime) {
     // je ...
     rt.asm.je(epilogue).unwrap();
 
-    rt.asm.set_label(&mut add_seg).unwrap();
+    rt.asm.set_label(&mut add_segment).unwrap();
     {
         // add rax, gs:[0x30] -> NT_TIB *TEB->NT_TIB.Self
         rt.asm.add(rax, ptr(0x30).gs()).unwrap();

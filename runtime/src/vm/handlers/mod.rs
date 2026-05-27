@@ -7,41 +7,11 @@ use crate::{
     vm::bytecode::{VMOp, VMReg},
 };
 
-pub mod arithmetic;
-pub mod branchimm;
-pub mod branchmem;
-pub mod branchreg;
 pub mod jcc;
 pub mod nop;
-pub mod popreg;
-pub mod pushimm;
-pub mod pushpopregs;
-pub mod pushreg;
-pub mod setmemimm;
-pub mod setmemreg;
-pub mod setregimm;
-pub mod setregmem;
-pub mod setregreg;
 
 pub fn initialize(rt: &mut Runtime) {
     let mut table = [
-        (VMOp::PushPopRegs, FnDef::VmHandlerPushPopRegs),
-        (VMOp::PushImm, FnDef::VmHandlerPushImm),
-        (VMOp::PushReg, FnDef::VmHandlerPushReg),
-        (VMOp::PopReg, FnDef::VmHandlerPopReg),
-        (VMOp::SetRegImm, FnDef::VmHandlerSetRegImm),
-        (VMOp::SetRegReg, FnDef::VmHandlerSetRegReg),
-        (VMOp::SetRegMem, FnDef::VmHandlerSetRegMem),
-        (VMOp::SetMemImm, FnDef::VmHandlerSetMemImm),
-        (VMOp::SetMemReg, FnDef::VmHandlerSetMemReg),
-        (VMOp::AddSubRegImm, FnDef::VmHandlerAddSubRegImm),
-        (VMOp::AddSubRegReg, FnDef::VmHandlerAddSubRegReg),
-        (VMOp::AddSubRegMem, FnDef::VmHandlerAddSubRegMem),
-        (VMOp::AddSubMemImm, FnDef::VmHandlerAddSubMemImm),
-        (VMOp::AddSubMemReg, FnDef::VmHandlerAddSubMemReg),
-        (VMOp::BranchImm, FnDef::VmHandlerBranchImm),
-        (VMOp::BranchReg, FnDef::VmHandlerBranchReg),
-        (VMOp::BranchMem, FnDef::VmHandlerBranchMem),
         (VMOp::Jcc, FnDef::VmHandlerJcc),
         (VMOp::Nop, FnDef::VmHandlerNop),
     ];

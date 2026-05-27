@@ -1,35 +1,73 @@
 use iced_x86::{Code, Instruction};
+use rand::seq::SliceRandom;
+use rand::Rng;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMCond, VMFlag, VMLogic, VMOp, VMTest};
+use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMOp, VMTest};
 use crate::vm::encoders::Encode;
 
+#[derive(Debug)]
 pub struct Jcc {
     pub logic: VMLogic,
-    pub conds: Vec<VMCond>,
-    pub dst: u32,
+    pub conditions: Vec<VMCondition>,
+    pub destination: u32,
+}
+
+impl Jcc {
+    fn mutate(&mut self) {
+        let mut rng = rand::thread_rng();
+
+        self.apply_shuffle(&mut rng);
+
+        if rng.gen() {
+            self.apply_de_morgan();
+        }
+    }
+
+    fn apply_de_morgan(&mut self) {
+        self.logic = match self.logic {
+            VMLogic::AND => VMLogic::OR,
+            VMLogic::OR => VMLogic::AND,
+        };
+        for condition in &mut self.conditions {
+            condition.test = match condition.test {
+                VMTest::CMP => VMTest::CMP,
+                VMTest::EQ => VMTest::NEQ,
+                VMTest::NEQ => VMTest::EQ,
+            };
+            if condition.test == VMTest::CMP {
+                condition.rhs = 1 - condition.rhs;
+            }
+        }
+    }
+
+    fn apply_shuffle(&mut self, rng: &mut impl Rng) {
+        self.conditions.shuffle(rng);
+    }
 }
 
 impl Encode for Jcc {
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+        self.mutate();
+
         let mut bytes = vec![
             mapper.index(VMOp::Jcc),
             mapper.index(self.logic),
-            self.conds.len() as u8,
+            self.conditions.len() as u8,
         ];
 
-        for cond in &self.conds {
-            bytes.extend_from_slice(&cond.encode(mapper));
+        for condition in &mut self.conditions {
+            bytes.extend_from_slice(&condition.encode(mapper));
         }
-        bytes.extend_from_slice(&self.dst.to_le_bytes());
+        bytes.extend_from_slice(&self.destination.to_le_bytes());
         bytes
     }
 }
 
 pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>> {
-    let dst: u32 = instruction.memory_displacement64().try_into().unwrap();
+    let destination = instruction.memory_displacement64().try_into().unwrap();
 
-    let (logic, conds) = match instruction.code() {
+    let (logic, conditions) = match instruction.code() {
         // JA = CF=0 AND ZF=0
         Code::Ja_rel32_64 | Code::Ja_rel8_64 => (
             VMLogic::AND,
@@ -81,28 +119,35 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>>
         _ => return None,
     };
 
-    Some(Jcc { logic, conds, dst }.encode(mapper))
+    Some(
+        Jcc {
+            logic,
+            conditions,
+            destination,
+        }
+        .encode(mapper),
+    )
 }
 
-fn cmp(lhs: VMFlag, rhs: u8) -> VMCond {
-    VMCond {
-        cmp: VMTest::CMP,
+fn cmp(lhs: VMFlag, rhs: u8) -> VMCondition {
+    VMCondition {
+        test: VMTest::CMP,
         lhs: lhs as u8,
         rhs,
     }
 }
 
-fn eq(lhs: VMFlag, rhs: VMFlag) -> VMCond {
-    VMCond {
-        cmp: VMTest::EQ,
+fn eq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
+    VMCondition {
+        test: VMTest::EQ,
         lhs: lhs as u8,
         rhs: rhs as u8,
     }
 }
 
-fn neq(lhs: VMFlag, rhs: VMFlag) -> VMCond {
-    VMCond {
-        cmp: VMTest::NEQ,
+fn neq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
+    VMCondition {
+        test: VMTest::NEQ,
         lhs: lhs as u8,
         rhs: rhs as u8,
     }

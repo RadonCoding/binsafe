@@ -1,11 +1,8 @@
-pub mod transforms;
-
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::{i32, mem};
 
 use crate::engine::Engine;
-use crate::protections::virtualization::transforms::anti_debug::AntiDebug;
 use crate::protections::Protection;
 use exe::Buffer;
 use exe::{PE, RVA};
@@ -18,7 +15,6 @@ use runtime::vm::bytecode;
 #[derive(Default)]
 pub struct Virtualization {
     vblocks: HashMap<u32, usize>,
-    transforms: usize,
     dedupes: usize,
 }
 
@@ -40,8 +36,6 @@ impl Protection for Virtualization {
         let key_mul = rng.gen::<u64>();
         let key_add = rng.gen::<u64>();
 
-        let anti_debug = AntiDebug::new(&engine.blocks);
-
         'outer: for block in &mut engine.blocks {
             if block.size < DISPATCH_SIZE {
                 continue;
@@ -51,12 +45,6 @@ impl Protection for Virtualization {
                 Some(virtualized) => virtualized,
                 None => continue 'outer,
             };
-
-            // Check if eligible for anti-debug transform
-            if let Some(transform) = anti_debug.transform(&mut engine.rt.mapper, block) {
-                vblock.splice(0..0, transform);
-                self.transforms += 1;
-            }
 
             let mut hasher = DefaultHasher::new();
             vblock.hash(&mut hasher);
@@ -174,8 +162,8 @@ impl Protection for Virtualization {
         let percentage = (virtualized as f64 / total.max(1) as f64) * 100.0;
 
         info!(
-            "VIRTUALIZED: {}/{} blocks ({:.2}%) [transforms: {}] [dedupes: {}]",
-            virtualized, total, percentage, self.transforms, self.dedupes
+            "VIRTUALIZED: {}/{} blocks ({:.2}%) [dedupes: {}]",
+            virtualized, total, percentage, self.dedupes
         );
     }
 }

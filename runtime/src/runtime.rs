@@ -30,23 +30,6 @@ pub enum FnDef {
     VmSib,
     /* VM HANDLERS */
     VmHandlersInitialize,
-    VmHandlerPushPopRegs,
-    VmHandlerPushImm,
-    VmHandlerPushReg,
-    VmHandlerPopReg,
-    VmHandlerSetRegImm,
-    VmHandlerSetRegReg,
-    VmHandlerSetRegMem,
-    VmHandlerSetMemImm,
-    VmHandlerSetMemReg,
-    VmHandlerAddSubRegImm,
-    VmHandlerAddSubRegMem,
-    VmHandlerAddSubRegReg,
-    VmHandlerAddSubMemImm,
-    VmHandlerAddSubMemReg,
-    VmHandlerBranchImm,
-    VmHandlerBranchReg,
-    VmHandlerBranchMem,
     VmHandlerJcc,
     VmHandlerNop,
     /* VM ARITHMETIC */
@@ -77,7 +60,8 @@ pub enum DataDef {
     VmGlobalState,
     VmStateTlsIndex,
     VmStackTlsIndex,
-    VmCacheTlsIndex,
+    VmScratchTlsIndex,
+    VmKeyTlsIndex,
     VmCleanupFlsIndex,
     VmTable,
     VmCode,
@@ -346,63 +330,8 @@ impl Runtime {
             (FnDef::VmCleanup, vm::cleanup::build),
             (FnDef::VmSib, vm::sib::build),
             (FnDef::VmHandlersInitialize, vm::handlers::initialize),
-            (
-                FnDef::VmHandlerPushPopRegs,
-                vm::handlers::pushpopregs::build,
-            ),
-            (FnDef::VmHandlerPushImm, vm::handlers::pushimm::build),
-            (FnDef::VmHandlerPushReg, vm::handlers::pushreg::build),
-            (FnDef::VmHandlerPopReg, vm::handlers::popreg::build),
-            (FnDef::VmHandlerSetRegImm, vm::handlers::setregimm::build),
-            (FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build),
-            (FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build),
-            (FnDef::VmHandlerSetMemImm, vm::handlers::setmemimm::build),
-            (FnDef::VmHandlerSetMemReg, vm::handlers::setmemreg::build),
-            (
-                FnDef::VmHandlerAddSubRegImm,
-                vm::handlers::arithmetic::addsubregimm::build,
-            ),
-            (
-                FnDef::VmHandlerAddSubRegMem,
-                vm::handlers::arithmetic::addsubregmem::build,
-            ),
-            (
-                FnDef::VmHandlerAddSubRegReg,
-                vm::handlers::arithmetic::addsubregreg::build,
-            ),
-            (
-                FnDef::VmHandlerAddSubMemImm,
-                vm::handlers::arithmetic::addsubmemimm::build,
-            ),
-            (
-                FnDef::VmHandlerAddSubMemReg,
-                vm::handlers::arithmetic::addsubmemreg::build,
-            ),
-            (FnDef::VmHandlerBranchImm, vm::handlers::branchimm::build),
-            (FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build),
-            (FnDef::VmHandlerBranchMem, vm::handlers::branchmem::build),
             (FnDef::VmHandlerJcc, vm::handlers::jcc::build),
             (FnDef::VmHandlerNop, vm::handlers::nop::build),
-            (
-                FnDef::VmArithmeticFlags,
-                vm::handlers::arithmetic::flags::build,
-            ),
-            (
-                FnDef::VmArithmeticAddSub8,
-                vm::handlers::arithmetic::addsub::build_8,
-            ),
-            (
-                FnDef::VmArithmeticAddSub16,
-                vm::handlers::arithmetic::addsub::build_16,
-            ),
-            (
-                FnDef::VmArithmeticAddSub32,
-                vm::handlers::arithmetic::addsub::build_32,
-            ),
-            (
-                FnDef::VmArithmeticAddSub64,
-                vm::handlers::arithmetic::addsub::build_64,
-            ),
             (FnDef::VmVehInitialize, vm::veh::initialize),
             (
                 FnDef::CompareUnicodeToAnsi,
@@ -426,7 +355,8 @@ impl Runtime {
 
         self.define_data_dword(DataDef::VmStateTlsIndex, 0);
         self.define_data_dword(DataDef::VmStackTlsIndex, 0);
-        self.define_data_dword(DataDef::VmCacheTlsIndex, 0);
+        self.define_data_dword(DataDef::VmScratchTlsIndex, 0);
+        self.define_data_dword(DataDef::VmKeyTlsIndex, 0);
         self.define_data_dword(DataDef::VmCleanupFlsIndex, 0);
 
         self.define_data_bytes(DataDef::Imports, &vec![0u8; self.imports.len() * 8]);

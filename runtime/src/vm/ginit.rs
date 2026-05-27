@@ -32,7 +32,14 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.call(r12).unwrap();
     // mov [...], eax
     rt.asm
-        .mov(ptr(rt.data_labels[&DataDef::VmCacheTlsIndex]), eax)
+        .mov(ptr(rt.data_labels[&DataDef::VmScratchTlsIndex]), eax)
+        .unwrap();
+
+    // call r12
+    rt.asm.call(r12).unwrap();
+    // mov [...], eax
+    rt.asm
+        .mov(ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]), eax)
         .unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
