@@ -1,10 +1,11 @@
+use crate::vm::utils;
 use iced_x86::code_asm::{
     al, byte_ptr, cl, eax, ecx, ptr, qword_ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, rsp,
 };
 
 use crate::{
     runtime::{BoolDef, DataDef, FnDef, ImportDef, Runtime},
-    vm::{bytecode::VMReg, stack, utils},
+    vm::{bytecode::VMReg, stack},
 };
 
 pub fn initialize(rt: &mut Runtime) {
@@ -23,7 +24,7 @@ pub fn initialize(rt: &mut Runtime) {
     rt.asm.jnz(epilogue).unwrap();
 
     // lea rcx, [...]; lea rdx, [...], call ...
-    rt.get_proc_address(ImportDef::RtlAddVectoredExceptionHandler);
+    rt.resolve(ImportDef::RtlAddVectoredExceptionHandler);
 
     // mov rcx, 0x1
     rt.asm.mov(rcx, 0x1u64).unwrap();
@@ -147,7 +148,7 @@ pub fn handler(rt: &mut Runtime) {
 
     for (vreg, offset) in VM_TO_CONTEXT {
         // mov rcx, [rax + ...]
-        utils::mov_reg_vreg_64(rt, rax, *vreg, rcx);
+        utils::vreg::load_reg(rt, rax, *vreg, rcx);
 
         if *vreg == VMReg::Flags {
             // mov [r14 + ...], ecx
@@ -164,11 +165,11 @@ pub fn handler(rt: &mut Runtime) {
     }
 
     // mov rcx, [rax + ...]
-    utils::mov_reg_vreg_64(rt, rax, VMReg::Vbp, rcx);
+    utils::vreg::load_reg(rt, rax, VMReg::Vbp, rcx);
     // mov rdx, [rax + ...]
-    utils::mov_reg_vreg_64(rt, rax, VMReg::Vbl, rdx);
+    utils::vreg::load_reg(rt, rax, VMReg::Vbl, rdx);
     // mov r8, [r14 + ...]
-    utils::mov_reg_vreg_64(rt, r12, VMReg::Vsk, r8);
+    utils::vreg::load_reg(rt, r12, VMReg::Vsk, r8);
     // xor r9b, r9b
     rt.asm.xor(r9b, r9b).unwrap();
     // call ...

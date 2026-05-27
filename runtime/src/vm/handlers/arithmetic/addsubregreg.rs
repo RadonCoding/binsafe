@@ -5,8 +5,7 @@ use iced_x86::code_asm::{
 
 use crate::{
     runtime::{FnDef, Runtime},
-
-    vm::{bytecode::VMBits, stack},
+    vm::{bytecode::VMBits, stack, utils},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -30,20 +29,16 @@ pub fn build(rt: &mut Runtime) {
     // mov r12, rdx
     rt.asm.mov(r12, rdx).unwrap();
 
-    // mov r13b, [r12] -> dbits
-    rt.asm.mov(r13b, ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
+    // mov r13b, [r12]; add r12, 0x1 -> dbits
+    utils::bytecode::read_byte(rt, r12, r13b);
 
     // movzx r8, [r12] -> dst
     rt.asm.movzx(r8, byte_ptr(r12)).unwrap();
     // add r12, 0x1
     rt.asm.add(r12, 0x1).unwrap();
 
-    // mov r14b, [r12] -> sbits
-    rt.asm.mov(r14b, ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
+    // mov r14b, [r12]; add r12, 0x1 -> sbits
+    utils::bytecode::read_byte(rt, r12, r14b);
 
     // movzx r9, [r12] -> src
     rt.asm.movzx(r9, byte_ptr(r12)).unwrap();
@@ -53,17 +48,13 @@ pub fn build(rt: &mut Runtime) {
     // xor r15b, r15b
     rt.asm.xor(r15b, r15b).unwrap();
 
-    // mov al, [r12] -> sub
-    rt.asm.mov(al, ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
+    // mov al, [r12]; add r12, 0x1 -> sub
+    utils::bytecode::read_byte(rt, r12, al);
     // or r15b, al
     rt.asm.or(r15b, al).unwrap();
 
-    // mov al, [r12] -> store
-    rt.asm.mov(al, ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
+    // mov al, [r12]; add r12, 0x1 -> store
+    utils::bytecode::read_byte(rt, r12, al);
     // shl al, 0x1
     rt.asm.shl(al, 0x1).unwrap();
     // or r15b, al

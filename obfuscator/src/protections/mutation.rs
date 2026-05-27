@@ -2,6 +2,7 @@ use crate::engine::Engine;
 use crate::protections::Protection;
 use iced_x86::code_asm::*;
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
+use logger::info;
 use rand::Rng;
 
 #[derive(Default)]
@@ -81,12 +82,14 @@ impl Protection for Mutation {
     fn apply(&self, engine: &mut Engine) {
         let mut rng = rand::thread_rng();
 
+        let mut mutated = 0usize;
+
         for i in 0..engine.blocks.len() {
             let block = &engine.blocks[i];
 
             let mut asm = CodeAssembler::new(engine.bitness).unwrap();
 
-            let mut mutated = false;
+            let mut processed = false;
 
             for (index, instruction) in block.instructions.iter().enumerate() {
                 let dead_flags = self.has_dead_flags(&block.instructions[index..]);
@@ -101,12 +104,12 @@ impl Protection for Mutation {
                     if let Some(reg) = self.resolve_gpr64(raw) {
                         asm.mov(reg, imm ^ (key as u64)).unwrap();
                         asm.xor(reg, key as i32).unwrap();
-                        mutated = true;
+                        processed = true;
                         continue;
                     } else if let Some(reg) = self.resolve_gpr32(raw) {
                         asm.mov(reg, (imm as u32) ^ key).unwrap();
                         asm.xor(reg, key as i32).unwrap();
-                        mutated = true;
+                        processed = true;
                         continue;
                     }
                 }
@@ -125,7 +128,7 @@ impl Protection for Mutation {
                         } else {
                             asm.add(reg, -imm).unwrap();
                         }
-                        mutated = true;
+                        processed = true;
                         continue;
                     } else if let Some(reg) = self.resolve_gpr32(raw) {
                         if addition {
@@ -133,7 +136,7 @@ impl Protection for Mutation {
                         } else {
                             asm.add(reg, -imm).unwrap();
                         }
-                        mutated = true;
+                        processed = true;
                         continue;
                     }
                 }
@@ -148,12 +151,12 @@ impl Protection for Mutation {
                     if let Some(reg) = self.resolve_gpr64(raw) {
                         asm.not(reg).unwrap();
                         asm.xor(reg, !imm).unwrap();
-                        mutated = true;
+                        processed = true;
                         continue;
                     } else if let Some(reg) = self.resolve_gpr32(raw) {
                         asm.not(reg).unwrap();
                         asm.xor(reg, !imm).unwrap();
-                        mutated = true;
+                        processed = true;
                         continue;
                     }
                 }
@@ -169,13 +172,13 @@ impl Protection for Mutation {
                         asm.not(reg).unwrap();
                         asm.or(reg, !imm).unwrap();
                         asm.not(reg).unwrap();
-                        mutated = true;
+                        processed = true;
                         continue;
                     } else if let Some(reg) = self.resolve_gpr32(raw) {
                         asm.not(reg).unwrap();
                         asm.or(reg, !imm).unwrap();
                         asm.not(reg).unwrap();
-                        mutated = true;
+                        processed = true;
                         continue;
                     }
                 }
@@ -191,13 +194,13 @@ impl Protection for Mutation {
                         asm.not(reg).unwrap();
                         asm.and(reg, !imm).unwrap();
                         asm.not(reg).unwrap();
-                        mutated = true;
+                        processed = true;
                         continue;
                     } else if let Some(reg) = self.resolve_gpr32(raw) {
                         asm.not(reg).unwrap();
                         asm.and(reg, !imm).unwrap();
                         asm.not(reg).unwrap();
-                        mutated = true;
+                        processed = true;
                         continue;
                     }
                 }
@@ -207,12 +210,12 @@ impl Protection for Mutation {
                     if let Some(reg) = self.resolve_gpr64(raw) {
                         asm.not(reg).unwrap();
                         asm.add(reg, 1).unwrap();
-                        mutated = true;
+                        processed = true;
                         continue;
                     } else if let Some(reg) = self.resolve_gpr32(raw) {
                         asm.not(reg).unwrap();
                         asm.add(reg, 1).unwrap();
-                        mutated = true;
+                        processed = true;
                         continue;
                     }
                 }
@@ -225,11 +228,11 @@ impl Protection for Mutation {
                     if raw == instruction.op1_register() && dead_flags {
                         if let Some(reg) = self.resolve_gpr64(raw) {
                             asm.xor(reg, reg).unwrap();
-                            mutated = true;
+                            processed = true;
                             continue;
                         } else if let Some(reg) = self.resolve_gpr32(raw) {
                             asm.xor(reg, reg).unwrap();
-                            mutated = true;
+                            processed = true;
                             continue;
                         }
                     }
@@ -238,13 +241,19 @@ impl Protection for Mutation {
                 asm.add_instruction(*instruction).unwrap();
             }
 
-            if mutated {
+            if processed {
                 let bytes = asm.assemble(block.rva as u64).unwrap();
 
                 if bytes.len() <= block.size {
                     engine.replace(i, &bytes);
+                    mutated += 1;
                 }
             }
         }
+
+        let total = engine.blocks.len();
+        let percentage = (mutated as f64 / total.max(1) as f64) * 100.0;
+
+        info!("MUTATED: {}/{} blocks ({:.2}%)", mutated, total, percentage);
     }
 }

@@ -2,7 +2,6 @@ use iced_x86::code_asm::{byte_ptr, r12, r13, rax, rcx, rdi, rdx, rsi};
 
 use crate::{
     runtime::{FnDef, Runtime},
-
     vm::stack,
 };
 
@@ -23,7 +22,7 @@ pub fn build(rt: &mut Runtime) {
     // mov rdx, r12
     rt.asm.mov(rdx, r12).unwrap();
     // call ...
-    stack::call(rt, rt.func_labels[&FnDef::ComputeAddress]);
+    stack::call(rt, rt.func_labels[&FnDef::VmSib]);
 
     // mov r12, rdx
     rt.asm.mov(r12, rdx).unwrap();

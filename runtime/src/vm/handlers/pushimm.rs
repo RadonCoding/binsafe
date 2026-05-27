@@ -1,8 +1,7 @@
-use iced_x86::code_asm::{byte_ptr, ptr, r8, r8b, r8d, rax, rcx, rdx, word_ptr};
+use iced_x86::code_asm::{byte_ptr, r8, r8b, r8d, rax, rcx, rdx, word_ptr};
 
 use crate::{
     runtime::Runtime,
-
     vm::{bytecode::VMReg, stack, utils},
 };
 
@@ -14,7 +13,7 @@ pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // sub [rcx + ...], 0x8
-    utils::sub_vreg_imm_64(rt, rcx, 0x8, VMReg::Rsp);
+    utils::vreg::sub_imm(rt, rcx, 0x8, VMReg::Rsp);
 
     // mov r8b, [rdx] -> size
     rt.asm.mov(r8b, byte_ptr(rdx)).unwrap();
@@ -54,11 +53,8 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut dword).unwrap();
     {
-        // mov r8d, [rdx] -> src
-        rt.asm.mov(r8d, ptr(rdx)).unwrap();
-        // add rdx, 0x4
-        rt.asm.add(rdx, 0x4).unwrap();
-
+        // mov r8d, [rdx]; add rdx, 0x4 -> src
+        utils::bytecode::read_dword(rt, rdx, r8d);
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
@@ -66,8 +62,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut epilogue).unwrap();
     {
         // mov rax, [rcx + ...]; mov [rax], r8
-        utils::store_vreg_mem_64(rt, rcx, rax, r8, VMReg::Rsp);
-
+        utils::vreg::store_mem(rt, rcx, rax, r8, VMReg::Rsp);
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
         // ret

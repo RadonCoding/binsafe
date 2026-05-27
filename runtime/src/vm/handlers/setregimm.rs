@@ -2,7 +2,7 @@ use iced_x86::code_asm::{al, byte_ptr, eax, ptr, r8, r9, rax, rcx, rdx, word_ptr
 
 use crate::{
     runtime::Runtime,
-    vm::{bytecode::VMBits, stack},
+    vm::{bytecode::VMBits, stack, utils},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -14,10 +14,8 @@ pub fn build(rt: &mut Runtime) {
     let mut lower64 = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
-    // mov al, [rdx] -> dbits
-    rt.asm.mov(al, ptr(rdx)).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
+    // mov al, [rdx]; add rdx, 0x1 -> dbits
+    utils::bytecode::read_byte(rt, rdx, al);
 
     // movzx r8, [rdx] -> dst
     rt.asm.movzx(r8, byte_ptr(rdx)).unwrap();
@@ -113,10 +111,8 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower32).unwrap();
     {
-        // mov eax, [rdx] -> src
-        rt.asm.mov(eax, ptr(rdx)).unwrap();
-        // add rdx, 0x4
-        rt.asm.add(rdx, 0x4).unwrap();
+        // mov eax, [rdx]; add rdx, 0x4 -> src
+        utils::bytecode::read_dword(rt, rdx, eax);
 
         // mov [rcx + r8*8], rax
         rt.asm.mov(ptr(rcx + r8 * 8), rax).unwrap();
@@ -127,10 +123,8 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut lower64).unwrap();
     {
-        // mov rax, [rdx] -> src
-        rt.asm.mov(rax, ptr(rdx)).unwrap();
-        // add rdx, 0x8
-        rt.asm.add(rdx, 0x8).unwrap();
+        // mov rax, [rdx]; add rdx, 0x8 -> src
+        utils::bytecode::read_qword(rt, rdx, rax);
 
         // mov [rcx + r8*8], rax
         rt.asm.mov(ptr(rcx + r8 * 8), rax).unwrap();

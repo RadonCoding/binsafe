@@ -1,10 +1,8 @@
 use crate::vm::stack;
+use crate::vm::utils;
 use crate::{
     runtime::Runtime,
-    vm::{
-        bytecode::{VMLogic, VMReg, VMTest},
-        utils,
-    },
+    vm::bytecode::{VMLogic, VMReg, VMTest},
 };
 use iced_x86::code_asm::{
     al, byte_ptr, eax, ptr, r12, r12b, r13, r13d, r14, r14b, r8b, r8d, r9b, r9d, rax, rcx, rdx,
@@ -30,17 +28,12 @@ pub fn build(rt: &mut Runtime) {
     stack::push(rt, r14);
 
     // mov r13d, [rcx + ...]
-    utils::mov_reg_vreg_32(rt, rcx, VMReg::Flags, r13d);
+    utils::vreg::load_reg32(rt, rcx, VMReg::Flags, r13d);
 
-    // mov al, [rdx] -> logic
-    rt.asm.mov(al, ptr(rdx)).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
-
-    // mov r14b, [rdx] -> number of conditions
-    rt.asm.mov(r14b, ptr(rdx)).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
+    // mov al, [rdx]; add rdx, 0x1 -> logic
+    utils::bytecode::read_byte(rt, rdx, al);
+    // mov r14b, [rdx]; add rdx, 0x1 -> number of conditions
+    utils::bytecode::read_byte(rt, rdx, r14b);
 
     // cmp al, ...
     rt.asm
@@ -82,10 +75,8 @@ pub fn build(rt: &mut Runtime) {
             // add rdx, 0x1
             rt.asm.add(rdx, 0x1).unwrap();
 
-            // mov r9b, [rdx] -> rhs
-            rt.asm.mov(r9b, ptr(rdx)).unwrap();
-            // add rdx, 0x1
-            rt.asm.add(rdx, 0x1).unwrap();
+            // mov r9b, [rdx]; add rdx, 0x1 -> rhs
+            utils::bytecode::read_byte(rt, rdx, r9b);
 
             // bt r13d, r8d
             rt.asm.bt(r13d, r8d).unwrap();
@@ -191,13 +182,12 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
-        // mov eax, [rdx] -> dst
-        rt.asm.mov(eax, ptr(rdx)).unwrap();
-        // add rdx, 0x4
-        rt.asm.add(rdx, 0x4).unwrap();
+
+        // mov eax, [rdx]; add rdx, 0x4 -> dst
+        utils::bytecode::read_dword(rt, rdx, eax);
 
         // add rax, [rcx + ...]
-        utils::add_reg_vreg_64(rt, rcx, VMReg::Vib, rax);
+        utils::vreg::reg_add(rt, rcx, VMReg::Vib, rax);
 
         // test r12b, r12b
         rt.asm.test(r12b, r12b).unwrap();
@@ -205,7 +195,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jz(skip_jump).unwrap();
 
         // mov [rcx + ...], rax
-        utils::mov_vreg_reg_64(rt, rcx, rax, VMReg::Vex);
+        utils::vreg::store_reg(rt, rcx, rax, VMReg::Vex);
     }
 
     rt.asm.set_label(&mut skip_jump).unwrap();
