@@ -26,7 +26,6 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut skip_ret).unwrap();
     {
-
         // mov eax, [rdx]; add rdx, 0x4 -> dst
         utils::bytecode::read_dword(rt, rdx, eax);
 
@@ -38,6 +37,7 @@ pub fn build(rt: &mut Runtime) {
 
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
+
         // ret
         stack::ret(rt);
     }

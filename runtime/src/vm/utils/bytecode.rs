@@ -1,6 +1,6 @@
 use crate::runtime::Runtime;
 use iced_x86::code_asm::{
-    byte_ptr, ptr, AsmRegister16, AsmRegister32, AsmRegister64, AsmRegister8,
+    byte_ptr, ptr, word_ptr, AsmRegister16, AsmRegister32, AsmRegister64, AsmRegister8,
 };
 
 /// `mov {to}, [{base}]`; `add {base}, 0x1`
@@ -12,7 +12,7 @@ pub fn read_byte(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister8) {
 }
 
 /// `movzx {to}, [{base}]`; `add {base}, 0x1`
-pub fn read_byte_zx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister64) {
+pub fn read_byte_zx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
     // movzx ..., [...]
     rt.asm.movzx(to, byte_ptr(base)).unwrap();
     // add ..., 0x1
@@ -23,6 +23,14 @@ pub fn read_byte_zx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister64) {
 pub fn read_word(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister16) {
     // mov ..., [...]
     rt.asm.mov(to, ptr(base)).unwrap();
+    // add ..., 0x2
+    rt.asm.add(base, 0x2).unwrap();
+}
+
+/// `movzx {to}, [{base}]`; `add {base}, 0x2`
+pub fn read_word_zx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
+    // movzx ..., [...]
+    rt.asm.movzx(to, word_ptr(base)).unwrap();
     // add ..., 0x2
     rt.asm.add(base, 0x2).unwrap();
 }

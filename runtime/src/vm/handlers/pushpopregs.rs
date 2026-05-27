@@ -20,10 +20,8 @@ pub fn build(rt: &mut Runtime) {
     // mov r12b, [rdx]; add rdx, 0x1 -> pop
     utils::bytecode::read_byte(rt, rdx, r12b);
 
-    // movzx r13, byte [rdx] -> count
-    rt.asm.movzx(r13, byte_ptr(rdx)).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
+    // movzx r13d, [rdx]; add rdx, 0x1 -> count
+    utils::bytecode::read_byte_zx(rt, rdx, r13d);
 
     rt.asm.set_label(&mut register_loop).unwrap();
     {
@@ -32,10 +30,8 @@ pub fn build(rt: &mut Runtime) {
         // jz ...
         rt.asm.jz(epilogue).unwrap();
 
-        // movzx r8, byte [rdx]
-        rt.asm.movzx(r8, byte_ptr(rdx)).unwrap();
-        // inc rdx
-        rt.asm.inc(rdx).unwrap();
+        // movzx r8d, [rdx]; add rdx, 0x1 -> src
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
 
         // test r12b, r12b
         rt.asm.test(r12b, r12b).unwrap();

@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{byte_ptr, r8, r8b, r8d, rax, rcx, rdx, word_ptr};
+use iced_x86::code_asm::{byte_ptr, r8, r8b, r8d, rax, rcx, rdx};
 
 use crate::{
     runtime::Runtime,
@@ -31,22 +31,16 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut byte).unwrap();
     {
-        // movsx r8, [rdx] -> src
-        rt.asm.movsx(r8, byte_ptr(rdx)).unwrap();
-        // add rdx, 0x1
-        rt.asm.add(rdx, 0x1).unwrap();
-
+        // movzx r8d, [rdx]; add rdx, 0x1 -> src
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
 
     rt.asm.set_label(&mut word).unwrap();
     {
-        // movsx r8, [rdx] -> src
-        rt.asm.movsx(r8, word_ptr(rdx)).unwrap();
-        // add rdx, 0x2
-        rt.asm.add(rdx, 0x2).unwrap();
-
+        // movzx r8d, [rdx]; add rdx, 0x1 -> src
+        utils::bytecode::read_word_zx(rt, rdx, r8d);
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
@@ -63,6 +57,7 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov rax, [rcx + ...]; mov [rax], r8
         utils::vreg::store_mem(rt, rcx, rax, r8, VMReg::Rsp);
+
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
         // ret
