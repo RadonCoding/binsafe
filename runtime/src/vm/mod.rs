@@ -6,6 +6,7 @@ pub mod entry;
 pub mod exit;
 pub mod ginit;
 pub mod handlers;
+pub mod sib;
 pub mod stack;
 pub mod tinit;
 pub mod utils;

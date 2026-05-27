@@ -1,8 +1,9 @@
+use crate::vm::utils;
 use iced_x86::code_asm::{al, ptr, r12, r13, r8, rax, rcx, rdx};
 
 use crate::{
     runtime::{FnDef, Runtime},
-    vm::{bytecode::VMReg, stack, utils},
+    vm::{bytecode::VMReg, stack},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -19,10 +20,8 @@ pub fn build(rt: &mut Runtime) {
     // mov r13, rdx
     rt.asm.mov(r13, rdx).unwrap();
 
-    // mov al, [r13] -> ret
-    rt.asm.mov(al, ptr(r13)).unwrap();
-    // add r13, 0x1
-    rt.asm.add(r13, 0x1).unwrap();
+    // mov al, [r13]; add r13, 0x1 -> ret
+    utils::bytecode::read_byte(rt, r13, al);
 
     // test al, al
     rt.asm.test(al, al).unwrap();
@@ -30,11 +29,11 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.jz(skip_ret).unwrap();
 
     // sub [r12 + ...], 0x8
-    utils::sub_vreg_imm_64(rt, r12, 0x8, VMReg::Rsp);
+    utils::vreg::sub_imm(rt, r12, 0x8, VMReg::Rsp);
     // mov r8, [r12 + ...]
-    utils::mov_reg_vreg_64(rt, r12, VMReg::Vex, r8);
+    utils::vreg::load_reg(rt, r12, VMReg::Vex, r8);
     // mov rax, [r12 + ...]; mov [rax], r8
-    utils::store_vreg_mem_64(rt, r12, rax, r8, VMReg::Rsp);
+    utils::vreg::store_mem(rt, r12, rax, r8, VMReg::Rsp);
 
     rt.asm.set_label(&mut skip_ret).unwrap();
     {
@@ -43,7 +42,7 @@ pub fn build(rt: &mut Runtime) {
         // mov rdx, r13
         rt.asm.mov(rdx, r13).unwrap();
         // call ...
-        stack::call(rt, rt.func_labels[&FnDef::ComputeAddress]);
+        stack::call(rt, rt.func_labels[&FnDef::VmSib]);
         // mov r13, rdx
         rt.asm.mov(r13, rdx).unwrap();
 
@@ -51,7 +50,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(rax, ptr(rax)).unwrap();
 
         // mov [r12 + ...], rax
-        utils::mov_vreg_reg_64(rt, r12, rax, VMReg::Vbr);
+        utils::vreg::store_reg(rt, r12, rax, VMReg::Vbr);
 
         // mov rax, r13
         rt.asm.mov(rax, r13).unwrap();

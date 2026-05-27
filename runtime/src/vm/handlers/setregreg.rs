@@ -4,7 +4,7 @@ use iced_x86::code_asm::{
 
 use crate::{
     runtime::Runtime,
-    vm::{bytecode::VMBits, stack},
+    vm::{bytecode::VMBits, stack, utils},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -21,20 +21,16 @@ pub fn build(rt: &mut Runtime) {
     // push r13
     stack::push(rt, r13);
 
-    // mov r12b, [rdx] -> dbits
-    rt.asm.mov(r12b, ptr(rdx)).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
+    // mov r12b, [rdx]; add rdx, 0x1 -> dbits
+    utils::bytecode::read_byte(rt, rdx, r12b);
 
     // movzx r8, [rdx] -> dst
     rt.asm.movzx(r8, byte_ptr(rdx)).unwrap();
     // add rdx, 0x1
     rt.asm.add(rdx, 0x1).unwrap();
 
-    // mov r13b, [rdx] -> sbits
-    rt.asm.mov(r13b, ptr(rdx)).unwrap();
-    // add rdx, 0x1
-    rt.asm.add(rdx, 0x1).unwrap();
+    // mov r13b, [rdx]; add rdx, 0x1 -> sbits
+    utils::bytecode::read_byte(rt, rdx, r13b);
 
     // movzx r9, [rdx] -> src
     rt.asm.movzx(r9, byte_ptr(rdx)).unwrap();

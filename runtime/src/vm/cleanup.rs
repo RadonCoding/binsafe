@@ -15,14 +15,14 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.sub(rsp, 0x28).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(ImportDef::GetProcessHeap);
+    rt.resolve(ImportDef::GetProcessHeap);
     // call rax
     rt.asm.call(rax).unwrap();
     // mov r12, rax
     rt.asm.mov(r12, rax).unwrap();
 
     // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.get_proc_address(ImportDef::RtlFreeHeap);
+    rt.resolve(ImportDef::RtlFreeHeap);
     // mov r13, rax
     rt.asm.mov(r13, rax).unwrap();
 
