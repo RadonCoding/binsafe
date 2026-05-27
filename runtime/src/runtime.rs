@@ -27,11 +27,15 @@ pub enum FnDef {
     VmCrypt,
     VmDispatch,
     VmCleanup,
-    VmSib,
     /* VM HANDLERS */
     VmHandlersInitialize,
     VmHandlerJcc,
-    VmHandlerNop,
+    VmHandlerLoadImm,
+    VmHandlerLoadReg,
+    VmHandlerLoadMem,
+    VmHandlerLoadAddr,
+    VmHandlerStoreReg,
+    VmHandlerStoreMem,
     /* VM ARITHMETIC */
     VmArithmeticFlags,
     VmArithmeticAddSub8,
@@ -321,18 +325,22 @@ impl Runtime {
         let mut shuffled = Vec::new();
 
         let functions: Vec<(FnDef, fn(&mut Runtime))> = vec![
-            (FnDef::VmGInit, vm::ginit::build),
-            (FnDef::VmTInit, vm::tinit::build),
-            (FnDef::VmEntry, vm::entry::build),
-            (FnDef::VmExit, vm::exit::build),
-            (FnDef::VmCrypt, vm::crypt::build),
-            (FnDef::VmDispatch, vm::dispatch::build),
-            (FnDef::VmCleanup, vm::cleanup::build),
-            (FnDef::VmSib, vm::sib::build),
+            (FnDef::VmGInit, vm::functions::ginit::build),
+            (FnDef::VmTInit, vm::functions::tinit::build),
+            (FnDef::VmEntry, vm::functions::entry::build),
+            (FnDef::VmExit, vm::functions::exit::build),
+            (FnDef::VmCrypt, vm::functions::crypt::build),
+            (FnDef::VmDispatch, vm::functions::dispatch::build),
+            (FnDef::VmCleanup, vm::functions::cleanup::build),
             (FnDef::VmHandlersInitialize, vm::handlers::initialize),
             (FnDef::VmHandlerJcc, vm::handlers::jcc::build),
-            (FnDef::VmHandlerNop, vm::handlers::nop::build),
-            (FnDef::VmVehInitialize, vm::veh::initialize),
+            (FnDef::VmHandlerLoadImm, vm::handlers::load_imm::build),
+            (FnDef::VmHandlerLoadReg, vm::handlers::load_reg::build),
+            (FnDef::VmHandlerLoadMem, vm::handlers::load_mem::build),
+            (FnDef::VmHandlerLoadAddr, vm::handlers::load_addr::build),
+            (FnDef::VmHandlerStoreReg, vm::handlers::store_reg::build),
+            (FnDef::VmHandlerStoreMem, vm::handlers::store_mem::build),
+            (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (
                 FnDef::CompareUnicodeToAnsi,
                 functions::compare_unicode_to_ansi::build,
@@ -416,7 +424,7 @@ impl Runtime {
         let mut tasks = Vec::new();
         tasks.push(EmissionTask::Function(
             FnDef::VmVehHandler,
-            vm::veh::handler,
+            vm::functions::veh::handler,
         ));
         tasks.push(EmissionTask::Data(DataDef::VehStart));
         tasks.extend(shuffled);
@@ -430,7 +438,12 @@ impl Runtime {
                 }
                 EmissionTask::Data(def) => {
                     self.set_data_label(def);
-                    self.asm.db(&self.data[&def]).unwrap();
+
+                    if self.data[&def].is_empty() {
+                        self.asm.zero_bytes().unwrap();
+                    } else {
+                        self.asm.db(&self.data[&def]).unwrap();
+                    }
                 }
                 EmissionTask::Bool(def) => {
                     self.set_bool_label(def);

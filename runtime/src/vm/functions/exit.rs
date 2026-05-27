@@ -1,9 +1,8 @@
-use crate::vm::utils;
 use iced_x86::code_asm::{ptr, r12, r12d, rsp};
 
 use crate::{
     runtime::{DataDef, Runtime},
-    vm::{bytecode::VMReg, VREG_TO_REG},
+    vm::{bytecode::VMReg, utils, VREG_TO_REG},
 };
 
 pub fn build(rt: &mut Runtime) {

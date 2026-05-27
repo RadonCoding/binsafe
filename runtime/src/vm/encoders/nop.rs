@@ -4,6 +4,7 @@ use crate::mapper::Mapper;
 use crate::vm::bytecode::VMOp;
 use crate::vm::encoders::Encode;
 
+#[derive(Debug)]
 pub struct Nop;
 
 impl Encode for Nop {
@@ -12,10 +13,10 @@ impl Encode for Nop {
     }
 }
 
-pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     match instruction.code() {
         Code::Nopw | Code::Nopd | Code::Nopq | Code::Nop_rm16 | Code::Nop_rm32 | Code::Nop_rm64 => {
-            Some(Nop.encode(mapper))
+            Some(vec![Box::new(Nop)])
         }
         _ => None,
     }

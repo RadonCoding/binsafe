@@ -3,12 +3,19 @@ use core::panic;
 use iced_x86::{Instruction, Mnemonic, Register};
 
 use crate::mapper::{mapped, Mapper};
-use crate::vm::encoders::{jcc, nop, Encode};
+use crate::vm::encoders::{jcc, lea, mov, nop, Encode};
 
 mapped! {
     VMOp {
         Jcc,
+        // Load
+        LoadImm,
+        LoadReg,
+        LoadMem,
+        LoadAddr,
         // Store
+        StoreReg,
+        StoreMem,
         Nop,
     }
 }
@@ -200,15 +207,11 @@ impl Encode for VMCondition {
     }
 }
 
-pub fn convert(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<u8>> {
-    let mut output = Vec::new();
+pub fn convert(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
+    let mut output: Vec<Box<dyn Encode>> = Vec::new();
 
-    let mut i = 0;
-
-    while i < instructions.len() {
-        let instruction = &instructions[i];
-
-        let bytes = match instruction.mnemonic() {
+    for instruction in instructions {
+        let ops = match instruction.mnemonic() {
             Mnemonic::Ja
             | Mnemonic::Jae
             | Mnemonic::Jb
@@ -224,14 +227,24 @@ pub fn convert(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<
             | Mnemonic::Jns
             | Mnemonic::Jo
             | Mnemonic::Jp
-            | Mnemonic::Js => jcc::encode(mapper, instruction)?,
-            Mnemonic::Nop => nop::encode(mapper, instruction)?,
+            | Mnemonic::Js => jcc::encode(instruction)?,
+            Mnemonic::Lea => lea::encode(instruction)?,
+            Mnemonic::Mov => mov::encode(instruction)?,
+            Mnemonic::Nop => nop::encode(instruction)?,
             _ => return None,
         };
 
-        output.extend_from_slice(&bytes);
-        i += 1;
+        output.extend(ops);
     }
 
     Some(output)
+}
+
+pub fn assemble(mapper: &mut Mapper, operations: &mut [Box<dyn Encode>]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+
+    for operation in operations {
+        bytes.extend(operation.encode(mapper));
+    }
+    bytes
 }

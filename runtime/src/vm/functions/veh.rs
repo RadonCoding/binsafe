@@ -1,11 +1,13 @@
-use crate::vm::utils;
 use iced_x86::code_asm::{
     al, byte_ptr, cl, eax, ecx, ptr, qword_ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, rsp,
 };
 
 use crate::{
     runtime::{BoolDef, DataDef, FnDef, ImportDef, Runtime},
-    vm::{bytecode::VMReg, stack},
+    vm::{
+        bytecode::VMReg,
+        utils::{self, stack},
+    },
 };
 
 pub fn initialize(rt: &mut Runtime) {

@@ -1,10 +1,13 @@
-use crate::vm::utils;
 use iced_x86::code_asm::{ecx, ptr, r12, r12b, r12d, rax, rcx, rdi, rdx, rsi, rsp};
 
 use crate::{
     mapper::Mappable as _,
     runtime::{DataDef, FnDef, ImportDef, Runtime},
-    vm::{bytecode::VMReg, stack, utils::lock, VREG_TO_REG},
+    vm::{
+        bytecode::VMReg,
+        utils::{self, lock, stack},
+        VREG_TO_REG,
+    },
 };
 
 // void (unsigned int)

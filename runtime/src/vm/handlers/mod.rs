@@ -8,12 +8,22 @@ use crate::{
 };
 
 pub mod jcc;
-pub mod nop;
+pub mod load_addr;
+pub mod load_imm;
+pub mod load_mem;
+pub mod load_reg;
+pub mod store_mem;
+pub mod store_reg;
 
 pub fn initialize(rt: &mut Runtime) {
     let mut table = [
         (VMOp::Jcc, FnDef::VmHandlerJcc),
-        (VMOp::Nop, FnDef::VmHandlerNop),
+        (VMOp::LoadImm, FnDef::VmHandlerLoadImm),
+        (VMOp::LoadReg, FnDef::VmHandlerLoadReg),
+        (VMOp::LoadMem, FnDef::VmHandlerLoadMem),
+        (VMOp::LoadAddr, FnDef::VmHandlerLoadAddr),
+        (VMOp::StoreReg, FnDef::VmHandlerStoreReg),
+        (VMOp::StoreMem, FnDef::VmHandlerStoreMem),
     ];
 
     let mut rng = rand::thread_rng();
