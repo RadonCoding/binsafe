@@ -389,19 +389,19 @@ impl Runtime {
             ),
             (
                 FnDef::VmArithmeticAddSub8,
-                vm::handlers::arithmetic::addsub8::build,
+                vm::handlers::arithmetic::addsub::build_8,
             ),
             (
                 FnDef::VmArithmeticAddSub16,
-                vm::handlers::arithmetic::addsub16::build,
+                vm::handlers::arithmetic::addsub::build_16,
             ),
             (
                 FnDef::VmArithmeticAddSub32,
-                vm::handlers::arithmetic::addsub32::build,
+                vm::handlers::arithmetic::addsub::build_32,
             ),
             (
                 FnDef::VmArithmeticAddSub64,
-                vm::handlers::arithmetic::addsub64::build,
+                vm::handlers::arithmetic::addsub::build_64,
             ),
             (FnDef::VmVehInitialize, vm::veh::initialize),
             (

@@ -1,7 +1,4 @@
-pub mod addsub16;
-pub mod addsub32;
-pub mod addsub64;
-pub mod addsub8;
+pub mod addsub;
 pub mod addsubmemimm;
 pub mod addsubmemreg;
 pub mod addsubregimm;
