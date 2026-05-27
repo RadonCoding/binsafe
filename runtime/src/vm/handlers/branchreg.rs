@@ -1,5 +1,5 @@
 use crate::vm::utils;
-use iced_x86::code_asm::{al, byte_ptr, ptr, r8, rax, rcx, rdx};
+use iced_x86::code_asm::{al, ptr, r8, r8d, rax, rcx, rdx};
 
 use crate::{
     runtime::Runtime,
@@ -27,10 +27,8 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut skip_ret).unwrap();
     {
-        // movzx r8, [rdx] -> dst
-        rt.asm.movzx(r8, byte_ptr(rdx)).unwrap();
-        // add rdx, 0x1
-        rt.asm.add(rdx, 0x1).unwrap();
+        // movzx r8d, [rdx]; add rdx, 0x1 -> dst
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
 
         // mov rax, [rcx + rax * 8]
         rt.asm.mov(rax, ptr(rcx + r8 * 8)).unwrap();

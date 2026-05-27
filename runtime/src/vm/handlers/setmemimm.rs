@@ -1,8 +1,8 @@
-use iced_x86::code_asm::{byte_ptr, r12, r13, rax, rcx, rdi, rdx, rsi};
+use iced_x86::code_asm::{r12, r13, r13d, rax, rcx, rdi, rdx, rsi};
 
 use crate::{
     runtime::{FnDef, Runtime},
-    vm::stack,
+    vm::{stack, utils},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -27,10 +27,8 @@ pub fn build(rt: &mut Runtime) {
     // mov r12, rdx
     rt.asm.mov(r12, rdx).unwrap();
 
-    // movzx r13, [r12] -> size
-    rt.asm.movzx(r13, byte_ptr(r12)).unwrap();
-    // add r12, 0x1
-    rt.asm.add(r12, 0x1).unwrap();
+    // movzx r13d, [r12]; add r12, 0x1 -> size
+    utils::bytecode::read_byte_zx(rt, r12, r13d);
 
     // mov rsi, r12
     rt.asm.mov(rsi, r12).unwrap();

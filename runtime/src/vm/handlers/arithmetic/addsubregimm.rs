@@ -78,7 +78,6 @@ pub fn build(rt: &mut Runtime) {
     {
         // lea rdx, [rcx + r8*8]
         rt.asm.lea(rdx, ptr(rcx + r8 * 8)).unwrap();
-
         // mov r8b, [r12]; add r12, 0x1
         utils::bytecode::read_byte(rt, r12, r8b);
         // mov r9b, r14b
@@ -112,7 +111,6 @@ pub fn build(rt: &mut Runtime) {
     {
         // lea rdx, [rcx + r8*8]
         rt.asm.lea(rdx, ptr(rcx + r8 * 8)).unwrap();
-
         // mov r8w, [r12]; add r12, 0x2
         utils::bytecode::read_word(rt, r12, r8w);
         // mov r9b, r14b
@@ -129,7 +127,6 @@ pub fn build(rt: &mut Runtime) {
     {
         // lea rdx, [rcx + r8*8]
         rt.asm.lea(rdx, ptr(rcx + r8 * 8)).unwrap();
-
         // mov r8d, [r12]; add r12, 0x4
         utils::bytecode::read_dword(rt, r12, r8d);
         // mov r9b, r14b
@@ -146,7 +143,6 @@ pub fn build(rt: &mut Runtime) {
     {
         // lea rdx, [rcx + r8*8]
         rt.asm.lea(rdx, ptr(rcx + r8 * 8)).unwrap();
-
         // mov r8, [r12]; add r12, 0x8
         utils::bytecode::read_qword(rt, r12, r8);
         // mov r9b, r14b
