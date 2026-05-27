@@ -218,14 +218,13 @@ impl Encode for VMCond {
 }
 
 pub fn convert(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<u8>> {
-    let mut out = Vec::new();
+    let mut output = Vec::new();
+
     let mut i = 0;
 
     while i < instructions.len() {
-        if let Some((bytes, consumed)) =
-            stack::try_emit_push_pop_regs(mapper, &instructions[i..])
-        {
-            out.extend_from_slice(&bytes);
+        if let Some((bytes, consumed)) = stack::try_emit_push_pop_regs(mapper, &instructions[i..]) {
+            output.extend_from_slice(&bytes);
             i += consumed;
             continue;
         }
@@ -263,9 +262,9 @@ pub fn convert(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<
             _ => return None,
         };
 
-        out.extend_from_slice(&bytes);
+        output.extend_from_slice(&bytes);
         i += 1;
     }
 
-    Some(out)
+    Some(output)
 }
