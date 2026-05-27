@@ -2,6 +2,7 @@ pub mod bytecode;
 pub mod cleanup;
 pub mod crypt;
 pub mod dispatch;
+pub mod encoders;
 pub mod entry;
 pub mod exit;
 pub mod ginit;

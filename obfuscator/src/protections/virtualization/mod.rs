@@ -13,7 +13,7 @@ use iced_x86::code_asm::CodeAssembler;
 use logger::info;
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
-use runtime::vm::bytecode::{self};
+use runtime::vm::bytecode;
 
 #[derive(Default)]
 pub struct Virtualization {

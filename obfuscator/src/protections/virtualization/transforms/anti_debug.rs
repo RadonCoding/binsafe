@@ -4,7 +4,8 @@ use rand::{seq::SliceRandom, Rng};
 use runtime::{
     mapper::Mapper,
     vm::{
-        bytecode::{VMBits, VMCmd, VMMem, VMOp, VMReg, VMSeg},
+        bytecode::{VMBits, VMMem, VMOp, VMReg, VMSeg},
+        encoders::{arithmetic, load, Encode},
         veh::TRAP_MAGIC,
     },
 };
@@ -68,8 +69,7 @@ impl AntiDebug {
         let displacement: i32 =
             ((TRAP_MAGIC as i32) << 24) | ((skip as i32) << 16) | (entropy as i32);
 
-        let trap = VMCmd::SetRegMem {
-            vop: VMOp::SetRegMem,
+        let trap = load::SetRegMem {
             dbits: VMBits::Lower64,
             load: true,
             dst: VMReg::Vs0,
@@ -89,17 +89,21 @@ impl AntiDebug {
     }
 
     fn peb_check(mapper: &mut Mapper) -> Vec<u8> {
-        let transform: Vec<VMCmd<'static>> = vec![
-            VMCmd::SetRegReg {
-                vop: VMOp::SetRegReg,
+        let mut bytes = Vec::new();
+
+        bytes.extend(
+            load::SetRegReg {
                 dbits: VMBits::Lower64,
                 dst: VMReg::Vs1,
                 sbits: VMBits::Lower64,
                 src: VMReg::Flags,
-            },
-            // PEB *TEB->ProcessEnvironmentBlock
-            VMCmd::SetRegMem {
-                vop: VMOp::SetRegMem,
+            }
+            .encode(mapper),
+        );
+
+        // PEB *TEB->ProcessEnvironmentBlock
+        bytes.extend(
+            load::SetRegMem {
                 dbits: VMBits::Lower64,
                 load: true,
                 dst: VMReg::Vs0,
@@ -110,10 +114,13 @@ impl AntiDebug {
                     displacement: 0x60,
                     seg: VMSeg::Gs,
                 },
-            },
-            // BOOLEAN PEB->BeingDebugged
-            VMCmd::AddSubRegMem {
-                vop: VMOp::AddSubRegMem,
+            }
+            .encode(mapper),
+        );
+
+        // BOOLEAN PEB->BeingDebugged
+        bytes.extend(
+            arithmetic::AddSubRegMem {
                 sub: true,
                 store: true,
                 dbits: VMBits::Lower8,
@@ -125,19 +132,20 @@ impl AntiDebug {
                     displacement: 0x02,
                     seg: VMSeg::None,
                 },
-            },
-            VMCmd::SetRegReg {
-                vop: VMOp::SetRegReg,
+            }
+            .encode(mapper),
+        );
+
+        bytes.extend(
+            load::SetRegReg {
                 dbits: VMBits::Lower64,
                 dst: VMReg::Flags,
                 sbits: VMBits::Lower64,
                 src: VMReg::Vs1,
-            },
-        ];
+            }
+            .encode(mapper),
+        );
 
-        transform
-            .into_iter()
-            .flat_map(|cmd| cmd.encode(mapper))
-            .collect()
+        bytes
     }
 }
