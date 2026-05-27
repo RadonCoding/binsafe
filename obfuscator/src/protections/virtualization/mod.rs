@@ -124,9 +124,9 @@ impl Protection for Virtualization {
     fn apply(&self, engine: &mut Engine) {
         let ventry_rva = engine.rt.lookup(engine.rt.func_labels[&FnDef::VmEntry]);
 
-        let vtable_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmTable]);
-        let vtable_offset = engine.pe.rva_to_offset(RVA(vtable_rva as u32)).unwrap();
-        let vtable = unsafe { engine.pe.as_mut_ptr().add(vtable_offset.0 as usize) };
+        let vtable_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmTable]) as u32;
+        let vtable_offset = engine.pe.translate(RVA(vtable_rva).into()).unwrap();
+        let vtable = unsafe { engine.pe.as_ptr().add(vtable_offset) as *mut u8 };
 
         for i in 0..engine.blocks.len() {
             let block = &engine.blocks[i];
