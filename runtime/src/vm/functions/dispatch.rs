@@ -1,9 +1,11 @@
-use crate::vm::utils::{self};
 use iced_x86::code_asm::{eax, ptr, r12, r13, r14, r8, r8d, r9b, rax, rcx, rdx};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
-    vm::{bytecode::VMReg, stack},
+    vm::{
+        bytecode::{VMOp, VMReg},
+        utils::{self, stack},
+    },
 };
 
 // void (unsigned long*, unsigned char*)
@@ -57,6 +59,11 @@ pub fn build(rt: &mut Runtime) {
 
         // movzx r8d, [r13]; add r13, 0x1 -> op
         utils::bytecode::read_byte_zx(rt, r13, r8d);
+
+        // cmp r8d, ...
+        rt.asm.cmp(r8d, rt.mapper.index(VMOp::Nop) as i32).unwrap();
+        // je ...
+        rt.asm.je(execute_loop).unwrap();
 
         // lea rax, [...]
         rt.asm

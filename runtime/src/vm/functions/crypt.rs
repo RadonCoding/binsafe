@@ -4,7 +4,7 @@ use iced_x86::code_asm::{
 
 use crate::{
     runtime::{DataDef, Runtime},
-    vm::stack,
+    vm::utils::stack,
 };
 
 // void (unsigned char*, unsigned long, unsigned char*, bool)
@@ -57,7 +57,7 @@ pub fn build(rt: &mut Runtime) {
 
     // test r13b, r13b
     rt.asm.test(r13b, r13b).unwrap();
-    // jnz ... -> decrypting
+    // jnz ...
     rt.asm.jnz(decrypting).unwrap();
 
     // mov eax, [...]
@@ -71,9 +71,10 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut decrypting).unwrap();
     {
+        // Check if this is the first block:
         // test r15, r15
         rt.asm.test(r15, r15).unwrap();
-        // jz ... -> first block
+        // jz ...
         rt.asm.jz(start_key).unwrap();
 
         rt.asm.set_label(&mut spin_previous).unwrap();
@@ -108,7 +109,8 @@ pub fn build(rt: &mut Runtime) {
         // and r14, rax
         rt.asm.and(r14, rax).unwrap();
 
-        // mov [r12 - 0x1], 0x0 -> release previous
+        // Release lock on the previous block:
+        // mov [r12 - 0x1], 0x0
         rt.asm.mov(byte_ptr(r12 - 0x1), 0x0).unwrap();
 
         // jmp ...
@@ -167,9 +169,10 @@ pub fn build(rt: &mut Runtime) {
         // xor [rcx], r14
         rt.asm.xor(ptr(rcx), r14).unwrap();
 
+        // Skip reading the ciphertext if decrypting since the block was already ciphertext:
         // test r13b, r13b
         rt.asm.test(r13b, r13b).unwrap();
-        // jnz ... -> decrypting
+        // jnz ...
         rt.asm.jnz(continue_loop).unwrap();
 
         // mov rax, [rcx]

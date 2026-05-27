@@ -1,6 +1,5 @@
 use iced_x86::{Code, Instruction};
 use rand::seq::SliceRandom;
-use rand::Rng;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMOp, VMTest};
@@ -13,42 +12,10 @@ pub struct Jcc {
     pub destination: u32,
 }
 
-impl Jcc {
-    fn mutate(&mut self) {
-        let mut rng = rand::thread_rng();
-
-        self.apply_shuffle(&mut rng);
-
-        if rng.gen() {
-            self.apply_de_morgan();
-        }
-    }
-
-    fn apply_de_morgan(&mut self) {
-        self.logic = match self.logic {
-            VMLogic::AND => VMLogic::OR,
-            VMLogic::OR => VMLogic::AND,
-        };
-        for condition in &mut self.conditions {
-            condition.test = match condition.test {
-                VMTest::CMP => VMTest::CMP,
-                VMTest::EQ => VMTest::NEQ,
-                VMTest::NEQ => VMTest::EQ,
-            };
-            if condition.test == VMTest::CMP {
-                condition.rhs = 1 - condition.rhs;
-            }
-        }
-    }
-
-    fn apply_shuffle(&mut self, rng: &mut impl Rng) {
-        self.conditions.shuffle(rng);
-    }
-}
-
 impl Encode for Jcc {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
-        self.mutate();
+        let mut rng = rand::thread_rng();
+        self.conditions.shuffle(&mut rng);
 
         let mut bytes = vec![
             mapper.index(VMOp::Jcc),
@@ -64,7 +31,7 @@ impl Encode for Jcc {
     }
 }
 
-pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let destination = instruction.memory_displacement64().try_into().unwrap();
 
     let (logic, conditions) = match instruction.code() {
@@ -119,14 +86,11 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<u8>>
         _ => return None,
     };
 
-    Some(
-        Jcc {
-            logic,
-            conditions,
-            destination,
-        }
-        .encode(mapper),
-    )
+    Some(vec![Box::new(Jcc {
+        logic,
+        conditions,
+        destination,
+    })])
 }
 
 fn cmp(lhs: VMFlag, rhs: u8) -> VMCondition {

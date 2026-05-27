@@ -1,0 +1,54 @@
+use iced_x86::code_asm::{al, ptr, r8, r9, r9b, r9d, r9w, rax, rdx};
+
+use crate::{
+    runtime::Runtime,
+    vm::utils::{self, scratch, stack},
+};
+
+// unsigned char* (unsigned long*, unsigned char*)
+pub fn build(rt: &mut Runtime) {
+    let mut epilogue = rt.asm.create_label();
+
+    // al -> width
+    utils::bytecode::read_byte(rt, rdx, al);
+
+    // load r8
+    scratch::load(rt, r8);
+
+    // load r9
+    scratch::load(rt, r9);
+
+    utils::bits::dispatch(
+        rt,
+        al,
+        &mut epilogue,
+        |rt| {
+            // mov [r8], r9
+            rt.asm.mov(ptr(r8), r9).unwrap();
+        },
+        |rt| {
+            // mov [r8], r9d
+            rt.asm.mov(ptr(r8), r9d).unwrap();
+        },
+        |rt| {
+            // mov [r8], r9w
+            rt.asm.mov(ptr(r8), r9w).unwrap();
+        },
+        |rt| {
+            // mov [r8], r9b
+            rt.asm.mov(ptr(r8), r9b).unwrap();
+        },
+        |rt| {
+            // mov [r8], r9b
+            rt.asm.mov(ptr(r8), r9b).unwrap();
+        },
+    );
+
+    rt.asm.set_label(&mut epilogue).unwrap();
+    {
+        // mov rax, rdx
+        rt.asm.mov(rax, rdx).unwrap();
+        // ret
+        stack::ret(rt);
+    }
+}

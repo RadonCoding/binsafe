@@ -1,8 +1,13 @@
+#[cfg(debug_assertions)]
+use std::collections::HashSet;
+
 use crate::engine::Engine;
 use crate::protections::Protection;
 use iced_x86::code_asm::*;
+#[cfg(debug_assertions)]
+use iced_x86::Code;
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
-use logger::info;
+use logger::{debug, info};
 use rand::Rng;
 
 #[derive(Default)]
@@ -84,6 +89,9 @@ impl Protection for Mutation {
 
         let mut mutated = 0usize;
 
+        #[cfg(debug_assertions)]
+        let mut logged: HashSet<Code> = HashSet::new();
+
         for i in 0..engine.blocks.len() {
             let block = &engine.blocks[i];
 
@@ -96,149 +104,178 @@ impl Protection for Mutation {
                 let mnemonic = instruction.mnemonic();
                 let raw = instruction.op0_register();
 
-                // MOV reg, imm -> MOV reg, (imm^key); XOR reg, key
-                if mnemonic == Mnemonic::Mov && instruction.try_immediate(1).is_ok() && dead_flags {
-                    let imm = instruction.immediate(1);
-                    let key = rng.gen::<u32>();
+                #[cfg(debug_assertions)]
+                let asm_index = asm.instructions().len();
 
-                    if let Some(reg) = self.resolve_gpr64(raw) {
-                        asm.mov(reg, imm ^ (key as u64)).unwrap();
-                        asm.xor(reg, key as i32).unwrap();
-                        processed = true;
-                        continue;
-                    } else if let Some(reg) = self.resolve_gpr32(raw) {
-                        asm.mov(reg, (imm as u32) ^ key).unwrap();
-                        asm.xor(reg, key as i32).unwrap();
-                        processed = true;
-                        continue;
-                    }
-                }
+                let mut mutated = false;
 
-                // ADD/SUB reg, imm -> SUB/ADD reg, -imm
-                if (mnemonic == Mnemonic::Add || mnemonic == Mnemonic::Sub)
-                    && instruction.op1_kind() == OpKind::Immediate32
-                    && dead_flags
-                {
-                    let imm = instruction.immediate(1) as i32;
-                    let addition = mnemonic == Mnemonic::Add;
+                'mutation: {
+                    // MOV reg, imm -> MOV reg, (imm^key); XOR reg, key
+                    if mnemonic == Mnemonic::Mov
+                        && instruction.try_immediate(1).is_ok()
+                        && dead_flags
+                    {
+                        let imm = instruction.immediate(1);
+                        let key = rng.gen::<u32>();
 
-                    if let Some(reg) = self.resolve_gpr64(raw) {
-                        if addition {
-                            asm.sub(reg, -imm).unwrap();
-                        } else {
-                            asm.add(reg, -imm).unwrap();
-                        }
-                        processed = true;
-                        continue;
-                    } else if let Some(reg) = self.resolve_gpr32(raw) {
-                        if addition {
-                            asm.sub(reg, -imm).unwrap();
-                        } else {
-                            asm.add(reg, -imm).unwrap();
-                        }
-                        processed = true;
-                        continue;
-                    }
-                }
-
-                // XOR reg, imm -> NOT reg; XOR reg, !imm
-                if mnemonic == Mnemonic::Xor
-                    && instruction.op1_kind() == OpKind::Immediate32
-                    && dead_flags
-                {
-                    let imm = instruction.immediate(1) as i32;
-
-                    if let Some(reg) = self.resolve_gpr64(raw) {
-                        asm.not(reg).unwrap();
-                        asm.xor(reg, !imm).unwrap();
-                        processed = true;
-                        continue;
-                    } else if let Some(reg) = self.resolve_gpr32(raw) {
-                        asm.not(reg).unwrap();
-                        asm.xor(reg, !imm).unwrap();
-                        processed = true;
-                        continue;
-                    }
-                }
-
-                // AND reg, imm -> NOT reg; OR reg, !imm; NOT reg
-                if mnemonic == Mnemonic::And
-                    && instruction.op1_kind() == OpKind::Immediate32
-                    && dead_flags
-                {
-                    let imm = instruction.immediate(1) as i32;
-
-                    if let Some(reg) = self.resolve_gpr64(raw) {
-                        asm.not(reg).unwrap();
-                        asm.or(reg, !imm).unwrap();
-                        asm.not(reg).unwrap();
-                        processed = true;
-                        continue;
-                    } else if let Some(reg) = self.resolve_gpr32(raw) {
-                        asm.not(reg).unwrap();
-                        asm.or(reg, !imm).unwrap();
-                        asm.not(reg).unwrap();
-                        processed = true;
-                        continue;
-                    }
-                }
-
-                // OR reg, imm -> NOT reg; AND reg, !imm; NOT reg
-                if mnemonic == Mnemonic::Or
-                    && instruction.op1_kind() == OpKind::Immediate32
-                    && dead_flags
-                {
-                    let imm = instruction.immediate(1) as i32;
-
-                    if let Some(reg) = self.resolve_gpr64(raw) {
-                        asm.not(reg).unwrap();
-                        asm.and(reg, !imm).unwrap();
-                        asm.not(reg).unwrap();
-                        processed = true;
-                        continue;
-                    } else if let Some(reg) = self.resolve_gpr32(raw) {
-                        asm.not(reg).unwrap();
-                        asm.and(reg, !imm).unwrap();
-                        asm.not(reg).unwrap();
-                        processed = true;
-                        continue;
-                    }
-                }
-
-                // NEG reg -> NOT reg; ADD reg, 1
-                if mnemonic == Mnemonic::Neg && dead_flags {
-                    if let Some(reg) = self.resolve_gpr64(raw) {
-                        asm.not(reg).unwrap();
-                        asm.add(reg, 1).unwrap();
-                        processed = true;
-                        continue;
-                    } else if let Some(reg) = self.resolve_gpr32(raw) {
-                        asm.not(reg).unwrap();
-                        asm.add(reg, 1).unwrap();
-                        processed = true;
-                        continue;
-                    }
-                }
-
-                // SUB reg, reg -> XOR reg, reg
-                if mnemonic == Mnemonic::Sub
-                    && instruction.op0_kind() == OpKind::Register
-                    && instruction.op1_kind() == OpKind::Register
-                {
-                    if raw == instruction.op1_register() && dead_flags {
                         if let Some(reg) = self.resolve_gpr64(raw) {
-                            asm.xor(reg, reg).unwrap();
-                            processed = true;
-                            continue;
+                            asm.mov(reg, imm ^ (key as u64)).unwrap();
+                            asm.xor(reg, key as i32).unwrap();
+                            mutated = true;
+                            break 'mutation;
                         } else if let Some(reg) = self.resolve_gpr32(raw) {
-                            asm.xor(reg, reg).unwrap();
-                            processed = true;
-                            continue;
+                            asm.mov(reg, (imm as u32) ^ key).unwrap();
+                            asm.xor(reg, key as i32).unwrap();
+                            mutated = true;
+                            break 'mutation;
                         }
                     }
+
+                    // ADD/SUB reg, imm -> SUB/ADD reg, -imm
+                    if (mnemonic == Mnemonic::Add || mnemonic == Mnemonic::Sub)
+                        && instruction.op1_kind() == OpKind::Immediate32
+                        && dead_flags
+                    {
+                        let imm = instruction.immediate(1) as i32;
+                        let addition = mnemonic == Mnemonic::Add;
+
+                        if let Some(reg) = self.resolve_gpr64(raw) {
+                            if addition {
+                                asm.sub(reg, -imm).unwrap();
+                            } else {
+                                asm.add(reg, -imm).unwrap();
+                            }
+                            mutated = true;
+                            break 'mutation;
+                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                            if addition {
+                                asm.sub(reg, -imm).unwrap();
+                            } else {
+                                asm.add(reg, -imm).unwrap();
+                            }
+                            mutated = true;
+                            break 'mutation;
+                        }
+                    }
+
+                    // XOR reg, imm -> NOT reg; XOR reg, !imm
+                    if mnemonic == Mnemonic::Xor
+                        && instruction.op1_kind() == OpKind::Immediate32
+                        && dead_flags
+                    {
+                        let imm = instruction.immediate(1) as i32;
+
+                        if let Some(reg) = self.resolve_gpr64(raw) {
+                            asm.not(reg).unwrap();
+                            asm.xor(reg, !imm).unwrap();
+                            mutated = true;
+                            break 'mutation;
+                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                            asm.not(reg).unwrap();
+                            asm.xor(reg, !imm).unwrap();
+                            mutated = true;
+                            break 'mutation;
+                        }
+                    }
+
+                    // AND reg, imm -> NOT reg; OR reg, !imm; NOT reg
+                    if mnemonic == Mnemonic::And
+                        && instruction.op1_kind() == OpKind::Immediate32
+                        && dead_flags
+                    {
+                        let imm = instruction.immediate(1) as i32;
+
+                        if let Some(reg) = self.resolve_gpr64(raw) {
+                            asm.not(reg).unwrap();
+                            asm.or(reg, !imm).unwrap();
+                            asm.not(reg).unwrap();
+                            mutated = true;
+                            break 'mutation;
+                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                            asm.not(reg).unwrap();
+                            asm.or(reg, !imm).unwrap();
+                            asm.not(reg).unwrap();
+                            mutated = true;
+                            break 'mutation;
+                        }
+                    }
+
+                    // OR reg, imm -> NOT reg; AND reg, !imm; NOT reg
+                    if mnemonic == Mnemonic::Or
+                        && instruction.op1_kind() == OpKind::Immediate32
+                        && dead_flags
+                    {
+                        let imm = instruction.immediate(1) as i32;
+
+                        if let Some(reg) = self.resolve_gpr64(raw) {
+                            asm.not(reg).unwrap();
+                            asm.and(reg, !imm).unwrap();
+                            asm.not(reg).unwrap();
+                            mutated = true;
+                            break 'mutation;
+                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                            asm.not(reg).unwrap();
+                            asm.and(reg, !imm).unwrap();
+                            asm.not(reg).unwrap();
+                            mutated = true;
+                            break 'mutation;
+                        }
+                    }
+
+                    // NEG reg -> NOT reg; ADD reg, 1
+                    if mnemonic == Mnemonic::Neg && dead_flags {
+                        if let Some(reg) = self.resolve_gpr64(raw) {
+                            asm.not(reg).unwrap();
+                            asm.add(reg, 1).unwrap();
+                            mutated = true;
+                            break 'mutation;
+                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                            asm.not(reg).unwrap();
+                            asm.add(reg, 1).unwrap();
+                            mutated = true;
+                            break 'mutation;
+                        }
+                    }
+
+                    // SUB reg, reg -> XOR reg, reg
+                    if mnemonic == Mnemonic::Sub
+                        && instruction.op0_kind() == OpKind::Register
+                        && instruction.op1_kind() == OpKind::Register
+                    {
+                        if raw == instruction.op1_register() && dead_flags {
+                            if let Some(reg) = self.resolve_gpr64(raw) {
+                                asm.xor(reg, reg).unwrap();
+                                mutated = true;
+                                break 'mutation;
+                            } else if let Some(reg) = self.resolve_gpr32(raw) {
+                                asm.xor(reg, reg).unwrap();
+                                mutated = true;
+                                break 'mutation;
+                            }
+                        }
+                    }
+
+                    asm.add_instruction(*instruction).unwrap();
                 }
 
-                asm.add_instruction(*instruction).unwrap();
+                if mutated {
+                    processed = true;
+
+                    #[cfg(debug_assertions)]
+                    if logged.insert(instruction.code()) {
+                        let after = asm.instructions()[asm_index..]
+                            .iter()
+                            .map(|i| format!("    {}", i))
+                            .collect::<Vec<String>>()
+                            .join("\n");
+                        debug!(
+                            "MUTATED @ 0x{:08X}:\n  BEFORE: {}\n  AFTER:\n{}",
+                            instruction.ip(),
+                            instruction,
+                            after
+                        );
+                    }
+                }
             }
 
             if processed {
