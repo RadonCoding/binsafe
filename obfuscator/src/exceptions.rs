@@ -1,4 +1,4 @@
-use exe::{Buffer, Castable, ImageDirectoryEntry, PETranslation, VecPE, PE};
+use exe::{Buffer, ImageDirectoryEntry, PETranslation, VecPE, PE};
 use std::{collections::HashSet, mem};
 
 #[repr(C, packed)]
@@ -7,7 +7,6 @@ struct RuntimeFunction {
     end_address: u32,
     unwind_info_address: u32,
 }
-unsafe impl Castable for RuntimeFunction {}
 
 pub fn get_exception_handlers(pe: &VecPE) -> HashSet<u32> {
     let mut results = HashSet::new();

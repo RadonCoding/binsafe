@@ -41,6 +41,14 @@ pub fn store_reg(rt: &mut Runtime, base: AsmRegister64, from: AsmRegister64, to:
         .unwrap();
 }
 
+/// `mov [{base} + {to} * 8], {from}`
+pub fn store_reg32(rt: &mut Runtime, base: AsmRegister64, from: AsmRegister32, to: VMReg) {
+    // mov [...], ...
+    rt.asm
+        .mov(ptr(base + rt.mapper.index(to) * 8), from)
+        .unwrap();
+}
+
 /// `mov qword [{base} + {to} * 8], {from}`
 pub fn store_imm(rt: &mut Runtime, base: AsmRegister64, from: i32, to: VMReg) {
     // mov [...], ...

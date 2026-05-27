@@ -1,5 +1,5 @@
-use crate::vm::utils;
-use iced_x86::code_asm::{ptr, r12, r13, r14, r8, r8d, r9b, rax, rcx, rdx, word_ptr};
+use crate::vm::utils::{self};
+use iced_x86::code_asm::{eax, ptr, r12, r13, r14, r8, r8d, r9b, rax, rcx, rdx};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -27,10 +27,8 @@ pub fn build(rt: &mut Runtime) {
     // Initialize block pointer and block length:
     // mov [r12 + ...], r13
     utils::vreg::store_reg(rt, r12, r13, VMReg::Vbp);
-    // movzx rax, [r13]
-    rt.asm.movzx(rax, word_ptr(r13)).unwrap();
-    // add r13, 0x2
-    rt.asm.add(r13, 0x2).unwrap();
+    // movzx rax, [r13]; add r13, 0x2
+    utils::bytecode::read_word_zx(rt, r13, eax);
     // mov [r12 + ...], rax
     utils::vreg::store_reg(rt, r12, rax, VMReg::Vbl);
 

@@ -8,7 +8,7 @@ use crate::engine::Engine;
 use crate::protections::virtualization::transforms::anti_debug::AntiDebug;
 use crate::protections::Protection;
 use exe::Buffer;
-use exe::{PETranslation, PE, RVA};
+use exe::{PE, RVA};
 use iced_x86::code_asm::CodeAssembler;
 use logger::info;
 use rand::Rng;
@@ -125,11 +125,8 @@ impl Protection for Virtualization {
         let ventry_rva = engine.rt.lookup(engine.rt.func_labels[&FnDef::VmEntry]);
 
         let vtable_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmTable]);
-        let vtable_offset = engine
-            .pe
-            .translate(PETranslation::Memory(RVA(vtable_rva as u32)))
-            .unwrap();
-        let vtable = unsafe { engine.pe.as_mut_ptr().add(vtable_offset) };
+        let vtable_offset = engine.pe.rva_to_offset(RVA(vtable_rva as u32)).unwrap();
+        let vtable = unsafe { engine.pe.as_mut_ptr().add(vtable_offset.0 as usize) };
 
         for i in 0..engine.blocks.len() {
             let block = &engine.blocks[i];

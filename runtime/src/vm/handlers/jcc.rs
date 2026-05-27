@@ -140,13 +140,6 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.je(is_or).unwrap();
             // and r12b, r8b
             rt.asm.and(r12b, r8b).unwrap();
-
-            // For AND conditions do not check the rest if the condition was false:
-            // test r12b, r12b
-            rt.asm.test(r12b, r12b).unwrap();
-            // jz ...
-            rt.asm.jz(epilogue).unwrap();
-
             // jmp ...
             rt.asm.jmp(continue_loop).unwrap();
         }
