@@ -32,6 +32,7 @@ pub fn build(rt: &mut Runtime) {
 
     // mov al, [rdx]; add rdx, 0x1 -> logic
     utils::bytecode::read_byte(rt, rdx, al);
+
     // mov r14b, [rdx]; add rdx, 0x1 -> number of conditions
     utils::bytecode::read_byte(rt, rdx, r14b);
 

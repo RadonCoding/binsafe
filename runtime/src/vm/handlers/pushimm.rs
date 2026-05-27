@@ -39,7 +39,7 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut word).unwrap();
     {
-        // movzx r8d, [rdx]; add rdx, 0x1 -> src
+        // movzx r8d, [rdx]; add rdx, 0x2 -> src
         utils::bytecode::read_word_zx(rt, rdx, r8d);
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
