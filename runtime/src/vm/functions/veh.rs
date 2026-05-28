@@ -70,8 +70,6 @@ const VM_TO_CONTEXT: &[(VMReg, i32)] = &[
     (VMReg::Flags, 0x44),
 ];
 
-pub const TRAP_MAGIC: u8 = 0x8E;
-
 // long (*EXCEPTION_POINTERS)
 pub fn handler(rt: &mut Runtime) {
     let mut continue_search = rt.asm.create_label();
