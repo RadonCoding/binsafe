@@ -9,6 +9,7 @@ use crate::{
 
 pub mod add;
 pub mod discard;
+pub mod flags;
 pub mod jcc;
 pub mod load_address;
 pub mod load_immediate;

@@ -492,14 +492,16 @@ mod tests {
 
     #[test]
     fn test_flags() {
+        // SF & PF
         template(
-            &[Instruction::with2(Code::Add_rm64_imm8, Register::RAX, -0x11).unwrap()],
+            &[Instruction::with2(Code::Add_rm64_imm8, Register::RAX, -0x1).unwrap()],
             &[(VMReg::Rax, 0x0)],
             VMReg::Flags,
             flag(VMFlag::Sign) | flag(VMFlag::Parity),
         );
+        // OF & SF & AF & PF
         template(
-            &[Instruction::with2(Code::Add_rm64_imm8, Register::RAX, 0x22).unwrap()],
+            &[Instruction::with2(Code::Add_rm64_imm8, Register::RAX, 0x1).unwrap()],
             &[(VMReg::Rax, 0x7FFF_FFFF_FFFF_FFFF)],
             VMReg::Flags,
             flag(VMFlag::Overflow)
@@ -507,8 +509,9 @@ mod tests {
                 | flag(VMFlag::Auxiliary)
                 | flag(VMFlag::Parity),
         );
+        // ZF & CF & AF & PF
         template(
-            &[Instruction::with2(Code::Add_rm64_imm8, Register::RAX, 0x33).unwrap()],
+            &[Instruction::with2(Code::Add_rm64_imm8, Register::RAX, 0x1).unwrap()],
             &[(VMReg::Rax, 0xFFFF_FFFF_FFFF_FFFF)],
             VMReg::Flags,
             flag(VMFlag::Carry)

@@ -1,5 +1,3 @@
-use std::mem;
-
 use rand::seq::SliceRandom;
 use rand::Rng;
 
@@ -50,19 +48,40 @@ impl Jcc {
 
         self.conditions.shuffle(&mut rng);
 
-        for condition in &mut self.conditions {
-            match condition.test {
-                VMTest::EQ | VMTest::NEQ if rng.gen() => {
-                    mem::swap(&mut condition.lhs, &mut condition.rhs);
+        match self.logic {
+            VMLogic::AND if rng.gen() => {
+                // AND(A,B,...) == NOT(OR(A,B,...))
+                self.logic = VMLogic::NOR;
+
+                for c in &mut self.conditions {
+                    match c.test {
+                        VMTest::EQ => c.test = VMTest::NEQ,
+                        VMTest::NEQ => c.test = VMTest::EQ,
+                        VMTest::CMP => {
+                            c.rhs ^= 1;
+                        }
+                    }
                 }
-
-                _ => {}
             }
-        }
+            VMLogic::OR if rng.gen() => {
+                // OR(A,B,...) == NOT(AND(!A,!B,...))
+                self.logic = VMLogic::NAND;
 
-        self.conditions.shuffle(&mut rng);
+                for c in &mut self.conditions {
+                    match c.test {
+                        VMTest::EQ => c.test = VMTest::NEQ,
+                        VMTest::NEQ => c.test = VMTest::EQ,
+                        VMTest::CMP => {
+                            c.rhs ^= 1;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 }
+
 impl Encode for Jcc {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
         self.mutate();
