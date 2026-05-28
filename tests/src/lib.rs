@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use std::{ffi::c_void, mem, ptr, thread};
+    use std::{ffi::c_void, mem, ptr, sync::OnceLock, thread};
 
     use iced_x86::{
         code_asm::{ecx, esi, ptr, qword_ptr, rax, rcx, rdi, rdx, rsi},
@@ -14,13 +14,47 @@ mod tests {
             bytecode::{self, VMFlag, VMReg},
         },
     };
-    use windows::Win32::System::Memory::{
-        VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
+    use windows::Win32::System::{
+        Memory::{
+            VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
+        },
+        Threading::{FlsAlloc, TlsAlloc},
     };
 
     struct Executor {
         rt: Runtime,
         mem: *mut c_void,
+    }
+
+    static TLS_STATE: OnceLock<u32> = OnceLock::new();
+    static TLS_STACK: OnceLock<u32> = OnceLock::new();
+    static TLS_SCRATCH: OnceLock<u32> = OnceLock::new();
+    static TLS_KEY: OnceLock<u32> = OnceLock::new();
+    static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
+
+    fn initialize_tls() -> [(DataDef, u32); 5] {
+        [
+            (
+                DataDef::VmStateTlsIndex,
+                *TLS_STATE.get_or_init(|| unsafe { TlsAlloc() }),
+            ),
+            (
+                DataDef::VmStackTlsIndex,
+                *TLS_STACK.get_or_init(|| unsafe { TlsAlloc() }),
+            ),
+            (
+                DataDef::VmScratchTlsIndex,
+                *TLS_SCRATCH.get_or_init(|| unsafe { TlsAlloc() }),
+            ),
+            (
+                DataDef::VmKeyTlsIndex,
+                *TLS_KEY.get_or_init(|| unsafe { TlsAlloc() }),
+            ),
+            (
+                DataDef::VmCleanupFlsIndex,
+                *FLS_CLEANUP.get_or_init(|| unsafe { FlsAlloc(None) }),
+            ),
+        ]
     }
 
     impl Executor {
@@ -54,11 +88,6 @@ mod tests {
         fn run(&mut self, setup: &[(VMReg, u64)], bytecode: &[u8]) -> [u64; VMReg::COUNT] {
             let dispatch = self.rt.func_labels[&FnDef::VmDispatch];
 
-            // call ...
-            self.rt
-                .asm
-                .call(self.rt.func_labels[&FnDef::VmGInit])
-                .unwrap();
             // call ...
             self.rt
                 .asm
@@ -141,7 +170,12 @@ mod tests {
 
             let ip = self.mem as u64;
 
-            let code = self.rt.assemble(ip);
+            let mut code = self.rt.assemble(ip);
+
+            for (def, value) in initialize_tls() {
+                let offset = (self.rt.lookup(self.rt.data_labels[&def]) - ip) as usize;
+                code[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+            }
 
             assert!(code.len() <= Self::SIZE);
 
