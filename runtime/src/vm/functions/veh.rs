@@ -1,11 +1,11 @@
-use crate::vm::utils;
-use iced_x86::code_asm::{
-    al, byte_ptr, cl, eax, ecx, ptr, qword_ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, rsp,
-};
+use iced_x86::code_asm::{al, byte_ptr, eax, ecx, ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{BoolDef, DataDef, FnDef, ImportDef, Runtime},
-    vm::{bytecode::VMReg, stack},
+    vm::{
+        bytecode::VMReg,
+        utils::{self, stack},
+    },
 };
 
 pub fn initialize(rt: &mut Runtime) {
@@ -66,16 +66,12 @@ const VM_TO_CONTEXT: &[(VMReg, i32)] = &[
     (VMReg::R13, 0xE0),
     (VMReg::R14, 0xE8),
     (VMReg::R15, 0xF0),
-    (VMReg::Ven, 0xF8),
+    (VMReg::NEntry, 0xF8),
     (VMReg::Flags, 0x44),
 ];
 
-pub const TRAP_MAGIC: u8 = 0x8E;
-
 // long (*EXCEPTION_POINTERS)
 pub fn handler(rt: &mut Runtime) {
-    let mut check_range = rt.asm.create_label();
-    let mut handle_trap = rt.asm.create_label();
     let mut continue_search = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
@@ -96,48 +92,26 @@ pub fn handler(rt: &mut Runtime) {
     // mov r14, [r12 + 0x8] -> CONTEXT *EXCEPTION_POINTERS->ContextRecord
     rt.asm.mov(r14, ptr(r12 + 0x8)).unwrap();
 
-    // mov eax, [r13] -> DWORD EXCEPTION_RECORD->ExceptionCode
-    rt.asm.mov(eax, ptr(r13)).unwrap();
-    // cmp eax, 0xC0000005
-    rt.asm.cmp(eax, 0xC0000005u32).unwrap();
-    // jne ...
-    rt.asm.jne(check_range).unwrap();
+    // mov rax, [r13 + 0x10] -> PVOID EXCEPTION_RECORD->ExceptionAddress
+    rt.asm.mov(rax, ptr(r13 + 0x10)).unwrap();
 
-    // mov rax, [r13 + 0x28] -> EXCEPTION_RECORD->ExceptionInformation[1]
-    rt.asm.mov(rax, ptr(r13 + 0x28)).unwrap();
+    // lea rcx, [...]
+    rt.asm
+        .lea(rcx, ptr(rt.data_labels[&DataDef::VehStart]))
+        .unwrap();
+    // cmp rax, rcx
+    rt.asm.cmp(rax, rcx).unwrap();
+    // jb ...
+    rt.asm.jb(continue_search).unwrap();
 
-    // mov ecx, eax
-    rt.asm.mov(ecx, eax).unwrap();
-    // shr ecx, 0x18
-    rt.asm.shr(ecx, 0x18).unwrap();
-    // cmp cl, ...
-    rt.asm.cmp(cl, TRAP_MAGIC as u32).unwrap();
-    // je ...
-    rt.asm.je(handle_trap).unwrap();
-
-    rt.asm.set_label(&mut check_range).unwrap();
-    {
-        // mov rax, [r13 + 0x10] -> PVOID EXCEPTION_RECORD->ExceptionAddress
-        rt.asm.mov(rax, ptr(r13 + 0x10)).unwrap();
-
-        // lea rcx, [...]
-        rt.asm
-            .lea(rcx, ptr(rt.data_labels[&DataDef::VehStart]))
-            .unwrap();
-        // cmp rax, rcx
-        rt.asm.cmp(rax, rcx).unwrap();
-        // jb ...
-        rt.asm.jb(continue_search).unwrap();
-
-        // lea rcx, [...]
-        rt.asm
-            .lea(rcx, ptr(rt.data_labels[&DataDef::VehEnd]))
-            .unwrap();
-        // cmp rax, rcx
-        rt.asm.cmp(rax, rcx).unwrap();
-        // jae ...
-        rt.asm.jae(continue_search).unwrap();
-    }
+    // lea rcx, [...]
+    rt.asm
+        .lea(rcx, ptr(rt.data_labels[&DataDef::VehEnd]))
+        .unwrap();
+    // cmp rax, rcx
+    rt.asm.cmp(rax, rcx).unwrap();
+    // jae ...
+    rt.asm.jae(continue_search).unwrap();
 
     // mov eax, [...]
     rt.asm
@@ -158,18 +132,18 @@ pub fn handler(rt: &mut Runtime) {
             rt.asm.mov(ptr(r14 + *offset), rcx).unwrap();
         }
 
-        if *vreg == VMReg::Ven {
+        if *vreg == VMReg::NEntry {
             // mov [r13 + 0x10], rcx -> PVOID EXCEPTION_RECORD->ExceptionAddress
             rt.asm.mov(ptr(r13 + 0x10), rcx).unwrap();
         }
     }
 
     // mov rcx, [rax + ...]
-    utils::vreg::load_reg(rt, rax, VMReg::Vbp, rcx);
+    utils::vreg::load_reg(rt, rax, VMReg::BPointer, rcx);
     // mov rdx, [rax + ...]
-    utils::vreg::load_reg(rt, rax, VMReg::Vbl, rdx);
+    utils::vreg::load_reg(rt, rax, VMReg::BLength, rdx);
     // mov r8, [r14 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::Vsk, r8);
+    utils::vreg::load_reg(rt, r12, VMReg::VKey, r8);
     // xor r9b, r9b
     rt.asm.xor(r9b, r9b).unwrap();
     // call ...
@@ -179,31 +153,6 @@ pub fn handler(rt: &mut Runtime) {
     rt.asm.mov(rax, -0x1i64 as u64).unwrap();
     // jmp ...
     rt.asm.jmp(epilogue).unwrap();
-
-    rt.asm.set_label(&mut handle_trap).unwrap();
-    {
-        // mov ecx, eax
-        rt.asm.mov(ecx, eax).unwrap();
-        // shr ecx, 0x10
-        rt.asm.shr(ecx, 0x10).unwrap();
-        // and ecx, 0xFF
-        rt.asm.and(ecx, 0xFFu32).unwrap();
-
-        // mov rax, [r14 + 0xE0] -> DWORD64 CONTEXT->R13
-        rt.asm.mov(rax, ptr(r14 + 0xE0)).unwrap();
-        // add rax, rcx
-        rt.asm.add(rax, rcx).unwrap();
-        // mov [r14 + 0xE0], rax -> DWORD64 CONTEXT->R13
-        rt.asm.mov(ptr(r14 + 0xE0), rax).unwrap();
-
-        // add [r14 + 0xF8], 0x7 -> CONTEXT->Rip
-        rt.asm.add(qword_ptr(r14 + 0xF8), 0x7).unwrap();
-
-        // mov rax, -0x1 -> EXCEPTION_CONTINUE_EXECUTION
-        rt.asm.mov(rax, -0x1i64 as u64).unwrap();
-        // jmp ...
-        rt.asm.jmp(epilogue).unwrap();
-    }
 
     rt.asm.set_label(&mut continue_search).unwrap();
     {

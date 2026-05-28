@@ -1,23 +1,28 @@
-use crate::vm::stack;
-use crate::vm::utils;
-use crate::{
-    runtime::Runtime,
-    vm::bytecode::{VMLogic, VMReg, VMTest},
-};
+use crate::vm::encoders::jcc::{VMLogic, VMTest};
+use crate::vm::utils::{self, stack};
+use crate::{runtime::Runtime, vm::bytecode::VMReg};
 use iced_x86::code_asm::{
-    al, eax, r12, r12b, r13, r13d, r14, r14b, r8b, r8d, r9b, r9d, rax, rcx, rdx,
+    al, eax, ptr, r12, r12b, r13, r13d, r14, r14d, r8b, r8d, r9b, r9d, rax, rcx, rdx,
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
     let mut condition_loop = rt.asm.create_label();
-    let mut check_next = rt.asm.create_label();
+
     let mut handle_cmp = rt.asm.create_label();
     let mut handle_eq = rt.asm.create_label();
     let mut handle_neq = rt.asm.create_label();
+
+    let mut check_invert = rt.asm.create_label();
+    let mut invert = rt.asm.create_label();
+    let mut check_continue = rt.asm.create_label();
+
     let mut is_or = rt.asm.create_label();
+
+    let mut skip_loop = rt.asm.create_label();
     let mut continue_loop = rt.asm.create_label();
-    let mut skip_jump = rt.asm.create_label();
+
+    let mut check_result = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // push r12
@@ -30,11 +35,11 @@ pub fn build(rt: &mut Runtime) {
     // mov r13d, [rcx + ...]
     utils::vreg::load_reg32(rt, rcx, VMReg::Flags, r13d);
 
-    // mov al, [rdx]; add rdx, 0x1 -> logic
+    // al -> logic
     utils::bytecode::read_byte(rt, rdx, al);
 
-    // mov r14b, [rdx]; add rdx, 0x1 -> conditions
-    utils::bytecode::read_byte(rt, rdx, r14b);
+    // r14d -> conditions
+    utils::bytecode::read_byte_zx(rt, rdx, r14d);
 
     // cmp al, ...
     rt.asm
@@ -42,15 +47,24 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
     // sete r12b
     rt.asm.sete(r12b).unwrap();
+    // je ...
+    rt.asm.je(condition_loop).unwrap();
+
+    // cmp al, ...
+    rt.asm
+        .cmp(al, rt.mapper.index(VMLogic::NOR) as i32)
+        .unwrap();
+    // sete r12b
+    rt.asm.sete(r12b).unwrap();
 
     rt.asm.set_label(&mut condition_loop).unwrap();
     {
-        // test r14b, r14b
-        rt.asm.test(r14b, r14b).unwrap();
+        // test r14d, r14d
+        rt.asm.test(r14d, r14d).unwrap();
         // jz ...
-        rt.asm.jz(epilogue).unwrap();
+        rt.asm.jz(check_result).unwrap();
 
-        // mov r8b, [rdx]; add rdx, 0x1 -> test
+        // r8b -> test
         utils::bytecode::read_byte(rt, rdx, r8b);
 
         // cmp r8b, ...
@@ -69,9 +83,9 @@ pub fn build(rt: &mut Runtime) {
         // Compares the bit in flags specified by the flag bit (lhs) with the set state (rhs)
         rt.asm.set_label(&mut handle_cmp).unwrap();
         {
-            // movzx r8d, [rdx]; add rdx, 0x1 -> lhs
+            // r8d -> lhs
             utils::bytecode::read_byte_zx(rt, rdx, r8d);
-            // mov r9b, [rdx]; add rdx, 0x1 -> rhs
+            // r9b -> rhs
             utils::bytecode::read_byte(rt, rdx, r9b);
 
             // bt r13d, r8d
@@ -83,15 +97,15 @@ pub fn build(rt: &mut Runtime) {
             // sete r8b
             rt.asm.sete(r8b).unwrap();
             // jmp ...
-            rt.asm.jmp(check_next).unwrap();
+            rt.asm.jmp(check_invert).unwrap();
         }
 
         // Checks if the bit in flags specified by the first flag bit (lhs) == the bit in flags specified by the second flag bit (rhs)
         rt.asm.set_label(&mut handle_eq).unwrap();
         {
-            // movzx r8d, [rdx]; add rdx, 0x1 -> lhs
+            // r8d -> lhs
             utils::bytecode::read_byte_zx(rt, rdx, r8d);
-            // movzx r9d, [rdx]; add rdx, 0x1 -> rhs
+            // r9d -> rhs
             utils::bytecode::read_byte_zx(rt, rdx, r9d);
 
             // bt r13d, r8d
@@ -107,15 +121,15 @@ pub fn build(rt: &mut Runtime) {
             // sete r8b
             rt.asm.sete(r8b).unwrap();
             // jmp ...
-            rt.asm.jmp(check_next).unwrap();
+            rt.asm.jmp(check_invert).unwrap();
         }
 
         // Checks if the bit in flags specified by the first flag bit (lhs) != the bit in flags specified by the second flag bit (rhs)
         rt.asm.set_label(&mut handle_neq).unwrap();
         {
-            // movzx r8d, [rdx]; add rdx, 0x1 -> lhs
+            // r8d -> lhs
             utils::bytecode::read_byte_zx(rt, rdx, r8d);
-            // movzx r9d, [rdx]; add rdx, 0x1 -> rhs
+            // r9d -> rhs
             utils::bytecode::read_byte_zx(rt, rdx, r9d);
 
             // bt r13d, r8d
@@ -132,12 +146,48 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.setne(r8b).unwrap();
         }
 
-        rt.asm.set_label(&mut check_next).unwrap();
+        rt.asm.set_label(&mut check_invert).unwrap();
+        {
+            // cmp al, ...
+            rt.asm
+                .cmp(al, rt.mapper.index(VMLogic::NAND) as i32)
+                .unwrap();
+            // je ...
+            rt.asm.je(invert).unwrap();
+
+            // cmp al, ...
+            rt.asm
+                .cmp(al, rt.mapper.index(VMLogic::NOR) as i32)
+                .unwrap();
+            // jne ...
+            rt.asm.jne(check_continue).unwrap();
+        }
+
+        rt.asm.set_label(&mut invert).unwrap();
+        {
+            // xor r8b, 0x1
+            rt.asm.xor(r8b, 0x1).unwrap();
+        }
+
+        rt.asm.set_label(&mut check_continue).unwrap();
         {
             // cmp al, ...
             rt.asm.cmp(al, rt.mapper.index(VMLogic::OR) as i32).unwrap();
             // je ...
             rt.asm.je(is_or).unwrap();
+
+            // cmp al, ...
+            rt.asm
+                .cmp(al, rt.mapper.index(VMLogic::NAND) as i32)
+                .unwrap();
+            // je ...
+            rt.asm.je(is_or).unwrap();
+
+            // test r8b, r8b
+            rt.asm.test(r8b, r8b).unwrap();
+            // jz ...
+            rt.asm.jz(skip_loop).unwrap();
+
             // and r12b, r8b
             rt.asm.and(r12b, r8b).unwrap();
             // jmp ...
@@ -152,31 +202,40 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut continue_loop).unwrap();
         {
-            // dec r14b
-            rt.asm.dec(r14b).unwrap();
+            // dec r14d
+            rt.asm.dec(r14d).unwrap();
             // jmp ...
             rt.asm.jmp(condition_loop).unwrap();
         }
+
+        rt.asm.set_label(&mut skip_loop).unwrap();
+        {
+            // lea r14 [r14 + r14*2]
+            rt.asm.lea(r14, ptr(r14 + r14 * 2)).unwrap();
+            // lea rdx [rdx + r14+1]
+            rt.asm.lea(rdx, ptr(rdx + r14 + 1)).unwrap();
+            // jmp ...
+            rt.asm.jmp(epilogue).unwrap();
+        }
     }
 
-    rt.asm.set_label(&mut epilogue).unwrap();
+    rt.asm.set_label(&mut check_result).unwrap();
     {
-        // mov eax, [rdx]; add rdx, 0x4 -> destination
+        // eax -> destination
         utils::bytecode::read_dword(rt, rdx, eax);
-
-        // add rax, [rcx + ...]
-        utils::vreg::reg_add(rt, rcx, VMReg::Vib, rax);
 
         // test r12b, r12b
         rt.asm.test(r12b, r12b).unwrap();
         // jz ...
-        rt.asm.jz(skip_jump).unwrap();
+        rt.asm.jz(epilogue).unwrap();
 
+        // add rax, [rcx + ...]
+        utils::vreg::reg_add(rt, rcx, VMReg::VImage, rax);
         // mov [rcx + ...], rax
-        utils::vreg::store_reg(rt, rcx, rax, VMReg::Vex);
+        utils::vreg::store_reg(rt, rcx, rax, VMReg::NBranch);
     }
 
-    rt.asm.set_label(&mut skip_jump).unwrap();
+    rt.asm.set_label(&mut epilogue).unwrap();
     {
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
