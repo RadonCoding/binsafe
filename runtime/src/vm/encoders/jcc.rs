@@ -1,6 +1,3 @@
-use rand::seq::SliceRandom;
-use rand::Rng;
-
 use crate::mapper::{mapped, Mapper};
 use crate::vm::bytecode::{VMOp, VMReg};
 use crate::vm::encoders::{Effect, Encode};
@@ -42,50 +39,8 @@ pub struct Jcc {
     pub destination: u32,
 }
 
-impl Jcc {
-    fn mutate(&mut self) {
-        let mut rng = rand::thread_rng();
-
-        self.conditions.shuffle(&mut rng);
-
-        match self.logic {
-            VMLogic::AND if rng.gen() => {
-                // AND(A,B,...) == NOT(OR(A,B,...))
-                self.logic = VMLogic::NOR;
-
-                for c in &mut self.conditions {
-                    match c.test {
-                        VMTest::EQ => c.test = VMTest::NEQ,
-                        VMTest::NEQ => c.test = VMTest::EQ,
-                        VMTest::CMP => {
-                            c.rhs ^= 1;
-                        }
-                    }
-                }
-            }
-            VMLogic::OR if rng.gen() => {
-                // OR(A,B,...) == NOT(AND(!A,!B,...))
-                self.logic = VMLogic::NAND;
-
-                for c in &mut self.conditions {
-                    match c.test {
-                        VMTest::EQ => c.test = VMTest::NEQ,
-                        VMTest::NEQ => c.test = VMTest::EQ,
-                        VMTest::CMP => {
-                            c.rhs ^= 1;
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
 impl Encode for Jcc {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
-        self.mutate();
-
         let mut bytes = vec![
             mapper.index(VMOp::Jcc),
             mapper.index(self.logic),
