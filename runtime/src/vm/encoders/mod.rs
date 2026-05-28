@@ -1,11 +1,13 @@
 use std::fmt::{self, Debug};
 
 use crate::mapper::Mapper;
+use crate::vm::bytecode::VMWidth;
 
 pub trait Encode: Debug {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8>;
 }
 
+#[cfg(debug_assertions)]
 impl fmt::Display for dyn Encode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = format!("{self:?}");
@@ -68,25 +70,23 @@ impl fmt::Display for dyn Encode {
     }
 }
 
-pub fn compose_2(a: impl Encode + 'static, b: impl Encode + 'static) -> Vec<Box<dyn Encode>> {
-    vec![Box::new(a), Box::new(b)]
+pub fn encode_immediate(value: u64) -> (VMWidth, usize) {
+    match value {
+        0..=0xFF => (VMWidth::Lower8, 1),
+        0..=0xFFFF => (VMWidth::Lower16, 2),
+        0..=0xFFFFFFFF => (VMWidth::Lower32, 4),
+        _ => (VMWidth::Lower64, 8),
+    }
 }
 
-pub fn compose_3(
-    a: impl Encode + 'static,
-    b: impl Encode + 'static,
-    c: impl Encode + 'static,
-) -> Vec<Box<dyn Encode>> {
-    vec![Box::new(a), Box::new(b), Box::new(c)]
-}
-
+pub mod add;
+pub mod discard;
 pub mod jcc;
-pub mod lea;
-pub mod load_addr;
-pub mod load_imm;
-pub mod load_mem;
-pub mod load_reg;
-pub mod mov;
+pub mod load_address;
+pub mod load_immediate;
+pub mod load_memory;
+pub mod load_register;
 pub mod nop;
-pub mod store_mem;
-pub mod store_reg;
+pub mod store_memory;
+pub mod store_register;
+pub mod sub;

@@ -3,10 +3,10 @@ use crate::vm::bytecode::VMOp;
 use crate::vm::encoders::Encode;
 
 #[derive(Debug)]
-pub struct Nop;
+pub struct Discard;
 
-impl Encode for Nop {
+impl Encode for Discard {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::Nop)]
+        vec![mapper.index(VMOp::Discard)]
     }
 }

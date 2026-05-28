@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{AsmRegister8, CodeLabel};
 
-use crate::{runtime::Runtime, vm::bytecode::VMBits};
+use crate::{runtime::Runtime, vm::bytecode::VMWidth};
 
 pub fn dispatch(
     rt: &mut Runtime,
@@ -20,25 +20,25 @@ pub fn dispatch(
 
     // cmp width, ...
     rt.asm
-        .cmp(width, rt.mapper.index(VMBits::Lower64) as i32)
+        .cmp(width, rt.mapper.index(VMWidth::Lower64) as i32)
         .unwrap();
     // je ...
     rt.asm.je(l64).unwrap();
     // cmp width, ...
     rt.asm
-        .cmp(width, rt.mapper.index(VMBits::Lower32) as i32)
+        .cmp(width, rt.mapper.index(VMWidth::Lower32) as i32)
         .unwrap();
     // je ...
     rt.asm.je(l32).unwrap();
     // cmp width, ...
     rt.asm
-        .cmp(width, rt.mapper.index(VMBits::Lower16) as i32)
+        .cmp(width, rt.mapper.index(VMWidth::Lower16) as i32)
         .unwrap();
     // je ...
     rt.asm.je(l16).unwrap();
     // cmp width, ...
     rt.asm
-        .cmp(width, rt.mapper.index(VMBits::Higher8) as i32)
+        .cmp(width, rt.mapper.index(VMWidth::Higher8) as i32)
         .unwrap();
     // je ...
     rt.asm.je(h8).unwrap();

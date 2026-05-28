@@ -27,14 +27,3 @@ pub fn load(rt: &mut Runtime, dst: AsmRegister64) {
     // mov ..., [r11 - 0x8]
     rt.asm.mov(dst, ptr(r11 - 0x8)).unwrap();
 }
-
-pub fn peek(rt: &mut Runtime, dst: AsmRegister64) {
-    // mov r11d, [...]
-    rt.asm
-        .mov(r11d, ptr(rt.data_labels[&DataDef::VmScratchTlsIndex]))
-        .unwrap();
-    // mov r11, gs:[0x1480 + r11*8]
-    rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
-    // mov ..., [r11]
-    rt.asm.mov(dst, ptr(r11)).unwrap();
-}

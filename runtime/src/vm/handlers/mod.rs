@@ -7,23 +7,31 @@ use crate::{
     vm::bytecode::{VMOp, VMReg},
 };
 
+pub mod add;
+pub mod discard;
 pub mod jcc;
 pub mod load_addr;
 pub mod load_imm;
 pub mod load_mem;
 pub mod load_reg;
+pub mod nop;
 pub mod store_mem;
 pub mod store_reg;
+pub mod sub;
 
 pub fn initialize(rt: &mut Runtime) {
     let mut table = [
         (VMOp::Jcc, FnDef::VmHandlerJcc),
-        (VMOp::LoadImm, FnDef::VmHandlerLoadImm),
-        (VMOp::LoadReg, FnDef::VmHandlerLoadReg),
-        (VMOp::LoadMem, FnDef::VmHandlerLoadMem),
-        (VMOp::LoadAddr, FnDef::VmHandlerLoadAddr),
-        (VMOp::StoreReg, FnDef::VmHandlerStoreReg),
-        (VMOp::StoreMem, FnDef::VmHandlerStoreMem),
+        (VMOp::LoadImmediate, FnDef::VmHandlerLoadImm),
+        (VMOp::LoadRegister, FnDef::VmHandlerLoadReg),
+        (VMOp::LoadMemory, FnDef::VmHandlerLoadMem),
+        (VMOp::LoadAddress, FnDef::VmHandlerLoadAddr),
+        (VMOp::StoreRegister, FnDef::VmHandlerStoreReg),
+        (VMOp::StoreMemory, FnDef::VmHandlerStoreMem),
+        (VMOp::Add, FnDef::VmHandlerAdd),
+        (VMOp::Sub, FnDef::VmHandlerSub),
+        (VMOp::Discard, FnDef::VmHandlerDiscard),
+        (VMOp::Nop, FnDef::VmHandlerNop),
     ];
 
     let mut rng = rand::thread_rng();
@@ -60,7 +68,7 @@ pub fn initialize(rt: &mut Runtime) {
             rt.asm.mov(r8, rdx).unwrap();
 
             // add r8, [...]
-            utils::vreg::reg_add(rt, rax, VMReg::Vib, r8);
+            utils::vreg::reg_add(rt, rax, VMReg::VImage, r8);
 
             // mov [rcx + ...], r8
             rt.asm.mov(ptr(rcx + rt.mapper.index(op) * 8), r8).unwrap();

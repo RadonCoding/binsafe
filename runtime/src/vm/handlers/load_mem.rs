@@ -15,7 +15,7 @@ pub fn build(rt: &mut Runtime) {
     // load r8
     scratch::load(rt, r8);
 
-    utils::bits::dispatch(
+    utils::width::dispatch(
         rt,
         al,
         &mut epilogue,

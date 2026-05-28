@@ -107,12 +107,12 @@ pub fn build(rt: &mut Runtime) {
     // mov rax, [rax + 0x10] -> PVOID PEB->ImageBaseAddress
     rt.asm.mov(rax, ptr(rax + 0x10)).unwrap();
     // mov [r12 + ...], rax
-    utils::vreg::store_reg(rt, r12, rax, VMReg::Vib);
+    utils::vreg::store_reg(rt, r12, rax, VMReg::VImage);
 
     // lea rcx, [...]; lea rdx, [...]; call ...
     rt.resolve(ImportDef::NtQueryInformationProcess);
     // mov [...], rax
-    utils::vreg::store_reg(rt, r12, rax, VMReg::Vsk);
+    utils::vreg::store_reg(rt, r12, rax, VMReg::VKey);
 
     // call ...
     rt.asm
@@ -152,17 +152,17 @@ pub fn build(rt: &mut Runtime) {
         utils::vreg::store_reg(rt, r12, rcx, VMReg::Flags);
 
         // mov [r12 + ...], rcx
-        utils::vreg::store_imm(rt, r12, 0x0, VMReg::Vbr);
+        utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
 
         // pop rcx -> ret
         rt.asm.pop(rdx).unwrap();
         // mov [r12 + ...], rcx
-        utils::vreg::store_reg(rt, r12, rdx, VMReg::Vex);
+        utils::vreg::store_reg(rt, r12, rdx, VMReg::NExit);
         // mov [r12 + ...], rcx
-        utils::vreg::store_reg(rt, r12, rdx, VMReg::Ven);
+        utils::vreg::store_reg(rt, r12, rdx, VMReg::NEntry);
 
         // sub rdx, [...]
-        utils::vreg::reg_sub(rt, r12, VMReg::Vib, rdx);
+        utils::vreg::reg_sub(rt, r12, VMReg::VImage, rdx);
 
         // pop rcx -> index
         rt.asm.pop(rcx).unwrap();
@@ -181,9 +181,9 @@ pub fn build(rt: &mut Runtime) {
         // mov ecx, [rdx] -> displ
         rt.asm.mov(ecx, ptr(rdx)).unwrap();
         // sub [r12 + ...], rcx
-        utils::vreg::sub_reg(rt, r12, rcx, VMReg::Ven);
+        utils::vreg::sub_reg(rt, r12, rcx, VMReg::NEntry);
         // add [r12 + ...], rcx
-        utils::vreg::add_reg(rt, r12, rcx, VMReg::Vex);
+        utils::vreg::add_reg(rt, r12, rcx, VMReg::NExit);
 
         // mov ecx, [rdx + 0x4] -> offset
         rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();

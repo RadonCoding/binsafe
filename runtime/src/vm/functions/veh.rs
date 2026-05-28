@@ -68,7 +68,7 @@ const VM_TO_CONTEXT: &[(VMReg, i32)] = &[
     (VMReg::R13, 0xE0),
     (VMReg::R14, 0xE8),
     (VMReg::R15, 0xF0),
-    (VMReg::Ven, 0xF8),
+    (VMReg::NEntry, 0xF8),
     (VMReg::Flags, 0x44),
 ];
 
@@ -160,18 +160,18 @@ pub fn handler(rt: &mut Runtime) {
             rt.asm.mov(ptr(r14 + *offset), rcx).unwrap();
         }
 
-        if *vreg == VMReg::Ven {
+        if *vreg == VMReg::NEntry {
             // mov [r13 + 0x10], rcx -> PVOID EXCEPTION_RECORD->ExceptionAddress
             rt.asm.mov(ptr(r13 + 0x10), rcx).unwrap();
         }
     }
 
     // mov rcx, [rax + ...]
-    utils::vreg::load_reg(rt, rax, VMReg::Vbp, rcx);
+    utils::vreg::load_reg(rt, rax, VMReg::BPointer, rcx);
     // mov rdx, [rax + ...]
-    utils::vreg::load_reg(rt, rax, VMReg::Vbl, rdx);
+    utils::vreg::load_reg(rt, rax, VMReg::BLength, rdx);
     // mov r8, [r14 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::Vsk, r8);
+    utils::vreg::load_reg(rt, r12, VMReg::VKey, r8);
     // xor r9b, r9b
     rt.asm.xor(r9b, r9b).unwrap();
     // call ...

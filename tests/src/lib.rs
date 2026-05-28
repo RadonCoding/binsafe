@@ -93,7 +93,10 @@ mod tests {
             // mov [rcx + ...], -0x1
             self.rt
                 .asm
-                .mov(qword_ptr(rcx + self.rt.mapper.index(VMReg::Ven) * 8), -0x1)
+                .mov(
+                    qword_ptr(rcx + self.rt.mapper.index(VMReg::NEntry) * 8),
+                    -0x1,
+                )
                 .unwrap();
 
             // mov rax, ...
@@ -104,7 +107,7 @@ mod tests {
             // mov [rcx + ...], rax
             self.rt
                 .asm
-                .mov(ptr(rcx + self.rt.mapper.index(VMReg::Vsk) * 8), rax)
+                .mov(ptr(rcx + self.rt.mapper.index(VMReg::VKey) * 8), rax)
                 .unwrap();
 
             // lea rdx, [...]
@@ -219,31 +222,22 @@ mod tests {
     ) {
         let mut executor = Executor::new();
 
-        let mut ops = bytecode::convert(&instructions).unwrap();
-        let mut bytecode = bytecode::assemble(&mut executor.rt.mapper, &mut ops);
+        let mut operations = bytecode::convert(&instructions).unwrap();
+        let mut bytecode = bytecode::assemble(&mut executor.rt.mapper, &mut operations);
 
         encrypt(&mut bytecode);
 
         let state = executor.run(&setup, &bytecode);
 
-        let mut dump = Vec::new();
-
-        for reg in VMReg::VARIANTS {
-            dump.push(format!(
-                "{:?}=0x{:X}",
-                reg,
-                state[executor.rt.mapper.index(*reg) as usize]
-            ));
-        }
-
         assert_eq!(
             state[(executor.rt.mapper.index(target)) as usize],
             expected,
-            "{:?} | Expected: 0x{:X}, Got: 0x{:X}\n{}",
+            "{:?} | Expected: {:?}=0x{:X}, Got: {:?}=0x{:X}",
             instructions[0].code(),
+            target,
             expected,
+            target,
             state[(executor.rt.mapper.index(target)) as usize],
-            dump.join("\n")
         );
     }
 
@@ -267,7 +261,6 @@ mod tests {
     #[test]
     fn test_mov() {
         let mut buffer = [0u64; 4];
-
         let memory = buffer.as_mut_ptr() as u64;
 
         template(
@@ -281,7 +274,7 @@ mod tests {
                 Instruction::with2(
                     Code::Mov_rm64_imm32,
                     MemoryOperand::with_base(Register::RBX),
-                    0x2222_2222,
+                    0x1111_1111,
                 )
                 .unwrap(),
                 Instruction::with2(
@@ -293,7 +286,7 @@ mod tests {
             ],
             &[(VMReg::Rbx, memory)],
             VMReg::Rax,
-            0x2222_2222,
+            0x1111_1111,
         );
         template(
             &[
@@ -310,16 +303,16 @@ mod tests {
                 )
                 .unwrap(),
             ],
-            &[(VMReg::Rbx, memory), (VMReg::Rax, 0x3333_3333)],
+            &[(VMReg::Rbx, memory), (VMReg::Rax, 0x1111_1111)],
             VMReg::Rcx,
-            0x3333_3333,
+            0x1111_1111,
         );
         template(
             &[
                 Instruction::with2(
                     Code::Mov_rm16_imm16,
                     MemoryOperand::with_base(Register::RBX),
-                    0x4444,
+                    0x1111,
                 )
                 .unwrap(),
                 Instruction::with2(
@@ -331,13 +324,13 @@ mod tests {
             ],
             &[(VMReg::Rbx, memory)],
             VMReg::Rcx,
-            0x4444,
+            0x1111,
         );
         template(
-            &[Instruction::with2(Code::Mov_r8_imm8, Register::AL, 0x55).unwrap()],
+            &[Instruction::with2(Code::Mov_r8_imm8, Register::AL, 0x11).unwrap()],
             &[],
             VMReg::Rax,
-            0x55,
+            0x11,
         );
     }
 
@@ -345,39 +338,39 @@ mod tests {
     fn test_jcc() {
         template(
             &[
-                Instruction::with2(Code::Cmp_rm64_imm8, Register::RAX, 0x11).unwrap(),
-                Instruction::with_branch(Code::Je_rel8_64, 0x1111).unwrap(),
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with_branch(Code::Je_rel8_64, 0x1111_1111).unwrap(),
             ],
-            &[(VMReg::Rax, 0x11)],
-            VMReg::Vex,
-            0x1111,
+            &[(VMReg::Rax, 0x1111_1111)],
+            VMReg::NBranch,
+            0x1111_1111,
         );
         template(
             &[
-                Instruction::with2(Code::Cmp_rm32_imm8, Register::EAX, 0x22).unwrap(),
-                Instruction::with_branch(Code::Jne_rel8_64, 0x2222).unwrap(),
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with_branch(Code::Jne_rel8_64, 0x1111_1111).unwrap(),
             ],
-            &[(VMReg::Rax, 0x22)],
-            VMReg::Vex,
-            0x2222,
+            &[(VMReg::Rax, 0x2222_2222)],
+            VMReg::NBranch,
+            0x1111_1111,
         );
         template(
             &[
-                Instruction::with2(Code::Cmp_rm16_imm8, Register::AX, 0x33).unwrap(),
-                Instruction::with_branch(Code::Ja_rel8_64, 0x3333).unwrap(),
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with_branch(Code::Ja_rel8_64, 0x1111_1111).unwrap(),
             ],
-            &[(VMReg::Rax, 0x33)],
-            VMReg::Vex,
-            0x3333,
+            &[(VMReg::Rax, 0x2222_2222)],
+            VMReg::NBranch,
+            0x1111_1111,
         );
         template(
             &[
-                Instruction::with2(Code::Cmp_rm8_imm8, Register::AL, 0x44).unwrap(),
-                Instruction::with_branch(Code::Jb_rel8_64, 0x4444).unwrap(),
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x2222_2222).unwrap(),
+                Instruction::with_branch(Code::Jae_rel8_64, 0x1111_1111).unwrap(),
             ],
-            &[(VMReg::Rax, 0x44)],
-            VMReg::Vex,
-            0x4444,
+            &[(VMReg::Rax, 0x1111_1111)],
+            VMReg::NBranch,
+            0,
         );
     }
 
@@ -390,15 +383,15 @@ mod tests {
                 MemoryOperand::with_base_index_scale_displ_size(
                     Register::RBX,
                     Register::RCX,
-                    4,
-                    0x11,
+                    1,
+                    0x1111_1111,
                     8,
                 ),
             )
             .unwrap()],
-            &[(VMReg::Rbx, 0x1000), (VMReg::Rcx, 0x10)],
+            &[(VMReg::Rbx, 0x1111_1111), (VMReg::Rcx, 0x1111_1111)],
             VMReg::Rax,
-            0x1000 + (0x10 * 4) + 0x11,
+            0x3333_3333,
         );
         template(
             &[Instruction::with2(
@@ -407,15 +400,93 @@ mod tests {
                 MemoryOperand::with_base_index_scale_displ_size(
                     Register::RBX,
                     Register::RCX,
-                    2,
-                    0x22,
+                    1,
+                    0x1111_1111,
                     4,
                 ),
             )
             .unwrap()],
-            &[(VMReg::Rbx, 0x2000), (VMReg::Rcx, 0x20)],
+            &[(VMReg::Rbx, 0x1111_1111), (VMReg::Rcx, 0x1111_1111)],
             VMReg::Rax,
-            0x2000 + (0x20 * 2) + 0x22,
+            0x3333_3333,
+        );
+    }
+
+    #[test]
+    fn test_add() {
+        template(
+            &[Instruction::with2(Code::Add_r64_rm64, Register::RAX, Register::RBX).unwrap()],
+            &[(VMReg::Rax, 0x1111_1111), (VMReg::Rbx, 0x1111_1111)],
+            VMReg::Rax,
+            0x2222_2222,
+        );
+        template(
+            &[Instruction::with2(Code::Add_rm32_imm32, Register::EAX, 0x1111_1111).unwrap()],
+            &[(VMReg::Rax, 0x1111_1111)],
+            VMReg::Rax,
+            0x2222_2222,
+        );
+        template(
+            &[Instruction::with2(Code::Add_rm16_imm16, Register::AX, 0x1111).unwrap()],
+            &[(VMReg::Rax, 0x1111)],
+            VMReg::Rax,
+            0x2222,
+        );
+        template(
+            &[Instruction::with2(Code::Add_rm8_imm8, Register::AL, 0x11).unwrap()],
+            &[(VMReg::Rax, 0x11)],
+            VMReg::Rax,
+            0x22,
+        );
+    }
+
+    #[test]
+    fn test_sub() {
+        template(
+            &[Instruction::with2(Code::Sub_r64_rm64, Register::RAX, Register::RBX).unwrap()],
+            &[(VMReg::Rax, 0x2222_2222), (VMReg::Rbx, 0x1111_1111)],
+            VMReg::Rax,
+            0x1111_1111,
+        );
+        template(
+            &[Instruction::with2(Code::Sub_rm32_imm32, Register::EAX, 0x1111_1111).unwrap()],
+            &[(VMReg::Rax, 0x2222_2222)],
+            VMReg::Rax,
+            0x1111_1111,
+        );
+        template(
+            &[Instruction::with2(Code::Sub_rm16_imm16, Register::AX, 0x1111).unwrap()],
+            &[(VMReg::Rax, 0x2222)],
+            VMReg::Rax,
+            0x1111,
+        );
+        template(
+            &[Instruction::with2(Code::Sub_rm8_imm8, Register::AL, 0x11).unwrap()],
+            &[(VMReg::Rax, 0x22)],
+            VMReg::Rax,
+            0x11,
+        );
+    }
+
+    #[test]
+    fn test_cmp() {
+        template(
+            &[
+                Instruction::with2(Code::Cmp_r64_rm64, Register::RAX, Register::RBX).unwrap(),
+                Instruction::with_branch(Code::Je_rel8_64, 0x1111_1111).unwrap(),
+            ],
+            &[(VMReg::Rax, 0x1111_1111), (VMReg::Rbx, 0x1111_1111)],
+            VMReg::NBranch,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_r32_rm32, Register::EAX, Register::EBX).unwrap(),
+                Instruction::with_branch(Code::Je_rel8_64, 0x1111_1111).unwrap(),
+            ],
+            &[(VMReg::Rax, 0x1111_1111), (VMReg::Rbx, 0x1111_1111)],
+            VMReg::NBranch,
+            0x1111_1111,
         );
     }
 

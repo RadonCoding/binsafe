@@ -30,19 +30,19 @@ pub fn build(rt: &mut Runtime) {
     }
 
     // cmp [r12 + ...], 0x0
-    utils::vreg::cmp_imm(rt, r12, VMReg::Vbr, 0x0);
+    utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
     // je ...
     rt.asm.je(use_vex).unwrap();
 
     // push [r12 + ...]
-    utils::vreg::push(rt, r12, VMReg::Vbr);
+    utils::vreg::push(rt, r12, VMReg::NBranch);
     // jmp ...
     rt.asm.jmp(epilogue).unwrap();
 
     rt.asm.set_label(&mut use_vex).unwrap();
     {
         // push [r12 + ...]
-        utils::vreg::push(rt, r12, VMReg::Vex);
+        utils::vreg::push(rt, r12, VMReg::NExit);
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();

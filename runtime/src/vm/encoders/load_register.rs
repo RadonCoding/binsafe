@@ -1,17 +1,17 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMBits, VMOp, VMReg};
+use crate::vm::bytecode::{VMOp, VMReg, VMWidth};
 use crate::vm::encoders::Encode;
 
 #[derive(Debug)]
-pub struct LoadReg {
-    pub width: VMBits,
+pub struct LoadRegister {
+    pub width: VMWidth,
     pub source: VMReg,
 }
 
-impl Encode for LoadReg {
+impl Encode for LoadRegister {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
         vec![
-            mapper.index(VMOp::LoadReg),
+            mapper.index(VMOp::LoadRegister),
             mapper.index(self.width),
             mapper.index(self.source),
         ]
