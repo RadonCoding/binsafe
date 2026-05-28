@@ -1,25 +1,23 @@
-pub mod transforms;
-
 use std::collections::HashMap;
+#[cfg(debug_assertions)]
+use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::{i32, mem};
 
 use crate::engine::Engine;
-use crate::protections::virtualization::transforms::anti_debug::AntiDebug;
 use crate::protections::Protection;
 use exe::Buffer;
 use exe::{PE, RVA};
 use iced_x86::code_asm::CodeAssembler;
-use logger::info;
+use logger::{debug, info};
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
-use runtime::vm::bytecode;
+use runtime::vm::{bytecode, permute};
 
 #[derive(Default)]
 pub struct Virtualization {
     vblocks: HashMap<u32, usize>,
-    transforms: usize,
-    dedupes: usize,
+    duplicates: usize,
 }
 
 // PUSH imm32 + CALL rel32
@@ -35,28 +33,63 @@ impl Protection for Virtualization {
 
         let mut dedup = HashMap::new();
 
+        #[cfg(debug_assertions)]
+        let mut logged = HashSet::new();
+
         let mut rng = rand::thread_rng();
         let key_seed = rng.gen::<u64>();
         let key_mul = rng.gen::<u64>();
         let key_add = rng.gen::<u64>();
-
-        let anti_debug = AntiDebug::new(&engine.blocks);
 
         'outer: for block in &mut engine.blocks {
             if block.size < DISPATCH_SIZE {
                 continue;
             }
 
-            let mut vblock = match bytecode::convert(&mut engine.rt.mapper, &block.instructions) {
-                Some(virtualized) => virtualized,
-                None => continue 'outer,
+            let operations = match bytecode::convert(&block.instructions) {
+                Some(operations) if !operations.is_empty() => operations,
+                _ => continue 'outer,
             };
 
-            // Check if eligible for anti-debug transform
-            if let Some(transform) = anti_debug.transform(&mut engine.rt.mapper, block) {
-                vblock.splice(0..0, transform);
-                self.transforms += 1;
+            #[cfg(debug_assertions)]
+            let lifted = operations
+                .iter()
+                .map(|operation| format!("    {}", operation))
+                .collect::<Vec<String>>()
+                .join("\n");
+
+            let mut operations = permute::permute(operations);
+
+            #[cfg(debug_assertions)]
+            {
+                let mut log = false;
+
+                for instruction in &block.instructions {
+                    if logged.insert(instruction.code()) {
+                        log = true;
+                    }
+                }
+
+                if log {
+                    let before = block
+                        .instructions
+                        .iter()
+                        .map(|instruction| format!("    {}", instruction))
+                        .collect::<Vec<String>>()
+                        .join("\n");
+                    let permuted = operations
+                        .iter()
+                        .map(|operation| format!("    {}", operation))
+                        .collect::<Vec<String>>()
+                        .join("\n");
+                    debug!(
+                        "VIRTUALIZED @ 0x{:08X}:\n  BEFORE:\n{}\n  LIFTED:\n{}\n  PERMUTED:\n{}",
+                        block.rva, before, lifted, permuted
+                    );
+                }
             }
+
+            let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &mut operations);
 
             let mut hasher = DefaultHasher::new();
             vblock.hash(&mut hasher);
@@ -64,7 +97,7 @@ impl Protection for Virtualization {
 
             // Check if the block already exists to avoid duplication
             let vcode_offset = if dedup.contains_key(&hash) {
-                self.dedupes += 1;
+                self.duplicates += 1;
 
                 dedup[&hash]
             } else {
@@ -111,14 +144,12 @@ impl Protection for Virtualization {
             vtable.extend_from_slice(&vcode_offset.to_le_bytes());
         }
 
-        if !vcode.is_empty() {
-            engine.rt.define_data_bytes(DataDef::VmTable, &vtable);
-            engine.rt.define_data_bytes(DataDef::VmCode, &vcode);
+        engine.rt.define_data_bytes(DataDef::VmTable, &vtable);
+        engine.rt.define_data_bytes(DataDef::VmCode, &vcode);
 
-            engine.rt.define_data_qword(DataDef::VmKeySeed, key_seed);
-            engine.rt.define_data_qword(DataDef::VmKeyMul, key_mul);
-            engine.rt.define_data_qword(DataDef::VmKeyAdd, key_add);
-        }
+        engine.rt.define_data_qword(DataDef::VmKeySeed, key_seed);
+        engine.rt.define_data_qword(DataDef::VmKeyMul, key_mul);
+        engine.rt.define_data_qword(DataDef::VmKeyAdd, key_add);
     }
 
     fn apply(&self, engine: &mut Engine) {
@@ -174,8 +205,8 @@ impl Protection for Virtualization {
         let percentage = (virtualized as f64 / total.max(1) as f64) * 100.0;
 
         info!(
-            "VIRTUALIZED: {}/{} blocks ({:.2}%) [transforms: {}] [dedupes: {}]",
-            virtualized, total, percentage, self.transforms, self.dedupes
+            "VIRTUALIZED: {}/{} blocks ({:.2}%) [duplicates: {}]",
+            virtualized, total, percentage, self.duplicates
         );
     }
 }

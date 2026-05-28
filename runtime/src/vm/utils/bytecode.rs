@@ -3,20 +3,20 @@ use iced_x86::code_asm::{
     byte_ptr, ptr, word_ptr, AsmRegister16, AsmRegister32, AsmRegister64, AsmRegister8,
 };
 
-/// `mov {to}, [{base}]`; `add {base}, 0x1`
+/// `mov {to}, [{base}]`; `inc {base}`
 pub fn read_byte(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister8) {
     // mov ..., [...]
     rt.asm.mov(to, ptr(base)).unwrap();
-    // add ..., 0x1
-    rt.asm.add(base, 0x1).unwrap();
+    // inc ...
+    rt.asm.inc(base).unwrap();
 }
 
-/// `movzx {to}, [{base}]`; `add {base}, 0x1`
+/// `movzx {to}, [{base}]`; `inc {base}`
 pub fn read_byte_zx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
     // movzx ..., [...]
     rt.asm.movzx(to, byte_ptr(base)).unwrap();
-    // add ..., 0x1
-    rt.asm.add(base, 0x1).unwrap();
+    // inc ...
+    rt.asm.inc(base).unwrap();
 }
 
 /// `mov {to}, [{base}]`; `add {base}, 0x2`

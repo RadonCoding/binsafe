@@ -27,28 +27,18 @@ pub enum FnDef {
     VmCrypt,
     VmDispatch,
     VmCleanup,
-    VmSib,
     /* VM HANDLERS */
     VmHandlersInitialize,
-    VmHandlerPushPopRegs,
-    VmHandlerPushImm,
-    VmHandlerPushReg,
-    VmHandlerPopReg,
-    VmHandlerSetRegImm,
-    VmHandlerSetRegReg,
-    VmHandlerSetRegMem,
-    VmHandlerSetMemImm,
-    VmHandlerSetMemReg,
-    VmHandlerAddSubRegImm,
-    VmHandlerAddSubRegMem,
-    VmHandlerAddSubRegReg,
-    VmHandlerAddSubMemImm,
-    VmHandlerAddSubMemReg,
-    VmHandlerBranchImm,
-    VmHandlerBranchReg,
-    VmHandlerBranchMem,
     VmHandlerJcc,
-    VmHandlerNop,
+    VmHandlerLoadImmediate,
+    VmHandlerLoadRegister,
+    VmHandlerLoadMemory,
+    VmHandlerLoadAddress,
+    VmHandlerStoreRegister,
+    VmHandlerStoreMemory,
+    VmHandlerAdd,
+    VmHandlerSub,
+    VmHandlerDiscard,
     /* VM ARITHMETIC */
     VmArithmeticFlags,
     VmArithmeticAddSub8,
@@ -77,7 +67,8 @@ pub enum DataDef {
     VmGlobalState,
     VmStateTlsIndex,
     VmStackTlsIndex,
-    VmCacheTlsIndex,
+    VmScratchTlsIndex,
+    VmKeyTlsIndex,
     VmCleanupFlsIndex,
     VmTable,
     VmCode,
@@ -337,73 +328,41 @@ impl Runtime {
         let mut shuffled = Vec::new();
 
         let functions: Vec<(FnDef, fn(&mut Runtime))> = vec![
-            (FnDef::VmGInit, vm::ginit::build),
-            (FnDef::VmTInit, vm::tinit::build),
-            (FnDef::VmEntry, vm::entry::build),
-            (FnDef::VmExit, vm::exit::build),
-            (FnDef::VmCrypt, vm::crypt::build),
-            (FnDef::VmDispatch, vm::dispatch::build),
-            (FnDef::VmCleanup, vm::cleanup::build),
-            (FnDef::VmSib, vm::sib::build),
+            (FnDef::VmGInit, vm::functions::ginit::build),
+            (FnDef::VmTInit, vm::functions::tinit::build),
+            (FnDef::VmEntry, vm::functions::entry::build),
+            (FnDef::VmExit, vm::functions::exit::build),
+            (FnDef::VmCrypt, vm::functions::crypt::build),
+            (FnDef::VmDispatch, vm::functions::dispatch::build),
+            (FnDef::VmCleanup, vm::functions::cleanup::build),
             (FnDef::VmHandlersInitialize, vm::handlers::initialize),
-            (
-                FnDef::VmHandlerPushPopRegs,
-                vm::handlers::pushpopregs::build,
-            ),
-            (FnDef::VmHandlerPushImm, vm::handlers::pushimm::build),
-            (FnDef::VmHandlerPushReg, vm::handlers::pushreg::build),
-            (FnDef::VmHandlerPopReg, vm::handlers::popreg::build),
-            (FnDef::VmHandlerSetRegImm, vm::handlers::setregimm::build),
-            (FnDef::VmHandlerSetRegReg, vm::handlers::setregreg::build),
-            (FnDef::VmHandlerSetRegMem, vm::handlers::setregmem::build),
-            (FnDef::VmHandlerSetMemImm, vm::handlers::setmemimm::build),
-            (FnDef::VmHandlerSetMemReg, vm::handlers::setmemreg::build),
-            (
-                FnDef::VmHandlerAddSubRegImm,
-                vm::handlers::arithmetic::addsubregimm::build,
-            ),
-            (
-                FnDef::VmHandlerAddSubRegMem,
-                vm::handlers::arithmetic::addsubregmem::build,
-            ),
-            (
-                FnDef::VmHandlerAddSubRegReg,
-                vm::handlers::arithmetic::addsubregreg::build,
-            ),
-            (
-                FnDef::VmHandlerAddSubMemImm,
-                vm::handlers::arithmetic::addsubmemimm::build,
-            ),
-            (
-                FnDef::VmHandlerAddSubMemReg,
-                vm::handlers::arithmetic::addsubmemreg::build,
-            ),
-            (FnDef::VmHandlerBranchImm, vm::handlers::branchimm::build),
-            (FnDef::VmHandlerBranchReg, vm::handlers::branchreg::build),
-            (FnDef::VmHandlerBranchMem, vm::handlers::branchmem::build),
             (FnDef::VmHandlerJcc, vm::handlers::jcc::build),
-            (FnDef::VmHandlerNop, vm::handlers::nop::build),
             (
-                FnDef::VmArithmeticFlags,
-                vm::handlers::arithmetic::flags::build,
+                FnDef::VmHandlerLoadImmediate,
+                vm::handlers::load_immediate::build,
             ),
             (
-                FnDef::VmArithmeticAddSub8,
-                vm::handlers::arithmetic::addsub::build_8,
+                FnDef::VmHandlerLoadRegister,
+                vm::handlers::load_register::build,
+            ),
+            (FnDef::VmHandlerLoadMemory, vm::handlers::load_memory::build),
+            (
+                FnDef::VmHandlerLoadAddress,
+                vm::handlers::load_address::build,
             ),
             (
-                FnDef::VmArithmeticAddSub16,
-                vm::handlers::arithmetic::addsub::build_16,
+                FnDef::VmHandlerStoreRegister,
+                vm::handlers::store_register::build,
             ),
             (
-                FnDef::VmArithmeticAddSub32,
-                vm::handlers::arithmetic::addsub::build_32,
+                FnDef::VmHandlerStoreMemory,
+                vm::handlers::store_memory::build,
             ),
-            (
-                FnDef::VmArithmeticAddSub64,
-                vm::handlers::arithmetic::addsub::build_64,
-            ),
-            (FnDef::VmVehInitialize, vm::veh::initialize),
+            (FnDef::VmHandlerAdd, vm::handlers::add::build),
+            (FnDef::VmHandlerSub, vm::handlers::sub::build),
+            (FnDef::VmHandlerDiscard, vm::handlers::discard::build),
+            (FnDef::VmArithmeticFlags, vm::handlers::flags::build),
+            (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (
                 FnDef::CompareUnicodeToAnsi,
                 functions::compare_unicode_to_ansi::build,
@@ -426,7 +385,8 @@ impl Runtime {
 
         self.define_data_dword(DataDef::VmStateTlsIndex, 0);
         self.define_data_dword(DataDef::VmStackTlsIndex, 0);
-        self.define_data_dword(DataDef::VmCacheTlsIndex, 0);
+        self.define_data_dword(DataDef::VmScratchTlsIndex, 0);
+        self.define_data_dword(DataDef::VmKeyTlsIndex, 0);
         self.define_data_dword(DataDef::VmCleanupFlsIndex, 0);
 
         self.define_data_bytes(DataDef::Imports, &vec![0u8; self.imports.len() * 8]);
@@ -486,7 +446,7 @@ impl Runtime {
         let mut tasks = Vec::new();
         tasks.push(EmissionTask::Function(
             FnDef::VmVehHandler,
-            vm::veh::handler,
+            vm::functions::veh::handler,
         ));
         tasks.push(EmissionTask::Data(DataDef::VehStart));
         tasks.extend(shuffled);
@@ -500,7 +460,12 @@ impl Runtime {
                 }
                 EmissionTask::Data(def) => {
                     self.set_data_label(def);
-                    self.asm.db(&self.data[&def]).unwrap();
+
+                    if self.data[&def].is_empty() {
+                        self.asm.zero_bytes().unwrap();
+                    } else {
+                        self.asm.db(&self.data[&def]).unwrap();
+                    }
                 }
                 EmissionTask::Bool(def) => {
                     self.set_bool_label(def);
