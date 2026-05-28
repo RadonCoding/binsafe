@@ -7,43 +7,30 @@ use crate::{
     vm::bytecode::{VMOp, VMReg},
 };
 
-pub mod arithmetic;
-pub mod branchimm;
-pub mod branchmem;
-pub mod branchreg;
+pub mod add;
+pub mod discard;
+pub mod flags;
 pub mod jcc;
-pub mod nop;
-pub mod popreg;
-pub mod pushimm;
-pub mod pushpopregs;
-pub mod pushreg;
-pub mod setmemimm;
-pub mod setmemreg;
-pub mod setregimm;
-pub mod setregmem;
-pub mod setregreg;
+pub mod load_address;
+pub mod load_immediate;
+pub mod load_memory;
+pub mod load_register;
+pub mod store_memory;
+pub mod store_register;
+pub mod sub;
 
 pub fn initialize(rt: &mut Runtime) {
     let mut table = [
-        (VMOp::PushPopRegs, FnDef::VmHandlerPushPopRegs),
-        (VMOp::PushImm, FnDef::VmHandlerPushImm),
-        (VMOp::PushReg, FnDef::VmHandlerPushReg),
-        (VMOp::PopReg, FnDef::VmHandlerPopReg),
-        (VMOp::SetRegImm, FnDef::VmHandlerSetRegImm),
-        (VMOp::SetRegReg, FnDef::VmHandlerSetRegReg),
-        (VMOp::SetRegMem, FnDef::VmHandlerSetRegMem),
-        (VMOp::SetMemImm, FnDef::VmHandlerSetMemImm),
-        (VMOp::SetMemReg, FnDef::VmHandlerSetMemReg),
-        (VMOp::AddSubRegImm, FnDef::VmHandlerAddSubRegImm),
-        (VMOp::AddSubRegReg, FnDef::VmHandlerAddSubRegReg),
-        (VMOp::AddSubRegMem, FnDef::VmHandlerAddSubRegMem),
-        (VMOp::AddSubMemImm, FnDef::VmHandlerAddSubMemImm),
-        (VMOp::AddSubMemReg, FnDef::VmHandlerAddSubMemReg),
-        (VMOp::BranchImm, FnDef::VmHandlerBranchImm),
-        (VMOp::BranchReg, FnDef::VmHandlerBranchReg),
-        (VMOp::BranchMem, FnDef::VmHandlerBranchMem),
         (VMOp::Jcc, FnDef::VmHandlerJcc),
-        (VMOp::Nop, FnDef::VmHandlerNop),
+        (VMOp::LoadImmediate, FnDef::VmHandlerLoadImmediate),
+        (VMOp::LoadRegister, FnDef::VmHandlerLoadRegister),
+        (VMOp::LoadMemory, FnDef::VmHandlerLoadMemory),
+        (VMOp::LoadAddress, FnDef::VmHandlerLoadAddress),
+        (VMOp::StoreRegister, FnDef::VmHandlerStoreRegister),
+        (VMOp::StoreMemory, FnDef::VmHandlerStoreMemory),
+        (VMOp::Add, FnDef::VmHandlerAdd),
+        (VMOp::Sub, FnDef::VmHandlerSub),
+        (VMOp::Discard, FnDef::VmHandlerDiscard),
     ];
 
     let mut rng = rand::thread_rng();
@@ -80,7 +67,7 @@ pub fn initialize(rt: &mut Runtime) {
             rt.asm.mov(r8, rdx).unwrap();
 
             // add r8, [...]
-            utils::vreg::reg_add(rt, rax, VMReg::Vib, r8);
+            utils::vreg::reg_add(rt, rax, VMReg::VImage, r8);
 
             // mov [rcx + ...], r8
             rt.asm.mov(ptr(rcx + rt.mapper.index(op) * 8), r8).unwrap();

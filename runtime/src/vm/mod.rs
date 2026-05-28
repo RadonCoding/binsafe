@@ -1,17 +1,10 @@
 pub mod bytecode;
-pub mod cleanup;
-pub mod crypt;
-pub mod dispatch;
 pub mod encoders;
-pub mod entry;
-pub mod exit;
-pub mod ginit;
+pub mod functions;
 pub mod handlers;
-pub mod sib;
-pub mod stack;
-pub mod tinit;
+pub mod lifters;
+pub mod permute;
 pub mod utils;
-pub mod veh;
 
 use crate::vm::bytecode::VMReg;
 use iced_x86::code_asm::{

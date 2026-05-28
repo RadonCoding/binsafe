@@ -2,7 +2,7 @@ use std::mem;
 
 use crate::{
     runtime::{FnDef, Runtime},
-    vm::utils::lock,
+    vm::utils::{lock, stack},
 };
 use iced_x86::code_asm::{ptr, qword_ptr, r8, r9, rax, rcx, rdx, rsp, AsmRegister64};
 
@@ -123,7 +123,6 @@ fn print_thread_prefix(rt: &mut Runtime) {
 }
 
 pub fn start_profiling(rt: &mut Runtime, message: &str) {
-    use crate::vm::stack;
     use iced_x86::code_asm::al;
 
     // push rax
@@ -152,7 +151,6 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
 }
 
 pub fn stop_profiling(rt: &mut Runtime, message: &str) {
-    use crate::vm::stack;
     use iced_x86::code_asm::al;
 
     // push rdx
