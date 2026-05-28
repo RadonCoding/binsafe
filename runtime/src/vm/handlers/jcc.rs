@@ -1,8 +1,6 @@
+use crate::vm::encoders::jcc::{VMLogic, VMTest};
 use crate::vm::utils::{self, stack};
-use crate::{
-    runtime::Runtime,
-    vm::bytecode::{VMLogic, VMReg, VMTest},
-};
+use crate::{runtime::Runtime, vm::bytecode::VMReg};
 use iced_x86::code_asm::{
     al, eax, ptr, r12, r12b, r13, r13d, r14, r14d, r8b, r8d, r9b, r9d, rax, rcx, rdx,
 };

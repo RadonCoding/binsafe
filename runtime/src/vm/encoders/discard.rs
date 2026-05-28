@@ -1,6 +1,6 @@
 use crate::mapper::Mapper;
 use crate::vm::bytecode::VMOp;
-use crate::vm::encoders::Encode;
+use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
 pub struct Discard;
@@ -8,5 +8,9 @@ pub struct Discard;
 impl Encode for Discard {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(VMOp::Discard)]
+    }
+
+    fn reads(&self) -> Vec<super::Effect> {
+        vec![Effect::Scratch]
     }
 }

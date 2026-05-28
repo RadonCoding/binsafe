@@ -1,8 +1,36 @@
 use rand::seq::SliceRandom;
 
-use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMCondition, VMLogic, VMOp};
-use crate::vm::encoders::Encode;
+use crate::mapper::{mapped, Mapper};
+use crate::vm::bytecode::{VMOp, VMReg};
+use crate::vm::encoders::{Effect, Encode};
+
+mapped! {
+    VMTest {
+        CMP,
+        EQ,
+        NEQ,
+    }
+}
+
+mapped! {
+    VMLogic {
+        AND,
+        OR,
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VMCondition {
+    pub test: VMTest,
+    pub lhs: u8,
+    pub rhs: u8,
+}
+
+impl Encode for VMCondition {
+    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+        vec![mapper.index(self.test), self.lhs, self.rhs]
+    }
+}
 
 #[derive(Debug)]
 pub struct Jcc {
@@ -27,5 +55,13 @@ impl Encode for Jcc {
         }
         bytes.extend_from_slice(&self.destination.to_le_bytes());
         bytes
+    }
+
+    fn reads(&self) -> Vec<super::Effect> {
+        vec![Effect::Flags]
+    }
+
+    fn writes(&self) -> Vec<super::Effect> {
+        vec![Effect::Reg(VMReg::NBranch)]
     }
 }

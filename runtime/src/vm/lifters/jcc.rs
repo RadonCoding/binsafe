@@ -1,6 +1,7 @@
 use iced_x86::{Code, Instruction};
 
-use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMTest};
+use crate::vm::bytecode::VMFlag;
+use crate::vm::encoders::jcc::{VMCondition, VMLogic, VMTest};
 use crate::vm::encoders::{jcc::Jcc, Encode};
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {

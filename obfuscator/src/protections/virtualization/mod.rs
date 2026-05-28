@@ -12,7 +12,7 @@ use iced_x86::code_asm::CodeAssembler;
 use logger::{debug, info};
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
-use runtime::vm::bytecode;
+use runtime::vm::{bytecode, permute};
 
 #[derive(Default)]
 pub struct Virtualization {
@@ -46,10 +46,19 @@ impl Protection for Virtualization {
                 continue;
             }
 
-            let mut operations = match bytecode::convert(&block.instructions) {
-                Some(ops) => ops,
-                None => continue 'outer,
+            let operations = match bytecode::convert(&block.instructions) {
+                Some(operations) if !operations.is_empty() => operations,
+                _ => continue 'outer,
             };
+
+            #[cfg(debug_assertions)]
+            let lifted = operations
+                .iter()
+                .map(|operation| format!("    {}", operation))
+                .collect::<Vec<String>>()
+                .join("\n");
+
+            let mut operations = permute::permute(operations);
 
             #[cfg(debug_assertions)]
             {
@@ -68,14 +77,14 @@ impl Protection for Virtualization {
                         .map(|instruction| format!("    {}", instruction))
                         .collect::<Vec<String>>()
                         .join("\n");
-                    let after = operations
+                    let permuted = operations
                         .iter()
                         .map(|operation| format!("    {}", operation))
                         .collect::<Vec<String>>()
                         .join("\n");
                     debug!(
-                        "VIRTUALIZED @ 0x{:08X}:\n  BEFORE:\n{}\n  AFTER:\n{}",
-                        block.rva, before, after
+                        "VIRTUALIZED @ 0x{:08X}:\n  BEFORE:\n{}\n  LIFTED:\n{}\n  PERMUTED:\n{}",
+                        block.rva, before, lifted, permuted
                     );
                 }
             }

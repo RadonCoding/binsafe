@@ -1,6 +1,6 @@
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMOp, VMReg, VMWidth};
-use crate::vm::encoders::Encode;
+use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
 pub struct LoadRegister {
@@ -15,5 +15,13 @@ impl Encode for LoadRegister {
             mapper.index(self.width),
             mapper.index(self.source),
         ]
+    }
+
+    fn reads(&self) -> Vec<super::Effect> {
+        vec![Effect::Reg(self.source)]
+    }
+
+    fn writes(&self) -> Vec<super::Effect> {
+        vec![Effect::Scratch]
     }
 }

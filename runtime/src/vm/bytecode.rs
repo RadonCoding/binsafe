@@ -4,7 +4,7 @@ use iced_x86::{Instruction, Mnemonic, Register};
 
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
-use crate::vm::lifters::{add, cmp, jcc, lea, mov, nop, sub};
+use crate::vm::lifters::{add, cmp, jcc, lea, mov, sub};
 
 mapped! {
     VMOp {
@@ -42,21 +42,6 @@ pub enum VMFlag {
 }
 
 mapped! {
-    VMTest {
-        CMP,
-        EQ,
-        NEQ,
-    }
-}
-
-mapped! {
-    VMLogic {
-        AND,
-        OR,
-    }
-}
-
-mapped! {
     VMReg {
         None,
         Rax,
@@ -83,6 +68,7 @@ mapped! {
         BLength, // Block Length
         VImage, // Image Base
         VKey, // System Key
+        VScratch0, // Scratch 0
     }
 }
 
@@ -160,7 +146,7 @@ impl From<Register> for VMSeg {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct VMMem {
     pub base: VMReg,
     pub index: VMReg,
@@ -201,19 +187,6 @@ impl From<&Instruction> for VMMem {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct VMCondition {
-    pub test: VMTest,
-    pub lhs: u8,
-    pub rhs: u8,
-}
-
-impl Encode for VMCondition {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(self.test), self.lhs, self.rhs]
-    }
-}
-
 pub fn convert(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
     let mut output: Vec<Box<dyn Encode>> = Vec::new();
 
@@ -240,7 +213,7 @@ pub fn convert(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
             Mnemonic::Cmp => cmp::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
             Mnemonic::Mov => mov::encode(instruction)?,
-            Mnemonic::Nop => nop::encode(instruction)?,
+            Mnemonic::Nop => continue,
             _ => return None,
         };
 

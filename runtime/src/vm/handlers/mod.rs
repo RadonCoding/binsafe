@@ -10,28 +10,26 @@ use crate::{
 pub mod add;
 pub mod discard;
 pub mod jcc;
-pub mod load_addr;
-pub mod load_imm;
-pub mod load_mem;
-pub mod load_reg;
-pub mod nop;
-pub mod store_mem;
-pub mod store_reg;
+pub mod load_address;
+pub mod load_immediate;
+pub mod load_memory;
+pub mod load_register;
+pub mod store_memory;
+pub mod store_register;
 pub mod sub;
 
 pub fn initialize(rt: &mut Runtime) {
     let mut table = [
         (VMOp::Jcc, FnDef::VmHandlerJcc),
-        (VMOp::LoadImmediate, FnDef::VmHandlerLoadImm),
-        (VMOp::LoadRegister, FnDef::VmHandlerLoadReg),
-        (VMOp::LoadMemory, FnDef::VmHandlerLoadMem),
-        (VMOp::LoadAddress, FnDef::VmHandlerLoadAddr),
-        (VMOp::StoreRegister, FnDef::VmHandlerStoreReg),
-        (VMOp::StoreMemory, FnDef::VmHandlerStoreMem),
+        (VMOp::LoadImmediate, FnDef::VmHandlerLoadImmediate),
+        (VMOp::LoadRegister, FnDef::VmHandlerLoadRegister),
+        (VMOp::LoadMemory, FnDef::VmHandlerLoadMemory),
+        (VMOp::LoadAddress, FnDef::VmHandlerLoadAddress),
+        (VMOp::StoreRegister, FnDef::VmHandlerStoreRegister),
+        (VMOp::StoreMemory, FnDef::VmHandlerStoreMemory),
         (VMOp::Add, FnDef::VmHandlerAdd),
         (VMOp::Sub, FnDef::VmHandlerSub),
         (VMOp::Discard, FnDef::VmHandlerDiscard),
-        (VMOp::Nop, FnDef::VmHandlerNop),
     ];
 
     let mut rng = rand::thread_rng();

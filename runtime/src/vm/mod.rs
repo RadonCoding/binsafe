@@ -3,6 +3,7 @@ pub mod encoders;
 pub mod functions;
 pub mod handlers;
 pub mod lifters;
+pub mod permute;
 pub mod utils;
 
 use crate::vm::bytecode::VMReg;
