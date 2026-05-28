@@ -14,7 +14,7 @@ pub fn permute(operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
 
     preserve(&mut atoms);
 
-    let mut operations: Vec<Box<dyn Encode>> = schedule(atoms).into_iter().flatten().collect();
+    let mut operations = schedule(atoms).into_iter().flatten().collect();
 
     cleanup(&mut operations);
 
