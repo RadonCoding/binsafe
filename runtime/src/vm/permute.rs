@@ -14,7 +14,58 @@ pub fn permute(operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
 
     preserve(&mut atoms);
 
-    schedule(atoms).into_iter().flatten().collect()
+    let mut operations: Vec<Box<dyn Encode>> = schedule(atoms).into_iter().flatten().collect();
+
+    cleanup(&mut operations);
+
+    operations
+}
+
+fn cleanup(operations: &mut Vec<Box<dyn Encode>>) {
+    let mut i = 0;
+
+    while i + 4 <= operations.len() {
+        if is_save_restore(&operations[i..i + 4]) {
+            operations.drain(i..i + 4);
+        } else {
+            i += 1;
+        }
+    }
+}
+
+fn is_save_restore(window: &[Box<dyn Encode>]) -> bool {
+    let Some((outer_src, _)) = single(&window[0], LoadStore::Load) else {
+        return false;
+    };
+    let Some((inner_dst, _)) = single(&window[1], LoadStore::Store) else {
+        return false;
+    };
+    let Some((inner_src, _)) = single(&window[2], LoadStore::Load) else {
+        return false;
+    };
+    let Some((outer_dst, _)) = single(&window[3], LoadStore::Store) else {
+        return false;
+    };
+
+    outer_src == outer_dst && inner_dst == inner_src
+}
+
+enum LoadStore {
+    Load,
+    Store,
+}
+
+fn single(op: &Box<dyn Encode>, kind: LoadStore) -> Option<(VMReg, ())> {
+    let reads = op.reads();
+    let writes = op.writes();
+    if reads.len() != 1 || writes.len() != 1 {
+        return None;
+    }
+    match (kind, &reads[0], &writes[0]) {
+        (LoadStore::Load, Effect::Reg(r), Effect::Scratch) => Some((*r, ())),
+        (LoadStore::Store, Effect::Scratch, Effect::Reg(r)) => Some((*r, ())),
+        _ => None,
+    }
 }
 
 fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Atom> {
