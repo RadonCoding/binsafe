@@ -41,6 +41,15 @@ pub fn build(rt: &mut Runtime) {
     // sete r12b
     rt.asm.sete(r12b).unwrap();
 
+    // cmp al, ...
+    rt.asm
+        .cmp(al, rt.mapper.index(VMLogic::NAND) as i32)
+        .unwrap();
+    // sete r8b
+    rt.asm.sete(r8b).unwrap();
+    // or r12b, r8b
+    rt.asm.or(r12b, r8b).unwrap();
+
     rt.asm.set_label(&mut condition_loop).unwrap();
     {
         // test r14d, r14d
@@ -137,6 +146,13 @@ pub fn build(rt: &mut Runtime) {
             // je ...
             rt.asm.je(is_or).unwrap();
 
+            // cmp al, ...
+            rt.asm
+                .cmp(al, rt.mapper.index(VMLogic::NOR) as i32)
+                .unwrap();
+            // je ...
+            rt.asm.je(is_or).unwrap();
+
             // test r8b, r8b
             rt.asm.test(r8b, r8b).unwrap();
             // jz ...
@@ -177,6 +193,31 @@ pub fn build(rt: &mut Runtime) {
     {
         // eax -> destination
         utils::bytecode::read_dword(rt, rdx, eax);
+
+        // cmp al, ...
+        rt.asm
+            .cmp(al, rt.mapper.index(VMLogic::NAND) as i32)
+            .unwrap();
+        // sete r8b
+        rt.asm.sete(r8b).unwrap();
+
+        // cmp al, ...
+        rt.asm
+            .cmp(al, rt.mapper.index(VMLogic::NOR) as i32)
+            .unwrap();
+        // sete r9b
+        rt.asm.sete(r9b).unwrap();
+
+        // or r8b, r9b
+        rt.asm.or(r8b, r9b).unwrap();
+
+        // test r8b, r8b
+        rt.asm.test(r8b, r8b).unwrap();
+        // jz ...
+        rt.asm.jz(epilogue).unwrap();
+
+        // xor r12b, 0x1
+        rt.asm.xor(r12b, 0x1).unwrap();
 
         // test r12b, r12b
         rt.asm.test(r12b, r12b).unwrap();

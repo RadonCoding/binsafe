@@ -1,3 +1,5 @@
+use std::mem;
+
 use rand::seq::SliceRandom;
 use rand::Rng;
 
@@ -17,6 +19,8 @@ mapped! {
     VMLogic {
         AND,
         OR,
+        NAND,
+        NOR
     }
 }
 
@@ -40,81 +44,23 @@ pub struct Jcc {
     pub destination: u32,
 }
 
-impl VMCondition {
-    fn swap(&self) -> Self {
-        Self {
-            test: self.test,
-            lhs: self.rhs,
-            rhs: self.lhs,
-        }
-    }
-}
-
 impl Jcc {
     fn mutate(&mut self) {
         let mut rng = rand::thread_rng();
 
-        #[cfg(debug_assertions)]
-        {
-            eprintln!("before:");
-            eprintln!("  logic={:?}", self.logic);
-            eprintln!("  conditions={:#?}", self.conditions);
-        }
-
         self.conditions.shuffle(&mut rng);
 
         for condition in &mut self.conditions {
-            if rng.gen() {
-                *condition = condition.swap();
-            }
-        }
+            match condition.test {
+                VMTest::EQ | VMTest::NEQ if rng.gen() => {
+                    mem::swap(&mut condition.lhs, &mut condition.rhs);
+                }
 
-        let original = self.conditions.clone();
-
-        match rng.gen_range(0..6) {
-            0 => {}
-            1 => self.conditions.extend(original),
-            2 => self
-                .conditions
-                .extend(original.iter().map(VMCondition::swap)),
-            3 => self.logic = VMLogic::AND,
-            4 => self.logic = VMLogic::OR,
-            _ => {
-                self.conditions = self
-                    .conditions
-                    .iter()
-                    .flat_map(|condition| match condition.test {
-                        VMTest::NEQ => {
-                            self.logic = VMLogic::OR;
-
-                            vec![
-                                VMCondition {
-                                    test: VMTest::CMP,
-                                    lhs: condition.lhs,
-                                    rhs: condition.rhs,
-                                },
-                                VMCondition {
-                                    test: VMTest::CMP,
-                                    lhs: condition.rhs,
-                                    rhs: condition.lhs,
-                                },
-                            ]
-                        }
-
-                        _ => vec![condition.clone()],
-                    })
-                    .collect();
+                _ => {}
             }
         }
 
         self.conditions.shuffle(&mut rng);
-
-        #[cfg(debug_assertions)]
-        {
-            eprintln!("after:");
-            eprintln!("  logic={:?}", self.logic);
-            eprintln!("  conditions={:#?}", self.conditions);
-        }
     }
 }
 impl Encode for Jcc {
