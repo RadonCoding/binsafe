@@ -1,10 +1,26 @@
 use std::fmt::{self, Debug};
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::VMWidth;
+use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Effect {
+    Reg(VMReg),
+    Mem(VMMem, u8),
+    Flags,
+    Scratch,
+}
 
 pub trait Encode: Debug {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8>;
+
+    fn reads(&self) -> Vec<Effect> {
+        vec![]
+    }
+
+    fn writes(&self) -> Vec<Effect> {
+        vec![]
+    }
 }
 
 #[cfg(debug_assertions)]
@@ -86,7 +102,6 @@ pub mod load_address;
 pub mod load_immediate;
 pub mod load_memory;
 pub mod load_register;
-pub mod nop;
 pub mod store_memory;
 pub mod store_register;
 pub mod sub;
