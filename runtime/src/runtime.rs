@@ -361,6 +361,7 @@ impl Runtime {
             (FnDef::VmHandlerAdd, vm::handlers::add::build),
             (FnDef::VmHandlerSub, vm::handlers::sub::build),
             (FnDef::VmHandlerDiscard, vm::handlers::discard::build),
+            (FnDef::VmArithmeticFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (
                 FnDef::CompareUnicodeToAnsi,

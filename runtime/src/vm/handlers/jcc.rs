@@ -8,13 +8,20 @@ use iced_x86::code_asm::{
 // unsigned char* (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
     let mut condition_loop = rt.asm.create_label();
-    let mut check_next = rt.asm.create_label();
+
     let mut handle_cmp = rt.asm.create_label();
     let mut handle_eq = rt.asm.create_label();
     let mut handle_neq = rt.asm.create_label();
+
+    let mut check_invert = rt.asm.create_label();
+    let mut invert = rt.asm.create_label();
+    let mut check_continue = rt.asm.create_label();
+
     let mut is_or = rt.asm.create_label();
+
     let mut skip_loop = rt.asm.create_label();
     let mut continue_loop = rt.asm.create_label();
+
     let mut check_result = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
@@ -40,15 +47,15 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
     // sete r12b
     rt.asm.sete(r12b).unwrap();
+    // je ...
+    rt.asm.je(condition_loop).unwrap();
 
     // cmp al, ...
     rt.asm
-        .cmp(al, rt.mapper.index(VMLogic::NAND) as i32)
+        .cmp(al, rt.mapper.index(VMLogic::NOR) as i32)
         .unwrap();
-    // sete r8b
-    rt.asm.sete(r8b).unwrap();
-    // or r12b, r8b
-    rt.asm.or(r12b, r8b).unwrap();
+    // sete r12b
+    rt.asm.sete(r12b).unwrap();
 
     rt.asm.set_label(&mut condition_loop).unwrap();
     {
@@ -90,7 +97,7 @@ pub fn build(rt: &mut Runtime) {
             // sete r8b
             rt.asm.sete(r8b).unwrap();
             // jmp ...
-            rt.asm.jmp(check_next).unwrap();
+            rt.asm.jmp(check_invert).unwrap();
         }
 
         // Checks if the bit in flags specified by the first flag bit (lhs) == the bit in flags specified by the second flag bit (rhs)
@@ -114,7 +121,7 @@ pub fn build(rt: &mut Runtime) {
             // sete r8b
             rt.asm.sete(r8b).unwrap();
             // jmp ...
-            rt.asm.jmp(check_next).unwrap();
+            rt.asm.jmp(check_invert).unwrap();
         }
 
         // Checks if the bit in flags specified by the first flag bit (lhs) != the bit in flags specified by the second flag bit (rhs)
@@ -139,7 +146,30 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.setne(r8b).unwrap();
         }
 
-        rt.asm.set_label(&mut check_next).unwrap();
+        rt.asm.set_label(&mut check_invert).unwrap();
+        {
+            // cmp al, ...
+            rt.asm
+                .cmp(al, rt.mapper.index(VMLogic::NAND) as i32)
+                .unwrap();
+            // je ...
+            rt.asm.je(invert).unwrap();
+
+            // cmp al, ...
+            rt.asm
+                .cmp(al, rt.mapper.index(VMLogic::NOR) as i32)
+                .unwrap();
+            // jne ...
+            rt.asm.jne(check_continue).unwrap();
+        }
+
+        rt.asm.set_label(&mut invert).unwrap();
+        {
+            // xor r8b, 0x1
+            rt.asm.xor(r8b, 0x1).unwrap();
+        }
+
+        rt.asm.set_label(&mut check_continue).unwrap();
         {
             // cmp al, ...
             rt.asm.cmp(al, rt.mapper.index(VMLogic::OR) as i32).unwrap();
@@ -148,7 +178,7 @@ pub fn build(rt: &mut Runtime) {
 
             // cmp al, ...
             rt.asm
-                .cmp(al, rt.mapper.index(VMLogic::NOR) as i32)
+                .cmp(al, rt.mapper.index(VMLogic::NAND) as i32)
                 .unwrap();
             // je ...
             rt.asm.je(is_or).unwrap();
@@ -193,31 +223,6 @@ pub fn build(rt: &mut Runtime) {
     {
         // eax -> destination
         utils::bytecode::read_dword(rt, rdx, eax);
-
-        // cmp al, ...
-        rt.asm
-            .cmp(al, rt.mapper.index(VMLogic::NAND) as i32)
-            .unwrap();
-        // sete r8b
-        rt.asm.sete(r8b).unwrap();
-
-        // cmp al, ...
-        rt.asm
-            .cmp(al, rt.mapper.index(VMLogic::NOR) as i32)
-            .unwrap();
-        // sete r9b
-        rt.asm.sete(r9b).unwrap();
-
-        // or r8b, r9b
-        rt.asm.or(r8b, r9b).unwrap();
-
-        // test r8b, r8b
-        rt.asm.test(r8b, r8b).unwrap();
-        // jz ...
-        rt.asm.jz(epilogue).unwrap();
-
-        // xor r12b, 0x1
-        rt.asm.xor(r12b, 0x1).unwrap();
 
         // test r12b, r12b
         rt.asm.test(r12b, r12b).unwrap();

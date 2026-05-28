@@ -1,11 +1,8 @@
-use iced_x86::code_asm::{al, r8, r8b, r8d, r8w, r9, r9b, r9d, r9w, rax, rcx, rdx};
+use iced_x86::code_asm::{al, r8, r8b, r8d, r8w, r9, r9b, r9d, r9w, rax, rdx};
 
 use crate::{
-    runtime::Runtime,
-    vm::{
-        bytecode::VMReg,
-        utils::{self, scratch, stack},
-    },
+    runtime::{FnDef, Runtime},
+    vm::utils::{self, scratch, stack},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -51,16 +48,21 @@ pub fn build(rt: &mut Runtime) {
     {
         // pushfq
         stack::pushfq(rt);
-        // pop r9
-        stack::pop(rt, r9);
-        // mov [rcx + ...], r9d
-        utils::vreg::store_reg32(rt, rcx, r9d, VMReg::Flags);
+        // pop rax
+        stack::pop(rt, rax);
+        // push rdx
+        stack::push(rt, rdx);
+        // mov rdx, rax
+        rt.asm.mov(rdx, rax).unwrap();
 
         // store r8
         scratch::store(rt, r8);
 
-        // mov rax, rdx
-        rt.asm.mov(rax, rdx).unwrap();
+        // call ...
+        stack::call(rt, rt.func_labels[&FnDef::VmArithmeticFlags]);
+
+        // pop rax
+        stack::pop(rt, rax);
         // ret
         stack::ret(rt);
     }
