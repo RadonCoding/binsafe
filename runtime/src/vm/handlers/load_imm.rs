@@ -12,7 +12,7 @@ pub fn build(rt: &mut Runtime) {
     // al -> width
     utils::bytecode::read_byte(rt, rdx, al);
 
-    utils::bits::dispatch(
+    utils::width::dispatch(
         rt,
         al,
         &mut epilogue,

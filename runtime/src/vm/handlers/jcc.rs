@@ -4,7 +4,7 @@ use crate::{
     vm::bytecode::{VMLogic, VMReg, VMTest},
 };
 use iced_x86::code_asm::{
-    al, eax, ptr, r12, r12b, r13, r13d, r14, r14b, r14d, r8b, r8d, r9b, r9d, rax, rcx, rdx,
+    al, eax, ptr, r12, r12b, r13, r13d, r14, r14d, r8b, r8d, r9b, r9d, rax, rcx, rdx,
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -158,16 +158,18 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut continue_loop).unwrap();
         {
-            // dec r14b
-            rt.asm.dec(r14b).unwrap();
+            // dec r14d
+            rt.asm.dec(r14d).unwrap();
             // jmp ...
             rt.asm.jmp(condition_loop).unwrap();
         }
 
         rt.asm.set_label(&mut skip_loop).unwrap();
         {
-            // lea rdx, [rdx + r14*4]
-            rt.asm.lea(rdx, ptr(rdx + r14 * 4)).unwrap();
+            // lea r14 [r14 + r14*2]
+            rt.asm.lea(r14, ptr(r14 + r14 * 2)).unwrap();
+            // lea rdx [rdx + r14+1]
+            rt.asm.lea(rdx, ptr(rdx + r14 + 1)).unwrap();
             // jmp ...
             rt.asm.jmp(epilogue).unwrap();
         }
@@ -184,9 +186,9 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jz(epilogue).unwrap();
 
         // add rax, [rcx + ...]
-        utils::vreg::reg_add(rt, rcx, VMReg::Vib, rax);
+        utils::vreg::reg_add(rt, rcx, VMReg::VImage, rax);
         // mov [rcx + ...], rax
-        utils::vreg::store_reg(rt, rcx, rax, VMReg::Vbr);
+        utils::vreg::store_reg(rt, rcx, rax, VMReg::NBranch);
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();

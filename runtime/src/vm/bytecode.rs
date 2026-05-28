@@ -3,19 +3,26 @@ use core::panic;
 use iced_x86::{Instruction, Mnemonic, Register};
 
 use crate::mapper::{mapped, Mapper};
-use crate::vm::encoders::{jcc, lea, mov, nop, Encode};
+use crate::vm::encoders::Encode;
+use crate::vm::lifters::{add, cmp, jcc, lea, mov, nop, sub};
 
 mapped! {
     VMOp {
         Jcc,
         // Load
-        LoadImm,
-        LoadReg,
-        LoadMem,
-        LoadAddr,
+        LoadImmediate,
+        LoadRegister,
+        LoadMemory,
+        LoadAddress,
         // Store
-        StoreReg,
-        StoreMem,
+        StoreRegister,
+        StoreMemory,
+        // Arithmetic
+        Add,
+        Sub,
+        // Stack
+        Discard,
+        // Nop
         Nop,
     }
 }
@@ -69,13 +76,13 @@ mapped! {
         R14,
         R15,
         Flags,
-        Ven, // Native Entry
-        Vex, // Native Exit
-        Vbp, // Block Pointer
-        Vbl, // Block Length
-        Vbr, // Virtual Branch
-        Vib, // Image Base
-        Vsk, // System Key
+        NEntry, // Native Entry
+        NBranch, // Native Branch
+        NExit, // Native Exit
+        BPointer, // Block Pointer
+        BLength, // Block Length
+        VImage, // Image Base
+        VKey, // System Key
     }
 }
 
@@ -99,14 +106,14 @@ impl From<Register> for VMReg {
             Register::R13 | Register::R13D | Register::R13W | Register::R13L => Self::R13,
             Register::R14 | Register::R14D | Register::R14W | Register::R14L => Self::R14,
             Register::R15 | Register::R15D | Register::R15W | Register::R15L => Self::R15,
-            Register::RIP => Self::Vib,
+            Register::RIP => Self::VImage,
             _ => panic!("unsupported register: {reg:?}"),
         }
     }
 }
 
 mapped! {
-    VMBits {
+    VMWidth {
         Lower8,
         Higher8,
         Lower16,
@@ -115,7 +122,7 @@ mapped! {
     }
 }
 
-impl From<Register> for VMBits {
+impl From<Register> for VMWidth {
     fn from(reg: Register) -> Self {
         match reg {
             reg if (reg >= Register::AL && reg <= Register::BL)
@@ -228,6 +235,9 @@ pub fn convert(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
             | Mnemonic::Jo
             | Mnemonic::Jp
             | Mnemonic::Js => jcc::encode(instruction)?,
+            Mnemonic::Add => add::encode(instruction)?,
+            Mnemonic::Sub => sub::encode(instruction)?,
+            Mnemonic::Cmp => cmp::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
             Mnemonic::Mov => mov::encode(instruction)?,
             Mnemonic::Nop => nop::encode(instruction)?,

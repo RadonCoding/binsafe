@@ -36,6 +36,10 @@ pub enum FnDef {
     VmHandlerLoadAddr,
     VmHandlerStoreReg,
     VmHandlerStoreMem,
+    VmHandlerAdd,
+    VmHandlerSub,
+    VmHandlerDiscard,
+    VmHandlerNop,
     /* VM ARITHMETIC */
     VmArithmeticFlags,
     VmArithmeticAddSub8,
@@ -340,6 +344,10 @@ impl Runtime {
             (FnDef::VmHandlerLoadAddr, vm::handlers::load_addr::build),
             (FnDef::VmHandlerStoreReg, vm::handlers::store_reg::build),
             (FnDef::VmHandlerStoreMem, vm::handlers::store_mem::build),
+            (FnDef::VmHandlerAdd, vm::handlers::add::build),
+            (FnDef::VmHandlerSub, vm::handlers::sub::build),
+            (FnDef::VmHandlerDiscard, vm::handlers::discard::build),
+            (FnDef::VmHandlerNop, vm::handlers::nop::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (
                 FnDef::CompareUnicodeToAnsi,

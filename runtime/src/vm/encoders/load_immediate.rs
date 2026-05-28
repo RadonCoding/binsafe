@@ -1,16 +1,16 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMBits, VMOp};
+use crate::vm::bytecode::{VMOp, VMWidth};
 use crate::vm::encoders::Encode;
 
 #[derive(Debug)]
-pub struct LoadImm {
-    pub width: VMBits,
+pub struct LoadImmediate {
+    pub width: VMWidth,
     pub source: Vec<u8>,
 }
 
-impl Encode for LoadImm {
+impl Encode for LoadImmediate {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
-        let mut bytes = vec![mapper.index(VMOp::LoadImm), mapper.index(self.width)];
+        let mut bytes = vec![mapper.index(VMOp::LoadImmediate), mapper.index(self.width)];
         bytes.extend_from_slice(&self.source);
         bytes
     }
