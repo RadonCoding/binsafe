@@ -1,4 +1,6 @@
 use iced_x86::{Code, Instruction};
+use rand::seq::SliceRandom;
+use rand::Rng;
 
 use crate::vm::bytecode::VMFlag;
 use crate::vm::encoders::jcc::{VMCondition, VMLogic, VMTest};
@@ -7,7 +9,7 @@ use crate::vm::encoders::{jcc::Jcc, Encode};
 pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let destination = instruction.memory_displacement64().try_into().unwrap();
 
-    let (logic, conditions) = match instruction.code() {
+    let (mut logic, mut conditions) = match instruction.code() {
         // JA = CF=0 AND ZF=0
         Code::Ja_rel32_64 | Code::Ja_rel8_64 => (
             VMLogic::AND,
@@ -59,11 +61,45 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
         _ => return None,
     };
 
+    mutate(&mut logic, &mut conditions);
+
     Some(vec![Box::new(Jcc {
         logic,
         conditions,
         destination,
     })])
+}
+
+fn mutate(logic: &mut VMLogic, conditions: &mut Vec<VMCondition>) {
+    let mut rng = rand::thread_rng();
+
+    conditions.shuffle(&mut rng);
+
+    match *logic {
+        VMLogic::AND if rng.gen() => {
+            // AND(A,B,...) == NOT(OR(!A,!B,...))
+            *logic = VMLogic::NOR;
+
+            invert(conditions);
+        }
+        VMLogic::OR if rng.gen() => {
+            // OR(A,B,...) == NOT(AND(!A,!B,...))
+            *logic = VMLogic::NAND;
+
+            invert(conditions);
+        }
+        _ => {}
+    }
+}
+
+fn invert(conditions: &mut [VMCondition]) {
+    for c in conditions {
+        match c.test {
+            VMTest::EQ => c.test = VMTest::NEQ,
+            VMTest::NEQ => c.test = VMTest::EQ,
+            VMTest::CMP => c.rhs ^= 1,
+        }
+    }
 }
 
 fn cmp(lhs: VMFlag, rhs: u8) -> VMCondition {
