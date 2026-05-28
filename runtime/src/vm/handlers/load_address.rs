@@ -4,11 +4,11 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{VMReg, VMSeg},
-        stack, utils,
+        utils::{self, scratch, stack},
     },
 };
 
-// unsigned long, unsigned long (unsigned long*, unsigned char*)
+// unsigned char* (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
     let mut add_base = rt.asm.create_label();
     let mut check_index = rt.asm.create_label();
@@ -19,7 +19,7 @@ pub fn build(rt: &mut Runtime) {
     // xor rax, rax
     rt.asm.xor(rax, rax).unwrap();
 
-    // movzx r8, [rdx]; add rdx, 0x1 -> base
+    // r8d -> base
     utils::bytecode::read_byte_zx(rt, rdx, r8d);
 
     // cmp r8, ...
@@ -35,9 +35,9 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut check_index).unwrap();
     {
-        // movzx r8, [rdx]; add rdx, 0x1 -> index
+        // r8d -> index
         utils::bytecode::read_byte_zx(rt, rdx, r8d);
-        // movzx r9, [rdx]; add rdx, 0x1 -> scale
+        // r9d -> scale
         utils::bytecode::read_byte_zx(rt, rdx, r9d);
         // cmp r8, ...
         rt.asm.cmp(r8, rt.mapper.index(VMReg::None) as i32).unwrap();
@@ -54,14 +54,13 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut add_displacement).unwrap();
     {
-        // movsxd r8, [rdx]; add rdx, 0x4 -> displacement
+        // r8 -> displacement
         utils::bytecode::read_dword_sx(rt, rdx, r8);
-
         // add rax, r8
         rt.asm.add(rax, r8).unwrap();
     }
 
-    // movzx r8, [rdx]; add rdx, 0x1 -> segment
+    // r8d -> segment
     utils::bytecode::read_byte_zx(rt, rdx, r8d);
 
     // cmp r8, ...
@@ -71,12 +70,17 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut add_segment).unwrap();
     {
-        // add rax, gs:[0x30] -> NT_TIB *TEB->NT_TIB.Self
+        // add rax, gs:[0x30]
         rt.asm.add(rax, ptr(0x30).gs()).unwrap();
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
+        // store rax
+        scratch::store(rt, rax);
+
+        // mov rax, rdx
+        rt.asm.mov(rax, rdx).unwrap();
         // ret
         stack::ret(rt);
     }

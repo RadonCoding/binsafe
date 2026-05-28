@@ -92,7 +92,7 @@ impl Mapper {
 
 macro_rules! mapped {
     ($ty:ident { $($v:ident),+ $(,)? }) => {
-        #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+        #[derive(Clone, Copy, Eq, PartialEq, Hash)]
         pub enum $ty {
             #[doc(hidden)]
             $($v { _sealed: () }),+
@@ -103,6 +103,14 @@ macro_rules! mapped {
             $(
                 pub const $v: Self = Self::$v { _sealed: () };
             )+
+        }
+
+        impl ::std::fmt::Debug for $ty {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                match self {
+                    $(Self::$v { .. } => f.write_str(stringify!($v))),+
+                }
+            }
         }
 
         impl crate::mapper::Mappable for $ty {

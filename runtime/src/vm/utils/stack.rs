@@ -31,42 +31,42 @@ pub fn pop(rt: &mut Runtime, dst: AsmRegister64) {
     rt.asm.mov(dst, ptr(r11 - 0x8)).unwrap();
 }
 
-// pub fn with_stack_pivot<F>(rt: &mut Runtime, f: F)
-// where
-//     F: FnOnce(&mut Runtime),
-// {
-//     // mov r10, rsp
-//     rt.asm.mov(r10, rsp).unwrap();
+pub fn with_stack_pivot<F>(rt: &mut Runtime, f: F)
+where
+    F: FnOnce(&mut Runtime),
+{
+    // mov r10, rsp
+    rt.asm.mov(r10, rsp).unwrap();
 
-//     // mov r11d, [...]
-//     rt.asm
-//         .mov(r11d, ptr(rt.data_labels[&DataDef::VmStackTlsIndex]))
-//         .unwrap();
-//     // mov r11, gs:[0x1480 + r11*8]
-//     rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
+    // mov r11d, [...]
+    rt.asm
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmStackTlsIndex]))
+        .unwrap();
+    // mov r11, gs:[0x1480 + r11*8]
+    rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
 
-//     // mov rsp, r11
-//     rt.asm.mov(rsp, r11).unwrap();
+    // mov rsp, r11
+    rt.asm.mov(rsp, r11).unwrap();
 
-//     f(rt);
+    f(rt);
 
-//     // mov r11d, [...]
-//     rt.asm
-//         .mov(r11d, ptr(rt.data_labels[&DataDef::VmStackTlsIndex]))
-//         .unwrap();
-//     // mov gs:[0x1480 + r11*8], rsp
-//     rt.asm.mov(qword_ptr(0x1480 + r11 * 8).gs(), rsp).unwrap();
+    // mov r11d, [...]
+    rt.asm
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmStackTlsIndex]))
+        .unwrap();
+    // mov gs:[0x1480 + r11*8], rsp
+    rt.asm.mov(qword_ptr(0x1480 + r11 * 8).gs(), rsp).unwrap();
 
-//     // mov rsp, r10
-//     rt.asm.mov(rsp, r10).unwrap();
-// }
+    // mov rsp, r10
+    rt.asm.mov(rsp, r10).unwrap();
+}
 
-// pub fn pushfq(rt: &mut Runtime) {
-//     with_stack_pivot(rt, |rt| {
-//         // pushfq
-//         rt.asm.pushfq().unwrap();
-//     });
-// }
+pub fn pushfq(rt: &mut Runtime) {
+    with_stack_pivot(rt, |rt| {
+        // pushfq
+        rt.asm.pushfq().unwrap();
+    });
+}
 
 pub fn call<T>(rt: &mut Runtime, target: T)
 where

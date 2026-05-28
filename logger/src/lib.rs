@@ -4,6 +4,7 @@ use std::{
 };
 
 pub enum LogLevel {
+    Debug,
     Info,
     Warn,
     Error,
@@ -12,6 +13,7 @@ pub enum LogLevel {
 impl fmt::Display for LogLevel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
+            LogLevel::Debug => "DEBUG",
             LogLevel::Info => "INFO",
             LogLevel::Warn => "WARN",
             LogLevel::Error => "ERROR",
@@ -33,6 +35,10 @@ fn log(level: LogLevel, args: fmt::Arguments) {
     );
 }
 
+pub fn debug(fmt: impl fmt::Display) {
+    log(LogLevel::Debug, format_args!("{}", fmt));
+}
+
 pub fn info(fmt: impl fmt::Display) {
     log(LogLevel::Info, format_args!("{}", fmt));
 }
@@ -43,6 +49,14 @@ pub fn warn(fmt: impl fmt::Display) {
 
 pub fn error(fmt: impl fmt::Display) {
     log(LogLevel::Error, format_args!("{}", fmt));
+}
+
+#[macro_export]
+macro_rules! debug {
+    ($($arg:tt)*) => {{
+        #[cfg(debug_assertions)]
+        $crate::debug(format_args!($($arg)*));
+    }};
 }
 
 #[macro_export]
