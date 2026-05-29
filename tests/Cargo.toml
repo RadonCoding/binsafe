@@ -5,5 +5,10 @@ edition = "2021"
 
 [dependencies]
 runtime = { path = "../runtime" }
+obfuscator = { path = "../obfuscator" }
 iced-x86 = { version = "1.21.0", features = ["code_asm"] }
-windows = { version = "0.62.2", features = ["Win32_System_Memory", "Win32_System_Threading"] }
+rand = "0.8.5"
+windows = { version = "0.62.2", features = [
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+] }

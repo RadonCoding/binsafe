@@ -1,13 +1,14 @@
-use iced_x86::code_asm::{
-    al, byte_ptr, eax, ptr, r12, r13, r13b, r14, r15, r8, r9b, rax, rcx, rdx,
-};
+use iced_x86::code_asm::{al, byte_ptr, eax, ptr, r12, r13, r14, r15, r8b, rax, rcx, rdx};
 
 use crate::{
     runtime::{DataDef, Runtime},
-    vm::utils::stack,
+    vm::{
+        bytecode::VMReg,
+        utils::{self, stack},
+    },
 };
 
-// void (unsigned char*, unsigned long, unsigned char*, bool)
+// void (unsigned char*, unsigned long, bool)
 pub fn build(rt: &mut Runtime) {
     let mut decrypting = rt.asm.create_label();
     let mut spin_previous = rt.asm.create_label();
@@ -33,8 +34,15 @@ pub fn build(rt: &mut Runtime) {
 
     // mov r12, rcx
     rt.asm.mov(r12, rcx).unwrap();
-    // mov r13b, r9b
-    rt.asm.mov(r13b, r9b).unwrap();
+
+    // mov eax, [...]
+    rt.asm
+        .mov(eax, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .unwrap();
+    // mov rax, gs:[0x1480 + rax * 8]
+    rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
+    // mov r15, [rax + ...]
+    utils::vreg::load_reg(rt, rax, VMReg::VKey, r15);
 
     // add rcx, 0x2
     rt.asm.add(rcx, 0x2).unwrap();
@@ -50,13 +58,13 @@ pub fn build(rt: &mut Runtime) {
     rt.asm
         .lea(rax, ptr(rt.data_labels[&DataDef::VmCode]))
         .unwrap();
-    // mov r15, r12
-    rt.asm.mov(r15, r12).unwrap();
-    // sub r15, rax
-    rt.asm.sub(r15, rax).unwrap();
+    // mov r14, r12
+    rt.asm.mov(r14, r12).unwrap();
+    // sub r14, rax
+    rt.asm.sub(r14, rax).unwrap();
 
-    // test r13b, r13b
-    rt.asm.test(r13b, r13b).unwrap();
+    // test r8b, r8b
+    rt.asm.test(r8b, r8b).unwrap();
     // jnz ...
     rt.asm.jnz(decrypting).unwrap();
 
@@ -64,16 +72,16 @@ pub fn build(rt: &mut Runtime) {
     rt.asm
         .mov(eax, ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]))
         .unwrap();
-    // mov r14, gs:[0x1480 + rax * 8]
-    rt.asm.mov(r14, ptr(0x1480 + rax * 8).gs()).unwrap();
+    // mov r13, gs:[0x1480 + rax * 8]
+    rt.asm.mov(r13, ptr(0x1480 + rax * 8).gs()).unwrap();
     // jmp ...
     rt.asm.jmp(crypt_loop).unwrap();
 
     rt.asm.set_label(&mut decrypting).unwrap();
     {
         // Check if this is the first block:
-        // test r15, r15
-        rt.asm.test(r15, r15).unwrap();
+        // test r14, r14
+        rt.asm.test(r14, r14).unwrap();
         // jz ...
         rt.asm.jz(start_key).unwrap();
 
@@ -102,12 +110,14 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut derive_key).unwrap();
     {
-        // mov r14, [r12 - 0x8]
-        rt.asm.mov(r14, ptr(r12 - 0x8)).unwrap();
+        // mov r13, [r12 - 0x8]
+        rt.asm.mov(r13, ptr(r12 - 0x8)).unwrap();
         // mov rax, 0x00FFFFFFFFFFFFFF
         rt.asm.mov(rax, 0x00FFFFFFFFFFFFFFu64).unwrap();
-        // and r14, rax
-        rt.asm.and(r14, rax).unwrap();
+        // and r13, rax
+        rt.asm.and(r13, rax).unwrap();
+        // xor r13, r15
+        rt.asm.xor(r13, r15).unwrap();
 
         // Release lock on the previous block:
         // mov [r12 - 0x1], 0x0
@@ -119,9 +129,9 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut start_key).unwrap();
     {
-        // mov r14, [...]
+        // mov r13, [...]
         rt.asm
-            .mov(r14, ptr(rt.data_labels[&DataDef::VmKeySeed]))
+            .mov(r13, ptr(rt.data_labels[&DataDef::VmKeySeed]))
             .unwrap();
     }
 
@@ -131,8 +141,8 @@ pub fn build(rt: &mut Runtime) {
         rt.asm
             .mov(eax, ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]))
             .unwrap();
-        // mov gs:[0x1480 + rax * 8], r14
-        rt.asm.mov(ptr(0x1480 + rax * 8).gs(), r14).unwrap();
+        // mov gs:[0x1480 + rax * 8], r13
+        rt.asm.mov(ptr(0x1480 + rax * 8).gs(), r13).unwrap();
     }
 
     rt.asm.set_label(&mut spin_current).unwrap();
@@ -166,12 +176,12 @@ pub fn build(rt: &mut Runtime) {
 
         // mov rax, [rcx]
         rt.asm.mov(rax, ptr(rcx)).unwrap();
-        // xor [rcx], r14
-        rt.asm.xor(ptr(rcx), r14).unwrap();
+        // xor [rcx], r13
+        rt.asm.xor(ptr(rcx), r13).unwrap();
 
         // Skip reading the ciphertext if decrypting since the block was already ciphertext:
-        // test r13b, r13b
-        rt.asm.test(r13b, r13b).unwrap();
+        // test r8b, r8b
+        rt.asm.test(r8b, r8b).unwrap();
         // jnz ...
         rt.asm.jnz(continue_loop).unwrap();
 
@@ -180,26 +190,21 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut continue_loop).unwrap();
         {
-            // xor r14, rax
-            rt.asm.xor(r14, rax).unwrap();
-
-            // movzx rax, [r8]
-            rt.asm.movzx(rax, byte_ptr(r8)).unwrap();
-            // xor r14, rax
-            rt.asm.xor(r14, rax).unwrap();
+            // xor r13, rax
+            rt.asm.xor(r13, rax).unwrap();
 
             // mov rax, [...]
             rt.asm
                 .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyMul]))
                 .unwrap();
-            // imul r14, rax
-            rt.asm.imul_2(r14, rax).unwrap();
+            // imul r13, rax
+            rt.asm.imul_2(r13, rax).unwrap();
             // mov rax, [...]
             rt.asm
                 .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyAdd]))
                 .unwrap();
-            // add r14, rax
-            rt.asm.add(r14, rax).unwrap();
+            // add r13, rax
+            rt.asm.add(r13, rax).unwrap();
 
             // add rcx, 0x8
             rt.asm.add(rcx, 0x8).unwrap();
@@ -210,12 +215,13 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut unlock).unwrap();
     {
-        // test r13b, r13b
-        rt.asm.test(r13b, r13b).unwrap();
-        // jnz ... -> decrypting
+        // test r8b, r8b
+        rt.asm.test(r8b, r8b).unwrap();
+        // jnz ...
         rt.asm.jnz(epilogue).unwrap();
 
-        // mov [r12], 0x0 -> release current
+        // If encrypting release lock on the current block:
+        // mov [r12], 0x0
         rt.asm.mov(byte_ptr(rdx), 0x0).unwrap();
     }
 

@@ -14,6 +14,9 @@ use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::{bytecode, permute};
 
+mod attestation;
+pub mod crypt;
+
 #[derive(Default)]
 pub struct Virtualization {
     vblocks: HashMap<u32, usize>,
@@ -22,9 +25,6 @@ pub struct Virtualization {
 
 // PUSH imm32 + CALL rel32
 const DISPATCH_SIZE: usize = 10;
-
-// First byte of NtQueryInformationProcess which is hooked by many anti-anti-debug implementations
-const NTQIP_SIGNATURE: u8 = 0x4C;
 
 impl Protection for Virtualization {
     fn initialize(&mut self, engine: &mut Engine) {
@@ -40,6 +40,14 @@ impl Protection for Virtualization {
         let key_seed = rng.gen::<u64>();
         let key_mul = rng.gen::<u64>();
         let key_add = rng.gen::<u64>();
+        let key_att = rng.gen::<u64>();
+
+        let mut attestation =
+            bytecode::assemble(&mut engine.rt.mapper, &mut attestation::generate(key_att));
+
+        crypt::encrypt(&mut attestation, key_seed, key_mul, key_add, 0, &mut rng);
+
+        vcode.extend_from_slice(&attestation);
 
         'outer: for block in &mut engine.blocks {
             if block.size < DISPATCH_SIZE {
@@ -101,31 +109,9 @@ impl Protection for Virtualization {
 
                 dedup[&hash]
             } else {
-                let mut vcode_key = if vcode.is_empty() {
-                    key_seed
-                } else {
-                    u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap())
-                };
+                let vcode_key = u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap());
 
-                let length = TryInto::<u16>::try_into(vblock.len()).unwrap();
-
-                while vblock.len() % 8 != 0 {
-                    vblock.push(rng.gen::<u8>());
-                }
-
-                for chunk in vblock.chunks_exact_mut(8) {
-                    let mut qword = u64::from_le_bytes(chunk.try_into().unwrap());
-                    qword ^= vcode_key;
-                    chunk.copy_from_slice(&qword.to_le_bytes());
-
-                    vcode_key ^= qword ^ NTQIP_SIGNATURE as u64;
-                    vcode_key = vcode_key.wrapping_mul(key_mul).wrapping_add(key_add);
-                }
-
-                // WORD - length of the VM-block [0..2]
-                vblock.splice(0..0, length.to_le_bytes());
-                // BYTE - lock state of the VM-block [..1]
-                vblock.push(0);
+                crypt::encrypt(&mut vblock, vcode_key, key_mul, key_add, key_att, &mut rng);
 
                 let vcode_offset = TryInto::<u32>::try_into(vcode.len()).unwrap();
                 vcode.extend_from_slice(&vblock);

@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{eax, ptr, r12, r13, r14, r8, r8d, r9b, rax, rcx, rdx};
+use iced_x86::code_asm::{eax, ptr, r12, r13, r14, r8, r8b, r8d, rax, rcx, rdx};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -43,10 +43,8 @@ pub fn build(rt: &mut Runtime) {
     utils::vreg::load_reg(rt, r12, VMReg::BPointer, rcx);
     // mov rdx, [r14 + ...]
     utils::vreg::load_reg(rt, r12, VMReg::BLength, rdx);
-    // mov r8, [r14 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VKey, r8);
-    // mov r9b, 0x1
-    rt.asm.mov(r9b, 0x1).unwrap();
+    // mov r8b, 0x1
+    rt.asm.mov(r8b, 0x1).unwrap();
     // call ...
     stack::call_with_label(rt, rt.func_labels[&FnDef::VmCrypt], &execute_loop);
 
@@ -104,10 +102,8 @@ pub fn build(rt: &mut Runtime) {
         utils::vreg::load_reg(rt, r12, VMReg::BPointer, rcx);
         // mov rdx, [r14 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::BLength, rdx);
-        // mov r8, [r14 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::VKey, r8);
-        // xor r9b, r9b
-        rt.asm.xor(r9b, r9b).unwrap();
+        // xor r8b, r8b
+        rt.asm.xor(r8b, r8b).unwrap();
         // call ...
         stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 
