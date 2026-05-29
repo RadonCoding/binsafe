@@ -8,6 +8,7 @@ use crate::vm::encoders::jcc::{VMCondition, VMLogic, VMTest};
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
+use crate::vm::encoders::ret::Ret;
 use crate::vm::encoders::{jcc::Jcc, Encode};
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
@@ -67,6 +68,8 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 Box::new(call_always()),
             ])
         }
+
+        Code::Retnq => Some(vec![Box::new(Ret)]),
 
         Code::Call_rm64 => match instruction.op0_kind() {
             OpKind::Register => Some(vec![
@@ -213,7 +216,7 @@ fn call_always() -> Jcc {
     }
 }
 
-fn cmp(lhs: VMFlag, rhs: u8) -> VMCondition {
+pub fn cmp(lhs: VMFlag, rhs: u8) -> VMCondition {
     VMCondition {
         test: VMTest::CMP,
         lhs: lhs as u8,
@@ -221,7 +224,7 @@ fn cmp(lhs: VMFlag, rhs: u8) -> VMCondition {
     }
 }
 
-fn eq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
+pub fn eq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
     VMCondition {
         test: VMTest::EQ,
         lhs: lhs as u8,
@@ -229,7 +232,7 @@ fn eq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
     }
 }
 
-fn neq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
+pub fn neq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
     VMCondition {
         test: VMTest::NEQ,
         lhs: lhs as u8,

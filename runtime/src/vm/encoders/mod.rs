@@ -15,6 +15,10 @@ pub enum Effect {
 pub trait Encode: Debug + Any {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8>;
 
+    fn size(&mut self, mapper: &mut Mapper) -> usize {
+        self.encode(mapper).len()
+    }
+
     fn reads(&self) -> Vec<Effect> {
         vec![]
     }
@@ -103,6 +107,8 @@ pub mod load_address;
 pub mod load_immediate;
 pub mod load_memory;
 pub mod load_register;
+pub mod ret;
+pub mod skip;
 pub mod store_memory;
 pub mod store_register;
 pub mod sub;

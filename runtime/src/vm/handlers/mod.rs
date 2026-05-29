@@ -15,6 +15,7 @@ pub mod load_address;
 pub mod load_immediate;
 pub mod load_memory;
 pub mod load_register;
+pub mod ret;
 pub mod store_memory;
 pub mod store_register;
 pub mod sub;
@@ -22,6 +23,7 @@ pub mod sub;
 pub fn initialize(rt: &mut Runtime) {
     let mut table = [
         (VMOp::Jcc, FnDef::VmHandlerJcc),
+        (VMOp::Ret, FnDef::VmHandlerRet),
         (VMOp::LoadImmediate, FnDef::VmHandlerLoadImmediate),
         (VMOp::LoadRegister, FnDef::VmHandlerLoadRegister),
         (VMOp::LoadMemory, FnDef::VmHandlerLoadMemory),

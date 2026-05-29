@@ -17,6 +17,9 @@ mapped! {
 
         CAND, // CALL AND
         COR,// CALL OR
+
+        SAND, // SKIP AND
+        SOR,  // SKIP OR
     }
 }
 
@@ -58,6 +61,9 @@ impl Encode for Jcc {
     }
 
     fn writes(&self) -> Vec<super::Effect> {
-        vec![Effect::Register(VMReg::NBranch)]
+        match self.logic {
+            VMLogic::SAND | VMLogic::SOR => vec![],
+            _ => vec![Effect::Register(VMReg::NBranch)],
+        }
     }
 }
