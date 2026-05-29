@@ -209,14 +209,16 @@ fn writes_flags(atom: &Atom) -> bool {
         .any(|op| op.writes().iter().any(|e| matches!(e, Effect::Flags)))
 }
 
-/// Returns true if the atom contains a [`LoadMemory`] operation.
-fn reads_memory(atom: &Atom) -> bool {
-    atom.iter()
-        .any(|op| (**op).type_id() == TypeId::of::<LoadMemory>())
+/// Returns true if any operation in the slice is a [`LoadMemory`].
+fn reads_memory(operations: &[Box<dyn Encode>]) -> bool {
+    operations
+        .iter()
+        .any(|operation| (**operation).type_id() == TypeId::of::<LoadMemory>())
 }
 
-/// Returns true if the atom contains a [`StoreMemory`] operation.
-fn writes_memory(atom: &Atom) -> bool {
-    atom.iter()
-        .any(|op| (**op).type_id() == TypeId::of::<StoreMemory>())
+/// Returns true if any operation in the slice is a [`StoreMemory`].
+fn writes_memory(operations: &[Box<dyn Encode>]) -> bool {
+    operations
+        .iter()
+        .any(|operation| (**operation).type_id() == TypeId::of::<StoreMemory>())
 }

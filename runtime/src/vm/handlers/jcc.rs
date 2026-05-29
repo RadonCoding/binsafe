@@ -20,7 +20,8 @@ pub fn build(rt: &mut Runtime) {
     let mut continue_loop = rt.asm.create_label();
 
     let mut check_result = rt.asm.create_label();
-    let mut store_caller = rt.asm.create_label();
+    let mut handle_call = rt.asm.create_label();
+    let mut handle_skip = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // push r12
@@ -53,6 +54,15 @@ pub fn build(rt: &mut Runtime) {
     // cmp r13b, ...
     rt.asm
         .cmp(r13b, rt.mapper.index(VMLogic::CAND) as i32)
+        .unwrap();
+    // sete r15b
+    rt.asm.sete(r15b).unwrap();
+    // je ...
+    rt.asm.je(condition_loop).unwrap();
+
+    // cmp r13b, ...
+    rt.asm
+        .cmp(r13b, rt.mapper.index(VMLogic::SAND) as i32)
         .unwrap();
     // sete r15b
     rt.asm.sete(r15b).unwrap();
@@ -162,6 +172,13 @@ pub fn build(rt: &mut Runtime) {
             // je ...
             rt.asm.je(is_or).unwrap();
 
+            // cmp r13b, ...
+            rt.asm
+                .cmp(r13b, rt.mapper.index(VMLogic::SOR) as i32)
+                .unwrap();
+            // je ...
+            rt.asm.je(is_or).unwrap();
+
             // and r15b, r8b
             rt.asm.and(r15b, r8b).unwrap();
             // jmp ...
@@ -193,6 +210,20 @@ pub fn build(rt: &mut Runtime) {
         // jz ...
         rt.asm.jz(epilogue).unwrap();
 
+        // cmp r13b, ...
+        rt.asm
+            .cmp(r13b, rt.mapper.index(VMLogic::SAND) as i32)
+            .unwrap();
+        // je ...
+        rt.asm.je(handle_skip).unwrap();
+
+        // cmp r13b, ...
+        rt.asm
+            .cmp(r13b, rt.mapper.index(VMLogic::SOR) as i32)
+            .unwrap();
+        // je ...
+        rt.asm.je(handle_skip).unwrap();
+
         // mov [rcx + ...], rax
         utils::vreg::store_reg(rt, rcx, rax, VMReg::NBranch);
 
@@ -201,7 +232,7 @@ pub fn build(rt: &mut Runtime) {
             .cmp(r13b, rt.mapper.index(VMLogic::CAND) as i32)
             .unwrap();
         // je ...
-        rt.asm.je(store_caller).unwrap();
+        rt.asm.je(handle_call).unwrap();
 
         // cmp r13b, ...
         rt.asm
@@ -211,7 +242,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jne(epilogue).unwrap();
     }
 
-    rt.asm.set_label(&mut store_caller).unwrap();
+    rt.asm.set_label(&mut handle_call).unwrap();
     {
         // sub [rcx + ...], 0x8
         utils::vreg::sub_imm(rt, rcx, 0x8, VMReg::Rsp);
@@ -219,6 +250,14 @@ pub fn build(rt: &mut Runtime) {
         utils::vreg::load_reg(rt, rcx, VMReg::NExit, r8);
         // mov rax, [rcx + ...]; mov [rax], r8
         utils::vreg::store_mem(rt, rcx, VMReg::Rsp, rax, r8);
+        // jmp ...
+        rt.asm.jmp(epilogue).unwrap();
+    }
+
+    rt.asm.set_label(&mut handle_skip).unwrap();
+    {
+        // add rdx, rax
+        rt.asm.add(rdx, rax).unwrap();
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();

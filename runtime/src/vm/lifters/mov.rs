@@ -83,38 +83,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
         }
 
         Code::Mov_r64_rm64 | Code::Mov_r32_rm32 | Code::Mov_r16_rm16 | Code::Mov_r8_rm8 => {
-            let destination_register = instruction.op0_register();
-            let destination_width = VMWidth::from(destination_register);
-            let destination = VMReg::from(destination_register);
-
-            match instruction.op1_kind() {
-                OpKind::Register => {
-                    let source_register = instruction.op1_register();
-                    Some(vec![
-                        Box::new(LoadRegister {
-                            width: VMWidth::from(source_register),
-                            source: VMReg::from(source_register),
-                        }),
-                        Box::new(StoreRegister {
-                            width: destination_width,
-                            destination,
-                        }),
-                    ])
-                }
-                OpKind::Memory => Some(vec![
-                    Box::new(LoadAddress {
-                        source: VMMem::from(instruction),
-                    }),
-                    Box::new(LoadMemory {
-                        width: destination_width,
-                    }),
-                    Box::new(StoreRegister {
-                        width: destination_width,
-                        destination,
-                    }),
-                ]),
-                _ => None,
-            }
+            r_rm(instruction)
         }
 
         Code::Mov_rm64_r64 | Code::Mov_rm32_r32 | Code::Mov_rm16_r16 | Code::Mov_rm8_r8 => {
@@ -151,6 +120,41 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 _ => None,
             }
         }
+        _ => None,
+    }
+}
+
+pub fn r_rm(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+    let destination_register = instruction.op0_register();
+    let destination_width = VMWidth::from(destination_register);
+    let destination = VMReg::from(destination_register);
+
+    match instruction.op1_kind() {
+        OpKind::Register => {
+            let source_register = instruction.op1_register();
+            Some(vec![
+                Box::new(LoadRegister {
+                    width: VMWidth::from(source_register),
+                    source: VMReg::from(source_register),
+                }),
+                Box::new(StoreRegister {
+                    width: destination_width,
+                    destination,
+                }),
+            ])
+        }
+        OpKind::Memory => Some(vec![
+            Box::new(LoadAddress {
+                source: VMMem::from(instruction),
+            }),
+            Box::new(LoadMemory {
+                width: destination_width,
+            }),
+            Box::new(StoreRegister {
+                width: destination_width,
+                destination,
+            }),
+        ]),
         _ => None,
     }
 }

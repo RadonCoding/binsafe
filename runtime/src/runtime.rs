@@ -30,6 +30,7 @@ pub enum FnDef {
     /* VM HANDLERS */
     VmHandlersInitialize,
     VmHandlerJcc,
+    VmHandlerRet,
     VmHandlerLoadImmediate,
     VmHandlerLoadRegister,
     VmHandlerLoadMemory,
@@ -337,6 +338,7 @@ impl Runtime {
             (FnDef::VmCleanup, vm::functions::cleanup::build),
             (FnDef::VmHandlersInitialize, vm::handlers::initialize),
             (FnDef::VmHandlerJcc, vm::handlers::jcc::build),
+            (FnDef::VmHandlerRet, vm::handlers::ret::build),
             (
                 FnDef::VmHandlerLoadImmediate,
                 vm::handlers::load_immediate::build,

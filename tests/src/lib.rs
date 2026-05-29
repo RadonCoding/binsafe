@@ -283,13 +283,13 @@ mod tests {
     fn test_crypt() {
         let mut buffer = vec![0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE];
 
-        let original = buffer.clone();
+        let before = buffer.clone();
 
         encrypt(&mut buffer);
 
-        let result = decrypt(&mut buffer);
+        let after = decrypt(&mut buffer);
 
-        assert_eq!(original, result);
+        assert_eq!(before, after);
     }
 
     #[test]
@@ -555,6 +555,426 @@ mod tests {
             &[(VMReg::Rax, 0x1111_1111), (VMReg::Rbx, 0x1111_1111)],
             VMReg::NBranch,
             0x1111_1111,
+        );
+    }
+
+    #[test]
+    fn test_cmov() {
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmove_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmove_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovne_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovne_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmova_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmova_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovae_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x2222_2222).unwrap(),
+                Instruction::with2(Code::Cmovae_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x2222_2222).unwrap(),
+                Instruction::with2(Code::Cmovb_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovb_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovbe_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovbe_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovg_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovg_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovge_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x2222_2222).unwrap(),
+                Instruction::with2(Code::Cmovge_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x2222_2222).unwrap(),
+                Instruction::with2(Code::Cmovl_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovl_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovle_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovle_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, -0x1).unwrap(),
+                Instruction::with2(Code::Cmovo_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x7FFF_FFFF_FFFF_FFFF),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovo_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovno_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, -0x1).unwrap(),
+                Instruction::with2(Code::Cmovno_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x7FFF_FFFF_FFFF_FFFF),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovp_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x2222_2222).unwrap(),
+                Instruction::with2(Code::Cmovp_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x2222_2222).unwrap(),
+                Instruction::with2(Code::Cmovnp_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovnp_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x2222_2222).unwrap(),
+                Instruction::with2(Code::Cmovs_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovs_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x1111_1111).unwrap(),
+                Instruction::with2(Code::Cmovns_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x2222_2222),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x1111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(Code::Cmp_rm64_imm32, Register::RAX, 0x2222_2222).unwrap(),
+                Instruction::with2(Code::Cmovns_r64_rm64, Register::RBX, Register::RCX).unwrap(),
+            ],
+            &[
+                (VMReg::Rax, 0x1111_1111),
+                (VMReg::Rbx, 0x2222_2222),
+                (VMReg::Rcx, 0x1111_1111),
+            ],
+            VMReg::Rbx,
+            0x2222_2222,
         );
     }
 

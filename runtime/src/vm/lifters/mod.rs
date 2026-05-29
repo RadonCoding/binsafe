@@ -1,5 +1,6 @@
 pub mod add;
 pub mod arithmetic;
+pub mod cmov;
 pub mod cmp;
 pub mod jcc;
 pub mod lea;

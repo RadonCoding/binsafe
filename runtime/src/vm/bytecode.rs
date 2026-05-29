@@ -5,11 +5,12 @@ use strum_macros::EnumIter;
 
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
-use crate::vm::lifters::{add, cmp, jcc, lea, mov, sub};
+use crate::vm::lifters::{add, cmov, cmp, jcc, lea, mov, sub};
 
 mapped! {
     VMOp {
         Jcc,
+        Ret,
         // Load
         LoadImmediate,
         LoadRegister,
@@ -209,7 +210,24 @@ pub fn convert(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
             | Mnemonic::Jp
             | Mnemonic::Js
             | Mnemonic::Jmp
-            | Mnemonic::Call => jcc::encode(instruction)?,
+            | Mnemonic::Call
+            | Mnemonic::Ret => jcc::encode(instruction)?,
+            Mnemonic::Cmove
+            | Mnemonic::Cmovne
+            | Mnemonic::Cmova
+            | Mnemonic::Cmovae
+            | Mnemonic::Cmovb
+            | Mnemonic::Cmovbe
+            | Mnemonic::Cmovg
+            | Mnemonic::Cmovge
+            | Mnemonic::Cmovl
+            | Mnemonic::Cmovle
+            | Mnemonic::Cmovno
+            | Mnemonic::Cmovnp
+            | Mnemonic::Cmovns
+            | Mnemonic::Cmovo
+            | Mnemonic::Cmovp
+            | Mnemonic::Cmovs => cmov::encode(instruction)?,
             Mnemonic::Add => add::encode(instruction)?,
             Mnemonic::Sub => sub::encode(instruction)?,
             Mnemonic::Cmp => cmp::encode(instruction)?,
