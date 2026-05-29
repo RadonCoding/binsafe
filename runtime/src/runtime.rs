@@ -91,7 +91,6 @@ pub enum StringDef {
     Ntdll,
     KERNEL32,
     KERNELBASE,
-    NtQueryInformationProcess,
     RtlAddVectoredExceptionHandler,
     TlsAlloc,
     RtlFlsAlloc,
@@ -105,7 +104,6 @@ pub enum StringDef {
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
 pub enum ImportDef {
-    NtQueryInformationProcess,
     RtlAddVectoredExceptionHandler,
     TlsAlloc,
     RtlFlsAlloc,
@@ -120,9 +118,6 @@ pub enum ImportDef {
 impl ImportDef {
     pub fn get(&self) -> (StringDef, StringDef) {
         match self {
-            ImportDef::NtQueryInformationProcess => {
-                (StringDef::Ntdll, StringDef::NtQueryInformationProcess)
-            }
             ImportDef::RtlAddVectoredExceptionHandler => {
                 (StringDef::Ntdll, StringDef::RtlAddVectoredExceptionHandler)
             }
@@ -399,10 +394,6 @@ impl Runtime {
         self.define_string(StringDef::Ntdll, "ntdll.dll");
         self.define_string(StringDef::KERNEL32, "KERNEL32.DLL");
         self.define_string(StringDef::KERNELBASE, "KERNELBASE.DLL");
-        self.define_string(
-            StringDef::NtQueryInformationProcess,
-            "NtQueryInformationProcess",
-        );
         self.define_string(
             StringDef::RtlAddVectoredExceptionHandler,
             "RtlAddVectoredExceptionHandler",

@@ -1,12 +1,8 @@
-mod engine;
-mod exceptions;
-mod protections;
-
 use clap::Parser;
 use logger::info;
 use std::{fs, path::PathBuf};
 
-use crate::{
+use obfuscator::{
     engine::Engine,
     protections::{mutation::Mutation, virtualization::Virtualization},
 };

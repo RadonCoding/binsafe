@@ -6,6 +6,7 @@ mod tests {
         code_asm::{ecx, esi, ptr, qword_ptr, rax, rcx, rdi, rdx, rsi},
         Code, Instruction, MemoryOperand, Register,
     };
+    use obfuscator::protections::virtualization::crypt;
     use runtime::{
         mapper::Mappable,
         runtime::{DataDef, FnDef, Runtime},
@@ -60,10 +61,8 @@ mod tests {
 
     impl Executor {
         pub const TEST_KEY_SEED: u64 = 0x1234567890ABCDEF;
-        pub const TEST_KEY_MUL: u64 = 0xFEDCBA0987654321;
-        pub const TEST_KEY_ADD: u64 = 0x0123456789ABCDEF;
-
-        pub const TEST_VSK: u8 = 0x4C;
+        pub const TEST_KEY_MUL: u64 = 0x1234567890ABCDEF;
+        pub const TEST_KEY_ADD: u64 = 0x1234567890ABCDEF;
 
         pub const SIZE: usize = 0x10000;
 
@@ -129,17 +128,6 @@ mod tests {
                 )
                 .unwrap();
 
-            // mov rax, ...
-            self.rt
-                .asm
-                .mov(rax, &Self::TEST_VSK as *const u8 as u64)
-                .unwrap();
-            // mov [rcx + ...], rax
-            self.rt
-                .asm
-                .mov(ptr(rcx + self.rt.mapper.index(VMReg::VKey) * 8), rax)
-                .unwrap();
-
             // lea rdx, [...]
             self.rt
                 .asm
@@ -203,50 +191,24 @@ mod tests {
     }
 
     fn encrypt(bytecode: &mut Vec<u8>) {
-        let mut key = Executor::TEST_KEY_SEED;
-
-        let length = TryInto::<u16>::try_into(bytecode.len()).unwrap();
-
-        while bytecode.len() % 8 != 0 {
-            bytecode.push(0);
-        }
-
-        for chunk in bytecode.chunks_exact_mut(8) {
-            let mut qword = u64::from_le_bytes(chunk.try_into().unwrap());
-            qword ^= key;
-            chunk.copy_from_slice(&qword.to_le_bytes());
-
-            key ^= (qword ^ (Executor::TEST_VSK as u64)) as u64;
-            key = key
-                .wrapping_mul(Executor::TEST_KEY_MUL)
-                .wrapping_add(Executor::TEST_KEY_ADD);
-        }
-
-        bytecode.splice(0..0, length.to_le_bytes());
-        bytecode.push(0);
+        crypt::encrypt(
+            bytecode,
+            Executor::TEST_KEY_SEED,
+            Executor::TEST_KEY_MUL,
+            Executor::TEST_KEY_ADD,
+            0,
+            &mut rand::thread_rng(),
+        );
     }
 
-    fn decrypt(block: &mut Vec<u8>) -> Vec<u8> {
-        let mut key = Executor::TEST_KEY_SEED;
-
-        let length =
-            u16::from_le_bytes(block.drain(0..2).collect::<Vec<u8>>().try_into().unwrap()) as usize;
-
-        block.pop();
-
-        for chunk in block.chunks_exact_mut(8) {
-            let qword = u64::from_le_bytes(chunk.try_into().unwrap());
-            let original = qword ^ key;
-            chunk.copy_from_slice(&original.to_le_bytes());
-
-            key ^= (qword ^ (Executor::TEST_VSK as u64)) as u64;
-            key = key
-                .wrapping_mul(Executor::TEST_KEY_MUL)
-                .wrapping_add(Executor::TEST_KEY_ADD);
-        }
-
-        block.truncate(length);
-        block.clone()
+    fn decrypt(block: &mut Vec<u8>) {
+        crypt::decrypt(
+            block,
+            Executor::TEST_KEY_SEED,
+            Executor::TEST_KEY_MUL,
+            Executor::TEST_KEY_ADD,
+            0,
+        )
     }
 
     fn template(
@@ -289,7 +251,9 @@ mod tests {
 
         encrypt(&mut buffer);
 
-        let after = decrypt(&mut buffer);
+        decrypt(&mut buffer);
+
+        let after = buffer.clone();
 
         assert_eq!(before, after);
     }

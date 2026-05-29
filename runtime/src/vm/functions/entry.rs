@@ -2,7 +2,7 @@ use iced_x86::code_asm::{ecx, ptr, r12, r12b, r12d, rax, rcx, rdi, rdx, rsi, rsp
 
 use crate::{
     mapper::Mappable as _,
-    runtime::{DataDef, FnDef, ImportDef, Runtime},
+    runtime::{DataDef, FnDef, Runtime},
     vm::{
         bytecode::VMReg,
         utils::{self, lock, stack},
@@ -109,15 +109,21 @@ pub fn build(rt: &mut Runtime) {
     // mov [r12 + ...], rax
     utils::vreg::store_reg(rt, r12, rax, VMReg::VImage);
 
-    // lea rcx, [...]; lea rdx, [...]; call ...
-    rt.resolve(ImportDef::NtQueryInformationProcess);
-    // mov [...], rax
-    utils::vreg::store_reg(rt, r12, rax, VMReg::VKey);
-
     // call ...
     rt.asm
         .call(rt.func_labels[&FnDef::VmHandlersInitialize])
         .unwrap();
+
+    // mov [r12 + ...], -0x1
+    utils::vreg::store_imm(rt, r12, -0x1, VMReg::NEntry);
+    // mov rcx, r12
+    rt.asm.mov(rcx, r12).unwrap();
+    // lea rdx, [...]
+    rt.asm
+        .lea(rdx, ptr(rt.data_labels[&DataDef::VmCode]))
+        .unwrap();
+    // call ...
+    stack::call(rt, rt.func_labels[&FnDef::VmDispatch]);
 
     lock::release_global(rt);
 

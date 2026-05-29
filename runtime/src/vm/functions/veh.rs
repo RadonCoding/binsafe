@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, byte_ptr, eax, ecx, ptr, r12, r13, r14, r8, r9b, rax, rcx, rdx, rsp};
+use iced_x86::code_asm::{al, byte_ptr, eax, ecx, ptr, r12, r13, r14, r8b, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{BoolDef, DataDef, FnDef, ImportDef, Runtime},
@@ -142,10 +142,8 @@ pub fn handler(rt: &mut Runtime) {
     utils::vreg::load_reg(rt, rax, VMReg::BPointer, rcx);
     // mov rdx, [rax + ...]
     utils::vreg::load_reg(rt, rax, VMReg::BLength, rdx);
-    // mov r8, [r14 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VKey, r8);
-    // xor r9b, r9b
-    rt.asm.xor(r9b, r9b).unwrap();
+    // xor r8b, r8b
+    rt.asm.xor(r8b, r8b).unwrap();
     // call ...
     stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 
