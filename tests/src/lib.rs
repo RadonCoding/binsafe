@@ -12,6 +12,7 @@ mod tests {
         vm::{
             self,
             bytecode::{self, VMFlag, VMReg},
+            permute,
         },
     };
     use windows::Win32::System::{
@@ -256,7 +257,8 @@ mod tests {
     ) {
         let mut executor = Executor::new();
 
-        let mut operations = bytecode::convert(&instructions).unwrap();
+        let lifted = bytecode::lift(&instructions).unwrap();
+        let mut operations = permute::permute(lifted);
         let mut bytecode = bytecode::assemble(&mut executor.rt.mapper, &mut operations);
 
         encrypt(&mut bytecode);

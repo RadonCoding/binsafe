@@ -15,4 +15,8 @@ impl Encode for StoreMemory {
     fn reads(&self) -> Vec<super::Effect> {
         vec![Effect::Scratch, Effect::Scratch]
     }
+
+    fn writes(&self) -> Vec<Effect> {
+        vec![Effect::Memory]
+    }
 }

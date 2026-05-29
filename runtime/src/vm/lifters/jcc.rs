@@ -3,8 +3,7 @@ use rand::seq::SliceRandom;
 use rand::Rng;
 use strum::IntoEnumIterator;
 
-use crate::vm::bytecode::{VMFlag, VMMem, VMReg, VMSeg, VMWidth};
-use crate::vm::encoders::jcc::{VMCondition, VMLogic, VMTest};
+use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMTest, VMWidth};
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;

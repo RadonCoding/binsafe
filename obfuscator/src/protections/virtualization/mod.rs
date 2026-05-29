@@ -46,19 +46,19 @@ impl Protection for Virtualization {
                 continue;
             }
 
-            let operations = match bytecode::convert(&block.instructions) {
+            let lifted = match bytecode::lift(&block.instructions) {
                 Some(operations) if !operations.is_empty() => operations,
                 _ => continue 'outer,
             };
 
             #[cfg(debug_assertions)]
-            let lifted = operations
+            let before = lifted
                 .iter()
                 .map(|operation| format!("    {}", operation))
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            let mut operations = permute::permute(operations);
+            let mut operations = permute::permute(lifted);
 
             #[cfg(debug_assertions)]
             {
@@ -71,20 +71,20 @@ impl Protection for Virtualization {
                 }
 
                 if log {
-                    let before = block
+                    let instructions = block
                         .instructions
                         .iter()
                         .map(|instruction| format!("    {}", instruction))
                         .collect::<Vec<String>>()
                         .join("\n");
-                    let permuted = operations
+                    let after = operations
                         .iter()
                         .map(|operation| format!("    {}", operation))
                         .collect::<Vec<String>>()
                         .join("\n");
                     debug!(
                         "VIRTUALIZED @ 0x{:08X}:\n  BEFORE:\n{}\n  LIFTED:\n{}\n  PERMUTED:\n{}",
-                        block.rva, before, lifted, permuted
+                        block.rva, instructions, before, after
                     );
                 }
             }

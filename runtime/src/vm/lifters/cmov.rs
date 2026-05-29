@@ -1,7 +1,6 @@
 use iced_x86::{Code, Instruction};
 
-use crate::vm::bytecode::VMFlag;
-use crate::vm::encoders::jcc::VMLogic;
+use crate::vm::bytecode::{VMFlag, VMLogic};
 use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::jcc::{cmp, eq, neq};

@@ -188,7 +188,41 @@ impl From<&Instruction> for VMMem {
     }
 }
 
-pub fn convert(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
+mapped! {
+    VMTest {
+        CMP,
+        EQ,
+        NEQ,
+    }
+}
+
+mapped! {
+    VMLogic {
+        JAND, // JUMP AND
+        JOR, // JUMP OR
+
+        CAND, // CALL AND
+        COR,// CALL OR
+
+        SAND, // SKIP AND
+        SOR,  // SKIP OR
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VMCondition {
+    pub test: VMTest,
+    pub lhs: u8,
+    pub rhs: u8,
+}
+
+impl Encode for VMCondition {
+    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+        vec![mapper.index(self.test), self.lhs, self.rhs]
+    }
+}
+
+pub fn lift(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
     let mut output: Vec<Box<dyn Encode>> = Vec::new();
 
     for instruction in instructions {

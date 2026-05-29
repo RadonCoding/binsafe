@@ -4,9 +4,7 @@ use std::collections::HashSet;
 use std::mem;
 
 use crate::vm::bytecode::{VMReg, VMWidth};
-use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
-use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{Effect, Encode};
 
@@ -146,15 +144,24 @@ fn cleanup(operations: &mut Vec<Box<dyn Encode>>) {
     }
 }
 
-/// If atoms have a read/write or write/write conflict on any register or memory.
+/// If atoms have a read/write or write/write conflict on any register, memory, or flags.
 fn conflicts(a: &Atom, b: &Atom) -> bool {
     let (ar, aw) = registers(a);
     let (br, bw) = registers(b);
+    // a writes a register b reads
     !aw.is_disjoint(&br)
+        // a reads a register b writes
         || !ar.is_disjoint(&bw)
+        // both write the same register
         || !aw.is_disjoint(&bw)
+        // a writes memory b reads or writes
         || (writes_memory(a) && (reads_memory(b) || writes_memory(b)))
+        // a reads memory b writes
         || (reads_memory(a) && writes_memory(b))
+        // a writes flags b reads or writes
+        || (writes_flags(a) && (reads_flags(b) || writes_flags(b)))
+        // a reads flags b writes
+        || (reads_flags(a) && writes_flags(b))
 }
 
 /// Collects all [`VMReg`]s read and written across all operations in an atom.
@@ -203,22 +210,26 @@ fn is_branch(atom: &Atom) -> bool {
     })
 }
 
+/// Returns true if any operation in the atom reads [`Effect::Flags`].
+fn reads_flags(atom: &Atom) -> bool {
+    atom.iter()
+        .any(|op| op.reads().iter().any(|e| matches!(e, Effect::Flags)))
+}
+
 /// Returns true if any operation in the atom writes [`Effect::Flags`].
 fn writes_flags(atom: &Atom) -> bool {
     atom.iter()
         .any(|op| op.writes().iter().any(|e| matches!(e, Effect::Flags)))
 }
 
-/// Returns true if any operation in the slice is a [`LoadMemory`].
-fn reads_memory(operations: &[Box<dyn Encode>]) -> bool {
-    operations
-        .iter()
-        .any(|operation| (**operation).type_id() == TypeId::of::<LoadMemory>())
+/// Returns true if any operation in the atom reads [`Effect::Memory`].
+fn reads_memory(atom: &Atom) -> bool {
+    atom.iter()
+        .any(|op| op.reads().iter().any(|e| matches!(e, Effect::Memory)))
 }
 
-/// Returns true if any operation in the slice is a [`StoreMemory`].
-fn writes_memory(operations: &[Box<dyn Encode>]) -> bool {
-    operations
-        .iter()
-        .any(|operation| (**operation).type_id() == TypeId::of::<StoreMemory>())
+/// Returns true if any operation in the atom writes [`Effect::Memory`].
+fn writes_memory(atom: &Atom) -> bool {
+    atom.iter()
+        .any(|op| op.writes().iter().any(|e| matches!(e, Effect::Memory)))
 }

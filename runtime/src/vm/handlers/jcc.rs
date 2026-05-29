@@ -1,4 +1,4 @@
-use crate::vm::encoders::jcc::{VMLogic, VMTest};
+use crate::vm::bytecode::{VMLogic, VMTest};
 use crate::vm::utils::{self, stack};
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
 use iced_x86::code_asm::{
