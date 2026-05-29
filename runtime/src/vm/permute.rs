@@ -129,7 +129,8 @@ fn cleanup(operations: &mut Vec<Box<dyn Encode>>) {
             let reads = op1.reads();
             let writes = op2.writes();
 
-            if let (Some(Effect::Reg(r1)), Some(Effect::Reg(r2))) = (reads.first(), writes.first())
+            if let (Some(Effect::Register(r1)), Some(Effect::Register(r2))) =
+                (reads.first(), writes.first())
             {
                 if r1 == r2 {
                     operations.drain(i..i + 2);
@@ -160,16 +161,17 @@ fn conflicts(a: &Atom, b: &Atom) -> bool {
 fn registers(atom: &Atom) -> (HashSet<VMReg>, HashSet<VMReg>) {
     let mut reads = HashSet::new();
     let mut writes = HashSet::new();
+
     for op in atom {
         for effect in op.reads() {
-            if let Effect::Reg(r) = effect {
+            if let Effect::Register(r) = effect {
                 if r != VMReg::None {
                     reads.insert(r);
                 }
             }
         }
         for effect in op.writes() {
-            if let Effect::Reg(r) = effect {
+            if let Effect::Register(r) = effect {
                 if r != VMReg::None {
                     writes.insert(r);
                 }
@@ -197,7 +199,7 @@ fn is_branch(atom: &Atom) -> bool {
     atom.iter().any(|op| {
         op.writes()
             .iter()
-            .any(|e| matches!(e, Effect::Reg(VMReg::NBranch)))
+            .any(|e| matches!(e, Effect::Register(VMReg::NBranch)))
     })
 }
 

@@ -18,7 +18,7 @@ impl Encode for LoadRegister {
     }
 
     fn reads(&self) -> Vec<super::Effect> {
-        vec![Effect::Reg(self.source)]
+        vec![Effect::Register(self.source)]
     }
 
     fn writes(&self) -> Vec<super::Effect> {

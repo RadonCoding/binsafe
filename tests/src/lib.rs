@@ -409,6 +409,40 @@ mod tests {
     }
 
     #[test]
+    fn test_jmp() {
+        let mut buffer = [0u64; 8];
+        let memory = buffer.as_mut_ptr() as u64;
+
+        template(
+            &[Instruction::with1(Code::Jmp_rm64, Register::RAX).unwrap()],
+            &[(VMReg::Rax, 0x1111_1111)],
+            VMReg::NBranch,
+            0x1111_1111,
+        );
+        template(
+            &[Instruction::with_branch(Code::Jmp_rel32_64, 0x1111_1111).unwrap()],
+            &[(VMReg::VImage, 0x1000_0000)],
+            VMReg::NBranch,
+            0x2111_1111,
+        );
+        template(
+            &[
+                Instruction::with2(
+                    Code::Mov_rm64_imm32,
+                    MemoryOperand::with_base(Register::RAX),
+                    0x1111_1111,
+                )
+                .unwrap(),
+                Instruction::with1(Code::Jmp_rm64, MemoryOperand::with_base(Register::RAX))
+                    .unwrap(),
+            ],
+            &[(VMReg::Rax, memory)],
+            VMReg::NBranch,
+            0x1111_1111,
+        );
+    }
+
+    #[test]
     fn test_lea() {
         template(
             &[Instruction::with2(

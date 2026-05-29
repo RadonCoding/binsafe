@@ -12,10 +12,11 @@ mapped! {
 
 mapped! {
     VMLogic {
-        AND,
-        OR,
-        NAND,
-        NOR
+        JAND, // JUMP AND
+        JOR, // JUMP OR
+
+        CAND, // CALL AND
+        COR,// CALL OR
     }
 }
 
@@ -36,7 +37,6 @@ impl Encode for VMCondition {
 pub struct Jcc {
     pub logic: VMLogic,
     pub conditions: Vec<VMCondition>,
-    pub destination: u32,
 }
 
 impl Encode for Jcc {
@@ -50,15 +50,14 @@ impl Encode for Jcc {
         for condition in &mut self.conditions {
             bytes.extend_from_slice(&condition.encode(mapper));
         }
-        bytes.extend_from_slice(&self.destination.to_le_bytes());
         bytes
     }
 
     fn reads(&self) -> Vec<super::Effect> {
-        vec![Effect::Flags]
+        vec![Effect::Flags, Effect::Scratch]
     }
 
     fn writes(&self) -> Vec<super::Effect> {
-        vec![Effect::Reg(VMReg::NBranch)]
+        vec![Effect::Register(VMReg::NBranch)]
     }
 }

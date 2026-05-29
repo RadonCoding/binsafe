@@ -6,8 +6,8 @@ use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
-    Reg(VMReg),
-    Mem(VMMem, u8),
+    Register(VMReg),
+    Memory(VMMem, u8),
     Flags,
     Scratch,
 }
