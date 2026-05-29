@@ -1,6 +1,6 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::VMWidth;
-use crate::vm::encoders::jcc::{Jcc, VMCondition, VMLogic};
+use crate::vm::bytecode::{self, VMCondition, VMLogic, VMWidth};
+use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::{Effect, Encode};
 
@@ -13,30 +13,30 @@ pub struct Skip {
 
 impl Encode for Skip {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
-        let mut payload_bytes = Vec::new();
+        let mut payload = Vec::new();
+
         for op in &mut self.payload {
-            payload_bytes.extend(op.encode(mapper));
+            payload.extend(op.encode(mapper));
         }
 
-        let offset = u8::try_from(payload_bytes.len()).unwrap();
-
-        let mut load_imm = LoadImmediate {
+        let mut operations = Vec::<Box<dyn Encode>>::new();
+        operations.push(Box::new(LoadImmediate {
             width: VMWidth::Lower8,
-            source: vec![offset],
-        };
-        let mut jcc = Jcc {
+            source: vec![u8::try_from(payload.len()).unwrap()],
+        }));
+        operations.push(Box::new(Jcc {
             logic: self.logic,
             conditions: self.conditions.clone(),
-        };
+        }));
 
-        let mut bytes = load_imm.encode(mapper);
-        bytes.extend(jcc.encode(mapper));
-        bytes.extend(payload_bytes);
+        let mut bytes = bytecode::assemble(mapper, &mut operations);
+        bytes.extend(payload);
         bytes
     }
 
     fn reads(&self) -> Vec<Effect> {
         let mut effects = vec![Effect::Flags];
+
         for op in &self.payload {
             effects.extend(op.reads());
         }
@@ -45,6 +45,7 @@ impl Encode for Skip {
 
     fn writes(&self) -> Vec<Effect> {
         let mut effects = Vec::new();
+
         for op in &self.payload {
             effects.extend(op.writes());
         }

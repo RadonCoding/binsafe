@@ -2,12 +2,12 @@ use std::any::Any;
 use std::fmt::{self, Debug};
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
+use crate::vm::bytecode::{VMReg, VMWidth};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     Register(VMReg),
-    Memory(VMMem, u8),
+    Memory,
     Flags,
     Scratch,
 }
