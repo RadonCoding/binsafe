@@ -22,10 +22,10 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 Code::Mov_r64_imm64 => (VMWidth::Lower64, instruction.immediate64()),
                 _ => unreachable!(),
             };
-            let (width, size) = encode_immediate(value);
+            let (load_width, size) = encode_immediate(value);
             Some(vec![
                 Box::new(LoadImmediate {
-                    width,
+                    width: load_width,
                     source: value.to_le_bytes()[..size].to_vec(),
                 }),
                 Box::new(StoreRegister {
@@ -48,10 +48,10 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 Code::Mov_rm64_imm32 => (VMWidth::Lower64, instruction.immediate32to64() as u64),
                 _ => unreachable!(),
             };
-            let (width, size) = encode_immediate(value);
+            let (load_width, size) = encode_immediate(value);
             Some(vec![
                 Box::new(LoadImmediate {
-                    width,
+                    width: load_width,
                     source: value.to_le_bytes()[..size].to_vec(),
                 }),
                 Box::new(StoreRegister {
@@ -69,10 +69,10 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 Code::Mov_rm64_imm32 => (VMWidth::Lower64, instruction.immediate32to64() as u64),
                 _ => unreachable!(),
             };
-            let (width, size) = encode_immediate(value);
+            let (load_width, size) = encode_immediate(value);
             Some(vec![
                 Box::new(LoadImmediate {
-                    width,
+                    width: load_width,
                     source: value.to_le_bytes()[..size].to_vec(),
                 }),
                 Box::new(LoadAddress {

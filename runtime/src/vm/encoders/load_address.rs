@@ -16,8 +16,8 @@ impl Encode for LoadAddress {
 
     fn reads(&self) -> Vec<Effect> {
         vec![
-            Effect::Reg(self.source.base),
-            Effect::Reg(self.source.index),
+            Effect::Register(self.source.base),
+            Effect::Register(self.source.index),
         ]
     }
 

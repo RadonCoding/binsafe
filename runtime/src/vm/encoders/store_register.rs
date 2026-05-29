@@ -22,6 +22,6 @@ impl Encode for StoreRegister {
     }
 
     fn writes(&self) -> Vec<super::Effect> {
-        vec![Effect::Reg(self.destination)]
+        vec![Effect::Register(self.destination)]
     }
 }

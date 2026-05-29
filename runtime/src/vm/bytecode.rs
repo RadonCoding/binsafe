@@ -1,6 +1,7 @@
 use core::panic;
 
 use iced_x86::{Instruction, Mnemonic, Register};
+use strum_macros::EnumIter;
 
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
@@ -28,7 +29,7 @@ mapped! {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum VMFlag {
     Carry = 0,      // CF
     Parity = 2,     // PF
@@ -206,7 +207,9 @@ pub fn convert(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
             | Mnemonic::Jns
             | Mnemonic::Jo
             | Mnemonic::Jp
-            | Mnemonic::Js => jcc::encode(instruction)?,
+            | Mnemonic::Js
+            | Mnemonic::Jmp
+            | Mnemonic::Call => jcc::encode(instruction)?,
             Mnemonic::Add => add::encode(instruction)?,
             Mnemonic::Sub => sub::encode(instruction)?,
             Mnemonic::Cmp => cmp::encode(instruction)?,
