@@ -1,78 +1,34 @@
 use rand::Rng;
+use std::any::TypeId;
 use std::collections::HashSet;
 use std::mem;
 
 use crate::vm::bytecode::{VMReg, VMWidth};
+use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
+use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{Effect, Encode};
 
 type Atom = Vec<Box<dyn Encode>>;
 
+/// Shuffles operations into a randomized but semantically equivalent sequence.
 pub fn permute(operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
     let mut atoms = atomize(operations);
 
     preserve(&mut atoms);
 
-    let mut operations: Vec<Box<dyn Encode>> = schedule(atoms).into_iter().flatten().collect();
+    let mut operations = schedule(atoms).into_iter().flatten().collect();
 
     cleanup(&mut operations);
 
     operations
 }
 
-fn cleanup(operations: &mut Vec<Box<dyn Encode>>) {
-    let mut i = 0;
-
-    while i + 4 <= operations.len() {
-        if is_save_restore(&operations[i..i + 4]) {
-            operations.drain(i..i + 4);
-        } else {
-            i += 1;
-        }
-    }
-}
-
-fn is_save_restore(window: &[Box<dyn Encode>]) -> bool {
-    let Some((outer_src, _)) = single(&window[0], LoadStore::Load) else {
-        return false;
-    };
-    let Some((inner_dst, _)) = single(&window[1], LoadStore::Store) else {
-        return false;
-    };
-    let Some((inner_src, _)) = single(&window[2], LoadStore::Load) else {
-        return false;
-    };
-    let Some((outer_dst, _)) = single(&window[3], LoadStore::Store) else {
-        return false;
-    };
-
-    outer_src == outer_dst && inner_dst == inner_src
-}
-
-enum LoadStore {
-    Load,
-    Store,
-}
-
-fn single(op: &Box<dyn Encode>, kind: LoadStore) -> Option<(VMReg, ())> {
-    let reads = op.reads();
-    let writes = op.writes();
-    if reads.len() != 1 || writes.len() != 1 {
-        return None;
-    }
-    match (kind, &reads[0], &writes[0]) {
-        (LoadStore::Load, Effect::Reg(r), Effect::Scratch) => Some((*r, ())),
-        (LoadStore::Store, Effect::Scratch, Effect::Reg(r)) => Some((*r, ())),
-        _ => None,
-    }
-}
-
+/// Groups operations into atoms where each atom leaves the scratch stack balanced.
 fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Atom> {
     let mut atoms = Vec::new();
-
     let mut atom = Atom::new();
-
     let mut depth = 0;
 
     for operation in operations {
@@ -88,6 +44,7 @@ fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Atom> {
     atoms
 }
 
+/// Inserts [`VMReg::Flags`] save/restore instructions so flag state survives atom reordering.
 fn preserve(atoms: &mut [Atom]) {
     let brancher = match atoms.iter().rposition(is_branch) {
         Some(b) => b,
@@ -98,24 +55,15 @@ fn preserve(atoms: &mut [Atom]) {
         None => return,
     };
 
+    // Push flags onto scratch stack immediately after the atom that sets them
     atoms[flagger].push(Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source: VMReg::Flags,
     }));
-    atoms[flagger].push(Box::new(StoreRegister {
-        width: VMWidth::Lower64,
-        destination: VMReg::VScratch0,
-    }));
 
+    // Pop flags from scratch stack immediately before the branch
     atoms[brancher].insert(
         0,
-        Box::new(LoadRegister {
-            width: VMWidth::Lower64,
-            source: VMReg::VScratch0,
-        }),
-    );
-    atoms[brancher].insert(
-        1,
         Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: VMReg::Flags,
@@ -123,6 +71,7 @@ fn preserve(atoms: &mut [Atom]) {
     );
 }
 
+/// Topologically sorts atoms respecting data dependencies, randomizing where order is free.
 fn schedule(mut atoms: Vec<Atom>) -> Vec<Atom> {
     let trailing = match atoms.iter().rposition(is_branch) {
         Some(i) => atoms.split_off(i),
@@ -148,9 +97,7 @@ fn schedule(mut atoms: Vec<Atom>) -> Vec<Atom> {
 
     while !ready.is_empty() {
         let pick = ready.swap_remove(rng.gen_range(0..ready.len()));
-
         order.push(pick);
-
         for &next in &successors[pick] {
             indegree[next] -= 1;
             if indegree[next] == 0 {
@@ -168,9 +115,40 @@ fn schedule(mut atoms: Vec<Atom>) -> Vec<Atom> {
         .collect()
 }
 
+/// Removes redundant [`LoadRegister`] [`StoreRegister`] pairs introduced by [`preserve`] that cancel each other out.
+fn cleanup(operations: &mut Vec<Box<dyn Encode>>) {
+    let mut i = 0;
+
+    while i + 1 < operations.len() {
+        let op1 = &*operations[i];
+        let op2 = &*operations[i + 1];
+
+        if op1.type_id() == TypeId::of::<LoadRegister>()
+            && op2.type_id() == TypeId::of::<StoreRegister>()
+        {
+            let reads = op1.reads();
+            let writes = op2.writes();
+
+            if let (Some(Effect::Reg(r1)), Some(Effect::Reg(r2))) = (reads.first(), writes.first())
+            {
+                if r1 == r2 {
+                    operations.drain(i..i + 2);
+
+                    if i > 0 {
+                        i -= 1;
+                    }
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+}
+
+/// If atoms have a read/write or write/write conflict on any register or memory.
 fn conflicts(a: &Atom, b: &Atom) -> bool {
-    let (ar, aw) = regs(a);
-    let (br, bw) = regs(b);
+    let (ar, aw) = registers(a);
+    let (br, bw) = registers(b);
     !aw.is_disjoint(&br)
         || !ar.is_disjoint(&bw)
         || !aw.is_disjoint(&bw)
@@ -178,7 +156,8 @@ fn conflicts(a: &Atom, b: &Atom) -> bool {
         || (reads_memory(a) && writes_memory(b))
 }
 
-fn regs(atom: &Atom) -> (HashSet<VMReg>, HashSet<VMReg>) {
+/// Collects all [`VMReg`]s read and written across all operations in an atom.
+fn registers(atom: &Atom) -> (HashSet<VMReg>, HashSet<VMReg>) {
     let mut reads = HashSet::new();
     let mut writes = HashSet::new();
     for op in atom {
@@ -200,10 +179,12 @@ fn regs(atom: &Atom) -> (HashSet<VMReg>, HashSet<VMReg>) {
     (reads, writes)
 }
 
+/// Returns the net [`Effect::Scratch`] depth change for a single operation.
 fn stores_minus_loads(op: &dyn Encode) -> i32 {
     scratches(&op.writes()) as i32 - scratches(&op.reads()) as i32
 }
 
+/// Counts [`Effect::Scratch`] entries in an effect list.
 fn scratches(effects: &[Effect]) -> usize {
     effects
         .iter()
@@ -211,6 +192,7 @@ fn scratches(effects: &[Effect]) -> usize {
         .count()
 }
 
+/// Returns true if any operation in the atom writes to [`VMReg::NBranch`].
 fn is_branch(atom: &Atom) -> bool {
     atom.iter().any(|op| {
         op.writes()
@@ -219,29 +201,20 @@ fn is_branch(atom: &Atom) -> bool {
     })
 }
 
+/// Returns true if any operation in the atom writes [`Effect::Flags`].
 fn writes_flags(atom: &Atom) -> bool {
     atom.iter()
         .any(|op| op.writes().iter().any(|e| matches!(e, Effect::Flags)))
 }
 
+/// Returns true if the atom contains a [`LoadMemory`] operation.
 fn reads_memory(atom: &Atom) -> bool {
-    atom.iter().any(|op| {
-        let r = op.reads();
-        let w = op.writes();
-        r.len() == 1
-            && matches!(r[0], Effect::Scratch)
-            && w.len() == 1
-            && matches!(w[0], Effect::Scratch)
-    })
+    atom.iter()
+        .any(|op| (**op).type_id() == TypeId::of::<LoadMemory>())
 }
 
+/// Returns true if the atom contains a [`StoreMemory`] operation.
 fn writes_memory(atom: &Atom) -> bool {
-    atom.iter().any(|op| {
-        let r = op.reads();
-        let w = op.writes();
-        r.len() == 2
-            && matches!(r[0], Effect::Scratch)
-            && matches!(r[1], Effect::Scratch)
-            && w.is_empty()
-    })
+    atom.iter()
+        .any(|op| (**op).type_id() == TypeId::of::<StoreMemory>())
 }

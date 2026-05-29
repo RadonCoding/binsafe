@@ -68,7 +68,6 @@ mapped! {
         BLength, // Block Length
         VImage, // Image Base
         VKey, // System Key
-        VScratch0, // Scratch 0
     }
 }
 

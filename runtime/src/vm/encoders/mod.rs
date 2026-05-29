@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fmt::{self, Debug};
 
 use crate::mapper::Mapper;
@@ -11,7 +12,7 @@ pub enum Effect {
     Scratch,
 }
 
-pub trait Encode: Debug {
+pub trait Encode: Debug + Any {
     fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8>;
 
     fn reads(&self) -> Vec<Effect> {
