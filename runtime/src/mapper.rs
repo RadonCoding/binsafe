@@ -91,16 +91,17 @@ impl Mapper {
 }
 
 macro_rules! mapped {
-    ($ty:ident { $($v:ident),+ $(,)? }) => {
+    ($ty:ident { $($(#[$meta:meta])* $v:ident),+ $(,)? }) => {
         #[derive(Clone, Copy, Eq, PartialEq, Hash)]
         pub enum $ty {
             #[doc(hidden)]
-            $($v { _sealed: () }),+
+            $($(#[$meta])* $v { _sealed: () }),+
         }
 
         #[allow(non_upper_case_globals)]
         impl $ty {
             $(
+                $(#[$meta])*
                 pub const $v: Self = Self::$v { _sealed: () };
             )+
         }
@@ -108,14 +109,14 @@ macro_rules! mapped {
         impl ::std::fmt::Debug for $ty {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 match self {
-                    $(Self::$v { .. } => f.write_str(stringify!($v))),+
+                    $($(#[$meta])* Self::$v { .. } => f.write_str(stringify!($v))),+
                 }
             }
         }
 
         impl crate::mapper::Mappable for $ty {
             const VARIANTS: &'static [Self] = &[
-                $(Self::$v),+
+                $($(#[$meta])* Self::$v),+
             ];
         }
     };

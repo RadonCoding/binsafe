@@ -5,7 +5,7 @@ use exe::{
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};
 use logger::info;
 use rand::Rng;
-use runtime::runtime::Runtime;
+use runtime::runtime::{FnDef, Runtime};
 use std::{collections::HashSet, fmt, mem, path::Path};
 
 use crate::{exceptions, protections::Protection};
@@ -324,8 +324,8 @@ impl Engine {
         self.runtime_base().into()
     }
 
-    pub fn runtime_displacement(&self, displacement: i32) -> i32 {
-        self.runtime_base() as i32 + displacement
+    pub fn runtime_address(&mut self, def: FnDef) -> i32 {
+        self.runtime_base() as i32 + (self.rt.mapper.index(def) as i32 * 8)
     }
 
     pub fn execute(&mut self) -> Vec<u8> {

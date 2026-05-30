@@ -1,11 +1,11 @@
 use crate::{
     define_offset,
+    mapper::Mappable,
     runtime::{DataDef, FnDef, ImportDef, Runtime},
 };
 use iced_x86::code_asm::{
     eax, ecx, ptr, r12, r13, r14, r15, r15d, rax, rbp, rbx, rcx, rdx, rsp, word_ptr,
 };
-use strum::IntoEnumIterator;
 
 // void* (ImportDef def)
 pub fn build(rt: &mut Runtime) {
@@ -72,20 +72,21 @@ pub fn build(rt: &mut Runtime) {
     // jnz ...
     rt.asm.jnz(names_initialized).unwrap();
 
-    for (i, def) in ImportDef::iter().enumerate() {
+    for def in ImportDef::VARIANTS {
         let (module_def, export_def) = def.get();
+        let slot = rt.mapper.index(*def) as i32 * 16;
         // lea rdx, [...]
         rt.asm
             .lea(rdx, ptr(rt.string_labels[&module_def]))
             .unwrap();
         // mov [rax + ...], rdx
-        rt.asm.mov(ptr(rax + (i * 16) as i32), rdx).unwrap();
+        rt.asm.mov(ptr(rax + slot), rdx).unwrap();
         // lea rdx, [...]
         rt.asm
             .lea(rdx, ptr(rt.string_labels[&export_def]))
             .unwrap();
         // mov [rax + ...], rdx
-        rt.asm.mov(ptr(rax + (i * 16 + 8) as i32), rdx).unwrap();
+        rt.asm.mov(ptr(rax + slot + 8), rdx).unwrap();
     }
 
     rt.asm.set_label(&mut names_initialized).unwrap();
