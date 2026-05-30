@@ -120,25 +120,6 @@ pub fn generate(engine: &Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
     block.extend(restore());
     blocks.push(block);
 
-    #[cfg(debug_assertions)]
-    {
-        use logger::debug;
-        let after = blocks
-            .iter()
-            .enumerate()
-            .map(|(i, block)| {
-                let body = block
-                    .iter()
-                    .map(|operation| format!("    {}", operation))
-                    .collect::<Vec<String>>()
-                    .join("\n");
-                format!("  BLOCK {}:\n{}", i, body)
-            })
-            .collect::<Vec<String>>()
-            .join("\n");
-        debug!("ATTESTATION @ 0x{:016X}:\n{}", key, after);
-    }
-
     blocks
 }
 
