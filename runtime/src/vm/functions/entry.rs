@@ -1,7 +1,6 @@
-use iced_x86::code_asm::{ecx, ptr, r12, r12b, r12d, rax, rcx, rdi, rdx, rsi, rsp};
+use iced_x86::code_asm::{ecx, ptr, r12, r12b, r12d, rax, rcx, rdx, rsp};
 
 use crate::{
-    mapper::Mappable as _,
     runtime::{DataDef, FnDef, Runtime},
     vm::{
         bytecode::VMReg,
@@ -13,11 +12,18 @@ use crate::{
 // void (unsigned int)
 pub fn build(rt: &mut Runtime) {
     let mut acquire_global_lock = rt.asm.create_label();
-    let mut save_global_state = rt.asm.create_label();
+
     let mut invoke_ginit = rt.asm.create_label();
     let mut invoke_tinit = rt.asm.create_label();
+
+    let mut continue_attestation = rt.asm.create_label();
+    let mut finish_attestation = rt.asm.create_label();
+
     let mut initialize_state = rt.asm.create_label();
     let mut initialize_execution = rt.asm.create_label();
+
+    let mut save_native_state = rt.asm.create_label();
+    let mut copy_native_state = rt.asm.create_label();
 
     // pushfq
     rt.asm.pushfq().unwrap();
@@ -40,23 +46,27 @@ pub fn build(rt: &mut Runtime) {
     // jz ...
     rt.asm.jz(acquire_global_lock).unwrap();
 
+    // cmp [r12 + ...], 0x0
+    utils::vreg::cmp_imm(rt, r12, VMReg::VKey, 0x0);
+    // jne ...
+    rt.asm.jne(initialize_state).unwrap();
+
+    // cmp [r12 + ...], 0x0
+    utils::vreg::cmp_imm(rt, r12, VMReg::BPointer, 0x0);
+    // je ...
+    rt.asm.je(initialize_state).unwrap();
+
     // jmp ...
-    rt.asm.jmp(initialize_state).unwrap();
+    rt.asm.jmp(continue_attestation).unwrap();
 
     lock::acquire_global(rt, r12b, Some(&mut acquire_global_lock));
 
-    rt.asm.set_label(&mut save_global_state).unwrap();
-    {
-        // lea r12, [...]
-        rt.asm
-            .lea(r12, ptr(rt.data_labels[&DataDef::VmGlobalState]))
-            .unwrap();
-
-        for (vreg, reg) in VREG_TO_REG {
-            // mov [r12 + ...], ...
-            utils::vreg::store_reg(rt, r12, *reg, *vreg);
-        }
-    }
+    // lea r12, [...]
+    rt.asm
+        .lea(r12, ptr(rt.data_labels[&DataDef::VmGlobalState]))
+        .unwrap();
+    // call ...
+    rt.asm.call(save_native_state).unwrap();
 
     // mov r12d, [...]
     rt.asm
@@ -86,16 +96,8 @@ pub fn build(rt: &mut Runtime) {
     // mov r12, [0x1480 + r12*8]
     rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
 
-    // lea rsi, [...]
-    rt.asm
-        .lea(rsi, ptr(rt.data_labels[&DataDef::VmGlobalState]))
-        .unwrap();
-    // mov rdi, r12
-    rt.asm.mov(rdi, r12).unwrap();
-    // mov rcx, ...
-    rt.asm.mov(rcx, VMReg::COUNT as u64).unwrap();
-    // rep movsq
-    rt.asm.rep().movsq().unwrap();
+    // call ...
+    rt.asm.call(copy_native_state).unwrap();
 
     // call ...
     rt.asm
@@ -111,11 +113,24 @@ pub fn build(rt: &mut Runtime) {
 
     // call ...
     rt.asm
+        .call(rt.func_labels[&FnDef::VmFunctionsInitialize])
+        .unwrap();
+    // call ...
+    rt.asm
         .call(rt.func_labels[&FnDef::VmHandlersInitialize])
         .unwrap();
 
-    // mov [r12 + ...], -0x1
-    utils::vreg::store_imm(rt, r12, -0x1, VMReg::NEntry);
+    // lea rax, [...]
+    rt.asm
+        .lea(rax, ptr(rt.func_labels[&FnDef::VmEntry]))
+        .unwrap();
+    // mov [r12 + ...], rax
+    utils::vreg::store_reg(rt, r12, rax, VMReg::NExit);
+    // mov [r12 + ...], rsp
+    utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
+    // mov [r12 + ...], 0x0
+    utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
+
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();
     // lea rdx, [...]
@@ -125,53 +140,103 @@ pub fn build(rt: &mut Runtime) {
     // call ...
     stack::call(rt, rt.func_labels[&FnDef::VmDispatch]);
 
-    lock::release_global(rt);
-
+    // cmp [r12 + ...], 0x0
+    utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
+    // je ...
+    rt.asm.je(finish_attestation).unwrap();
     // jmp ...
-    rt.asm.jmp(initialize_execution).unwrap();
+    rt.asm.jmp(rt.func_labels[&FnDef::VmExit]).unwrap();
+
+    rt.asm.set_label(&mut continue_attestation).unwrap();
+    {
+        // call ...
+        rt.asm.call(save_native_state).unwrap();
+        // Skip the pushes from prologue:
+        // add rsp, 0x10
+        rt.asm.add(rsp, 0x10i32).unwrap();
+        // mov [r12 + ...], rsp
+        utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
+
+        // Set the block pointer past the padding, length word, and lock byte:
+        // mov rdx, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::BPointer, rdx);
+        // mov rcx, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::BLength, rcx);
+        // add rcx, 0x7
+        rt.asm.add(rcx, 0x7i32).unwrap();
+        // and rcx, -0x8
+        rt.asm.and(rcx, -0x8i32).unwrap();
+        // add rdx, rcx
+        rt.asm.add(rdx, rcx).unwrap();
+        // add rdx, 0x3
+        rt.asm.add(rdx, 0x3i32).unwrap();
+
+        // mov [r12 + ...], 0x0
+        utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
+
+        // mov rcx, r12
+        rt.asm.mov(rcx, r12).unwrap();
+        // call ...
+        stack::call(rt, rt.func_labels[&FnDef::VmDispatch]);
+
+        // cmp [r12 + ...], 0x0
+        utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
+        // je ...
+        rt.asm.je(finish_attestation).unwrap();
+
+        // jmp ...
+        rt.asm.jmp(rt.func_labels[&FnDef::VmExit]).unwrap();
+    }
+
+    rt.asm.set_label(&mut finish_attestation).unwrap();
+    {
+        lock::release_global(rt);
+
+        // mov rsp, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::Rsp, rsp);
+
+        // jmp ...
+        rt.asm.jmp(initialize_execution).unwrap();
+    }
 
     rt.asm.set_label(&mut initialize_state).unwrap();
     {
-        // mov r12d, [...]
-        rt.asm
-            .mov(r12d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
-            .unwrap();
-        // mov r12, [0x1480 + r12*8]
-        rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
-
-        for (vreg, reg) in VREG_TO_REG {
-            // mov [r12 + ...], ...
-            utils::vreg::store_reg(rt, r12, *reg, *vreg);
-        }
+        // call ...
+        rt.asm.call(save_native_state).unwrap();
     }
 
     rt.asm.set_label(&mut initialize_execution).unwrap();
     {
-        // pop rcx -> r12
-        rt.asm.pop(rcx).unwrap();
-        // mov [r12 + ...], ...
-        utils::vreg::store_reg(rt, r12, rcx, VMReg::R12);
+        // pop rax
+        rt.asm.pop(rax).unwrap();
+        // mov [r12 + ...], rax
+        utils::vreg::store_reg(rt, r12, rax, VMReg::R12);
 
-        // pop rcx -> flags
-        rt.asm.pop(rcx).unwrap();
-        // mov [r12 + ...], rcx
-        utils::vreg::store_reg(rt, r12, rcx, VMReg::Flags);
+        // pop rax
+        rt.asm.pop(rax).unwrap();
+        // mov [r12 + ...], rax
+        utils::vreg::store_reg(rt, r12, rax, VMReg::Flags);
 
-        // mov [r12 + ...], rcx
+        // mov [r12 + ...], 0x0
         utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
 
-        // pop rcx -> ret
+        // Pop the return address from the stack:
+        // pop rdx
         rt.asm.pop(rdx).unwrap();
-        // mov [r12 + ...], rcx
+        // mov [r12 + ...], rdx
         utils::vreg::store_reg(rt, r12, rdx, VMReg::NExit);
-        // mov [r12 + ...], rcx
+        // mov [r12 + ...], rdx
         utils::vreg::store_reg(rt, r12, rdx, VMReg::NEntry);
 
+        // Subtract the image base from the return address:
         // sub rdx, [...]
         utils::vreg::reg_sub(rt, r12, VMReg::VImage, rdx);
 
-        // pop rcx -> index
+        // Pop the VM-table index from the stack:
+        // pop rcx
         rt.asm.pop(rcx).unwrap();
+
+        // Resolve the VM-table entry using the index:
         // xor rcx, rdx
         rt.asm.xor(rcx, rdx).unwrap();
         // and ecx, 0x0FFFFFFF
@@ -180,18 +245,19 @@ pub fn build(rt: &mut Runtime) {
         rt.asm
             .lea(rdx, ptr(rt.data_labels[&DataDef::VmTable]))
             .unwrap();
-
         // lea rdx, [rdx + rcx*8]
         rt.asm.lea(rdx, ptr(rdx + rcx * 8)).unwrap();
 
-        // mov ecx, [rdx] -> displ
+        // Apply the displacement of the caller stub to the native entry and exit points:
+        // mov ecx, [rdx]
         rt.asm.mov(ecx, ptr(rdx)).unwrap();
         // sub [r12 + ...], rcx
         utils::vreg::sub_reg(rt, r12, rcx, VMReg::NEntry);
         // add [r12 + ...], rcx
         utils::vreg::add_reg(rt, r12, rcx, VMReg::NExit);
 
-        // mov ecx, [rdx + 0x4] -> offset
+        // Read the offset into VM-code from the VM-table:
+        // mov ecx, [rdx + 0x4]
         rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();
 
         // lea rdx, [...]
@@ -201,6 +267,7 @@ pub fn build(rt: &mut Runtime) {
         // add rdx, rcx
         rt.asm.add(rdx, rcx).unwrap();
 
+        // Stack now points to where it was before the caller stub:
         // mov [r12 + ...], rsp
         utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
     }
@@ -212,4 +279,31 @@ pub fn build(rt: &mut Runtime) {
 
     // jmp ...
     rt.asm.jmp(rt.func_labels[&FnDef::VmExit]).unwrap();
+
+    rt.asm.set_label(&mut save_native_state).unwrap();
+    {
+        for (vreg, reg) in VREG_TO_REG {
+            // mov [r12 + ...], ...
+            utils::vreg::store_reg(rt, r12, *reg, *vreg);
+        }
+        // ret
+        rt.asm.ret().unwrap();
+    }
+
+    rt.asm.set_label(&mut copy_native_state).unwrap();
+    {
+        // lea rax, [...]
+        rt.asm
+            .lea(rax, ptr(rt.data_labels[&DataDef::VmGlobalState]))
+            .unwrap();
+
+        for (vreg, _reg) in VREG_TO_REG {
+            // push [rax + ...]
+            utils::vreg::push(rt, rax, *vreg);
+            // pop [r12 + ...]
+            utils::vreg::pop(rt, r12, *vreg);
+        }
+        // ret
+        rt.asm.ret().unwrap();
+    }
 }

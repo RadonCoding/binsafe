@@ -1,12 +1,13 @@
 use crate::{
     define_offset,
-    runtime::{FnDef, Runtime},
+    runtime::{DataDef, FnDef, ImportDef, Runtime},
 };
 use iced_x86::code_asm::{
     eax, ecx, ptr, r12, r13, r14, r15, r15d, rax, rbp, rbx, rcx, rdx, rsp, word_ptr,
 };
+use strum::IntoEnumIterator;
 
-// void* (const char*, const char*)
+// void* (ImportDef def)
 pub fn build(rt: &mut Runtime) {
     let mut module_loop = rt.asm.create_label();
     let mut get_exports = rt.asm.create_label();
@@ -14,9 +15,11 @@ pub fn build(rt: &mut Runtime) {
     let mut found = rt.asm.create_label();
     let mut not_found = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
+    let mut names_initialized = rt.asm.create_label();
 
     let mut offset = 0;
 
+    define_offset!(slot, offset, 8);
     define_offset!(number_of_names, offset, 4);
     define_offset!(address_of_names, offset, 8);
     define_offset!(address_of_name_ordinals, offset, 8);
@@ -31,6 +34,15 @@ pub fn build(rt: &mut Runtime) {
     // sub rsp, ...
     rt.asm.sub(rsp, stack_size).unwrap();
 
+    // lea rax, [...]
+    rt.asm
+        .lea(rax, ptr(rt.data_labels[&DataDef::ImportAddresses]))
+        .unwrap();
+    // lea rax, [rax + rcx*8]
+    rt.asm.lea(rax, ptr(rax + rcx * 8)).unwrap();
+    // mov [rbp - ...], rax
+    rt.asm.mov(ptr(rbp - slot), rax).unwrap();
+
     // push r12
     rt.asm.push(r12).unwrap();
     // push r13
@@ -42,10 +54,48 @@ pub fn build(rt: &mut Runtime) {
     // push rbx
     rt.asm.push(rbx).unwrap();
 
-    // mov r12, rcx
-    rt.asm.mov(r12, rcx).unwrap();
-    // mov r13, rdx
-    rt.asm.mov(r13, rdx).unwrap();
+    // mov rax, [rax]
+    rt.asm.mov(rax, ptr(rax)).unwrap();
+    // test rax, rax
+    rt.asm.test(rax, rax).unwrap();
+    // jnz ...
+    rt.asm.jnz(epilogue).unwrap();
+
+    // lea rax, [...]
+    rt.asm
+        .lea(rax, ptr(rt.data_labels[&DataDef::ImportNames]))
+        .unwrap();
+    // mov rdx, [rax]
+    rt.asm.mov(rdx, ptr(rax)).unwrap();
+    // test rdx, rdx
+    rt.asm.test(rdx, rdx).unwrap();
+    // jnz ...
+    rt.asm.jnz(names_initialized).unwrap();
+
+    for (i, def) in ImportDef::iter().enumerate() {
+        let (module_def, export_def) = def.get();
+        // lea rdx, [...]
+        rt.asm
+            .lea(rdx, ptr(rt.string_labels[&module_def]))
+            .unwrap();
+        // mov [rax + ...], rdx
+        rt.asm.mov(ptr(rax + (i * 16) as i32), rdx).unwrap();
+        // lea rdx, [...]
+        rt.asm
+            .lea(rdx, ptr(rt.string_labels[&export_def]))
+            .unwrap();
+        // mov [rax + ...], rdx
+        rt.asm.mov(ptr(rax + (i * 16 + 8) as i32), rdx).unwrap();
+    }
+
+    rt.asm.set_label(&mut names_initialized).unwrap();
+
+    // shl rcx, 4
+    rt.asm.shl(rcx, 4i32).unwrap();
+    // mov r12, [rax + rcx]
+    rt.asm.mov(r12, ptr(rax + rcx)).unwrap();
+    // mov r13, [rax + rcx + 0x8]
+    rt.asm.mov(r13, ptr(rax + rcx + 0x8i32)).unwrap();
 
     // mov rbx, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
     rt.asm.mov(rbx, ptr(0x60).gs()).unwrap();
@@ -157,10 +207,12 @@ pub fn build(rt: &mut Runtime) {
 
             // mov rcx, rax
             rt.asm.mov(rcx, rax).unwrap();
-            // mov rax, r13
+            // mov rdx, r13
             rt.asm.mov(rdx, r13).unwrap();
             // call ...
-            rt.asm.call(rt.func_labels[&FnDef::CompareAnsi]).unwrap();
+            rt.asm
+                .call(rt.func_labels[&FnDef::CompareAnsiToAnsi])
+                .unwrap();
 
             // test rax, rax
             rt.asm.test(rax, rax).unwrap();
@@ -198,7 +250,6 @@ pub fn build(rt: &mut Runtime) {
     {
         // xor rax, rax
         rt.asm.xor(rax, rax).unwrap();
-
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
@@ -215,6 +266,11 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.pop(r13).unwrap();
         // pop r12
         rt.asm.pop(r12).unwrap();
+
+        // mov rcx, [rbp - ...]
+        rt.asm.mov(rcx, ptr(rbp - slot)).unwrap();
+        // mov [rcx], rax
+        rt.asm.mov(ptr(rcx), rax).unwrap();
 
         // mov rsp, rbp
         rt.asm.mov(rsp, rbp).unwrap();

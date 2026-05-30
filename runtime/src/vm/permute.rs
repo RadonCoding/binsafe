@@ -39,6 +39,17 @@ fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Atom> {
         }
     }
 
+    if !atom.is_empty() {
+        let mut single = Atom::new();
+
+        for atom in atoms.drain(..) {
+            single.extend(atom);
+        }
+        single.extend(atom);
+
+        atoms.push(single);
+    }
+
     atoms
 }
 

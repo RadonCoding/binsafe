@@ -3,7 +3,7 @@ mod tests {
     use std::{ffi::c_void, mem, ptr, sync::OnceLock, thread};
 
     use iced_x86::{
-        code_asm::{ecx, esi, ptr, qword_ptr, rax, rcx, rdi, rdx, rsi},
+        code_asm::{ecx, esi, ptr, rax, rcx, rdi, rdx, rsi},
         Code, Instruction, MemoryOperand, Register,
     };
     use obfuscator::protections::virtualization::crypt;
@@ -29,24 +29,14 @@ mod tests {
     }
 
     static TLS_STATE: OnceLock<u32> = OnceLock::new();
-    static TLS_STACK: OnceLock<u32> = OnceLock::new();
-    static TLS_SCRATCH: OnceLock<u32> = OnceLock::new();
     static TLS_KEY: OnceLock<u32> = OnceLock::new();
     static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
 
-    fn initialize_tls() -> [(DataDef, u32); 5] {
+    fn initialize_tls() -> [(DataDef, u32); 3] {
         [
             (
                 DataDef::VmStateTlsIndex,
                 *TLS_STATE.get_or_init(|| unsafe { TlsAlloc() }),
-            ),
-            (
-                DataDef::VmStackTlsIndex,
-                *TLS_STACK.get_or_init(|| unsafe { TlsAlloc() }),
-            ),
-            (
-                DataDef::VmScratchTlsIndex,
-                *TLS_SCRATCH.get_or_init(|| unsafe { TlsAlloc() }),
             ),
             (
                 DataDef::VmKeyTlsIndex,
@@ -118,16 +108,6 @@ mod tests {
                     .unwrap();
             }
 
-            // Set the native entry to point to a value different than the virtual branch for the dispatcher:
-            // mov [rcx + ...], -0x1
-            self.rt
-                .asm
-                .mov(
-                    qword_ptr(rcx + self.rt.mapper.index(VMReg::NEntry) * 8),
-                    -0x1,
-                )
-                .unwrap();
-
             // lea rdx, [...]
             self.rt
                 .asm
@@ -197,7 +177,6 @@ mod tests {
             Executor::TEST_KEY_MUL,
             Executor::TEST_KEY_ADD,
             0,
-            &mut rand::thread_rng(),
         );
     }
 

@@ -261,7 +261,7 @@ impl Engine {
         info!("Found {} blocks", self.blocks.len());
     }
 
-    pub fn get_end_of_last_section(&self) -> u32 {
+    pub fn get_end_of_sections(&self) -> u32 {
         let sections = self.pe.get_section_table().unwrap();
         let last_section = sections[sections.len() - 1];
         self.pe
@@ -316,6 +316,18 @@ impl Engine {
         section
     }
 
+    pub fn runtime_base(&self) -> u32 {
+        self.get_end_of_sections()
+    }
+
+    pub fn runtime_ip(&self) -> u64 {
+        self.runtime_base().into()
+    }
+
+    pub fn runtime_displacement(&self, displacement: i32) -> i32 {
+        self.runtime_base() as i32 + displacement
+    }
+
     pub fn execute(&mut self) -> Vec<u8> {
         let mut protections = mem::take(&mut self.protections);
 
@@ -323,9 +335,7 @@ impl Engine {
             protection.initialize(self);
         }
 
-        let ip: u32 = self.get_end_of_last_section();
-
-        let code = self.rt.assemble(ip as u64);
+        let code = self.rt.assemble(self.runtime_ip());
         let new_section = self.create_section(
             Some("💀"),
             &code,

@@ -7,7 +7,7 @@ use iced_x86::code_asm::*;
 #[cfg(debug_assertions)]
 use iced_x86::Code;
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
-use logger::{debug, info};
+use logger::info;
 use rand::Rng;
 
 #[derive(Default)]
@@ -262,18 +262,22 @@ impl Protection for Mutation {
                     processed = true;
 
                     #[cfg(debug_assertions)]
-                    if logged.insert(instruction.code()) {
-                        let after = asm.instructions()[asm_index..]
-                            .iter()
-                            .map(|i| format!("    {}", i))
-                            .collect::<Vec<String>>()
-                            .join("\n");
-                        debug!(
-                            "MUTATED @ 0x{:08X}:\n  BEFORE: {}\n  AFTER:\n{}",
-                            instruction.ip(),
-                            instruction,
-                            after
-                        );
+                    {
+                        use logger::debug;
+
+                        if logged.insert(instruction.code()) {
+                            let after = asm.instructions()[asm_index..]
+                                .iter()
+                                .map(|i| format!("    {}", i))
+                                .collect::<Vec<String>>()
+                                .join("\n");
+                            debug!(
+                                "MUTATED @ 0x{:08X}:\n  BEFORE: {}\n  AFTER:\n{}",
+                                instruction.ip(),
+                                instruction,
+                                after
+                            );
+                        }
                     }
                 }
             }

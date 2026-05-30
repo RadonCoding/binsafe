@@ -3,7 +3,7 @@ use iced_x86::code_asm::{ecx, ptr, r12, r13, r8, rax, rcx, rdx, rsp};
 use crate::{
     mapper::Mappable,
     runtime::{DataDef, ImportDef, Runtime},
-    vm::bytecode::VMReg,
+    vm::{bytecode::VMReg, utils},
     VM_SCRATCH_SIZE, VM_STACK_SIZE,
 };
 
@@ -58,10 +58,12 @@ pub fn build(rt: &mut Runtime) {
 
     // mov ecx, [...]
     rt.asm
-        .mov(ecx, ptr(rt.data_labels[&DataDef::VmStackTlsIndex]))
+        .mov(ecx, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
         .unwrap();
-    // mov [0x1480 + rcx*8], rax
-    rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();
+    // mov rcx, gs:[0x1480 + rcx*8]
+    rt.asm.mov(rcx, ptr(0x1480 + rcx * 8).gs()).unwrap();
+    // mov [rcx + ...], rax
+    utils::vreg::store_reg(rt, rcx, rax, VMReg::VStack);
 
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();
@@ -77,10 +79,12 @@ pub fn build(rt: &mut Runtime) {
 
     // mov ecx, [...]
     rt.asm
-        .mov(ecx, ptr(rt.data_labels[&DataDef::VmScratchTlsIndex]))
+        .mov(ecx, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
         .unwrap();
-    // mov [0x1480 + rcx*8], rax
-    rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();
+    // mov rcx, gs:[0x1480 + rcx*8]
+    rt.asm.mov(rcx, ptr(0x1480 + rcx * 8).gs()).unwrap();
+    // mov [rcx + ...], rax
+    utils::vreg::store_reg(rt, rcx, rax, VMReg::VScratch);
 
     // lea rcx, [...]; lea rdx, [...]; call ...
     rt.resolve(ImportDef::RtlFlsSetValue);

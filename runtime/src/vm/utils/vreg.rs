@@ -127,8 +127,9 @@ pub fn push(rt: &mut Runtime, base: AsmRegister64, reg: VMReg) {
         .unwrap();
 }
 
-/// `mov [{rsp}], {src}` via tmp register since RSP is not a VMReg
-pub fn store_rsp(rt: &mut Runtime, rsp: AsmRegister64, tmp: AsmRegister64, src: AsmRegister64) {
-    rt.asm.mov(tmp, rsp).unwrap();
-    rt.asm.mov(ptr(tmp), src).unwrap();
+/// `pop qword [{base} + {reg} * 8]`
+pub fn pop(rt: &mut Runtime, base: AsmRegister64, reg: VMReg) {
+    rt.asm
+        .pop(qword_ptr(base + rt.mapper.index(reg) * 8))
+        .unwrap();
 }

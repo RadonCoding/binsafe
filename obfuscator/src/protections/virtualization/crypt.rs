@@ -1,15 +1,8 @@
 use rand::Rng;
 
-pub fn encrypt(
-    block: &mut Vec<u8>,
-    key: u64,
-    key_mul: u64,
-    key_add: u64,
-    key_att: u64,
-    rng: &mut impl Rng,
-) {
+pub fn encrypt(block: &mut Vec<u8>, key: u64, key_mul: u64, key_add: u64, key_att: u64) {
     let length = TryInto::<u16>::try_into(block.len()).unwrap();
-    pad(block, rng);
+    pad(block);
     encrypt_chunks(block, key, key_mul, key_add, key_att);
     finalize(block, length);
 }
@@ -22,7 +15,9 @@ pub fn decrypt(block: &mut Vec<u8>, key: u64, key_mul: u64, key_add: u64, key_at
     block.truncate(length);
 }
 
-pub fn pad(block: &mut Vec<u8>, rng: &mut impl Rng) {
+pub fn pad(block: &mut Vec<u8>) {
+    let mut rng = rand::thread_rng();
+
     while block.len() % 8 != 0 {
         block.push(rng.gen::<u8>());
     }

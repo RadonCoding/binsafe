@@ -9,7 +9,7 @@ use crate::protections::Protection;
 use exe::Buffer;
 use exe::{PE, RVA};
 use iced_x86::code_asm::CodeAssembler;
-use logger::{debug, info};
+use logger::info;
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::{bytecode, permute};
@@ -17,14 +17,61 @@ use runtime::vm::{bytecode, permute};
 mod attestation;
 pub mod crypt;
 
+struct Keys {
+    seed: u64,
+    mul: u64,
+    add: u64,
+    att: u64,
+}
+
+impl Default for Keys {
+    fn default() -> Self {
+        let mut rng = rand::thread_rng();
+
+        Self {
+            seed: rng.gen::<u64>(),
+            mul: rng.gen::<u64>(),
+            add: rng.gen::<u64>(),
+            att: rng.gen::<u64>(),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Virtualization {
+    keys: Keys,
     vblocks: HashMap<u32, usize>,
     duplicates: usize,
 }
 
 // PUSH imm32 + CALL rel32
 const DISPATCH_SIZE: usize = 10;
+
+impl Virtualization {
+    fn attestation(&self, engine: &mut Engine) -> Vec<u8> {
+        let blocks = attestation::generate(engine, self.keys.att);
+
+        let mut vcode = Vec::new();
+
+        for operations in blocks {
+            let mut operations = permute::permute(operations);
+
+            let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &mut operations);
+
+            let key = if vcode.is_empty() {
+                self.keys.seed
+            } else {
+                u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap())
+            };
+
+            crypt::encrypt(&mut vblock, key, self.keys.mul, self.keys.add, 0);
+
+            vcode.extend_from_slice(&vblock);
+        }
+
+        vcode
+    }
+}
 
 impl Protection for Virtualization {
     fn initialize(&mut self, engine: &mut Engine) {
@@ -36,42 +83,39 @@ impl Protection for Virtualization {
         #[cfg(debug_assertions)]
         let mut logged = HashSet::new();
 
-        let mut rng = rand::thread_rng();
-        let key_seed = rng.gen::<u64>();
-        let key_mul = rng.gen::<u64>();
-        let key_add = rng.gen::<u64>();
-        let key_att = rng.gen::<u64>();
-
-        let mut attestation =
-            bytecode::assemble(&mut engine.rt.mapper, &mut attestation::generate(key_att));
-
-        crypt::encrypt(&mut attestation, key_seed, key_mul, key_add, 0, &mut rng);
-
-        vcode.extend_from_slice(&attestation);
+        vcode.extend_from_slice(&self.attestation(engine));
 
         'outer: for block in &mut engine.blocks {
             if block.size < DISPATCH_SIZE {
                 continue;
             }
 
-            let lifted = match bytecode::lift(&block.instructions) {
-                Some(operations) if !operations.is_empty() => operations,
+            let operations = match bytecode::lift(&block.instructions) {
+                Some(ops) if !ops.is_empty() => ops,
                 _ => continue 'outer,
             };
 
             #[cfg(debug_assertions)]
-            let before = lifted
+            let lifted = operations
                 .iter()
                 .map(|operation| format!("    {}", operation))
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            let mut operations = permute::permute(lifted);
+            let mut operations = permute::permute(operations);
+
+            #[cfg(debug_assertions)]
+            let permuted = operations
+                .iter()
+                .map(|operation| format!("    {}", operation))
+                .collect::<Vec<String>>()
+                .join("\n");
 
             #[cfg(debug_assertions)]
             {
-                let mut log = false;
+                use logger::debug;
 
+                let mut log = false;
                 for instruction in &block.instructions {
                     if logged.insert(instruction.code()) {
                         log = true;
@@ -79,20 +123,16 @@ impl Protection for Virtualization {
                 }
 
                 if log {
-                    let instructions = block
+                    let before = block
                         .instructions
                         .iter()
                         .map(|instruction| format!("    {}", instruction))
                         .collect::<Vec<String>>()
                         .join("\n");
-                    let after = operations
-                        .iter()
-                        .map(|operation| format!("    {}", operation))
-                        .collect::<Vec<String>>()
-                        .join("\n");
+
                     debug!(
                         "VIRTUALIZED @ 0x{:08X}:\n  BEFORE:\n{}\n  LIFTED:\n{}\n  PERMUTED:\n{}",
-                        block.rva, instructions, before, after
+                        block.rva, before, lifted, permuted
                     );
                 }
             }
@@ -111,7 +151,13 @@ impl Protection for Virtualization {
             } else {
                 let vcode_key = u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap());
 
-                crypt::encrypt(&mut vblock, vcode_key, key_mul, key_add, key_att, &mut rng);
+                crypt::encrypt(
+                    &mut vblock,
+                    vcode_key,
+                    self.keys.mul,
+                    self.keys.add,
+                    self.keys.att,
+                );
 
                 let vcode_offset = TryInto::<u32>::try_into(vcode.len()).unwrap();
                 vcode.extend_from_slice(&vblock);
@@ -133,9 +179,15 @@ impl Protection for Virtualization {
         engine.rt.define_data_bytes(DataDef::VmTable, &vtable);
         engine.rt.define_data_bytes(DataDef::VmCode, &vcode);
 
-        engine.rt.define_data_qword(DataDef::VmKeySeed, key_seed);
-        engine.rt.define_data_qword(DataDef::VmKeyMul, key_mul);
-        engine.rt.define_data_qword(DataDef::VmKeyAdd, key_add);
+        engine
+            .rt
+            .define_data_qword(DataDef::VmKeySeed, self.keys.seed);
+        engine
+            .rt
+            .define_data_qword(DataDef::VmKeyMul, self.keys.mul);
+        engine
+            .rt
+            .define_data_qword(DataDef::VmKeyAdd, self.keys.add);
     }
 
     fn apply(&self, engine: &mut Engine) {

@@ -81,14 +81,19 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut check_branch).unwrap();
     {
-        // mov rax, [...]
+        // cmp [r12 + ...], 0x0
+        utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
+        // je ...
+        rt.asm.je(epilogue).unwrap();
+
+        // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NEntry, rax);
-        // cmp [...],
+        // cmp [r12 + ...],
         utils::vreg::cmp_reg(rt, r12, VMReg::NBranch, rax);
         // jne ...
         rt.asm.jne(epilogue).unwrap();
 
-        // If the virtual branch points to the native entry then re-execute the block:
+        // If the branch points to the native entry then re-execute the block:
         // mov r13, [...]
         utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
         // jmp ...

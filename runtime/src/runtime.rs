@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use iced_x86::{
-    code_asm::{ptr, rax, rcx, rdx, CodeAssembler, CodeLabel},
+    code_asm::{rcx, CodeAssembler, CodeLabel},
     BlockEncoderOptions, Decoder, DecoderOptions, Encoder,
 };
 use rand::seq::SliceRandom;
@@ -28,6 +28,7 @@ pub enum FnDef {
     VmDispatch,
     VmCleanup,
     /* VM HANDLERS */
+    VmFunctionsInitialize,
     VmHandlersInitialize,
     VmHandlerJcc,
     VmHandlerRet,
@@ -42,16 +43,12 @@ pub enum FnDef {
     VmHandlerDiscard,
     /* VM ARITHMETIC */
     VmArithmeticFlags,
-    VmArithmeticAddSub8,
-    VmArithmeticAddSub16,
-    VmArithmeticAddSub32,
-    VmArithmeticAddSub64,
     /* VM VEH */
     VmVehInitialize,
     VmVehHandler,
     /* CORE */
     CompareUnicodeToAnsi,
-    CompareAnsi,
+    CompareAnsiToAnsi,
     Resolve,
     #[cfg(debug_assertions)]
     Strlen,
@@ -63,12 +60,11 @@ pub enum FnDef {
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
 pub enum DataDef {
+    Functions,
     VehStart,
     VmHandlers,
     VmGlobalState,
     VmStateTlsIndex,
-    VmStackTlsIndex,
-    VmScratchTlsIndex,
     VmKeyTlsIndex,
     VmCleanupFlsIndex,
     VmTable,
@@ -77,7 +73,8 @@ pub enum DataDef {
     VmKeyMul,
     VmKeyAdd,
     VehEnd,
-    Imports,
+    ImportAddresses,
+    ImportNames,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
@@ -98,6 +95,8 @@ pub enum StringDef {
     GetProcessHeap,
     RtlAllocateHeap,
     RtlFreeHeap,
+    NtSetInformationThread,
+    NtQueryInformationThread,
     #[cfg(debug_assertions)]
     NtWriteFile,
 }
@@ -111,6 +110,8 @@ pub enum ImportDef {
     GetProcessHeap,
     RtlAllocateHeap,
     RtlFreeHeap,
+    NtSetInformationThread,
+    NtQueryInformationThread,
     #[cfg(debug_assertions)]
     NtWriteFile,
 }
@@ -127,6 +128,12 @@ impl ImportDef {
             ImportDef::GetProcessHeap => (StringDef::KERNEL32, StringDef::GetProcessHeap),
             ImportDef::RtlAllocateHeap => (StringDef::Ntdll, StringDef::RtlAllocateHeap),
             ImportDef::RtlFreeHeap => (StringDef::Ntdll, StringDef::RtlFreeHeap),
+            ImportDef::NtSetInformationThread => {
+                (StringDef::Ntdll, StringDef::NtSetInformationThread)
+            }
+            ImportDef::NtQueryInformationThread => {
+                (StringDef::Ntdll, StringDef::NtQueryInformationThread)
+            }
             #[cfg(debug_assertions)]
             ImportDef::NtWriteFile => (StringDef::Ntdll, StringDef::NtWriteFile),
         }
@@ -147,7 +154,7 @@ pub struct Runtime {
     data: HashMap<DataDef, Vec<u8>>,
     pub bool_labels: HashMap<BoolDef, CodeLabel>,
     bools: HashMap<BoolDef, bool>,
-    string_labels: HashMap<StringDef, CodeLabel>,
+    pub string_labels: HashMap<StringDef, CodeLabel>,
     strings: HashMap<StringDef, Vec<u8>>,
     imports: HashMap<ImportDef, usize>,
     addresses: HashMap<CodeLabel, u64>,
@@ -280,44 +287,11 @@ impl Runtime {
     }
 
     pub fn resolve(&mut self, def: ImportDef) {
-        let mut initialized = self.asm.create_label();
+        // mov rcx, ...
+        self.asm.mov(rcx, self.imports[&def] as u64).unwrap();
 
-        // lea rax, [...]
-        self.asm
-            .lea(rax, ptr(self.data_labels[&DataDef::Imports]))
-            .unwrap();
-        // mov rax, [rax + ...]
-        self.asm
-            .mov(rax, ptr(rax + self.imports[&def] * 8))
-            .unwrap();
-        // test rax, rax
-        self.asm.test(rax, rax).unwrap();
-        // jnz ...
-        self.asm.jnz(initialized).unwrap();
-
-        let (module_name, export_name) = def.get();
-
-        // lea rcx, [...]
-        self.asm
-            .lea(rcx, ptr(self.string_labels[&module_name]))
-            .unwrap();
-        // lea rdx, [...]
-        self.asm
-            .lea(rdx, ptr(self.string_labels[&export_name]))
-            .unwrap();
         // call ...
         self.asm.call(self.func_labels[&FnDef::Resolve]).unwrap();
-
-        // lea rcx, [...]
-        self.asm
-            .lea(rcx, ptr(self.data_labels[&DataDef::Imports]))
-            .unwrap();
-        // mov [rcx + ...], rax
-        self.asm
-            .mov(ptr(rcx + self.imports[&def] * 8), rax)
-            .unwrap();
-
-        self.asm.set_label(&mut initialized).unwrap();
     }
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
@@ -331,6 +305,7 @@ impl Runtime {
             (FnDef::VmCrypt, vm::functions::crypt::build),
             (FnDef::VmDispatch, vm::functions::dispatch::build),
             (FnDef::VmCleanup, vm::functions::cleanup::build),
+            (FnDef::VmFunctionsInitialize, vm::functions::initialize),
             (FnDef::VmHandlersInitialize, vm::handlers::initialize),
             (FnDef::VmHandlerJcc, vm::handlers::jcc::build),
             (FnDef::VmHandlerRet, vm::handlers::ret::build),
@@ -364,7 +339,10 @@ impl Runtime {
                 FnDef::CompareUnicodeToAnsi,
                 functions::compare_unicode_to_ansi::build,
             ),
-            (FnDef::CompareAnsi, functions::compare_ansi::build),
+            (
+                FnDef::CompareAnsiToAnsi,
+                functions::compare_ansi_to_ansi::build,
+            ),
             (FnDef::Resolve, functions::resolve::build),
             #[cfg(debug_assertions)]
             (FnDef::Strlen, functions::strlen::build),
@@ -377,16 +355,16 @@ impl Runtime {
         self.define_data_byte(DataDef::VehStart, 0x0);
         self.define_data_byte(DataDef::VehEnd, 0x0);
 
+        self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::iter().count() * 8]);
         self.define_data_bytes(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
         self.define_data_bytes(DataDef::VmGlobalState, &[0u8; VMReg::COUNT * 8]);
 
         self.define_data_dword(DataDef::VmStateTlsIndex, 0);
-        self.define_data_dword(DataDef::VmStackTlsIndex, 0);
-        self.define_data_dword(DataDef::VmScratchTlsIndex, 0);
         self.define_data_dword(DataDef::VmKeyTlsIndex, 0);
         self.define_data_dword(DataDef::VmCleanupFlsIndex, 0);
 
-        self.define_data_bytes(DataDef::Imports, &vec![0u8; self.imports.len() * 8]);
+        self.define_data_bytes(DataDef::ImportAddresses, &vec![0u8; self.imports.len() * 8]);
+        self.define_data_bytes(DataDef::ImportNames, &vec![0u8; self.imports.len() * 16]);
 
         self.define_bool(BoolDef::VmIsLocked, false);
         self.define_bool(BoolDef::VmHasVeh, false);
@@ -404,6 +382,11 @@ impl Runtime {
         self.define_string(StringDef::GetProcessHeap, "GetProcessHeap");
         self.define_string(StringDef::RtlAllocateHeap, "RtlAllocateHeap");
         self.define_string(StringDef::RtlFreeHeap, "RtlFreeHeap");
+        self.define_string(StringDef::NtSetInformationThread, "NtSetInformationThread");
+        self.define_string(
+            StringDef::NtQueryInformationThread,
+            "NtQueryInformationThread",
+        );
         #[cfg(debug_assertions)]
         self.define_string(StringDef::NtWriteFile, "NtWriteFile");
 
@@ -412,7 +395,7 @@ impl Runtime {
         }
 
         for def in DataDef::iter() {
-            if def == DataDef::VehStart || def == DataDef::VehEnd {
+            if def == DataDef::Functions || def == DataDef::VehStart || def == DataDef::VehEnd {
                 continue;
             }
 
@@ -437,6 +420,7 @@ impl Runtime {
         shuffled.shuffle(&mut rng);
 
         let mut tasks = Vec::new();
+        tasks.push(EmissionTask::Data(DataDef::Functions));
         tasks.push(EmissionTask::Function(
             FnDef::VmVehHandler,
             vm::functions::veh::handler,
