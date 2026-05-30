@@ -53,8 +53,22 @@ impl Virtualization {
 
         let mut vcode = Vec::new();
 
-        for operations in blocks {
+        #[cfg(debug_assertions)]
+        let mut log = Vec::new();
+
+        for (index, operations) in blocks.into_iter().enumerate() {
             let mut operations = permute::permute(operations);
+
+            #[cfg(debug_assertions)]
+            log.push(format!(
+                "  BLOCK {}:\n{}",
+                index,
+                operations
+                    .iter()
+                    .map(|operation| format!("    {}", operation))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            ));
 
             let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &mut operations);
 
@@ -67,6 +81,16 @@ impl Virtualization {
             crypt::encrypt(&mut vblock, key, self.keys.mul, self.keys.add, 0);
 
             vcode.extend_from_slice(&vblock);
+        }
+
+        #[cfg(debug_assertions)]
+        {
+            use logger::debug;
+            debug!(
+                "ATTESTATION @ 0x{:016X}:\n{}",
+                self.keys.att,
+                log.join("\n")
+            );
         }
 
         vcode
@@ -95,21 +119,7 @@ impl Protection for Virtualization {
                 _ => continue 'outer,
             };
 
-            #[cfg(debug_assertions)]
-            let lifted = operations
-                .iter()
-                .map(|operation| format!("    {}", operation))
-                .collect::<Vec<String>>()
-                .join("\n");
-
             let mut operations = permute::permute(operations);
-
-            #[cfg(debug_assertions)]
-            let permuted = operations
-                .iter()
-                .map(|operation| format!("    {}", operation))
-                .collect::<Vec<String>>()
-                .join("\n");
 
             #[cfg(debug_assertions)]
             {
@@ -123,17 +133,13 @@ impl Protection for Virtualization {
                 }
 
                 if log {
-                    let before = block
-                        .instructions
+                    let permuted = operations
                         .iter()
-                        .map(|instruction| format!("    {}", instruction))
+                        .map(|operation| format!("    {}", operation))
                         .collect::<Vec<String>>()
                         .join("\n");
 
-                    debug!(
-                        "VIRTUALIZED @ 0x{:08X}:\n  BEFORE:\n{}\n  LIFTED:\n{}\n  PERMUTED:\n{}",
-                        block.rva, before, lifted, permuted
-                    );
+                    debug!("VIRTUALIZED @ 0x{:08X}:\n{}", block.rva, permuted);
                 }
             }
 
