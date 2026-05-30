@@ -28,54 +28,81 @@ pub fn permute(operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
     operations
 }
 
-/// Splits two-op producer-consumer atoms by parking the intermediate value into a register that some later atom is about to overwrite.
+/// Splits atoms at every depth-1 scratch boundary by parking the intermediate value into a register that some later atom is about to overwrite.
 fn decouple(atoms: Vec<Atom>) -> Vec<Atom> {
-    let parking = (0..atoms.len())
+    let plans = (0..atoms.len())
         .map(|i| {
-            let atom = &atoms[i];
-            if atom.len() == 2
-                && stores_minus_loads(&*atom[0]) == 1
-                && stores_minus_loads(&*atom[1]) == -1
-            {
-                find_parking(&atoms, i)
-            } else {
+            let points = split_points(&atoms[i]);
+            if points.is_empty() {
                 None
+            } else {
+                find_parking(&atoms, i, points.len()).map(|regs| (points, regs))
             }
         })
-        .collect::<Vec<Option<VMReg>>>();
+        .collect::<Vec<Option<(Vec<usize>, Vec<VMReg>)>>>();
 
     let mut result = Vec::with_capacity(atoms.len() * 2);
 
     for (i, atom) in atoms.into_iter().enumerate() {
-        if let Some(register) = parking[i] {
-            let mut iter = atom.into_iter();
-            let producer = iter.next().unwrap();
-            let consumer = iter.next().unwrap();
+        match &plans[i] {
+            Some((points, registers)) => {
+                let mut ops = atom.into_iter().map(Some).collect::<Vec<_>>();
+                let total = ops.len();
+                let mut prev = 0;
 
-            result.push(vec![
-                producer,
-                Box::new(StoreRegister {
-                    width: VMWidth::Lower64,
-                    destination: register,
-                }),
-            ]);
-            result.push(vec![
-                Box::new(LoadRegister {
-                    width: VMWidth::Lower64,
-                    source: register,
-                }),
-                consumer,
-            ]);
-        } else {
-            result.push(atom);
+                for (k, &point) in points.iter().enumerate() {
+                    let mut sub = Vec::with_capacity(point - prev + 2);
+
+                    if k > 0 {
+                        sub.push(load(registers[k - 1]));
+                    }
+                    for j in prev..point {
+                        sub.push(ops[j].take().unwrap());
+                    }
+                    sub.push(store(registers[k]));
+
+                    result.push(sub);
+                    prev = point;
+                }
+
+                let mut tail = Vec::with_capacity(total - prev + 1);
+                tail.push(load(*registers.last().unwrap()));
+                for j in prev..total {
+                    tail.push(ops[j].take().unwrap());
+                }
+                result.push(tail);
+            }
+            None => result.push(atom),
         }
     }
 
     result
 }
 
-/// Finds a register that some atom after the pair kills (writes without reading), where no atom between reads it first.
-fn find_parking(atoms: &[Atom], pair: usize) -> Option<VMReg> {
+/// Returns the positions at which an atom can be split, i.e. every op boundary where the cumulative scratch depth is exactly 1.
+fn split_points(atom: &Atom) -> Vec<usize> {
+    let mut points = Vec::new();
+    let mut depth = 0;
+
+    for (i, op) in atom.iter().enumerate() {
+        depth += stores_minus_loads(&**op);
+        if depth == 1 && i + 1 < atom.len() {
+            points.push(i + 1);
+        }
+    }
+
+    points
+}
+
+/// Finds `count` distinct registers, each killed (written without being read) by some atom after the pair, with no read between.
+fn find_parking(atoms: &[Atom], pair: usize, count: usize) -> Option<Vec<VMReg>> {
+    let (own_reads, own_writes) = registers(&atoms[pair]);
+    let own = own_reads
+        .union(&own_writes)
+        .copied()
+        .collect::<HashSet<VMReg>>();
+
+    let mut result = Vec::with_capacity(count);
     let mut read_in_window = HashSet::new();
 
     for j in (pair + 1)..atoms.len() {
@@ -84,9 +111,14 @@ fn find_parking(atoms: &[Atom], pair: usize) -> Option<VMReg> {
         for &register in &writes {
             if !reads.contains(&register)
                 && !read_in_window.contains(&register)
+                && !result.contains(&register)
+                && !own.contains(&register)
                 && is_parking_register(register)
             {
-                return Some(register);
+                result.push(register);
+                if result.len() == count {
+                    return Some(result);
+                }
             }
         }
 
@@ -94,6 +126,20 @@ fn find_parking(atoms: &[Atom], pair: usize) -> Option<VMReg> {
     }
 
     None
+}
+
+fn load(register: VMReg) -> Box<dyn Encode> {
+    Box::new(LoadRegister {
+        width: VMWidth::Lower64,
+        source: register,
+    })
+}
+
+fn store(register: VMReg) -> Box<dyn Encode> {
+    Box::new(StoreRegister {
+        width: VMWidth::Lower64,
+        destination: register,
+    })
 }
 
 /// Returns true if the register is a general purpose x86-64 register safe to use as a temporary parking slot.
