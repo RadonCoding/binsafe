@@ -61,7 +61,7 @@ pub fn print_s(rt: &mut Runtime, s: &str) {
     rt.asm.pop(rax).unwrap();
 }
 
-pub fn print_q(rt: &mut Runtime, reg: AsmRegister64) {
+pub fn print_q(rt: &mut Runtime, q: AsmRegister64) {
     // push rax
     rt.asm.push(rax).unwrap();
     // push rcx
@@ -74,7 +74,7 @@ pub fn print_q(rt: &mut Runtime, reg: AsmRegister64) {
     rt.asm.push(r9).unwrap();
 
     // mov rax, ...
-    rt.asm.mov(rax, reg).unwrap();
+    rt.asm.mov(rax, q).unwrap();
 
     let stack_size = 0x20;
 

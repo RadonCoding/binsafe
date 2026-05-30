@@ -1,5 +1,7 @@
 use std::any::Any;
-use std::fmt::{self, Debug};
+#[cfg(debug_assertions)]
+use std::fmt;
+use std::fmt::Debug;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMReg, VMWidth};

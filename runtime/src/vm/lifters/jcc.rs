@@ -1,7 +1,4 @@
 use iced_x86::{Code, Instruction, OpKind};
-use rand::seq::SliceRandom;
-use rand::Rng;
-use strum::IntoEnumIterator;
 
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMTest, VMWidth};
 use crate::vm::encoders::load_address::LoadAddress;
@@ -20,7 +17,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                     width: VMWidth::Lower64,
                     source: VMReg::from(instruction.op0_register()),
                 }),
-                Box::new(jump_always()),
+                Box::new(Jcc::jump()),
             ]),
             OpKind::Memory => Some(vec![
                 Box::new(LoadAddress {
@@ -29,7 +26,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 Box::new(LoadMemory {
                     width: VMWidth::Lower64,
                 }),
-                Box::new(jump_always()),
+                Box::new(Jcc::jump()),
             ]),
             _ => None,
         },
@@ -47,7 +44,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Box::new(jump_always()),
+                Box::new(Jcc::jump()),
             ])
         }
 
@@ -64,7 +61,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Box::new(call_always()),
+                Box::new(Jcc::call()),
             ])
         }
 
@@ -76,7 +73,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                     width: VMWidth::Lower64,
                     source: VMReg::from(instruction.op0_register()),
                 }),
-                Box::new(call_always()),
+                Box::new(Jcc::call()),
             ]),
             OpKind::Memory => Some(vec![
                 Box::new(LoadAddress {
@@ -85,7 +82,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 Box::new(LoadMemory {
                     width: VMWidth::Lower64,
                 }),
-                Box::new(call_always()),
+                Box::new(Jcc::call()),
             ]),
             _ => None,
         },
@@ -176,42 +173,6 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 Box::new(Jcc { logic, conditions }),
             ])
         }
-    }
-}
-
-fn jump_always() -> Jcc {
-    let mut rng = rand::thread_rng();
-
-    let logic = if rng.gen() {
-        VMLogic::JAND
-    } else {
-        VMLogic::JOR
-    };
-
-    let flags = VMFlag::iter().collect::<Vec<VMFlag>>();
-    let flag = flags.choose(&mut rng).unwrap();
-
-    Jcc {
-        logic,
-        conditions: vec![eq(*flag, *flag)],
-    }
-}
-
-fn call_always() -> Jcc {
-    let mut rng = rand::thread_rng();
-
-    let logic = if rng.gen() {
-        VMLogic::CAND
-    } else {
-        VMLogic::COR
-    };
-
-    let flags = VMFlag::iter().collect::<Vec<VMFlag>>();
-    let flag = flags.choose(&mut rng).unwrap();
-
-    Jcc {
-        logic,
-        conditions: vec![eq(*flag, *flag)],
     }
 }
 

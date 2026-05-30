@@ -69,7 +69,9 @@ mapped! {
         BPointer, // Block Pointer
         BLength, // Block Length
         VImage, // Image Base
-        VKey, // System Key
+        VKey, // Attestation Key
+        VStack, // Virtual Stack Top
+        VScratch, // Virtual Scratch Top
     }
 }
 

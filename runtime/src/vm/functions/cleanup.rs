@@ -2,6 +2,7 @@ use iced_x86::code_asm::{ptr, r12, r13, r8, r8d, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{DataDef, ImportDef, Runtime},
+    vm::{bytecode::VMReg, utils},
     VM_SCRATCH_SIZE, VM_STACK_SIZE,
 };
 
@@ -36,22 +37,11 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
     // mov r8, gs:[0x1480 + r8*8]
     rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();
-    // call r14
-    rt.asm.call(r13).unwrap();
-
-    // mov rcx, r12
-    rt.asm.mov(rcx, r12).unwrap();
-    // xor rdx, rdx
-    rt.asm.xor(rdx, rdx).unwrap();
-    // mov r8d, [...]
-    rt.asm
-        .mov(r8d, ptr(rt.data_labels[&DataDef::VmStackTlsIndex]))
-        .unwrap();
-    // mov r8, gs:[0x1480 + r8*8]
-    rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();
+    // mov r8, [r8 + ...]
+    utils::vreg::load_reg(rt, r8, VMReg::VStack, r8);
     // sub r8, ...
     rt.asm.sub(r8, VM_STACK_SIZE as i32).unwrap();
-    // call r14
+    // call r13
     rt.asm.call(r13).unwrap();
 
     // mov rcx, r12
@@ -60,13 +50,28 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.xor(rdx, rdx).unwrap();
     // mov r8d, [...]
     rt.asm
-        .mov(r8d, ptr(rt.data_labels[&DataDef::VmScratchTlsIndex]))
+        .mov(r8d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
         .unwrap();
     // mov r8, gs:[0x1480 + r8*8]
     rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();
+    // mov r8, [r8 + ...]
+    utils::vreg::load_reg(rt, r8, VMReg::VScratch, r8);
     // sub r8, ...
     rt.asm.sub(r8, VM_SCRATCH_SIZE as i32).unwrap();
-    // call r14
+    // call r13
+    rt.asm.call(r13).unwrap();
+
+    // mov rcx, r12
+    rt.asm.mov(rcx, r12).unwrap();
+    // xor rdx, rdx
+    rt.asm.xor(rdx, rdx).unwrap();
+    // mov r8d, [...]
+    rt.asm
+        .mov(r8d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .unwrap();
+    // mov r8, gs:[0x1480 + r8*8]
+    rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();
+    // call r13
     rt.asm.call(r13).unwrap();
 
     // add rsp, 0x28
