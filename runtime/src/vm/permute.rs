@@ -3,8 +3,11 @@ use std::any::TypeId;
 use std::collections::HashSet;
 use std::mem;
 
-use crate::vm::bytecode::{VMReg, VMWidth};
+use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
+use crate::vm::encoders::load_address::LoadAddress;
+use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
+use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{Effect, Encode};
 
@@ -16,11 +19,102 @@ pub fn permute(operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
 
     preserve(&mut atoms);
 
+    let atoms = decouple(atoms);
+
     let mut operations = schedule(atoms).into_iter().flatten().collect();
 
     cleanup(&mut operations);
 
     operations
+}
+
+/// Splits two-op producer-consumer atoms by parking the intermediate value into a register that some later atom is about to overwrite.
+fn decouple(atoms: Vec<Atom>) -> Vec<Atom> {
+    let parking = (0..atoms.len())
+        .map(|i| {
+            let atom = &atoms[i];
+            if atom.len() == 2
+                && stores_minus_loads(&*atom[0]) == 1
+                && stores_minus_loads(&*atom[1]) == -1
+            {
+                find_parking(&atoms, i)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<Option<VMReg>>>();
+
+    let mut result = Vec::with_capacity(atoms.len() * 2);
+
+    for (i, atom) in atoms.into_iter().enumerate() {
+        if let Some(register) = parking[i] {
+            let mut iter = atom.into_iter();
+            let producer = iter.next().unwrap();
+            let consumer = iter.next().unwrap();
+
+            result.push(vec![
+                producer,
+                Box::new(StoreRegister {
+                    width: VMWidth::Lower64,
+                    destination: register,
+                }),
+            ]);
+            result.push(vec![
+                Box::new(LoadRegister {
+                    width: VMWidth::Lower64,
+                    source: register,
+                }),
+                consumer,
+            ]);
+        } else {
+            result.push(atom);
+        }
+    }
+
+    result
+}
+
+/// Finds a register that some atom after the pair kills (writes without reading), where no atom between reads it first.
+fn find_parking(atoms: &[Atom], pair: usize) -> Option<VMReg> {
+    let mut read_in_window = HashSet::new();
+
+    for j in (pair + 1)..atoms.len() {
+        let (reads, writes) = registers(&atoms[j]);
+
+        for &register in &writes {
+            if !reads.contains(&register)
+                && !read_in_window.contains(&register)
+                && is_parking_register(register)
+            {
+                return Some(register);
+            }
+        }
+
+        read_in_window.extend(reads);
+    }
+
+    None
+}
+
+/// Returns true if the register is a general purpose x86-64 register safe to use as a temporary parking slot.
+fn is_parking_register(register: VMReg) -> bool {
+    matches!(
+        register,
+        VMReg::Rax
+            | VMReg::Rcx
+            | VMReg::Rdx
+            | VMReg::Rbx
+            | VMReg::Rsi
+            | VMReg::Rdi
+            | VMReg::R8
+            | VMReg::R9
+            | VMReg::R10
+            | VMReg::R11
+            | VMReg::R12
+            | VMReg::R13
+            | VMReg::R14
+            | VMReg::R15
+    )
 }
 
 /// Groups operations into atoms where each atom leaves the scratch stack balanced.
@@ -165,14 +259,105 @@ fn conflicts(a: &Atom, b: &Atom) -> bool {
         || !ar.is_disjoint(&bw)
         // both write the same register
         || !aw.is_disjoint(&bw)
-        // a writes memory b reads or writes
-        || (writes_memory(a) && (reads_memory(b) || writes_memory(b)))
-        // a reads memory b writes
-        || (reads_memory(a) && writes_memory(b))
+        // memory aliasing
+        || memory_conflicts(a, b)
         // a writes flags b reads or writes
         || (writes_flags(a) && (reads_flags(b) || writes_flags(b)))
         // a reads flags b writes
         || (reads_flags(a) && writes_flags(b))
+}
+
+struct MemoryAccess {
+    location: VMMem,
+    width: i64,
+    is_store: bool,
+}
+
+/// Extracts the memory accesses performed by an atom by pairing each [`LoadMemory`] or [`StoreMemory`] with the [`LoadAddress`] immediately preceding it.
+fn memory_accesses(atom: &Atom) -> Option<Vec<MemoryAccess>> {
+    let mut result = Vec::new();
+
+    for i in 0..atom.len() {
+        let op = &*atom[i];
+
+        let width_and_kind = if let Some(load) = downcast::<LoadMemory>(op) {
+            Some((width_bytes(load.width), false))
+        } else if let Some(store) = downcast::<StoreMemory>(op) {
+            Some((width_bytes(store.width), true))
+        } else {
+            None
+        };
+
+        if let Some((width, is_store)) = width_and_kind {
+            if i == 0 {
+                return None;
+            }
+            let prev = &*atom[i - 1];
+            let address = downcast::<LoadAddress>(prev)?;
+            result.push(MemoryAccess {
+                location: address.source,
+                width,
+                is_store,
+            });
+        }
+    }
+
+    Some(result)
+}
+
+/// Checks if two memory accesses overlap, falling back to a conservative conflict when the addressing schemes differ.
+fn aliases(a: &MemoryAccess, b: &MemoryAccess) -> bool {
+    if !a.is_store && !b.is_store {
+        return false;
+    }
+
+    if a.location.base != b.location.base
+        || a.location.index != b.location.index
+        || a.location.scale != b.location.scale
+        || a.location.segment != b.location.segment
+    {
+        return true;
+    }
+
+    let a_start = a.location.displacement as i64;
+    let a_end = a_start + a.width;
+    let b_start = b.location.displacement as i64;
+    let b_end = b_start + b.width;
+
+    !(a_end <= b_start || b_end <= a_start)
+}
+
+/// Resolves memory aliasing between two atoms, falling back to a conservative effect check when accesses can't be paired with an address.
+fn memory_conflicts(a: &Atom, b: &Atom) -> bool {
+    match (memory_accesses(a), memory_accesses(b)) {
+        (Some(av), Some(bv)) => av.iter().any(|x| bv.iter().any(|y| aliases(x, y))),
+        _ => {
+            (writes_memory(a) && (reads_memory(b) || writes_memory(b)))
+                || (reads_memory(a) && writes_memory(b))
+        }
+    }
+}
+
+/// Returns the byte width of a [`VMWidth`].
+fn width_bytes(width: VMWidth) -> i64 {
+    if width == VMWidth::Lower64 {
+        8
+    } else if width == VMWidth::Lower32 {
+        4
+    } else if width == VMWidth::Lower16 {
+        2
+    } else {
+        1
+    }
+}
+
+/// Downcasts a `dyn Encode` reference into a concrete encoder type when the underlying type matches.
+fn downcast<T: Encode + 'static>(op: &dyn Encode) -> Option<&T> {
+    if op.type_id() == TypeId::of::<T>() {
+        Some(unsafe { &*(op as *const dyn Encode as *const T) })
+    } else {
+        None
+    }
 }
 
 /// Collects all [`VMReg`]s read and written across all operations in an atom.

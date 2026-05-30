@@ -47,6 +47,35 @@ pub struct Virtualization {
 // PUSH imm32 + CALL rel32
 const DISPATCH_SIZE: usize = 10;
 
+#[cfg(debug_assertions)]
+fn format_operations_with(
+    before: &[String],
+    after: &[Box<dyn runtime::vm::encoders::Encode>],
+) -> String {
+    let mut positions = HashMap::<&str, std::collections::VecDeque<usize>>::new();
+    for (i, line) in before.iter().enumerate() {
+        positions
+            .entry(line.as_str())
+            .or_insert_with(std::collections::VecDeque::new)
+            .push_back(i);
+    }
+
+    after
+        .iter()
+        .map(|operation| {
+            let key = format!("{}", operation);
+            match positions
+                .get_mut(key.as_str())
+                .and_then(|queue| queue.pop_front())
+            {
+                Some(index) => format!("  {:>3}   {}", index, key),
+                None => format!("    +   {}", key),
+            }
+        })
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
 impl Virtualization {
     fn attestation(&self, engine: &mut Engine) -> Vec<u8> {
         let blocks = attestation::generate(engine, self.keys.att);
@@ -57,17 +86,19 @@ impl Virtualization {
         let mut log = Vec::new();
 
         for (index, operations) in blocks.into_iter().enumerate() {
+            #[cfg(debug_assertions)]
+            let before = operations
+                .iter()
+                .map(|operation| format!("{}", operation))
+                .collect::<Vec<String>>();
+
             let mut operations = permute::permute(operations);
 
             #[cfg(debug_assertions)]
             log.push(format!(
                 "  BLOCK {}:\n{}",
                 index,
-                operations
-                    .iter()
-                    .map(|operation| format!("    {}", operation))
-                    .collect::<Vec<String>>()
-                    .join("\n")
+                format_operations_with(&before, &operations)
             ));
 
             let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &mut operations);
@@ -86,6 +117,7 @@ impl Virtualization {
         #[cfg(debug_assertions)]
         {
             use logger::debug;
+
             debug!(
                 "ATTESTATION @ 0x{:016X}:\n{}",
                 self.keys.att,
@@ -119,6 +151,12 @@ impl Protection for Virtualization {
                 _ => continue 'outer,
             };
 
+            #[cfg(debug_assertions)]
+            let before = operations
+                .iter()
+                .map(|operation| format!("{}", operation))
+                .collect::<Vec<String>>();
+
             let mut operations = permute::permute(operations);
 
             #[cfg(debug_assertions)]
@@ -133,13 +171,11 @@ impl Protection for Virtualization {
                 }
 
                 if log {
-                    let permuted = operations
-                        .iter()
-                        .map(|operation| format!("    {}", operation))
-                        .collect::<Vec<String>>()
-                        .join("\n");
-
-                    debug!("VIRTUALIZED @ 0x{:08X}:\n{}", block.rva, permuted);
+                    debug!(
+                        "VIRTUALIZED @ 0x{:08X}:\n{}",
+                        block.rva,
+                        format_operations_with(&before, &operations)
+                    );
                 }
             }
 
