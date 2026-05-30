@@ -92,7 +92,7 @@ impl Virtualization {
                 .map(|operation| format!("{}", operation))
                 .collect::<Vec<String>>();
 
-            let mut operations = permute::permute(operations);
+            let operations = permute::permute(operations);
 
             #[cfg(debug_assertions)]
             log.push(format!(
@@ -101,7 +101,7 @@ impl Virtualization {
                 format_operations_with(&before, &operations)
             ));
 
-            let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &mut operations);
+            let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &operations);
 
             let key = if vcode.is_empty() {
                 self.keys.seed
@@ -151,51 +151,52 @@ impl Protection for Virtualization {
                 _ => continue 'outer,
             };
 
-            #[cfg(debug_assertions)]
-            let before = operations
-                .iter()
-                .map(|operation| format!("{}", operation))
-                .collect::<Vec<String>>();
-
-            let mut operations = permute::permute(operations);
-
-            #[cfg(debug_assertions)]
-            {
-                use logger::debug;
-
-                let mut log = false;
-                for instruction in &block.instructions {
-                    if logged.insert(instruction.code()) {
-                        log = true;
-                    }
-                }
-
-                if log {
-                    debug!(
-                        "VIRTUALIZED @ 0x{:08X}:\n{}",
-                        block.rva,
-                        format_operations_with(&before, &operations)
-                    );
-                }
-            }
-
-            let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &mut operations);
+            let vblock = bytecode::assemble(&mut engine.rt.mapper, &operations);
 
             let mut hasher = DefaultHasher::new();
             vblock.hash(&mut hasher);
             let hash = hasher.finish();
 
-            // Check if the block already exists to avoid duplication
-            let vcode_offset = if dedup.contains_key(&hash) {
+            let vcode_offset = if let Some(&offset) = dedup.get(&hash) {
                 self.duplicates += 1;
-
-                dedup[&hash]
+                offset
             } else {
-                let vcode_key = u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap());
+                #[cfg(debug_assertions)]
+                let before = operations
+                    .iter()
+                    .map(|operation| format!("{}", operation))
+                    .collect::<Vec<String>>();
+
+                let operations = permute::permute(operations);
+
+                #[cfg(debug_assertions)]
+                {
+                    use logger::debug;
+
+                    let mut log = false;
+
+                    for instruction in &block.instructions {
+                        if logged.insert(instruction.code()) {
+                            log = true;
+                        }
+                    }
+
+                    if log {
+                        debug!(
+                            "VIRTUALIZED @ 0x{:08X}:\n{}",
+                            block.rva,
+                            format_operations_with(&before, &operations)
+                        );
+                    }
+                }
+
+                let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &operations);
+
+                let key = u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap());
 
                 crypt::encrypt(
                     &mut vblock,
-                    vcode_key,
+                    key,
                     self.keys.mul,
                     self.keys.add,
                     self.keys.att,

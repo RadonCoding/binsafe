@@ -5,7 +5,7 @@ use strum_macros::EnumIter;
 
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
-use crate::vm::lifters::{add, cmov, cmp, jcc, lea, mov, sub};
+use crate::vm::lifters::{add, and, cmov, cmp, jcc, lea, mov, or, sub, test, xor};
 
 mapped! {
     VMOp {
@@ -22,6 +22,10 @@ mapped! {
         // Arithmetic
         Add,
         Sub,
+        And,
+        Or,
+        Xor,
+        Test,
         // Stack
         Discard,
         // Nop
@@ -159,7 +163,7 @@ pub struct VMMem {
 }
 
 impl Encode for VMMem {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.push(mapper.index(self.base));
         bytes.push(mapper.index(self.index));
@@ -219,7 +223,7 @@ pub struct VMCondition {
 }
 
 impl Encode for VMCondition {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(self.test), self.lhs, self.rhs]
     }
 }
@@ -267,6 +271,10 @@ pub fn lift(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
             Mnemonic::Add => add::encode(instruction)?,
             Mnemonic::Sub => sub::encode(instruction)?,
             Mnemonic::Cmp => cmp::encode(instruction)?,
+            Mnemonic::And => and::encode(instruction)?,
+            Mnemonic::Or => or::encode(instruction)?,
+            Mnemonic::Xor => xor::encode(instruction)?,
+            Mnemonic::Test => test::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
             Mnemonic::Mov => mov::encode(instruction)?,
             Mnemonic::Nop => continue,
@@ -279,7 +287,7 @@ pub fn lift(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
     Some(output)
 }
 
-pub fn assemble(mapper: &mut Mapper, operations: &mut [Box<dyn Encode>]) -> Vec<u8> {
+pub fn assemble(mapper: &mut Mapper, operations: &[Box<dyn Encode>]) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     for operation in operations {

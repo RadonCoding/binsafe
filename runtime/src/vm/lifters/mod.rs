@@ -1,8 +1,12 @@
 pub mod add;
+pub mod and;
 pub mod arithmetic;
 pub mod cmov;
 pub mod cmp;
 pub mod jcc;
 pub mod lea;
 pub mod mov;
+pub mod or;
 pub mod sub;
+pub mod test;
+pub mod xor;

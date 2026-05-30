@@ -9,7 +9,7 @@ pub struct StoreRegister {
 }
 
 impl Encode for StoreRegister {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![
             mapper.index(VMOp::StoreRegister),
             mapper.index(self.width),

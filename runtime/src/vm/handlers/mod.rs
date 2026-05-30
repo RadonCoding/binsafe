@@ -8,6 +8,7 @@ use crate::{
 };
 
 pub mod add;
+pub mod and;
 pub mod discard;
 pub mod flags;
 pub mod jcc;
@@ -15,10 +16,13 @@ pub mod load_address;
 pub mod load_immediate;
 pub mod load_memory;
 pub mod load_register;
+pub mod or;
 pub mod ret;
 pub mod store_memory;
 pub mod store_register;
 pub mod sub;
+pub mod test;
+pub mod xor;
 
 pub fn initialize(rt: &mut Runtime) {
     let mut table = [
@@ -32,6 +36,10 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::StoreMemory, FnDef::VmHandlerStoreMemory),
         (VMOp::Add, FnDef::VmHandlerAdd),
         (VMOp::Sub, FnDef::VmHandlerSub),
+        (VMOp::And, FnDef::VmHandlerAnd),
+        (VMOp::Or, FnDef::VmHandlerOr),
+        (VMOp::Xor, FnDef::VmHandlerXor),
+        (VMOp::Test, FnDef::VmHandlerTest),
         (VMOp::Discard, FnDef::VmHandlerDiscard),
     ];
 
@@ -72,7 +80,9 @@ pub fn initialize(rt: &mut Runtime) {
             utils::vreg::reg_add(rt, rax, VMReg::VImage, r8);
 
             // mov [rcx + ...], r8
-            rt.asm.mov(ptr(rcx + rt.mapper.index(op) * 8), r8).unwrap();
+            rt.asm
+                .mov(ptr(rcx + rt.mapper.index(op) as i32 * 8), r8)
+                .unwrap();
         }
     });
 

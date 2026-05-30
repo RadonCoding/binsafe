@@ -51,7 +51,7 @@ pub fn initialize(rt: &mut Runtime) {
 
             // mov [rcx + ...], r8
             rt.asm
-                .mov(ptr(rcx + rt.mapper.index(*def) * 8), r8)
+                .mov(ptr(rcx + rt.mapper.index(*def) as i32 * 8), r8)
                 .unwrap();
         }
     });

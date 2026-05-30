@@ -9,7 +9,7 @@ pub struct LoadImmediate {
 }
 
 impl Encode for LoadImmediate {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         let mut bytes = vec![mapper.index(VMOp::LoadImmediate), mapper.index(self.width)];
         bytes.extend_from_slice(&self.source);
         bytes

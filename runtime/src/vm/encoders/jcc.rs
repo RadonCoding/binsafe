@@ -13,14 +13,14 @@ pub struct Jcc {
 }
 
 impl Encode for Jcc {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         let mut bytes = vec![
             mapper.index(VMOp::Jcc),
             mapper.index(self.logic),
             self.conditions.len() as u8,
         ];
 
-        for condition in &mut self.conditions {
+        for condition in &self.conditions {
             bytes.extend_from_slice(&condition.encode(mapper));
         }
         bytes

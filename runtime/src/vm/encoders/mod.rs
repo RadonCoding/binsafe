@@ -16,9 +16,9 @@ pub enum Effect {
 }
 
 pub trait Encode: Debug + Any {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8>;
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8>;
 
-    fn size(&mut self, mapper: &mut Mapper) -> usize {
+    fn size(&self, mapper: &mut Mapper) -> usize {
         self.encode(mapper).len()
     }
 
@@ -41,14 +41,18 @@ pub fn encode_immediate(value: u64) -> (VMWidth, usize) {
 }
 
 pub mod add;
+pub mod and;
 pub mod discard;
 pub mod jcc;
 pub mod load_address;
 pub mod load_immediate;
 pub mod load_memory;
 pub mod load_register;
+pub mod or;
 pub mod ret;
 pub mod skip;
 pub mod store_memory;
 pub mod store_register;
 pub mod sub;
+pub mod test;
+pub mod xor;

@@ -6,7 +6,7 @@ use crate::vm::encoders::{Effect, Encode};
 pub struct Ret;
 
 impl Encode for Ret {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(VMOp::Ret)]
     }
 

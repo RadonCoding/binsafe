@@ -3,13 +3,13 @@ use crate::vm::bytecode::{VMOp, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
-pub struct Sub {
+pub struct Test {
     pub width: VMWidth,
 }
 
-impl Encode for Sub {
+impl Encode for Test {
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::Sub), mapper.index(self.width)]
+        vec![mapper.index(VMOp::Test), mapper.index(self.width)]
     }
 
     fn reads(&self) -> Vec<super::Effect> {
