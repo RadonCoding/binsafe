@@ -42,7 +42,7 @@ const PRESERVED: &[VMReg] = &[
     NT_QUERY_INFORMATION_THREAD,
 ];
 
-pub fn generate(engine: &Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
+pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
     let mut blocks = Vec::<Vec<Box<dyn Encode>>>::new();
 
     let mut block = Vec::<Box<dyn Encode>>::new();
@@ -334,23 +334,23 @@ fn correct(key: u64) -> Vec<Box<dyn Encode>> {
     ]
 }
 
-fn import(engine: &Engine, def: ImportDef) -> Vec<Box<dyn Encode>> {
+fn import(engine: &mut Engine, def: ImportDef) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
-    instructions.extend(set(VMReg::Rcx, def as u64));
+    instructions.extend(set(VMReg::Rcx, engine.rt.mapper.index(def) as u64));
     instructions.extend(call(engine, FnDef::Resolve));
 
     instructions
 }
 
-fn call(engine: &Engine, def: FnDef) -> Vec<Box<dyn Encode>> {
+fn call(engine: &mut Engine, def: FnDef) -> Vec<Box<dyn Encode>> {
     vec![
         Box::new(LoadAddress {
             source: VMMem {
                 base: VMReg::VImage,
                 index: VMReg::None,
                 scale: 1,
-                displacement: engine.runtime_displacement(def as i32 * 8),
+                displacement: engine.runtime_address(def),
                 segment: VMSeg::None,
             },
         }),

@@ -8,134 +8,137 @@ use rand::seq::SliceRandom;
 
 use crate::{
     functions,
-    mapper::{Mappable, Mapper},
+    mapper::{mapped, Mappable, Mapper},
     vm::{
         self,
         bytecode::{VMOp, VMReg},
     },
 };
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
-pub enum FnDef {
-    /* VM */
-    VmGInit,
-    VmTInit,
-    VmEntry,
-    VmExit,
-    VmCrypt,
-    VmDispatch,
-    VmCleanup,
-    /* VM HANDLERS */
-    VmFunctionsInitialize,
-    VmHandlersInitialize,
-    VmHandlerJcc,
-    VmHandlerRet,
-    VmHandlerLoadImmediate,
-    VmHandlerLoadRegister,
-    VmHandlerLoadMemory,
-    VmHandlerLoadAddress,
-    VmHandlerStoreRegister,
-    VmHandlerStoreMemory,
-    VmHandlerAdd,
-    VmHandlerSub,
-    VmHandlerDiscard,
-    /* VM ARITHMETIC */
-    VmArithmeticFlags,
-    /* VM VEH */
-    VmVehInitialize,
-    VmVehHandler,
-    /* CORE */
-    CompareUnicodeToAnsi,
-    CompareAnsiToAnsi,
-    Resolve,
-    #[cfg(debug_assertions)]
-    Strlen,
-    #[cfg(debug_assertions)]
-    Print,
-    #[cfg(debug_assertions)]
-    Fmtdec,
+mapped! {
+    FnDef {
+        /* VM */
+        VmGInit,
+        VmTInit,
+        VmEntry,
+        VmExit,
+        VmCrypt,
+        VmDispatch,
+        VmCleanup,
+        /* VM HANDLERS */
+        VmFunctionsInitialize,
+        VmHandlersInitialize,
+        VmHandlerJcc,
+        VmHandlerRet,
+        VmHandlerLoadImmediate,
+        VmHandlerLoadRegister,
+        VmHandlerLoadMemory,
+        VmHandlerLoadAddress,
+        VmHandlerStoreRegister,
+        VmHandlerStoreMemory,
+        VmHandlerAdd,
+        VmHandlerSub,
+        VmHandlerDiscard,
+        /* VM ARITHMETIC */
+        VmArithmeticFlags,
+        /* VM VEH */
+        VmVehInitialize,
+        VmVehHandler,
+        /* CORE */
+        CompareUnicodeToAnsi,
+        CompareAnsiToAnsi,
+        Resolve,
+        #[cfg(debug_assertions)]
+        Strlen,
+        #[cfg(debug_assertions)]
+        Print,
+        #[cfg(debug_assertions)]
+        Fmtdec,
+    }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
-pub enum DataDef {
-    Functions,
-    VehStart,
-    VmHandlers,
-    VmGlobalState,
-    VmStateTlsIndex,
-    VmKeyTlsIndex,
-    VmCleanupFlsIndex,
-    VmTable,
-    VmCode,
-    VmKeySeed,
-    VmKeyMul,
-    VmKeyAdd,
-    VehEnd,
-    ImportAddresses,
-    ImportNames,
+mapped! {
+    DataDef {
+        Functions,
+        VehStart,
+        VmHandlers,
+        VmGlobalState,
+        VmStateTlsIndex,
+        VmKeyTlsIndex,
+        VmCleanupFlsIndex,
+        VmTable,
+        VmCode,
+        VmKeySeed,
+        VmKeyMul,
+        VmKeyAdd,
+        VehEnd,
+        ImportAddresses,
+        ImportNames,
+    }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
-pub enum BoolDef {
-    VmIsLocked,
-    VmHasVeh,
+mapped! {
+    BoolDef {
+        VmIsLocked,
+        VmHasVeh,
+    }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
-pub enum StringDef {
-    Ntdll,
-    KERNEL32,
-    KERNELBASE,
-    RtlAddVectoredExceptionHandler,
-    TlsAlloc,
-    RtlFlsAlloc,
-    RtlFlsSetValue,
-    GetProcessHeap,
-    RtlAllocateHeap,
-    RtlFreeHeap,
-    NtSetInformationThread,
-    NtQueryInformationThread,
-    #[cfg(debug_assertions)]
-    NtWriteFile,
+mapped! {
+    StringDef {
+        Ntdll,
+        KERNEL32,
+        KERNELBASE,
+        RtlAddVectoredExceptionHandler,
+        TlsAlloc,
+        RtlFlsAlloc,
+        RtlFlsSetValue,
+        GetProcessHeap,
+        RtlAllocateHeap,
+        RtlFreeHeap,
+        NtSetInformationThread,
+        NtQueryInformationThread,
+        #[cfg(debug_assertions)]
+        NtWriteFile,
+    }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, EnumIter)]
-pub enum ImportDef {
-    RtlAddVectoredExceptionHandler,
-    TlsAlloc,
-    RtlFlsAlloc,
-    RtlFlsSetValue,
-    GetProcessHeap,
-    RtlAllocateHeap,
-    RtlFreeHeap,
-    NtSetInformationThread,
-    NtQueryInformationThread,
-    #[cfg(debug_assertions)]
-    NtWriteFile,
+mapped! {
+    ImportDef {
+        RtlAddVectoredExceptionHandler,
+        TlsAlloc,
+        RtlFlsAlloc,
+        RtlFlsSetValue,
+        GetProcessHeap,
+        RtlAllocateHeap,
+        RtlFreeHeap,
+        NtSetInformationThread,
+        NtQueryInformationThread,
+        #[cfg(debug_assertions)]
+        NtWriteFile,
+    }
 }
 
 impl ImportDef {
     pub fn get(&self) -> (StringDef, StringDef) {
         match self {
-            ImportDef::RtlAddVectoredExceptionHandler => {
+            ImportDef::RtlAddVectoredExceptionHandler { .. } => {
                 (StringDef::Ntdll, StringDef::RtlAddVectoredExceptionHandler)
             }
-            ImportDef::TlsAlloc => (StringDef::KERNEL32, StringDef::TlsAlloc),
-            ImportDef::RtlFlsAlloc => (StringDef::Ntdll, StringDef::RtlFlsAlloc),
-            ImportDef::RtlFlsSetValue => (StringDef::Ntdll, StringDef::RtlFlsSetValue),
-            ImportDef::GetProcessHeap => (StringDef::KERNEL32, StringDef::GetProcessHeap),
-            ImportDef::RtlAllocateHeap => (StringDef::Ntdll, StringDef::RtlAllocateHeap),
-            ImportDef::RtlFreeHeap => (StringDef::Ntdll, StringDef::RtlFreeHeap),
-            ImportDef::NtSetInformationThread => {
+            ImportDef::TlsAlloc { .. } => (StringDef::KERNEL32, StringDef::TlsAlloc),
+            ImportDef::RtlFlsAlloc { .. } => (StringDef::Ntdll, StringDef::RtlFlsAlloc),
+            ImportDef::RtlFlsSetValue { .. } => (StringDef::Ntdll, StringDef::RtlFlsSetValue),
+            ImportDef::GetProcessHeap { .. } => (StringDef::KERNEL32, StringDef::GetProcessHeap),
+            ImportDef::RtlAllocateHeap { .. } => (StringDef::Ntdll, StringDef::RtlAllocateHeap),
+            ImportDef::RtlFreeHeap { .. } => (StringDef::Ntdll, StringDef::RtlFreeHeap),
+            ImportDef::NtSetInformationThread { .. } => {
                 (StringDef::Ntdll, StringDef::NtSetInformationThread)
             }
-            ImportDef::NtQueryInformationThread => {
+            ImportDef::NtQueryInformationThread { .. } => {
                 (StringDef::Ntdll, StringDef::NtQueryInformationThread)
             }
             #[cfg(debug_assertions)]
-            ImportDef::NtWriteFile => (StringDef::Ntdll, StringDef::NtWriteFile),
+            ImportDef::NtWriteFile { .. } => (StringDef::Ntdll, StringDef::NtWriteFile),
         }
     }
 }
@@ -169,32 +172,32 @@ impl Runtime {
 
         let mut func_labels = HashMap::new();
 
-        for def in FnDef::iter() {
-            func_labels.insert(def, asm.create_label());
+        for def in FnDef::VARIANTS {
+            func_labels.insert(*def, asm.create_label());
         }
 
         let mut data_labels = HashMap::new();
 
-        for def in DataDef::iter() {
-            data_labels.insert(def, asm.create_label());
+        for def in DataDef::VARIANTS {
+            data_labels.insert(*def, asm.create_label());
         }
 
         let mut bool_labels = HashMap::new();
 
-        for def in BoolDef::iter() {
-            bool_labels.insert(def, asm.create_label());
+        for def in BoolDef::VARIANTS {
+            bool_labels.insert(*def, asm.create_label());
         }
 
         let mut string_labels = HashMap::new();
 
-        for def in StringDef::iter() {
-            string_labels.insert(def, asm.create_label());
+        for def in StringDef::VARIANTS {
+            string_labels.insert(*def, asm.create_label());
         }
 
         let mut imports = HashMap::new();
 
-        for (i, def) in ImportDef::iter().enumerate() {
-            imports.insert(def, i);
+        for (i, def) in ImportDef::VARIANTS.iter().enumerate() {
+            imports.insert(*def, i);
         }
 
         Self {
@@ -288,7 +291,7 @@ impl Runtime {
 
     pub fn resolve(&mut self, def: ImportDef) {
         // mov rcx, ...
-        self.asm.mov(rcx, self.imports[&def] as u64).unwrap();
+        self.asm.mov(rcx, self.mapper.index(def) as u64).unwrap();
 
         // call ...
         self.asm.call(self.func_labels[&FnDef::Resolve]).unwrap();
@@ -355,7 +358,7 @@ impl Runtime {
         self.define_data_byte(DataDef::VehStart, 0x0);
         self.define_data_byte(DataDef::VehEnd, 0x0);
 
-        self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::iter().count() * 8]);
+        self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
         self.define_data_bytes(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
         self.define_data_bytes(DataDef::VmGlobalState, &[0u8; VMReg::COUNT * 8]);
 
@@ -394,25 +397,28 @@ impl Runtime {
             shuffled.push(EmissionTask::Function(def, builder));
         }
 
-        for def in DataDef::iter() {
-            if def == DataDef::Functions || def == DataDef::VehStart || def == DataDef::VehEnd {
+        for def in DataDef::VARIANTS {
+            if *def == DataDef::Functions
+                || *def == DataDef::VehStart
+                || *def == DataDef::VehEnd
+            {
                 continue;
             }
 
-            if self.data.contains_key(&def) {
-                shuffled.push(EmissionTask::Data(def));
+            if self.data.contains_key(def) {
+                shuffled.push(EmissionTask::Data(*def));
             }
         }
 
-        for def in BoolDef::iter() {
-            if self.bools.contains_key(&def) {
-                shuffled.push(EmissionTask::Bool(def));
+        for def in BoolDef::VARIANTS {
+            if self.bools.contains_key(def) {
+                shuffled.push(EmissionTask::Bool(*def));
             }
         }
 
-        for def in StringDef::iter() {
-            if self.strings.contains_key(&def) {
-                shuffled.push(EmissionTask::String(def));
+        for def in StringDef::VARIANTS {
+            if self.strings.contains_key(def) {
+                shuffled.push(EmissionTask::String(*def));
             }
         }
 
