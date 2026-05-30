@@ -13,6 +13,12 @@ use crate::vm::encoders::{Effect, Encode};
 
 type Atom = Vec<Box<dyn Encode>>;
 
+struct MemoryAccess {
+    memory: VMMem,
+    width: i64,
+    write: bool,
+}
+
 /// Shuffles operations into a randomized but semantically equivalent sequence.
 pub fn permute(operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
     let mut atoms = atomize(operations);
@@ -28,81 +34,54 @@ pub fn permute(operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
     operations
 }
 
-/// Splits atoms at every depth-1 scratch boundary by parking the intermediate value into a register that some later atom is about to overwrite.
+/// Splits two-op producer-consumer atoms by parking the intermediate value into a register that some later atom is about to overwrite.
 fn decouple(atoms: Vec<Atom>) -> Vec<Atom> {
-    let plans = (0..atoms.len())
+    let parking = (0..atoms.len())
         .map(|i| {
-            let points = split_points(&atoms[i]);
-            if points.is_empty() {
-                None
+            let atom = &atoms[i];
+            if atom.len() == 2
+                && stores_minus_loads(&*atom[0]) == 1
+                && stores_minus_loads(&*atom[1]) == -1
+            {
+                find_parking(&atoms, i)
             } else {
-                find_parking(&atoms, i, points.len()).map(|regs| (points, regs))
+                None
             }
         })
-        .collect::<Vec<Option<(Vec<usize>, Vec<VMReg>)>>>();
+        .collect::<Vec<Option<VMReg>>>();
 
     let mut result = Vec::with_capacity(atoms.len() * 2);
 
     for (i, atom) in atoms.into_iter().enumerate() {
-        match &plans[i] {
-            Some((points, registers)) => {
-                let mut ops = atom.into_iter().map(Some).collect::<Vec<_>>();
-                let total = ops.len();
-                let mut prev = 0;
+        if let Some(register) = parking[i] {
+            let mut iter = atom.into_iter();
+            let producer = iter.next().unwrap();
+            let consumer = iter.next().unwrap();
 
-                for (k, &point) in points.iter().enumerate() {
-                    let mut sub = Vec::with_capacity(point - prev + 2);
-
-                    if k > 0 {
-                        sub.push(load(registers[k - 1]));
-                    }
-                    for j in prev..point {
-                        sub.push(ops[j].take().unwrap());
-                    }
-                    sub.push(store(registers[k]));
-
-                    result.push(sub);
-                    prev = point;
-                }
-
-                let mut tail = Vec::with_capacity(total - prev + 1);
-                tail.push(load(*registers.last().unwrap()));
-                for j in prev..total {
-                    tail.push(ops[j].take().unwrap());
-                }
-                result.push(tail);
-            }
-            None => result.push(atom),
+            result.push(vec![
+                producer,
+                Box::new(StoreRegister {
+                    width: VMWidth::Lower64,
+                    destination: register,
+                }),
+            ]);
+            result.push(vec![
+                Box::new(LoadRegister {
+                    width: VMWidth::Lower64,
+                    source: register,
+                }),
+                consumer,
+            ]);
+        } else {
+            result.push(atom);
         }
     }
 
     result
 }
 
-/// Returns the positions at which an atom can be split, i.e. every op boundary where the cumulative scratch depth is exactly 1.
-fn split_points(atom: &Atom) -> Vec<usize> {
-    let mut points = Vec::new();
-    let mut depth = 0;
-
-    for (i, op) in atom.iter().enumerate() {
-        depth += stores_minus_loads(&**op);
-        if depth == 1 && i + 1 < atom.len() {
-            points.push(i + 1);
-        }
-    }
-
-    points
-}
-
-/// Finds `count` distinct registers, each killed (written without being read) by some atom after the pair, with no read between.
-fn find_parking(atoms: &[Atom], pair: usize, count: usize) -> Option<Vec<VMReg>> {
-    let (own_reads, own_writes) = registers(&atoms[pair]);
-    let own = own_reads
-        .union(&own_writes)
-        .copied()
-        .collect::<HashSet<VMReg>>();
-
-    let mut result = Vec::with_capacity(count);
+/// Finds a register that some atom after the pair kills (writes without reading), where no atom between reads it first.
+fn find_parking(atoms: &[Atom], pair: usize) -> Option<VMReg> {
     let mut read_in_window = HashSet::new();
 
     for j in (pair + 1)..atoms.len() {
@@ -111,14 +90,9 @@ fn find_parking(atoms: &[Atom], pair: usize, count: usize) -> Option<Vec<VMReg>>
         for &register in &writes {
             if !reads.contains(&register)
                 && !read_in_window.contains(&register)
-                && !result.contains(&register)
-                && !own.contains(&register)
                 && is_parking_register(register)
             {
-                result.push(register);
-                if result.len() == count {
-                    return Some(result);
-                }
+                return Some(register);
             }
         }
 
@@ -126,20 +100,6 @@ fn find_parking(atoms: &[Atom], pair: usize, count: usize) -> Option<Vec<VMReg>>
     }
 
     None
-}
-
-fn load(register: VMReg) -> Box<dyn Encode> {
-    Box::new(LoadRegister {
-        width: VMWidth::Lower64,
-        source: register,
-    })
-}
-
-fn store(register: VMReg) -> Box<dyn Encode> {
-    Box::new(StoreRegister {
-        width: VMWidth::Lower64,
-        destination: register,
-    })
 }
 
 /// Returns true if the register is a general purpose x86-64 register safe to use as a temporary parking slot.
@@ -313,12 +273,6 @@ fn conflicts(a: &Atom, b: &Atom) -> bool {
         || (reads_flags(a) && writes_flags(b))
 }
 
-struct MemoryAccess {
-    location: VMMem,
-    width: i64,
-    is_store: bool,
-}
-
 /// Extracts the memory accesses performed by an atom by pairing each [`LoadMemory`] or [`StoreMemory`] with the [`LoadAddress`] immediately preceding it.
 fn memory_accesses(atom: &Atom) -> Option<Vec<MemoryAccess>> {
     let mut result = Vec::new();
@@ -341,9 +295,9 @@ fn memory_accesses(atom: &Atom) -> Option<Vec<MemoryAccess>> {
             let prev = &*atom[i - 1];
             let address = downcast::<LoadAddress>(prev)?;
             result.push(MemoryAccess {
-                location: address.source,
+                memory: address.source,
                 width,
-                is_store,
+                write: is_store,
             });
         }
     }
@@ -353,21 +307,21 @@ fn memory_accesses(atom: &Atom) -> Option<Vec<MemoryAccess>> {
 
 /// Checks if two memory accesses overlap, falling back to a conservative conflict when the addressing schemes differ.
 fn aliases(a: &MemoryAccess, b: &MemoryAccess) -> bool {
-    if !a.is_store && !b.is_store {
+    if !a.write && !b.write {
         return false;
     }
 
-    if a.location.base != b.location.base
-        || a.location.index != b.location.index
-        || a.location.scale != b.location.scale
-        || a.location.segment != b.location.segment
+    if a.memory.base != b.memory.base
+        || a.memory.index != b.memory.index
+        || a.memory.scale != b.memory.scale
+        || a.memory.segment != b.memory.segment
     {
         return true;
     }
 
-    let a_start = a.location.displacement as i64;
+    let a_start = a.memory.displacement as i64;
     let a_end = a_start + a.width;
-    let b_start = b.location.displacement as i64;
+    let b_start = b.memory.displacement as i64;
     let b_end = b_start + b.width;
 
     !(a_end <= b_start || b_end <= a_start)
