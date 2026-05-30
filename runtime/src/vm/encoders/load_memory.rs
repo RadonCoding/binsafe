@@ -8,7 +8,7 @@ pub struct LoadMemory {
 }
 
 impl Encode for LoadMemory {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(VMOp::LoadMemory), mapper.index(self.width)]
     }
 

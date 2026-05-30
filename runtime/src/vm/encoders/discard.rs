@@ -6,7 +6,7 @@ use crate::vm::encoders::{Effect, Encode};
 pub struct Discard;
 
 impl Encode for Discard {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(VMOp::Discard)]
     }
 

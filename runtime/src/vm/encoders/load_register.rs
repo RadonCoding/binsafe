@@ -9,7 +9,7 @@ pub struct LoadRegister {
 }
 
 impl Encode for LoadRegister {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![
             mapper.index(VMOp::LoadRegister),
             mapper.index(self.width),

@@ -12,10 +12,10 @@ pub struct Skip {
 }
 
 impl Encode for Skip {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         let mut payload = Vec::new();
 
-        for op in &mut self.payload {
+        for op in &self.payload {
             payload.extend(op.encode(mapper));
         }
 
@@ -29,7 +29,7 @@ impl Encode for Skip {
             conditions: self.conditions.clone(),
         }));
 
-        let mut bytes = bytecode::assemble(mapper, &mut operations);
+        let mut bytes = bytecode::assemble(mapper, &operations);
         bytes.extend(payload);
         bytes
     }

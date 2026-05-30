@@ -8,7 +8,7 @@ pub struct StoreMemory {
 }
 
 impl Encode for StoreMemory {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(VMOp::StoreMemory), mapper.index(self.width)]
     }
 

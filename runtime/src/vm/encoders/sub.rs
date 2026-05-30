@@ -8,7 +8,7 @@ pub struct Sub {
 }
 
 impl Encode for Sub {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(VMOp::Sub), mapper.index(self.width)]
     }
 

@@ -8,7 +8,7 @@ pub struct LoadAddress {
 }
 
 impl Encode for LoadAddress {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         let mut bytes = vec![mapper.index(VMOp::LoadAddress)];
         bytes.extend(self.source.encode(mapper));
         bytes

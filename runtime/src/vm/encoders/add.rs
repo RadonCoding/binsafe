@@ -8,7 +8,7 @@ pub struct Add {
 }
 
 impl Encode for Add {
-    fn encode(&mut self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(VMOp::Add), mapper.index(self.width)]
     }
 
