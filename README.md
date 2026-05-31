@@ -13,7 +13,8 @@ Code virtualizer for compiled 64-bit portable executables.
 
 - **Lifting**: instructions are translated into a stack-machine bytecode the runtime interprets.
 - **Permutation**: operations are reordered through their data dependencies into a semantically equivalent sequence.
-- **Encryption**: each block is chained to the tail of the previous so the sequence decrypts sequentially at runtime.
+- **Encryption**: immediate values in the bytecode are masked against a rolling key advanced between immediates, so the runtime decrypts each one against the matching key state.
+- **Chaining**: each block is chained to the tail of the previous so any tamper to an earlier block breaks the decryption of every block that follows.
 
 #### Embedding
 
