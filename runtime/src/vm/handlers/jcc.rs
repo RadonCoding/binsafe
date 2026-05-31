@@ -7,17 +7,23 @@ use iced_x86::code_asm::{
 
 // unsigned char* (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
-    let mut condition_loop = rt.asm.create_label();
+    let mut or_loop = rt.asm.create_label();
+    let mut or_cmp = rt.asm.create_label();
+    let mut or_eq = rt.asm.create_label();
+    let mut or_neq = rt.asm.create_label();
+    let mut or_fold = rt.asm.create_label();
 
-    let mut handle_cmp = rt.asm.create_label();
-    let mut handle_eq = rt.asm.create_label();
-    let mut handle_neq = rt.asm.create_label();
+    let mut and_loop = rt.asm.create_label();
+    let mut and_cmp = rt.asm.create_label();
+    let mut and_eq = rt.asm.create_label();
+    let mut and_neq = rt.asm.create_label();
+    let mut and_fold = rt.asm.create_label();
 
-    let mut check_continue = rt.asm.create_label();
-
-    let mut is_or = rt.asm.create_label();
-
-    let mut continue_loop = rt.asm.create_label();
+    let mut xor_loop = rt.asm.create_label();
+    let mut xor_cmp = rt.asm.create_label();
+    let mut xor_eq = rt.asm.create_label();
+    let mut xor_neq = rt.asm.create_label();
+    let mut xor_fold = rt.asm.create_label();
 
     let mut check_result = rt.asm.create_label();
     let mut handle_call = rt.asm.create_label();
@@ -42,32 +48,56 @@ pub fn build(rt: &mut Runtime) {
     // r14d -> conditions
     utils::bytecode::read_byte_zx(rt, rdx, r14d);
 
+    // mov r15b, 0x1
+    rt.asm.mov(r15b, 1i32).unwrap();
+
     // cmp r13b, ...
     rt.asm
         .cmp(r13b, rt.mapper.index(VMLogic::JAND) as i32)
         .unwrap();
-    // sete r15b
-    rt.asm.sete(r15b).unwrap();
     // je ...
-    rt.asm.je(condition_loop).unwrap();
+    rt.asm.je(and_loop).unwrap();
 
     // cmp r13b, ...
     rt.asm
         .cmp(r13b, rt.mapper.index(VMLogic::CAND) as i32)
         .unwrap();
-    // sete r15b
-    rt.asm.sete(r15b).unwrap();
     // je ...
-    rt.asm.je(condition_loop).unwrap();
+    rt.asm.je(and_loop).unwrap();
 
     // cmp r13b, ...
     rt.asm
         .cmp(r13b, rt.mapper.index(VMLogic::SAND) as i32)
         .unwrap();
-    // sete r15b
-    rt.asm.sete(r15b).unwrap();
+    // je ...
+    rt.asm.je(and_loop).unwrap();
 
-    rt.asm.set_label(&mut condition_loop).unwrap();
+    // xor r15b, r15b
+    rt.asm.xor(r15b, r15b).unwrap();
+
+    // cmp r13b, ...
+    rt.asm
+        .cmp(r13b, rt.mapper.index(VMLogic::JXOR) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(xor_loop).unwrap();
+
+    // cmp r13b, ...
+    rt.asm
+        .cmp(r13b, rt.mapper.index(VMLogic::CXOR) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(xor_loop).unwrap();
+
+    // cmp r13b, ...
+    rt.asm
+        .cmp(r13b, rt.mapper.index(VMLogic::SXOR) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(xor_loop).unwrap();
+
+    // Iterates through conditions accumulating their results into the accumulator via OR
+    rt.asm.set_label(&mut or_loop).unwrap();
     {
         // test r14d, r14d
         rt.asm.test(r14d, r14d).unwrap();
@@ -82,122 +112,294 @@ pub fn build(rt: &mut Runtime) {
             .cmp(r8b, rt.mapper.index(VMTest::CMP) as i32)
             .unwrap();
         // jz ...
-        rt.asm.jz(handle_cmp).unwrap();
+        rt.asm.jz(or_cmp).unwrap();
         // cmp r8b, ...
         rt.asm.cmp(r8b, rt.mapper.index(VMTest::EQ) as i32).unwrap();
         // je ...
-        rt.asm.je(handle_eq).unwrap();
+        rt.asm.je(or_eq).unwrap();
         // jmp ...
-        rt.asm.jmp(handle_neq).unwrap();
+        rt.asm.jmp(or_neq).unwrap();
+    }
 
-        // Compares the bit in flags specified by the flag bit (lhs) with the set state (rhs)
-        rt.asm.set_label(&mut handle_cmp).unwrap();
-        {
-            // r8d -> lhs
-            utils::bytecode::read_byte_zx(rt, rdx, r8d);
-            // r9b -> rhs
-            utils::bytecode::read_byte(rt, rdx, r9b);
+    // Compares the bit in flags specified by the flag bit (lhs) with the set state (rhs)
+    rt.asm.set_label(&mut or_cmp).unwrap();
+    {
+        // r8d -> lhs
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        // r9b -> rhs
+        utils::bytecode::read_byte(rt, rdx, r9b);
 
-            // bt r12d, r8d
-            rt.asm.bt(r12d, r8d).unwrap();
-            // setc r8b
-            rt.asm.setc(r8b).unwrap();
-            // cmp r8b, r9b
-            rt.asm.cmp(r8b, r9b).unwrap();
-            // sete r8b
-            rt.asm.sete(r8b).unwrap();
-            // jmp ...
-            rt.asm.jmp(check_continue).unwrap();
-        }
+        // bt r12d, r8d
+        rt.asm.bt(r12d, r8d).unwrap();
+        // setc r8b
+        rt.asm.setc(r8b).unwrap();
+        // cmp r8b, r9b
+        rt.asm.cmp(r8b, r9b).unwrap();
+        // sete r8b
+        rt.asm.sete(r8b).unwrap();
+        // jmp ...
+        rt.asm.jmp(or_fold).unwrap();
+    }
 
-        // Checks if the bit in flags specified by the first flag bit (lhs) == the bit in flags specified by the second flag bit (rhs)
-        rt.asm.set_label(&mut handle_eq).unwrap();
-        {
-            // r8d -> lhs
-            utils::bytecode::read_byte_zx(rt, rdx, r8d);
-            // r9d -> rhs
-            utils::bytecode::read_byte_zx(rt, rdx, r9d);
+    // Checks if the bit in flags specified by the first flag bit (lhs) == the bit in flags specified by the second flag bit (rhs)
+    rt.asm.set_label(&mut or_eq).unwrap();
+    {
+        // r8d -> lhs
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        // r9d -> rhs
+        utils::bytecode::read_byte_zx(rt, rdx, r9d);
 
-            // bt r12d, r8d
-            rt.asm.bt(r12d, r8d).unwrap();
-            // setc r8b
-            rt.asm.setc(r8b).unwrap();
-            // bt r12d, r9d
-            rt.asm.bt(r12d, r9d).unwrap();
-            // setc r9b
-            rt.asm.setc(r9b).unwrap();
-            // cmp r8b, r9b
-            rt.asm.cmp(r8b, r9b).unwrap();
-            // sete r8b
-            rt.asm.sete(r8b).unwrap();
-            // jmp ...
-            rt.asm.jmp(check_continue).unwrap();
-        }
+        // bt r12d, r8d
+        rt.asm.bt(r12d, r8d).unwrap();
+        // setc r8b
+        rt.asm.setc(r8b).unwrap();
+        // bt r12d, r9d
+        rt.asm.bt(r12d, r9d).unwrap();
+        // setc r9b
+        rt.asm.setc(r9b).unwrap();
+        // cmp r8b, r9b
+        rt.asm.cmp(r8b, r9b).unwrap();
+        // sete r8b
+        rt.asm.sete(r8b).unwrap();
+        // jmp ...
+        rt.asm.jmp(or_fold).unwrap();
+    }
 
-        // Checks if the bit in flags specified by the first flag bit (lhs) != the bit in flags specified by the second flag bit (rhs)
-        rt.asm.set_label(&mut handle_neq).unwrap();
-        {
-            // r8d -> lhs
-            utils::bytecode::read_byte_zx(rt, rdx, r8d);
-            // r9d -> rhs
-            utils::bytecode::read_byte_zx(rt, rdx, r9d);
+    // Checks if the bit in flags specified by the first flag bit (lhs) != the bit in flags specified by the second flag bit (rhs)
+    rt.asm.set_label(&mut or_neq).unwrap();
+    {
+        // r8d -> lhs
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        // r9d -> rhs
+        utils::bytecode::read_byte_zx(rt, rdx, r9d);
 
-            // bt r12d, r8d
-            rt.asm.bt(r12d, r8d).unwrap();
-            // setc r8b
-            rt.asm.setc(r8b).unwrap();
-            // bt r12d, r9d
-            rt.asm.bt(r12d, r9d).unwrap();
-            // setc r9b
-            rt.asm.setc(r9b).unwrap();
-            // cmp r8b, r9b
-            rt.asm.cmp(r8b, r9b).unwrap();
-            // setne r8b
-            rt.asm.setne(r8b).unwrap();
-        }
+        // bt r12d, r8d
+        rt.asm.bt(r12d, r8d).unwrap();
+        // setc r8b
+        rt.asm.setc(r8b).unwrap();
+        // bt r12d, r9d
+        rt.asm.bt(r12d, r9d).unwrap();
+        // setc r9b
+        rt.asm.setc(r9b).unwrap();
+        // cmp r8b, r9b
+        rt.asm.cmp(r8b, r9b).unwrap();
+        // setne r8b
+        rt.asm.setne(r8b).unwrap();
+    }
 
-        rt.asm.set_label(&mut check_continue).unwrap();
-        {
-            // cmp r13b, ...
-            rt.asm
-                .cmp(r13b, rt.mapper.index(VMLogic::JOR) as i32)
-                .unwrap();
-            // je ...
-            rt.asm.je(is_or).unwrap();
+    // Folds the current condition's result into the accumulator via OR and loops back
+    rt.asm.set_label(&mut or_fold).unwrap();
+    {
+        // or r15b, r8b
+        rt.asm.or(r15b, r8b).unwrap();
+        // dec r14d
+        rt.asm.dec(r14d).unwrap();
+        // jmp ...
+        rt.asm.jmp(or_loop).unwrap();
+    }
 
-            // cmp r13b, ...
-            rt.asm
-                .cmp(r13b, rt.mapper.index(VMLogic::COR) as i32)
-                .unwrap();
-            // je ...
-            rt.asm.je(is_or).unwrap();
+    // Iterates through conditions accumulating their results into the accumulator via AND
+    rt.asm.set_label(&mut and_loop).unwrap();
+    {
+        // test r14d, r14d
+        rt.asm.test(r14d, r14d).unwrap();
+        // jz ...
+        rt.asm.jz(check_result).unwrap();
 
-            // cmp r13b, ...
-            rt.asm
-                .cmp(r13b, rt.mapper.index(VMLogic::SOR) as i32)
-                .unwrap();
-            // je ...
-            rt.asm.je(is_or).unwrap();
+        // r8b -> test
+        utils::bytecode::read_byte(rt, rdx, r8b);
 
-            // and r15b, r8b
-            rt.asm.and(r15b, r8b).unwrap();
-            // jmp ...
-            rt.asm.jmp(continue_loop).unwrap();
-        }
+        // cmp r8b, ...
+        rt.asm
+            .cmp(r8b, rt.mapper.index(VMTest::CMP) as i32)
+            .unwrap();
+        // jz ...
+        rt.asm.jz(and_cmp).unwrap();
+        // cmp r8b, ...
+        rt.asm.cmp(r8b, rt.mapper.index(VMTest::EQ) as i32).unwrap();
+        // je ...
+        rt.asm.je(and_eq).unwrap();
+        // jmp ...
+        rt.asm.jmp(and_neq).unwrap();
+    }
 
-        rt.asm.set_label(&mut is_or).unwrap();
-        {
-            // or r15b, r8b
-            rt.asm.or(r15b, r8b).unwrap();
-        }
+    // Compares the bit in flags specified by the flag bit (lhs) with the set state (rhs)
+    rt.asm.set_label(&mut and_cmp).unwrap();
+    {
+        // r8d -> lhs
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        // r9b -> rhs
+        utils::bytecode::read_byte(rt, rdx, r9b);
 
-        rt.asm.set_label(&mut continue_loop).unwrap();
-        {
-            // dec r14d
-            rt.asm.dec(r14d).unwrap();
-            // jmp ...
-            rt.asm.jmp(condition_loop).unwrap();
-        }
+        // bt r12d, r8d
+        rt.asm.bt(r12d, r8d).unwrap();
+        // setc r8b
+        rt.asm.setc(r8b).unwrap();
+        // cmp r8b, r9b
+        rt.asm.cmp(r8b, r9b).unwrap();
+        // sete r8b
+        rt.asm.sete(r8b).unwrap();
+        // jmp ...
+        rt.asm.jmp(and_fold).unwrap();
+    }
+
+    // Checks if the bit in flags specified by the first flag bit (lhs) == the bit in flags specified by the second flag bit (rhs)
+    rt.asm.set_label(&mut and_eq).unwrap();
+    {
+        // r8d -> lhs
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        // r9d -> rhs
+        utils::bytecode::read_byte_zx(rt, rdx, r9d);
+
+        // bt r12d, r8d
+        rt.asm.bt(r12d, r8d).unwrap();
+        // setc r8b
+        rt.asm.setc(r8b).unwrap();
+        // bt r12d, r9d
+        rt.asm.bt(r12d, r9d).unwrap();
+        // setc r9b
+        rt.asm.setc(r9b).unwrap();
+        // cmp r8b, r9b
+        rt.asm.cmp(r8b, r9b).unwrap();
+        // sete r8b
+        rt.asm.sete(r8b).unwrap();
+        // jmp ...
+        rt.asm.jmp(and_fold).unwrap();
+    }
+
+    // Checks if the bit in flags specified by the first flag bit (lhs) != the bit in flags specified by the second flag bit (rhs)
+    rt.asm.set_label(&mut and_neq).unwrap();
+    {
+        // r8d -> lhs
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        // r9d -> rhs
+        utils::bytecode::read_byte_zx(rt, rdx, r9d);
+
+        // bt r12d, r8d
+        rt.asm.bt(r12d, r8d).unwrap();
+        // setc r8b
+        rt.asm.setc(r8b).unwrap();
+        // bt r12d, r9d
+        rt.asm.bt(r12d, r9d).unwrap();
+        // setc r9b
+        rt.asm.setc(r9b).unwrap();
+        // cmp r8b, r9b
+        rt.asm.cmp(r8b, r9b).unwrap();
+        // setne r8b
+        rt.asm.setne(r8b).unwrap();
+    }
+
+    // Folds the current condition's result into the accumulator via AND and loops back
+    rt.asm.set_label(&mut and_fold).unwrap();
+    {
+        // and r15b, r8b
+        rt.asm.and(r15b, r8b).unwrap();
+        // dec r14d
+        rt.asm.dec(r14d).unwrap();
+        // jmp ...
+        rt.asm.jmp(and_loop).unwrap();
+    }
+
+    // Iterates through conditions accumulating their results into the accumulator via XOR
+    rt.asm.set_label(&mut xor_loop).unwrap();
+    {
+        // test r14d, r14d
+        rt.asm.test(r14d, r14d).unwrap();
+        // jz ...
+        rt.asm.jz(check_result).unwrap();
+
+        // r8b -> test
+        utils::bytecode::read_byte(rt, rdx, r8b);
+
+        // cmp r8b, ...
+        rt.asm
+            .cmp(r8b, rt.mapper.index(VMTest::CMP) as i32)
+            .unwrap();
+        // jz ...
+        rt.asm.jz(xor_cmp).unwrap();
+        // cmp r8b, ...
+        rt.asm.cmp(r8b, rt.mapper.index(VMTest::EQ) as i32).unwrap();
+        // je ...
+        rt.asm.je(xor_eq).unwrap();
+        // jmp ...
+        rt.asm.jmp(xor_neq).unwrap();
+    }
+
+    // Compares the bit in flags specified by the flag bit (lhs) with the set state (rhs)
+    rt.asm.set_label(&mut xor_cmp).unwrap();
+    {
+        // r8d -> lhs
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        // r9b -> rhs
+        utils::bytecode::read_byte(rt, rdx, r9b);
+
+        // bt r12d, r8d
+        rt.asm.bt(r12d, r8d).unwrap();
+        // setc r8b
+        rt.asm.setc(r8b).unwrap();
+        // cmp r8b, r9b
+        rt.asm.cmp(r8b, r9b).unwrap();
+        // sete r8b
+        rt.asm.sete(r8b).unwrap();
+        // jmp ...
+        rt.asm.jmp(xor_fold).unwrap();
+    }
+
+    // Checks if the bit in flags specified by the first flag bit (lhs) == the bit in flags specified by the second flag bit (rhs)
+    rt.asm.set_label(&mut xor_eq).unwrap();
+    {
+        // r8d -> lhs
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        // r9d -> rhs
+        utils::bytecode::read_byte_zx(rt, rdx, r9d);
+
+        // bt r12d, r8d
+        rt.asm.bt(r12d, r8d).unwrap();
+        // setc r8b
+        rt.asm.setc(r8b).unwrap();
+        // bt r12d, r9d
+        rt.asm.bt(r12d, r9d).unwrap();
+        // setc r9b
+        rt.asm.setc(r9b).unwrap();
+        // cmp r8b, r9b
+        rt.asm.cmp(r8b, r9b).unwrap();
+        // sete r8b
+        rt.asm.sete(r8b).unwrap();
+        // jmp ...
+        rt.asm.jmp(xor_fold).unwrap();
+    }
+
+    // Checks if the bit in flags specified by the first flag bit (lhs) != the bit in flags specified by the second flag bit (rhs)
+    rt.asm.set_label(&mut xor_neq).unwrap();
+    {
+        // r8d -> lhs
+        utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        // r9d -> rhs
+        utils::bytecode::read_byte_zx(rt, rdx, r9d);
+
+        // bt r12d, r8d
+        rt.asm.bt(r12d, r8d).unwrap();
+        // setc r8b
+        rt.asm.setc(r8b).unwrap();
+        // bt r12d, r9d
+        rt.asm.bt(r12d, r9d).unwrap();
+        // setc r9b
+        rt.asm.setc(r9b).unwrap();
+        // cmp r8b, r9b
+        rt.asm.cmp(r8b, r9b).unwrap();
+        // setne r8b
+        rt.asm.setne(r8b).unwrap();
+    }
+
+    // Folds the current condition's result into the accumulator via XOR and loops back
+    rt.asm.set_label(&mut xor_fold).unwrap();
+    {
+        // xor r15b, r8b
+        rt.asm.xor(r15b, r8b).unwrap();
+        // dec r14d
+        rt.asm.dec(r14d).unwrap();
+        // jmp ...
+        rt.asm.jmp(xor_loop).unwrap();
     }
 
     rt.asm.set_label(&mut check_result).unwrap();
@@ -224,6 +426,13 @@ pub fn build(rt: &mut Runtime) {
         // je ...
         rt.asm.je(handle_skip).unwrap();
 
+        // cmp r13b, ...
+        rt.asm
+            .cmp(r13b, rt.mapper.index(VMLogic::SXOR) as i32)
+            .unwrap();
+        // je ...
+        rt.asm.je(handle_skip).unwrap();
+
         // mov [rcx + ...], rax
         utils::vreg::store_reg(rt, rcx, rax, VMReg::NBranch);
 
@@ -238,8 +447,18 @@ pub fn build(rt: &mut Runtime) {
         rt.asm
             .cmp(r13b, rt.mapper.index(VMLogic::COR) as i32)
             .unwrap();
-        // jne ...
-        rt.asm.jne(epilogue).unwrap();
+        // je ...
+        rt.asm.je(handle_call).unwrap();
+
+        // cmp r13b, ...
+        rt.asm
+            .cmp(r13b, rt.mapper.index(VMLogic::CXOR) as i32)
+            .unwrap();
+        // je ...
+        rt.asm.je(handle_call).unwrap();
+
+        // jmp ...
+        rt.asm.jmp(epilogue).unwrap();
     }
 
     rt.asm.set_label(&mut handle_call).unwrap();
