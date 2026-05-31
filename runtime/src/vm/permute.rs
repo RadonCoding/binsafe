@@ -41,7 +41,7 @@ where
         .flat_map(|atom| effects(atom).0)
         .collect::<HashSet<VMReg>>();
 
-    // let atoms = decouple(atoms, &live);
+    let (atoms, parked) = decouple(atoms, &live);
 
     let (successors, mut indegree) = dependencies(&atoms);
     let n = successors.len();
@@ -62,7 +62,47 @@ where
         }
     }
 
-    schedule(atoms, &order)
+    let mut operations = schedule(atoms, &order);
+
+    cleanup(&mut operations, &parked);
+
+    operations
+}
+
+/// Removes adjacent [`decouple`]-inserted [`StoreRegister`]/[`LoadRegister`] pairs left behind when scheduling failed to interleave anything across a parking cut.
+fn cleanup(operations: &mut Vec<Box<dyn Encode>>, parked: &HashSet<usize>) {
+    let mut i = 0;
+
+    while i + 1 < operations.len() {
+        if !parked.contains(&address(&operations[i]))
+            || !parked.contains(&address(&operations[i + 1]))
+        {
+            i += 1;
+            continue;
+        }
+
+        let store = downcast::<StoreRegister>(&*operations[i]);
+        let load = downcast::<LoadRegister>(&*operations[i + 1]);
+
+        let pair = match (store, load) {
+            (Some(s), Some(l)) => s.destination == l.source && s.width == l.width,
+            _ => false,
+        };
+
+        if pair {
+            operations.drain(i..i + 2);
+
+            i = i.saturating_sub(1);
+            continue;
+        }
+
+        i += 1;
+    }
+}
+
+/// Stable identity for a boxed operation, used to tag [`decouple`]-inserted ops for [`cleanup`].
+fn address(op: &Box<dyn Encode>) -> usize {
+    &**op as *const dyn Encode as *const () as usize
 }
 
 /// Groups operations into atoms where each atom leaves the scratch stack balanced.
@@ -97,7 +137,7 @@ fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Atom> {
 }
 
 /// Splits each atom at every depth-1 cut by parking the single scratch value across the cut into a register that some later atom is about to kill.
-fn decouple(atoms: Vec<Atom>, live: &HashSet<VMReg>) -> Vec<Atom> {
+fn decouple(atoms: Vec<Atom>, live: &HashSet<VMReg>) -> (Vec<Atom>, HashSet<usize>) {
     let plans = (0..atoms.len())
         .map(|i| {
             let cuts = cuts(&atoms[i]);
@@ -111,15 +151,16 @@ fn decouple(atoms: Vec<Atom>, live: &HashSet<VMReg>) -> Vec<Atom> {
         .collect::<Vec<Option<(Vec<usize>, Vec<VMReg>)>>>();
 
     let mut result = Vec::with_capacity(atoms.len() * 2);
+    let mut parked = HashSet::new();
 
     for (atom, plan) in atoms.into_iter().zip(plans) {
         match plan {
-            Some((cuts, registers)) => result.extend(split(atom, &cuts, &registers)),
+            Some((cuts, registers)) => result.extend(split(atom, &cuts, &registers, &mut parked)),
             None => result.push(atom),
         }
     }
 
-    result
+    (result, parked)
 }
 
 /// Positions inside an atom where cumulative scratch depth equals one and exactly one value is sitting on top ready to be parked.
@@ -176,8 +217,13 @@ fn vacant(atoms: &[Atom], pair: usize, count: usize, live: &HashSet<VMReg>) -> O
     None
 }
 
-/// Splits an atom at the given cut positions, prepending a load and appending a store of the corresponding parking register at each boundary.
-fn split(atom: Atom, cuts: &[usize], registers: &[VMReg]) -> Vec<Atom> {
+/// Splits an atom at the given cut positions, prepending a load and appending a store of the corresponding parking register at each boundary, recording each synthetic op into `parked`.
+fn split(
+    atom: Atom,
+    cuts: &[usize],
+    registers: &[VMReg],
+    parked: &mut HashSet<usize>,
+) -> Vec<Atom> {
     let mut operations = atom
         .into_iter()
         .map(Some)
@@ -193,14 +239,20 @@ fn split(atom: Atom, cuts: &[usize], registers: &[VMReg]) -> Vec<Atom> {
         let mut piece = Vec::new();
 
         if k > 0 {
-            piece.push(load(registers[k - 1]));
+            let op = load(registers[k - 1]);
+
+            parked.insert(address(&op));
+            piece.push(op);
         }
 
         for j in previous..cut {
             piece.push(operations[j].take().unwrap());
         }
 
-        piece.push(store(registers[k]));
+        let op = store(registers[k]);
+
+        parked.insert(address(&op));
+        piece.push(op);
 
         result.push(piece);
 
@@ -209,7 +261,10 @@ fn split(atom: Atom, cuts: &[usize], registers: &[VMReg]) -> Vec<Atom> {
 
     let mut last = Vec::new();
 
-    last.push(load(*registers.last().unwrap()));
+    let op = load(*registers.last().unwrap());
+
+    parked.insert(address(&op));
+    last.push(op);
 
     for j in previous..total {
         last.push(operations[j].take().unwrap());
