@@ -117,10 +117,8 @@ impl Protection for Virtualization {
                 _ => continue 'outer,
             };
 
-            let vblock = bytecode::assemble(&mut engine.rt.mapper, &operations);
-
             let mut hasher = DefaultHasher::new();
-            vblock.hash(&mut hasher);
+            block.instructions.hash(&mut hasher);
             let hash = hasher.finish();
 
             let vcode_offset = if let Some(&offset) = dedup.get(&hash) {
