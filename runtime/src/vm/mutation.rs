@@ -19,6 +19,7 @@ pub fn mutate(operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
     operations
 }
 
+/// Recursively rewrites each leaf in place, descending into children.
 fn walk<R: Rng>(operations: &mut Vec<Rc<dyn Encode>>, rng: &mut R) {
     for op in operations.iter_mut() {
         if let Some(children) = Rc::get_mut(op).unwrap().children() {
