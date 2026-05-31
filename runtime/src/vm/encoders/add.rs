@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMWidth};
+use crate::vm::bytecode::{VMOp, VMReg, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ impl Encode for Add {
     }
 
     fn writes(&self) -> Vec<super::Effect> {
-        vec![Effect::Flags]
+        vec![Effect::Register(VMReg::Flags)]
     }
 
     fn depth(&self) -> i32 {

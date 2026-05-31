@@ -54,8 +54,14 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut add_displacement).unwrap();
     {
-        // r8 -> displacement
-        utils::bytecode::read_dword_sx(rt, rdx, r8);
+        // r8d -> displacement
+        utils::bytecode::read_dword(rt, rdx, r8d);
+        // mov r9, [rcx + ...]
+        utils::vreg::load_reg(rt, rcx, VMReg::VImm, r9);
+        // xor r8d, r9d
+        rt.asm.xor(r8d, r9d).unwrap();
+        // movsxd r8, r8d
+        rt.asm.movsxd(r8, r8d).unwrap();
         // add rax, r8
         rt.asm.add(rax, r8).unwrap();
     }

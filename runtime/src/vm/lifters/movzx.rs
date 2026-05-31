@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use iced_x86::{Code, Instruction, OpKind};
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
@@ -6,7 +7,7 @@ use crate::vm::encoders::{
     store_register::StoreRegister, Encode,
 };
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let source_width = match instruction.code() {
         Code::Movzx_r16_rm8 | Code::Movzx_r32_rm8 | Code::Movzx_r64_rm8 => VMWidth::Lower8,
         Code::Movzx_r16_rm16 | Code::Movzx_r32_rm16 | Code::Movzx_r64_rm16 => VMWidth::Lower16,
@@ -20,28 +21,28 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
         _ => VMWidth::Lower64,
     };
 
-    let mut operations = Vec::<Box<dyn Encode>>::new();
+    let mut operations = Vec::<Rc<dyn Encode>>::new();
 
     match instruction.op1_kind() {
         OpKind::Register => {
             let source_register = instruction.op1_register();
-            operations.push(Box::new(LoadRegister {
+            operations.push(Rc::new(LoadRegister {
                 width: VMWidth::from(source_register),
                 source: VMReg::from(source_register),
             }));
         }
         OpKind::Memory => {
-            operations.push(Box::new(LoadAddress {
+            operations.push(Rc::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Box::new(LoadMemory {
+            operations.push(Rc::new(LoadMemory {
                 width: source_width,
             }));
         }
         _ => return None,
     }
 
-    operations.push(Box::new(StoreRegister {
+    operations.push(Rc::new(StoreRegister {
         width: destination_width,
         destination,
     }));

@@ -1,5 +1,7 @@
 use iced_x86::{Code, Instruction, OpKind};
+use std::rc::Rc;
 
+use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMFlag, VMLogic, VMMem, VMReg, VMWidth};
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_immediate::LoadImmediate;
@@ -9,7 +11,7 @@ use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::jcc::{cmp, eq, neq};
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let code = instruction.code();
 
     let (logic, conditions) = match code {
@@ -60,34 +62,34 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
         _ => return None,
     };
 
-    let zero = || -> Box<dyn Encode> {
-        Box::new(LoadImmediate {
+    let zero = || -> Rc<dyn Encode> {
+        Rc::new(LoadImmediate {
             width: VMWidth::Lower8,
             source: vec![0],
         })
     };
-    let one = || -> Box<dyn Encode> {
-        Box::new(LoadImmediate {
+    let one = || -> Rc<dyn Encode> {
+        Rc::new(LoadImmediate {
             width: VMWidth::Lower8,
             source: vec![1],
         })
     };
 
-    let mut operations = Vec::<Box<dyn Encode>>::new();
+    let mut operations = Vec::<Rc<dyn Encode>>::new();
 
-    let payload: Vec<Box<dyn Encode>>;
+    let body: Vec<Rc<dyn Encode>>;
 
     match instruction.op0_kind() {
         OpKind::Register => {
             let destination = VMReg::from(instruction.op0_register());
             operations.push(zero());
-            operations.push(Box::new(StoreRegister {
+            operations.push(Rc::new(StoreRegister {
                 width: VMWidth::Lower8,
                 destination,
             }));
-            payload = vec![
+            body = vec![
                 one(),
-                Box::new(StoreRegister {
+                Rc::new(StoreRegister {
                     width: VMWidth::Lower8,
                     destination,
                 }),
@@ -95,18 +97,18 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
         }
         OpKind::Memory => {
             operations.push(zero());
-            operations.push(Box::new(LoadAddress {
+            operations.push(Rc::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Box::new(StoreMemory {
+            operations.push(Rc::new(StoreMemory {
                 width: VMWidth::Lower8,
             }));
-            payload = vec![
+            body = vec![
                 one(),
-                Box::new(LoadAddress {
+                Rc::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }),
-                Box::new(StoreMemory {
+                Rc::new(StoreMemory {
                     width: VMWidth::Lower8,
                 }),
             ];
@@ -114,11 +116,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
         _ => return None,
     }
 
-    operations.push(Box::new(Skip {
-        logic,
-        conditions,
-        payload,
-    }));
+    operations.push(Rc::new(Skip::new(mapper, logic, conditions, body)));
 
     Some(operations)
 }

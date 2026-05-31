@@ -1,8 +1,11 @@
-use iced_x86::code_asm::{al, r8, r8d, rax, rdx};
+use iced_x86::code_asm::{al, r8, r8b, r8d, r8w, r9, r9b, r9d, r9w, rax, rcx, rdx};
 
 use crate::{
     runtime::Runtime,
-    vm::utils::{self, scratch, stack},
+    vm::{
+        bytecode::VMReg,
+        utils::{self, scratch, stack},
+    },
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -12,41 +15,62 @@ pub fn build(rt: &mut Runtime) {
     // al -> width
     utils::bytecode::read_byte(rt, rdx, al);
 
+    // mov r9, [rcx + ...]
+    utils::vreg::load_reg(rt, rcx, VMReg::VImm, r9);
+
     utils::width::dispatch(
         rt,
         al,
         &mut epilogue,
         |rt| {
-            // r8 -> imm
+            // r8  -> source
             utils::bytecode::read_qword(rt, rdx, r8);
+            // xor r8, r9
+            rt.asm.xor(r8, r9).unwrap();
         },
         |rt| {
-            // r8d -> imm
+            // r8d  -> source
             utils::bytecode::read_dword(rt, rdx, r8d);
+            // xor r8d, r9d
+            rt.asm.xor(r8d, r9d).unwrap();
         },
         |rt| {
-            // r8d -> imm
+            // r8d  -> source
             utils::bytecode::read_word_zx(rt, rdx, r8d);
+            // xor r8w, r9w
+            rt.asm.xor(r8w, r9w).unwrap();
         },
         |rt| {
-            // r8d -> imm
+            // r8d  -> source
             utils::bytecode::read_byte_zx(rt, rdx, r8d);
+            // shr r9, 0x8
+            rt.asm.shr(r9, 0x8u32).unwrap();
+            // xor r8b, r9b
+            rt.asm.xor(r8b, r9b).unwrap();
         },
         |rt| {
-            // r8d -> imm
+            // r8d  -> source
             utils::bytecode::read_byte_zx(rt, rdx, r8d);
+            // xor r8b, r9b
+            rt.asm.xor(r8b, r9b).unwrap();
         },
         |rt| {
-            // r8d -> imm
+            // r8d  -> source
             utils::bytecode::read_dword(rt, rdx, r8d);
+            // xor r8d, r9d
+            rt.asm.xor(r8d, r9d).unwrap();
         },
         |rt| {
-            // r8d -> imm
+            // r8d  -> source
             utils::bytecode::read_word_zx(rt, rdx, r8d);
+            // xor r8w, r9w
+            rt.asm.xor(r8w, r9w).unwrap();
         },
         |rt| {
-            // r8d -> imm
+            // r8d  -> source
             utils::bytecode::read_byte_zx(rt, rdx, r8d);
+            // xor r8b, r9b
+            rt.asm.xor(r8b, r9b).unwrap();
         },
     );
 

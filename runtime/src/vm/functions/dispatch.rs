@@ -10,6 +10,7 @@ use crate::{
 
 // void (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
+    let mut start_block = rt.asm.create_label();
     let mut execute_loop = rt.asm.create_label();
     let mut check_branch = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
@@ -46,7 +47,13 @@ pub fn build(rt: &mut Runtime) {
     // mov r8b, 0x1
     rt.asm.mov(r8b, 0x1).unwrap();
     // call ...
-    stack::call_with_label(rt, rt.func_labels[&FnDef::VmCrypt], &execute_loop);
+    stack::call_with_label(rt, rt.func_labels[&FnDef::VmCrypt], &start_block);
+
+    rt.asm.set_label(&mut start_block).unwrap();
+    {
+        // mov [r12 + ...], 0x0
+        utils::vreg::store_imm(rt, r12, 0x0, VMReg::VImm);
+    }
 
     rt.asm.set_label(&mut execute_loop).unwrap();
     {
@@ -55,7 +62,7 @@ pub fn build(rt: &mut Runtime) {
         // je ...
         rt.asm.je(check_branch).unwrap();
 
-        // movzx r8d, [r13]; add r13, 0x1 -> op
+        // r8d -> operation
         utils::bytecode::read_byte_zx(rt, r13, r8d);
 
         // lea rax, [...]
@@ -97,7 +104,7 @@ pub fn build(rt: &mut Runtime) {
         // mov r13, [...]
         utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
         // jmp ...
-        rt.asm.jmp(execute_loop).unwrap();
+        rt.asm.jmp(start_block).unwrap();
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();

@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMMem, VMOp};
+use crate::vm::bytecode::{VMMem, VMOp, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
@@ -18,6 +18,7 @@ impl Encode for LoadAddress {
         vec![
             Effect::Register(self.source.base),
             Effect::Register(self.source.index),
+            Effect::Register(VMReg::VImm),
         ]
     }
 

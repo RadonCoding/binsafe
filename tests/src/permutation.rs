@@ -7,6 +7,7 @@ use runtime::{
         permute,
     },
 };
+use std::rc::Rc;
 
 use crate::{encrypt, instruction, Executor};
 
@@ -59,14 +60,19 @@ fn snapshot(executor: &mut Executor, state: [u64; VMReg::COUNT]) -> Vec<(VMReg, 
         .filter(|r| {
             !matches!(
                 **r,
-                VMReg::BPointer | VMReg::BLength | VMReg::VStack | VMReg::VScratch
+                VMReg::BPointer
+                    | VMReg::BLength
+                    | VMReg::VAtt
+                    | VMReg::VImm
+                    | VMReg::VStack
+                    | VMReg::VScratch
             )
         })
         .map(|r| (*r, state[executor.rt.mapper.index(*r) as usize]))
         .collect()
 }
 
-fn dump(operations: &[Box<dyn Encode>]) -> String {
+fn dump(operations: &[Rc<dyn Encode>]) -> String {
     let mut lines = Vec::new();
 
     for (i, op) in operations.iter().enumerate() {
@@ -76,43 +82,62 @@ fn dump(operations: &[Box<dyn Encode>]) -> String {
     lines.join("\n")
 }
 
+struct Run {
+    registers: Vec<(VMReg, u64)>,
+    memory: Vec<u64>,
+}
+
 fn exhaust(instructions: &[Instruction], setup: &[(VMReg, u64)], memory: &mut [u64]) {
-    let input = dump(&bytecode::lift(instructions).unwrap());
-    let initial = memory.to_vec();
+    let mut executor = Executor::new();
+    let lifted = bytecode::lift(&mut executor.rt.mapper, instructions).unwrap();
+    let input = dump(&lifted);
+
+    let baseline = memory.to_vec();
 
     let mut enumerator = Enumerator::default();
-    let mut reference: Option<(Vec<(VMReg, u64)>, Vec<u64>)> = None;
+
+    let mut reference: Option<Run> = None;
 
     loop {
-        memory.copy_from_slice(&initial);
+        memory.copy_from_slice(&baseline);
 
         let mut executor = Executor::new();
-        let lifted = bytecode::lift(instructions).unwrap();
-        let operations = permute::permute(lifted, |ready| enumerator.pick(ready));
-        let output = dump(&operations);
-        let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &operations);
+        let lifted = bytecode::lift(&mut executor.rt.mapper, instructions).unwrap();
+        let permuted = permute::permute(lifted, &mut |ready| enumerator.pick(ready));
+        let output = dump(&permuted);
+        let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &permuted);
 
         encrypt(&mut bytes);
 
         let raw = executor.run(setup, &bytes);
-        let regs = snapshot(&mut executor, raw);
-        let mem = memory.to_vec();
+
+        let current = Run {
+            registers: snapshot(&mut executor, raw),
+            memory: memory.to_vec(),
+        };
 
         match &reference {
-            None => reference = Some((regs, mem)),
-            Some((ref_regs, ref_mem)) => {
+            None => reference = Some(current),
+            Some(reference) => {
                 let mut differences = Vec::new();
 
-                for ((reg, expected), (_, received)) in ref_regs.iter().zip(regs.iter()) {
+                for ((register, expected), (_, received)) in
+                    reference.registers.iter().zip(current.registers.iter())
+                {
                     if expected != received {
                         differences.push(format!(
                             "{:?}: expected=0x{:X} received=0x{:X}",
-                            reg, expected, received,
+                            register, expected, received,
                         ));
                     }
                 }
 
-                for (i, (expected, received)) in ref_mem.iter().zip(mem.iter()).enumerate() {
+                for (i, (expected, received)) in reference
+                    .memory
+                    .iter()
+                    .zip(current.memory.iter())
+                    .enumerate()
+                {
                     if expected != received {
                         differences.push(format!(
                             "mem[{}]: expected=0x{:X} received=0x{:X}",
@@ -162,6 +187,7 @@ fn test_permutation_registers() {
 #[test]
 fn test_permutation_memory() {
     let mut buf = [0u64; 4];
+
     let base = buf.as_mut_ptr() as u64;
 
     exhaust(
@@ -215,6 +241,7 @@ fn test_permutation_flags() {
 #[test]
 fn test_permutation_scratch() {
     let mut stack = [0u64; 8];
+
     let top = unsafe { stack.as_mut_ptr().add(stack.len()) as u64 };
 
     exhaust(

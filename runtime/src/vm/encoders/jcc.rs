@@ -27,7 +27,7 @@ impl Encode for Jcc {
     }
 
     fn reads(&self) -> Vec<super::Effect> {
-        vec![Effect::Flags]
+        vec![Effect::Register(VMReg::Flags)]
     }
 
     fn writes(&self) -> Vec<super::Effect> {
@@ -39,6 +39,10 @@ impl Encode for Jcc {
 
     fn depth(&self) -> i32 {
         -1
+    }
+
+    fn branches(&self) -> bool {
+        true
     }
 }
 

@@ -20,4 +20,8 @@ impl Encode for Ret {
             Effect::Register(VMReg::NBranch),
         ]
     }
+
+    fn branches(&self) -> bool {
+        true
+    }
 }

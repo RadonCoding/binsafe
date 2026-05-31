@@ -1,23 +1,25 @@
 use iced_x86::{Instruction, MemoryOperand, Register};
 use rand::Rng;
-use runtime::vm::{
-    bytecode::{self, VMFlag, VMReg},
-    permute,
-};
+use runtime::vm::bytecode::{self, VMFlag, VMReg};
 
-use crate::{encrypt, instruction, Executor};
+use crate::{decrypt, encrypt, instruction, Executor};
 
 fn template(instructions: &[Instruction], setup: &[(VMReg, u64)], target: VMReg, expected: u64) {
     let mut executor = Executor::new();
 
-    let lifted = bytecode::lift(instructions).unwrap();
+    let lifted = bytecode::lift(&mut executor.rt.mapper, instructions).unwrap();
+
     let mut rng = rand::thread_rng();
-    let operations = permute::permute(lifted, |ready| rng.gen_range(0..ready.len()));
-    let mut bytecode = bytecode::assemble(&mut executor.rt.mapper, &operations);
+
+    let mut bytecode = bytecode::process(&mut executor.rt.mapper, lifted, |ready| {
+        rng.gen_range(0..ready.len())
+    })
+    .bytes;
 
     encrypt(&mut bytecode);
 
     let state = executor.run(setup, &bytecode);
+
     let received = state[(executor.rt.mapper.index(target)) as usize];
 
     assert_eq!(
@@ -88,7 +90,8 @@ fn test_crypt() {
     let before = buffer.clone();
 
     encrypt(&mut buffer);
-    crate::decrypt(&mut buffer);
+
+    decrypt(&mut buffer);
 
     let after = buffer.clone();
 
@@ -149,6 +152,39 @@ fn test_lea() {
     case!([instruction!(Lea_r16_m, Register::AX,
               MemoryOperand::with_base_displ_size(Register::RBX, 0x11, 2))],
           [Rbx = 0x11], Rax => 0x22);
+}
+
+#[test]
+fn test_memory() {
+    let mut buf = [0u64; 4];
+
+    let base = buf.as_mut_ptr() as u64;
+
+    let middle = unsafe { buf.as_mut_ptr().add(2) as u64 };
+
+    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x1111_1111_1111_1111u64),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base_displ_size(Register::RCX, 0, 8),
+               Register::RAX),
+           instruction!(Mov_r64_rm64, Register::RBX,
+               MemoryOperand::with_base_displ_size(Register::RCX, 0, 8))],
+          [Rcx = base], Rbx => 0x1111_1111_1111_1111);
+
+    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x2222_2222_2222_2222u64),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base_displ_size(Register::RCX, 16, 8),
+               Register::RAX),
+           instruction!(Mov_r64_rm64, Register::RBX,
+               MemoryOperand::with_base_displ_size(Register::RCX, 16, 8))],
+          [Rcx = base], Rbx => 0x2222_2222_2222_2222);
+
+    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x3333_3333_3333_3333u64),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base_displ_size(Register::RCX, -16, 8),
+               Register::RAX),
+           instruction!(Mov_r64_rm64, Register::RBX,
+               MemoryOperand::with_base_displ_size(Register::RCX, -16, 8))],
+          [Rcx = middle], Rbx => 0x3333_3333_3333_3333);
 }
 
 binary!(

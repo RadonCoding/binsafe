@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use iced_x86::{Code, Instruction, OpKind};
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
@@ -7,7 +8,7 @@ use crate::vm::encoders::{
     store_register::StoreRegister, Encode,
 };
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let code = instruction.code();
 
     match code {
@@ -24,11 +25,11 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
             };
             let (load_width, size) = encode_immediate(value);
             Some(vec![
-                Box::new(LoadImmediate {
+                Rc::new(LoadImmediate {
                     width: load_width,
                     source: value.to_le_bytes()[..size].to_vec(),
                 }),
-                Box::new(StoreRegister {
+                Rc::new(StoreRegister {
                     width: store_width,
                     destination: VMReg::from(instruction.op0_register()),
                 }),
@@ -50,11 +51,11 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
             };
             let (load_width, size) = encode_immediate(value);
             Some(vec![
-                Box::new(LoadImmediate {
+                Rc::new(LoadImmediate {
                     width: load_width,
                     source: value.to_le_bytes()[..size].to_vec(),
                 }),
-                Box::new(StoreRegister {
+                Rc::new(StoreRegister {
                     width: store_width,
                     destination: VMReg::from(instruction.op0_register()),
                 }),
@@ -71,14 +72,14 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
             };
             let (load_width, size) = encode_immediate(value);
             Some(vec![
-                Box::new(LoadImmediate {
+                Rc::new(LoadImmediate {
                     width: load_width,
                     source: value.to_le_bytes()[..size].to_vec(),
                 }),
-                Box::new(LoadAddress {
+                Rc::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }),
-                Box::new(StoreMemory { width: store_width }),
+                Rc::new(StoreMemory { width: store_width }),
             ])
         }
 
@@ -95,25 +96,25 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 OpKind::Register => {
                     let destination_register = instruction.op0_register();
                     Some(vec![
-                        Box::new(LoadRegister {
+                        Rc::new(LoadRegister {
                             width: source_width,
                             source,
                         }),
-                        Box::new(StoreRegister {
+                        Rc::new(StoreRegister {
                             width: VMWidth::from(destination_register),
                             destination: VMReg::from(destination_register),
                         }),
                     ])
                 }
                 OpKind::Memory => Some(vec![
-                    Box::new(LoadRegister {
+                    Rc::new(LoadRegister {
                         width: source_width,
                         source,
                     }),
-                    Box::new(LoadAddress {
+                    Rc::new(LoadAddress {
                         source: VMMem::from(instruction),
                     }),
-                    Box::new(StoreMemory {
+                    Rc::new(StoreMemory {
                         width: source_width,
                     }),
                 ]),
@@ -124,7 +125,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     }
 }
 
-pub fn r_rm(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+pub fn r_rm(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let destination_register = instruction.op0_register();
     let destination_width = VMWidth::from(destination_register);
     let destination = VMReg::from(destination_register);
@@ -133,24 +134,24 @@ pub fn r_rm(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
         OpKind::Register => {
             let source_register = instruction.op1_register();
             Some(vec![
-                Box::new(LoadRegister {
+                Rc::new(LoadRegister {
                     width: VMWidth::from(source_register),
                     source: VMReg::from(source_register),
                 }),
-                Box::new(StoreRegister {
+                Rc::new(StoreRegister {
                     width: destination_width,
                     destination,
                 }),
             ])
         }
         OpKind::Memory => Some(vec![
-            Box::new(LoadAddress {
+            Rc::new(LoadAddress {
                 source: VMMem::from(instruction),
             }),
-            Box::new(LoadMemory {
+            Rc::new(LoadMemory {
                 width: destination_width,
             }),
-            Box::new(StoreRegister {
+            Rc::new(StoreRegister {
                 width: destination_width,
                 destination,
             }),

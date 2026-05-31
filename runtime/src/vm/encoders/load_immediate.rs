@@ -1,6 +1,6 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMWidth};
-use crate::vm::encoders::Encode;
+use crate::vm::bytecode::{VMOp, VMReg, VMWidth};
+use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
 pub struct LoadImmediate {
@@ -13,6 +13,10 @@ impl Encode for LoadImmediate {
         let mut bytes = vec![mapper.index(VMOp::LoadImmediate), mapper.index(self.width)];
         bytes.extend_from_slice(&self.source);
         bytes
+    }
+
+    fn reads(&self) -> Vec<super::Effect> {
+        vec![Effect::Register(VMReg::VImm)]
     }
 
     fn depth(&self) -> i32 {

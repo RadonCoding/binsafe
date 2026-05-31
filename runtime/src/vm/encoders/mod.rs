@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::fmt::Debug;
+use std::rc::Rc;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMReg, VMWidth};
@@ -11,7 +12,6 @@ mod debug;
 pub enum Effect {
     Register(VMReg),
     Memory,
-    Flags,
 }
 
 pub trait Encode: Debug + Any {
@@ -31,6 +31,14 @@ pub trait Encode: Debug + Any {
 
     fn depth(&self) -> i32 {
         0
+    }
+
+    fn branches(&self) -> bool {
+        false
+    }
+
+    fn children(&mut self) -> Option<&mut Vec<Rc<dyn Encode>>> {
+        None
     }
 }
 

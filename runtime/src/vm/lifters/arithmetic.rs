@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use iced_x86::{Instruction, OpKind};
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
@@ -16,26 +17,26 @@ pub fn encode<O: Encode + 'static>(
     instruction: &Instruction,
     make: impl Fn(VMWidth) -> O,
     tail: Tail,
-) -> Option<Vec<Box<dyn Encode>>> {
+) -> Option<Vec<Rc<dyn Encode>>> {
     let op0_kind = instruction.op0_kind();
     let op1_kind = instruction.op1_kind();
 
     let width = operation_width(instruction, op0_kind)?;
 
-    let mut operations = Vec::<Box<dyn Encode>>::new();
+    let mut operations = Vec::<Rc<dyn Encode>>::new();
 
     match op0_kind {
         OpKind::Register => {
-            operations.push(Box::new(LoadRegister {
+            operations.push(Rc::new(LoadRegister {
                 width,
                 source: VMReg::from(instruction.op0_register()),
             }));
         }
         OpKind::Memory => {
-            operations.push(Box::new(LoadAddress {
+            operations.push(Rc::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Box::new(LoadMemory { width }));
+            operations.push(Rc::new(LoadMemory { width }));
         }
         _ => return None,
     }
@@ -43,21 +44,21 @@ pub fn encode<O: Encode + 'static>(
     match op1_kind {
         OpKind::Register => {
             let register = instruction.op1_register();
-            operations.push(Box::new(LoadRegister {
+            operations.push(Rc::new(LoadRegister {
                 width: VMWidth::from(register),
                 source: VMReg::from(register),
             }));
         }
         OpKind::Memory => {
-            operations.push(Box::new(LoadAddress {
+            operations.push(Rc::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Box::new(LoadMemory { width }));
+            operations.push(Rc::new(LoadMemory { width }));
         }
         kind if is_immediate(kind) => {
             let value = extract_immediate(instruction, kind);
             let (immediate_width, size) = encode_immediate(value);
-            operations.push(Box::new(LoadImmediate {
+            operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
                 source: value.to_le_bytes()[..size].to_vec(),
             }));
@@ -65,26 +66,26 @@ pub fn encode<O: Encode + 'static>(
         _ => return None,
     }
 
-    operations.push(Box::new(make(width)));
+    operations.push(Rc::new(make(width)));
 
     match tail {
         Tail::Writeback => match op0_kind {
             OpKind::Register => {
-                operations.push(Box::new(StoreRegister {
+                operations.push(Rc::new(StoreRegister {
                     width,
                     destination: VMReg::from(instruction.op0_register()),
                 }));
             }
             OpKind::Memory => {
-                operations.push(Box::new(LoadAddress {
+                operations.push(Rc::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }));
-                operations.push(Box::new(StoreMemory { width }));
+                operations.push(Rc::new(StoreMemory { width }));
             }
             _ => unreachable!(),
         },
         Tail::Discard => {
-            operations.push(Box::new(Discard));
+            operations.push(Rc::new(Discard));
         }
     }
 
