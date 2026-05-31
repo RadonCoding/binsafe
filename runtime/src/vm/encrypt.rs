@@ -194,8 +194,23 @@ fn xor(source: &mut [u8], width: VMWidth, key: u64) {
 /// Builds a random arithmetic equence and updates `key` to match, bracketing with a [`VMReg::Flags`] save/restore when the flags are live.
 fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
     let mut rng = rand::thread_rng();
-    let constant = rng.gen::<u64>();
-    let cipher = constant ^ *key;
+
+    let (width, bytes) = match rng.gen_range(0..16) {
+        0..=9 => (VMWidth::Lower8, 1),
+        10..=13 => (VMWidth::Lower16, 2),
+        14 => (VMWidth::Lower32, 4),
+        _ => (VMWidth::Lower64, 8),
+    };
+
+    let mask = if bytes == 8 {
+        !0u64
+    } else {
+        (1u64 << (bytes * 8)) - 1
+    };
+
+    let constant = rng.gen::<u64>() & mask;
+
+    let cipher = (constant ^ *key) & mask;
 
     let mut sequence = Vec::new();
 
@@ -212,8 +227,8 @@ fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
     }) as Rc<dyn Encode>);
 
     sequence.push(Rc::new(LoadImmediate {
-        width: VMWidth::Lower64,
-        source: cipher.to_le_bytes().to_vec(),
+        width,
+        source: cipher.to_le_bytes()[..bytes].to_vec(),
     }));
 
     match rng.gen_range(0..3) {
