@@ -42,6 +42,18 @@ pub fn build(rt: &mut Runtime) {
             // xor r8b, r9b
             rt.asm.xor(r8b, r9b).unwrap();
         },
+        |rt| {
+            // xor r8d, r9d
+            rt.asm.xor(r8d, r9d).unwrap();
+        },
+        |rt| {
+            // xor r8w, r9w
+            rt.asm.xor(r8w, r9w).unwrap();
+        },
+        |rt| {
+            // xor r8b, r9b
+            rt.asm.xor(r8b, r9b).unwrap();
+        },
     );
 
     rt.asm.set_label(&mut epilogue).unwrap();

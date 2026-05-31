@@ -51,4 +51,8 @@ impl Encode for Skip {
         }
         effects
     }
+
+    fn depth(&self) -> i32 {
+        self.payload.iter().map(|op| op.depth()).sum()
+    }
 }

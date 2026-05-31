@@ -4,7 +4,7 @@ use crate::{
     runtime::{FnDef, Runtime},
     vm::utils::{lock, stack},
 };
-use iced_x86::code_asm::{ptr, qword_ptr, r8, r9, rax, rcx, rdx, rsp, AsmRegister64};
+use iced_x86::code_asm::{ptr, qword_ptr, r10, r11, r8, r9, rax, rcx, rdx, rsp, AsmRegister64};
 
 pub fn print_s(rt: &mut Runtime, s: &str) {
     // push rax
@@ -17,6 +17,10 @@ pub fn print_s(rt: &mut Runtime, s: &str) {
     rt.asm.push(r8).unwrap();
     // push r9
     rt.asm.push(r9).unwrap();
+    // push r10
+    rt.asm.push(r10).unwrap();
+    // push r11
+    rt.asm.push(r11).unwrap();
 
     let mut bytes = s.as_bytes().to_vec();
     bytes.push(0);
@@ -49,6 +53,10 @@ pub fn print_s(rt: &mut Runtime, s: &str) {
     // add rsp, ...
     rt.asm.add(rsp, stack_size as i32).unwrap();
 
+    // pop r11
+    rt.asm.pop(r11).unwrap();
+    // pop r10
+    rt.asm.pop(r10).unwrap();
     // pop r9
     rt.asm.pop(r9).unwrap();
     // pop r8
@@ -72,6 +80,10 @@ pub fn print_q(rt: &mut Runtime, q: AsmRegister64) {
     rt.asm.push(r8).unwrap();
     // push r9
     rt.asm.push(r9).unwrap();
+    // push r10
+    rt.asm.push(r10).unwrap();
+    // push r11
+    rt.asm.push(r11).unwrap();
 
     // mov rax, ...
     rt.asm.mov(rax, q).unwrap();
@@ -96,6 +108,10 @@ pub fn print_q(rt: &mut Runtime, q: AsmRegister64) {
     // add rsp, ...
     rt.asm.add(rsp, stack_size as i32).unwrap();
 
+    // pop r11
+    rt.asm.pop(r11).unwrap();
+    // pop r10
+    rt.asm.pop(r10).unwrap();
     // pop r9
     rt.asm.pop(r9).unwrap();
     // pop r8

@@ -1,6 +1,6 @@
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMOp, VMWidth};
-use crate::vm::encoders::{Effect, Encode};
+use crate::vm::encoders::Encode;
 
 #[derive(Debug)]
 pub struct LoadImmediate {
@@ -15,7 +15,7 @@ impl Encode for LoadImmediate {
         bytes
     }
 
-    fn writes(&self) -> Vec<super::Effect> {
-        vec![Effect::Scratch]
+    fn depth(&self) -> i32 {
+        1
     }
 }

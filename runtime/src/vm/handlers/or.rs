@@ -42,6 +42,18 @@ pub fn build(rt: &mut Runtime) {
             // or r8b, r9b
             rt.asm.or(r8b, r9b).unwrap();
         },
+        |rt| {
+            // or r8d, r9d
+            rt.asm.or(r8d, r9d).unwrap();
+        },
+        |rt| {
+            // or r8w, r9w
+            rt.asm.or(r8w, r9w).unwrap();
+        },
+        |rt| {
+            // or r8b, r9b
+            rt.asm.or(r8b, r9b).unwrap();
+        },
     );
 
     rt.asm.set_label(&mut epilogue).unwrap();

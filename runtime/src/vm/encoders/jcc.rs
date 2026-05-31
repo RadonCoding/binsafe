@@ -27,7 +27,7 @@ impl Encode for Jcc {
     }
 
     fn reads(&self) -> Vec<super::Effect> {
-        vec![Effect::Flags, Effect::Scratch]
+        vec![Effect::Flags]
     }
 
     fn writes(&self) -> Vec<super::Effect> {
@@ -35,6 +35,10 @@ impl Encode for Jcc {
             VMLogic::SAND | VMLogic::SOR => vec![],
             _ => vec![Effect::Register(VMReg::NBranch)],
         }
+    }
+
+    fn depth(&self) -> i32 {
+        -1
     }
 }
 

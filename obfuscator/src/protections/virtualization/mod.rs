@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-#[cfg(debug_assertions)]
-use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::{i32, mem};
 
@@ -92,7 +90,8 @@ impl Virtualization {
                 .map(|operation| format!("{}", operation))
                 .collect::<Vec<String>>();
 
-            let operations = permute::permute(operations);
+            let mut rng = rand::thread_rng();
+            let operations = permute::permute(operations, |ready| rng.gen_range(0..ready.len()));
 
             #[cfg(debug_assertions)]
             log.push(format!(
@@ -137,7 +136,12 @@ impl Protection for Virtualization {
         let mut dedup = HashMap::new();
 
         #[cfg(debug_assertions)]
-        let mut logged = HashSet::new();
+        let mut max: Option<(
+            usize,
+            u32,
+            Vec<String>,
+            Vec<Box<dyn runtime::vm::encoders::Encode>>,
+        )> = None;
 
         vcode.extend_from_slice(&self.attestation(engine));
 
@@ -167,30 +171,22 @@ impl Protection for Virtualization {
                     .map(|operation| format!("{}", operation))
                     .collect::<Vec<String>>();
 
-                let operations = permute::permute(operations);
+                let mut rng = rand::thread_rng();
 
-                #[cfg(debug_assertions)]
-                {
-                    use logger::debug;
-
-                    let mut log = false;
-
-                    for instruction in &block.instructions {
-                        if logged.insert(instruction.code()) {
-                            log = true;
-                        }
-                    }
-
-                    if log {
-                        debug!(
-                            "VIRTUALIZED @ 0x{:08X}:\n{}",
-                            block.rva,
-                            format_operations_with(&before, &operations)
-                        );
-                    }
-                }
+                let operations =
+                    permute::permute(operations, |ready| rng.gen_range(0..ready.len()));
 
                 let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &operations);
+
+                #[cfg(debug_assertions)]
+                if block.instructions.len() > max.as_ref().map_or(0, |(m, _, _, _)| *m) {
+                    max = Some((
+                        block.instructions.len(),
+                        block.rva,
+                        before.clone(),
+                        operations,
+                    ));
+                }
 
                 let key = u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap());
 
@@ -217,6 +213,19 @@ impl Protection for Virtualization {
             // Store the placeholder for stub displacement and offset in the linear VM-code
             vtable.extend_from_slice(&0u32.to_le_bytes());
             vtable.extend_from_slice(&vcode_offset.to_le_bytes());
+        }
+
+        #[cfg(debug_assertions)]
+        {
+            use logger::debug;
+
+            if let Some((_, rva, before, operations)) = max {
+                debug!(
+                    "VIRTUALIZED @ 0x{:08X}:\n{}",
+                    rva,
+                    format_operations_with(&before, &operations)
+                );
+            }
         }
 
         engine.rt.define_data_bytes(DataDef::VmTable, &vtable);

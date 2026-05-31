@@ -3,7 +3,7 @@ use crate::vm::bytecode::{VMOp, VMReg, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
-pub struct StoreRegister {
+pub struct StoreRegister{
     pub width: VMWidth,
     pub destination: VMReg,
 }
@@ -17,11 +17,11 @@ impl Encode for StoreRegister {
         ]
     }
 
-    fn reads(&self) -> Vec<super::Effect> {
-        vec![Effect::Scratch]
-    }
-
     fn writes(&self) -> Vec<super::Effect> {
         vec![Effect::Register(self.destination)]
+    }
+
+    fn depth(&self) -> i32 {
+        -1
     }
 }

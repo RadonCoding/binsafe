@@ -1,0 +1,47 @@
+use iced_x86::{Instruction, OpKind};
+
+use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
+use crate::vm::encoders::{
+    encode_immediate, load_address::LoadAddress, load_immediate::LoadImmediate,
+    load_memory::LoadMemory, load_register::LoadRegister, push::Push, Encode,
+};
+
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
+
+    match instruction.op0_kind() {
+        OpKind::Register => {
+            operations.push(Box::new(LoadRegister {
+                width: VMWidth::Lower64,
+                source: VMReg::from(instruction.op0_register()),
+            }));
+        }
+        OpKind::Memory => {
+            operations.push(Box::new(LoadAddress {
+                source: VMMem::from(instruction),
+            }));
+            operations.push(Box::new(LoadMemory {
+                width: VMWidth::Lower64,
+            }));
+        }
+        OpKind::Immediate8 | OpKind::Immediate16 | OpKind::Immediate32 | OpKind::Immediate8to64 => {
+            let value = match instruction.op0_kind() {
+                OpKind::Immediate8 => instruction.immediate8() as u64,
+                OpKind::Immediate16 => instruction.immediate16() as u64,
+                OpKind::Immediate32 => instruction.immediate32() as u64,
+                OpKind::Immediate8to64 => instruction.immediate8to64() as u64,
+                _ => unreachable!(),
+            };
+            let (width, size) = encode_immediate(value);
+            operations.push(Box::new(LoadImmediate {
+                width,
+                source: value.to_le_bytes()[..size].to_vec(),
+            }));
+        }
+        _ => return None,
+    }
+
+    operations.push(Box::new(Push));
+
+    Some(operations)
+}
