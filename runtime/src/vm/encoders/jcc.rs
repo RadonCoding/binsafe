@@ -1,9 +1,5 @@
-use rand::seq::SliceRandom;
-use rand::Rng;
-use strum::IntoEnumIterator;
-
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMOp, VMReg, VMTest};
+use crate::vm::bytecode::{VMCondition, VMLogic, VMOp, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
@@ -48,42 +44,17 @@ impl Encode for Jcc {
 
 impl Jcc {
     pub fn jump() -> Self {
-        let mut rng = rand::thread_rng();
-
-        let logic = if rng.gen() {
-            VMLogic::JAND
-        } else {
-            VMLogic::JOR
-        };
-
-        Self::always(logic)
+        Self::always(VMLogic::JAND)
     }
 
     pub fn call() -> Self {
-        let mut rng = rand::thread_rng();
-
-        let logic = if rng.gen() {
-            VMLogic::CAND
-        } else {
-            VMLogic::COR
-        };
-
-        Self::always(logic)
+        Self::always(VMLogic::CAND)
     }
 
     fn always(logic: VMLogic) -> Self {
-        let mut rng = rand::thread_rng();
-
-        let flags = VMFlag::iter().collect::<Vec<VMFlag>>();
-        let flag = flags.choose(&mut rng).unwrap();
-
         Self {
             logic,
-            conditions: vec![VMCondition {
-                test: VMTest::EQ,
-                lhs: *flag as u8,
-                rhs: *flag as u8,
-            }],
+            conditions: vec![],
         }
     }
 }

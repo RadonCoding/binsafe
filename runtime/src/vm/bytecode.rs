@@ -451,6 +451,8 @@ pub fn process<F>(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>, mut pick
 where
     F: FnMut(&[usize]) -> usize,
 {
+    let operations = crate::vm::diversify::diversify(operations);
+
     #[cfg(debug_assertions)]
     let lifted = operations
         .iter()

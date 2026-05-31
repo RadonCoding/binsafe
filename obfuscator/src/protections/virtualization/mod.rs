@@ -112,13 +112,15 @@ impl Protection for Virtualization {
                 continue;
             }
 
-            let operations = match bytecode::lift(&mut engine.rt.mapper, &block.instructions) {
+            let lifted = match bytecode::lift(&mut engine.rt.mapper, &block.instructions) {
                 Some(ops) if !ops.is_empty() => ops,
                 _ => continue 'outer,
             };
 
+            let vblock = bytecode::assemble(&mut engine.rt.mapper, &lifted);
+
             let mut hasher = DefaultHasher::new();
-            block.instructions.hash(&mut hasher);
+            vblock.hash(&mut hasher);
             let hash = hasher.finish();
 
             let vcode_offset = if let Some(&offset) = dedup.get(&hash) {
@@ -127,7 +129,7 @@ impl Protection for Virtualization {
             } else {
                 let mut rng = rand::thread_rng();
 
-                let bytecode = bytecode::process(&mut engine.rt.mapper, operations, |ready| {
+                let bytecode = bytecode::process(&mut engine.rt.mapper, lifted, |ready| {
                     rng.gen_range(0..ready.len())
                 });
 

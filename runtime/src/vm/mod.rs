@@ -1,4 +1,5 @@
 pub mod bytecode;
+pub mod diversify;
 pub mod encoders;
 pub mod encrypt;
 pub mod functions;
