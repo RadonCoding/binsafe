@@ -46,7 +46,7 @@ mapped! {
         VmHandlerPop,
         VmHandlerDiscard,
         /* VM ARITHMETIC */
-        VmArithmeticFlags,
+        VmFlags,
         /* VM VEH */
         VmVehInitialize,
         VmVehHandler,
@@ -348,7 +348,7 @@ impl Runtime {
             (FnDef::VmHandlerPush, vm::handlers::push::build),
             (FnDef::VmHandlerPop, vm::handlers::pop::build),
             (FnDef::VmHandlerDiscard, vm::handlers::discard::build),
-            (FnDef::VmArithmeticFlags, vm::handlers::flags::build),
+            (FnDef::VmFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (
                 FnDef::CompareUnicodeToAnsi,

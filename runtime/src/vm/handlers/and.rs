@@ -71,7 +71,7 @@ pub fn build(rt: &mut Runtime) {
         scratch::store(rt, r8);
 
         // call ...
-        stack::call(rt, rt.func_labels[&FnDef::VmArithmeticFlags]);
+        stack::call(rt, rt.func_labels[&FnDef::VmFlags]);
 
         // pop rax
         stack::pop(rt, rax);

@@ -79,7 +79,7 @@ mapped! {
         BLength, // Block Length
         VImage, // Image Base
         VAtt, // Attestation Key
-        VImm, // Immediate Encryption Key
+        VImm, // Immediate Key
         VStack, // Virtual Stack Top
         VScratch, // Virtual Scratch Top
     }

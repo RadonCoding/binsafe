@@ -142,7 +142,7 @@ fn walk(
             *position += 1;
 
             if roll {
-                let sequence = roll_sequence(key, !deadzones[p]);
+                let sequence = rolling(key, !deadzones[p]);
                 let length = sequence.len();
                 operations.splice(i + 1..i + 1, sequence);
                 i += length;
@@ -192,7 +192,7 @@ fn xor(source: &mut [u8], width: VMWidth, key: u64) {
 }
 
 /// Builds a random arithmetic equence and updates `key` to match, bracketing with a [`VMReg::Flags`] save/restore when the flags are live.
-fn roll_sequence(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
+fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
     let mut rng = rand::thread_rng();
     let constant = rng.gen::<u64>();
     let cipher = constant ^ *key;
