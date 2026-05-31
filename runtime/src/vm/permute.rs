@@ -41,7 +41,7 @@ where
         .flat_map(|atom| effects(atom).0)
         .collect::<HashSet<VMReg>>();
 
-    let atoms = decouple(atoms, &live);
+    // let atoms = decouple(atoms, &live);
 
     let (successors, mut indegree) = dependencies(&atoms);
     let n = successors.len();
