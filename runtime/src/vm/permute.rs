@@ -21,8 +21,8 @@ struct Access {
 }
 
 struct Profile {
-    reads: u64,
-    writes: u64,
+    register_reads: u64,
+    register_writes: u64,
     memory_reads: bool,
     memory_writes: bool,
     accesses: Option<Vec<Access>>,
@@ -356,15 +356,15 @@ fn schedule(mut atoms: Vec<Atom>, order: &[usize]) -> Vec<Rc<dyn Encode>> {
 
 /// Pre-computed effect summary for an [`Atom`], cached by [`dependencies`] so each conflict pair doesn't re-walk the ops.
 fn profile(atom: &Atom) -> Profile {
-    let mut reads = 0;
-    let mut writes = 0;
+    let mut register_reads = 0;
+    let mut register_writes = 0;
     let mut memory_reads = false;
     let mut memory_writes = false;
 
     for op in atom {
         for effect in op.reads() {
             match effect {
-                Effect::Register(r) if r != VMReg::None => reads |= bit(r),
+                Effect::Register(r) if r != VMReg::None => register_reads |= bit(r),
                 Effect::Memory => memory_reads = true,
                 _ => {}
             }
@@ -372,7 +372,7 @@ fn profile(atom: &Atom) -> Profile {
 
         for effect in op.writes() {
             match effect {
-                Effect::Register(r) if r != VMReg::None => writes |= bit(r),
+                Effect::Register(r) if r != VMReg::None => register_writes |= bit(r),
                 Effect::Memory => memory_writes = true,
                 _ => {}
             }
@@ -380,8 +380,8 @@ fn profile(atom: &Atom) -> Profile {
     }
 
     Profile {
-        reads,
-        writes,
+        register_reads,
+        register_writes,
         memory_reads,
         memory_writes,
         accesses: accesses(atom),
@@ -390,9 +390,9 @@ fn profile(atom: &Atom) -> Profile {
 
 /// Whether two atoms have a read/write or write/write conflict on any register, memory location, or flag.
 fn conflicts(a: &Profile, b: &Profile) -> bool {
-    (a.writes & b.reads) != 0
-        || (a.reads & b.writes) != 0
-        || (a.writes & b.writes) != 0
+    (a.register_writes & b.register_reads) != 0
+        || (a.register_reads & b.register_writes) != 0
+        || (a.register_writes & b.register_writes) != 0
         || memory(a, b)
 }
 
