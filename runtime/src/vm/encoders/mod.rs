@@ -7,12 +7,11 @@ use crate::vm::bytecode::{VMReg, VMWidth};
 #[cfg(debug_assertions)]
 mod debug;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Effect {
     Register(VMReg),
     Memory,
     Flags,
-    Scratch,
 }
 
 pub trait Encode: Debug + Any {
@@ -28,6 +27,10 @@ pub trait Encode: Debug + Any {
 
     fn writes(&self) -> Vec<Effect> {
         vec![]
+    }
+
+    fn depth(&self) -> i32 {
+        0
     }
 }
 
@@ -49,6 +52,8 @@ pub mod load_immediate;
 pub mod load_memory;
 pub mod load_register;
 pub mod or;
+pub mod pop;
+pub mod push;
 pub mod ret;
 pub mod skip;
 pub mod store_memory;

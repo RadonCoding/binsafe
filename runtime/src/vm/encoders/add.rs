@@ -12,11 +12,11 @@ impl Encode for Add {
         vec![mapper.index(VMOp::Add), mapper.index(self.width)]
     }
 
-    fn reads(&self) -> Vec<super::Effect> {
-        vec![Effect::Scratch, Effect::Scratch]
+    fn writes(&self) -> Vec<super::Effect> {
+        vec![Effect::Flags]
     }
 
-    fn writes(&self) -> Vec<super::Effect> {
-        vec![Effect::Flags, Effect::Scratch]
+    fn depth(&self) -> i32 {
+        -1
     }
 }

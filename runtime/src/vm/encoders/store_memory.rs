@@ -12,11 +12,11 @@ impl Encode for StoreMemory {
         vec![mapper.index(VMOp::StoreMemory), mapper.index(self.width)]
     }
 
-    fn reads(&self) -> Vec<super::Effect> {
-        vec![Effect::Scratch, Effect::Scratch]
-    }
-
     fn writes(&self) -> Vec<Effect> {
         vec![Effect::Memory]
+    }
+
+    fn depth(&self) -> i32 {
+        -2
     }
 }

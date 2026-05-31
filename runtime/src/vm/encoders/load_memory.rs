@@ -13,10 +13,6 @@ impl Encode for LoadMemory {
     }
 
     fn reads(&self) -> Vec<super::Effect> {
-        vec![Effect::Scratch, Effect::Memory]
-    }
-
-    fn writes(&self) -> Vec<Effect> {
-        vec![Effect::Scratch]
+        vec![Effect::Memory]
     }
 }

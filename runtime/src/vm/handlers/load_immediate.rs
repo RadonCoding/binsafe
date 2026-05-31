@@ -36,6 +36,18 @@ pub fn build(rt: &mut Runtime) {
             // r8d -> imm
             utils::bytecode::read_byte_zx(rt, rdx, r8d);
         },
+        |rt| {
+            // r8d -> imm
+            utils::bytecode::read_dword(rt, rdx, r8d);
+        },
+        |rt| {
+            // r8d -> imm
+            utils::bytecode::read_word_zx(rt, rdx, r8d);
+        },
+        |rt| {
+            // r8d -> imm
+            utils::bytecode::read_byte_zx(rt, rdx, r8d);
+        },
     );
 
     rt.asm.set_label(&mut epilogue).unwrap();

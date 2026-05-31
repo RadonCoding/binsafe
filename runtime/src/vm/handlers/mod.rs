@@ -17,6 +17,8 @@ pub mod load_immediate;
 pub mod load_memory;
 pub mod load_register;
 pub mod or;
+pub mod pop;
+pub mod push;
 pub mod ret;
 pub mod store_memory;
 pub mod store_register;
@@ -40,6 +42,8 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::Or, FnDef::VmHandlerOr),
         (VMOp::Xor, FnDef::VmHandlerXor),
         (VMOp::Test, FnDef::VmHandlerTest),
+        (VMOp::Push, FnDef::VmHandlerPush),
+        (VMOp::Pop, FnDef::VmHandlerPop),
         (VMOp::Discard, FnDef::VmHandlerDiscard),
     ];
 

@@ -22,20 +22,20 @@ pub fn encode<O: Encode + 'static>(
 
     let width = operation_width(instruction, op0_kind)?;
 
-    let mut ops: Vec<Box<dyn Encode>> = Vec::new();
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
     match op0_kind {
         OpKind::Register => {
-            ops.push(Box::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width,
                 source: VMReg::from(instruction.op0_register()),
             }));
         }
         OpKind::Memory => {
-            ops.push(Box::new(LoadAddress {
+            operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            ops.push(Box::new(LoadMemory { width }));
+            operations.push(Box::new(LoadMemory { width }));
         }
         _ => return None,
     }
@@ -43,21 +43,21 @@ pub fn encode<O: Encode + 'static>(
     match op1_kind {
         OpKind::Register => {
             let register = instruction.op1_register();
-            ops.push(Box::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width: VMWidth::from(register),
                 source: VMReg::from(register),
             }));
         }
         OpKind::Memory => {
-            ops.push(Box::new(LoadAddress {
+            operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            ops.push(Box::new(LoadMemory { width }));
+            operations.push(Box::new(LoadMemory { width }));
         }
         kind if is_immediate(kind) => {
             let value = extract_immediate(instruction, kind);
             let (immediate_width, size) = encode_immediate(value);
-            ops.push(Box::new(LoadImmediate {
+            operations.push(Box::new(LoadImmediate {
                 width: immediate_width,
                 source: value.to_le_bytes()[..size].to_vec(),
             }));
@@ -65,30 +65,30 @@ pub fn encode<O: Encode + 'static>(
         _ => return None,
     }
 
-    ops.push(Box::new(make(width)));
+    operations.push(Box::new(make(width)));
 
     match tail {
         Tail::Writeback => match op0_kind {
             OpKind::Register => {
-                ops.push(Box::new(StoreRegister {
+                operations.push(Box::new(StoreRegister {
                     width,
                     destination: VMReg::from(instruction.op0_register()),
                 }));
             }
             OpKind::Memory => {
-                ops.push(Box::new(LoadAddress {
+                operations.push(Box::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }));
-                ops.push(Box::new(StoreMemory { width }));
+                operations.push(Box::new(StoreMemory { width }));
             }
             _ => unreachable!(),
         },
         Tail::Discard => {
-            ops.push(Box::new(Discard));
+            operations.push(Box::new(Discard));
         }
     }
 
-    Some(ops)
+    Some(operations)
 }
 
 fn operation_width(instruction: &Instruction, op0_kind: OpKind) -> Option<VMWidth> {

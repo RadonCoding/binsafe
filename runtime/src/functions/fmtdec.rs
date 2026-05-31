@@ -2,7 +2,7 @@ use iced_x86::code_asm::{al, byte_ptr, dl, ptr, r8, r9, rax, rcx, rdx};
 
 use crate::runtime::Runtime;
 
-// void (char*, u64)
+// void (char*, unsigned long)
 pub fn build(rt: &mut Runtime) {
     let mut convert_loop = rt.asm.create_label();
     let mut reverse_loop = rt.asm.create_label();

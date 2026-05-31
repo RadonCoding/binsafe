@@ -21,7 +21,7 @@ impl Encode for LoadAddress {
         ]
     }
 
-    fn writes(&self) -> Vec<super::Effect> {
-        vec![Effect::Scratch]
+    fn depth(&self) -> i32 {
+        1
     }
 }

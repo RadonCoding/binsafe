@@ -42,6 +42,8 @@ mapped! {
         VmHandlerOr,
         VmHandlerXor,
         VmHandlerTest,
+        VmHandlerPush,
+        VmHandlerPop,
         VmHandlerDiscard,
         /* VM ARITHMETIC */
         VmArithmeticFlags,
@@ -343,6 +345,8 @@ impl Runtime {
             (FnDef::VmHandlerOr, vm::handlers::or::build),
             (FnDef::VmHandlerXor, vm::handlers::xor::build),
             (FnDef::VmHandlerTest, vm::handlers::test::build),
+            (FnDef::VmHandlerPush, vm::handlers::push::build),
+            (FnDef::VmHandlerPop, vm::handlers::pop::build),
             (FnDef::VmHandlerDiscard, vm::handlers::discard::build),
             (FnDef::VmArithmeticFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
@@ -406,10 +410,7 @@ impl Runtime {
         }
 
         for def in DataDef::VARIANTS {
-            if *def == DataDef::Functions
-                || *def == DataDef::VehStart
-                || *def == DataDef::VehEnd
-            {
+            if *def == DataDef::Functions || *def == DataDef::VehStart || *def == DataDef::VehEnd {
                 continue;
             }
 

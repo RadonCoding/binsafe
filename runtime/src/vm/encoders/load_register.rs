@@ -21,7 +21,7 @@ impl Encode for LoadRegister {
         vec![Effect::Register(self.source)]
     }
 
-    fn writes(&self) -> Vec<super::Effect> {
-        vec![Effect::Scratch]
+    fn depth(&self) -> i32 {
+        1
     }
 }

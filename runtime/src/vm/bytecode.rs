@@ -5,7 +5,9 @@ use strum_macros::EnumIter;
 
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
-use crate::vm::lifters::{add, and, cmov, cmp, jcc, lea, mov, or, sub, test, xor};
+use crate::vm::lifters::{
+    add, and, cmov, cmp, jcc, lea, mov, movsx, movzx, or, pop, push, set, sub, test, xor,
+};
 
 mapped! {
     VMOp {
@@ -27,6 +29,8 @@ mapped! {
         Xor,
         Test,
         // Stack
+        Push,
+        Pop,
         Discard,
         // Nop
         Nop,
@@ -112,6 +116,9 @@ mapped! {
         Lower16,
         Lower32,
         Lower64,
+        SLower8,
+        SLower16,
+        SLower32,
     }
 }
 
@@ -153,7 +160,7 @@ impl From<Register> for VMSeg {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct VMMem {
     pub base: VMReg,
     pub index: VMReg,
@@ -277,6 +284,26 @@ pub fn lift(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
             Mnemonic::Test => test::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
             Mnemonic::Mov => mov::encode(instruction)?,
+            Mnemonic::Movzx => movzx::encode(instruction)?,
+            Mnemonic::Movsx | Mnemonic::Movsxd => movsx::encode(instruction)?,
+            Mnemonic::Push => push::encode(instruction)?,
+            Mnemonic::Pop => pop::encode(instruction)?,
+            Mnemonic::Seta
+            | Mnemonic::Setae
+            | Mnemonic::Setb
+            | Mnemonic::Setbe
+            | Mnemonic::Sete
+            | Mnemonic::Setg
+            | Mnemonic::Setge
+            | Mnemonic::Setl
+            | Mnemonic::Setle
+            | Mnemonic::Setne
+            | Mnemonic::Setno
+            | Mnemonic::Setnp
+            | Mnemonic::Setns
+            | Mnemonic::Seto
+            | Mnemonic::Setp
+            | Mnemonic::Sets => set::encode(instruction)?,
             Mnemonic::Nop => continue,
             _ => return None,
         };

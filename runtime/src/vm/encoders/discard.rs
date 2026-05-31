@@ -1,6 +1,6 @@
 use crate::mapper::Mapper;
 use crate::vm::bytecode::VMOp;
-use crate::vm::encoders::{Effect, Encode};
+use crate::vm::encoders::Encode;
 
 #[derive(Debug)]
 pub struct Discard;
@@ -10,7 +10,7 @@ impl Encode for Discard {
         vec![mapper.index(VMOp::Discard)]
     }
 
-    fn reads(&self) -> Vec<super::Effect> {
-        vec![Effect::Scratch]
+    fn depth(&self) -> i32 {
+        -1
     }
 }
