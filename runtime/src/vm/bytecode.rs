@@ -215,12 +215,15 @@ mapped! {
     VMLogic {
         JAND, // JUMP AND
         JOR, // JUMP OR
+        JXOR, // JUMP XOR
 
         CAND, // CALL AND
         COR,// CALL OR
+        CXOR, // CALL XOR
 
         SAND, // SKIP AND
         SOR,  // SKIP OR
+        SXOR, // SKIP XOR
     }
 }
 
@@ -451,7 +454,7 @@ pub fn process<F>(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>, mut pick
 where
     F: FnMut(&[usize]) -> usize,
 {
-    let operations = crate::vm::diversify::diversify(operations);
+    let operations = crate::vm::mutation::mutate(operations);
 
     #[cfg(debug_assertions)]
     let lifted = operations
@@ -476,6 +479,7 @@ where
         .collect::<Vec<String>>();
 
     let operations = crate::vm::permute::permute(operations, &mut picker);
+
     let bytes = assemble(mapper, &operations);
 
     Bytecode::new(

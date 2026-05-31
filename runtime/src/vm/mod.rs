@@ -1,10 +1,10 @@
 pub mod bytecode;
-pub mod diversify;
 pub mod encoders;
 pub mod encrypt;
 pub mod functions;
 pub mod handlers;
 pub mod lifters;
+pub mod mutation;
 pub mod permute;
 pub mod utils;
 
