@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use iced_x86::{Instruction, OpKind};
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
@@ -6,21 +7,21 @@ use crate::vm::encoders::{
     load_memory::LoadMemory, load_register::LoadRegister, push::Push, Encode,
 };
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
-    let mut operations = Vec::<Box<dyn Encode>>::new();
+pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+    let mut operations = Vec::<Rc<dyn Encode>>::new();
 
     match instruction.op0_kind() {
         OpKind::Register => {
-            operations.push(Box::new(LoadRegister {
+            operations.push(Rc::new(LoadRegister {
                 width: VMWidth::Lower64,
                 source: VMReg::from(instruction.op0_register()),
             }));
         }
         OpKind::Memory => {
-            operations.push(Box::new(LoadAddress {
+            operations.push(Rc::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Box::new(LoadMemory {
+            operations.push(Rc::new(LoadMemory {
                 width: VMWidth::Lower64,
             }));
         }
@@ -33,7 +34,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 _ => unreachable!(),
             };
             let (width, size) = encode_immediate(value);
-            operations.push(Box::new(LoadImmediate {
+            operations.push(Rc::new(LoadImmediate {
                 width,
                 source: value.to_le_bytes()[..size].to_vec(),
             }));
@@ -41,7 +42,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
         _ => return None,
     }
 
-    operations.push(Box::new(Push));
+    operations.push(Rc::new(Push));
 
     Some(operations)
 }

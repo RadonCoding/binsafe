@@ -10,7 +10,7 @@ use iced_x86::code_asm::CodeAssembler;
 use logger::info;
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
-use runtime::vm::{bytecode, permute};
+use runtime::vm::bytecode;
 
 mod attestation;
 pub mod crypt;
@@ -45,35 +45,6 @@ pub struct Virtualization {
 // PUSH imm32 + CALL rel32
 const DISPATCH_SIZE: usize = 10;
 
-#[cfg(debug_assertions)]
-fn format_operations_with(
-    before: &[String],
-    after: &[Box<dyn runtime::vm::encoders::Encode>],
-) -> String {
-    let mut positions = HashMap::<&str, std::collections::VecDeque<usize>>::new();
-    for (i, line) in before.iter().enumerate() {
-        positions
-            .entry(line.as_str())
-            .or_insert_with(std::collections::VecDeque::new)
-            .push_back(i);
-    }
-
-    after
-        .iter()
-        .map(|operation| {
-            let key = format!("{}", operation);
-            match positions
-                .get_mut(key.as_str())
-                .and_then(|queue| queue.pop_front())
-            {
-                Some(index) => format!("  {:>3}   {}", index, key),
-                None => format!("    +   {}", key),
-            }
-        })
-        .collect::<Vec<String>>()
-        .join("\n")
-}
-
 impl Virtualization {
     fn attestation(&self, engine: &mut Engine) -> Vec<u8> {
         let blocks = attestation::generate(engine, self.keys.att);
@@ -83,24 +54,20 @@ impl Virtualization {
         #[cfg(debug_assertions)]
         let mut log = Vec::new();
 
-        for (index, operations) in blocks.into_iter().enumerate() {
-            #[cfg(debug_assertions)]
-            let before = operations
-                .iter()
-                .map(|operation| format!("{}", operation))
-                .collect::<Vec<String>>();
-
+        for (_index, operations) in blocks.into_iter().enumerate() {
             let mut rng = rand::thread_rng();
-            let operations = permute::permute(operations, |ready| rng.gen_range(0..ready.len()));
+
+            let bytecode = bytecode::process(&mut engine.rt.mapper, operations, |ready| {
+                rng.gen_range(0..ready.len())
+            });
 
             #[cfg(debug_assertions)]
-            log.push(format!(
-                "  BLOCK {}:\n{}",
-                index,
-                format_operations_with(&before, &operations)
-            ));
+            {
+                let index = _index;
+                log.push(format!("  BLOCK {}:\n{}", index, bytecode));
+            }
 
-            let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &operations);
+            let mut vblock = bytecode.bytes;
 
             let key = if vcode.is_empty() {
                 self.keys.seed
@@ -136,12 +103,7 @@ impl Protection for Virtualization {
         let mut dedup = HashMap::new();
 
         #[cfg(debug_assertions)]
-        let mut max: Option<(
-            usize,
-            u32,
-            Vec<String>,
-            Vec<Box<dyn runtime::vm::encoders::Encode>>,
-        )> = None;
+        let mut largest: Option<(usize, u32, String)> = None;
 
         vcode.extend_from_slice(&self.attestation(engine));
 
@@ -150,7 +112,7 @@ impl Protection for Virtualization {
                 continue;
             }
 
-            let operations = match bytecode::lift(&block.instructions) {
+            let operations = match bytecode::lift(&mut engine.rt.mapper, &block.instructions) {
                 Some(ops) if !ops.is_empty() => ops,
                 _ => continue 'outer,
             };
@@ -165,28 +127,18 @@ impl Protection for Virtualization {
                 self.duplicates += 1;
                 offset
             } else {
-                #[cfg(debug_assertions)]
-                let before = operations
-                    .iter()
-                    .map(|operation| format!("{}", operation))
-                    .collect::<Vec<String>>();
-
                 let mut rng = rand::thread_rng();
 
-                let operations =
-                    permute::permute(operations, |ready| rng.gen_range(0..ready.len()));
-
-                let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &operations);
+                let bytecode = bytecode::process(&mut engine.rt.mapper, operations, |ready| {
+                    rng.gen_range(0..ready.len())
+                });
 
                 #[cfg(debug_assertions)]
-                if block.instructions.len() > max.as_ref().map_or(0, |(m, _, _, _)| *m) {
-                    max = Some((
-                        block.instructions.len(),
-                        block.rva,
-                        before.clone(),
-                        operations,
-                    ));
+                if block.instructions.len() > largest.as_ref().map_or(0, |(m, _, _)| *m) {
+                    largest = Some((block.instructions.len(), block.rva, format!("{}", bytecode)));
                 }
+
+                let mut vblock = bytecode.bytes;
 
                 let key = u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap());
 
@@ -219,12 +171,8 @@ impl Protection for Virtualization {
         {
             use logger::debug;
 
-            if let Some((_, rva, before, operations)) = max {
-                debug!(
-                    "VIRTUALIZED @ 0x{:08X}:\n{}",
-                    rva,
-                    format_operations_with(&before, &operations)
-                );
+            if let Some((_, rva, log)) = largest {
+                debug!("VIRTUALIZED @ 0x{:08X}:\n{}", rva, log);
             }
         }
 

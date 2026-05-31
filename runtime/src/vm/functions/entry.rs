@@ -47,7 +47,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.jz(acquire_global_lock).unwrap();
 
     // cmp [r12 + ...], 0x0
-    utils::vreg::cmp_imm(rt, r12, VMReg::VKey, 0x0);
+    utils::vreg::cmp_imm(rt, r12, VMReg::VAtt, 0x0);
     // jne ...
     rt.asm.jne(initialize_state).unwrap();
 

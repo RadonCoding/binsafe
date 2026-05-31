@@ -1,6 +1,7 @@
-use std::any::TypeId;
+use std::any::Any;
 use std::collections::HashSet;
 use std::mem;
+use std::rc::Rc;
 
 use crate::mapper::Mappable;
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
@@ -11,7 +12,7 @@ use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{Effect, Encode};
 
-type Atom = Vec<Box<dyn Encode>>;
+type Atom = Vec<Rc<dyn Encode>>;
 
 struct Access {
     memory: VMMem,
@@ -22,15 +23,13 @@ struct Access {
 struct Profile {
     reads: u64,
     writes: u64,
-    flags_reads: bool,
-    flags_writes: bool,
     memory_reads: bool,
     memory_writes: bool,
     accesses: Option<Vec<Access>>,
 }
 
 /// Shuffles operations into a semantically equivalent sequence, with `pick` choosing among the ready atoms at each scheduling step.
-pub fn permute<F>(operations: Vec<Box<dyn Encode>>, mut picker: F) -> Vec<Box<dyn Encode>>
+pub fn permute<F>(operations: Vec<Rc<dyn Encode>>, picker: &mut F) -> Vec<Rc<dyn Encode>>
 where
     F: FnMut(&[usize]) -> usize,
 {
@@ -62,15 +61,15 @@ where
         }
     }
 
-    let mut operations = schedule(atoms, &order);
+    let mut permutated = schedule(atoms, &order);
 
-    cleanup(&mut operations, &parked);
+    cleanup(&mut permutated, &parked);
 
-    operations
+    permutated
 }
 
 /// Removes adjacent [`decouple`]-inserted [`StoreRegister`]/[`LoadRegister`] pairs left behind when scheduling failed to interleave anything across a parking cut.
-fn cleanup(operations: &mut Vec<Box<dyn Encode>>, parked: &HashSet<usize>) {
+fn cleanup(operations: &mut Vec<Rc<dyn Encode>>, parked: &HashSet<usize>) {
     let mut i = 0;
 
     while i + 1 < operations.len() {
@@ -81,8 +80,8 @@ fn cleanup(operations: &mut Vec<Box<dyn Encode>>, parked: &HashSet<usize>) {
             continue;
         }
 
-        let store = downcast::<StoreRegister>(&*operations[i]);
-        let load = downcast::<LoadRegister>(&*operations[i + 1]);
+        let store = (&*operations[i] as &dyn Any).downcast_ref::<StoreRegister>();
+        let load = (&*operations[i + 1] as &dyn Any).downcast_ref::<LoadRegister>();
 
         let pair = match (store, load) {
             (Some(s), Some(l)) => s.destination == l.source && s.width == l.width,
@@ -100,13 +99,13 @@ fn cleanup(operations: &mut Vec<Box<dyn Encode>>, parked: &HashSet<usize>) {
     }
 }
 
-/// Stable identity for a boxed operation, used to tag [`decouple`]-inserted ops for [`cleanup`].
-fn address(op: &Box<dyn Encode>) -> usize {
+/// Stable identity for a refcounted operation, used to tag [`decouple`]-inserted ops for [`cleanup`].
+fn address(op: &Rc<dyn Encode>) -> usize {
     &**op as *const dyn Encode as *const () as usize
 }
 
 /// Groups operations into atoms where each atom leaves the scratch stack balanced.
-fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Atom> {
+fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Atom> {
     let mut atoms = Vec::new();
     let mut current = Atom::new();
     let mut depth = 0;
@@ -189,7 +188,7 @@ fn vacant(atoms: &[Atom], pair: usize, count: usize, live: &HashSet<VMReg>) -> O
         let (reads, _) = effects(&atoms[j]);
 
         for operation in &atoms[j] {
-            let Some(store) = downcast::<StoreRegister>(&**operation) else {
+            let Some(store) = (&**operation as &dyn Any).downcast_ref::<StoreRegister>() else {
                 continue;
             };
 
@@ -227,7 +226,7 @@ fn split(
     let mut operations = atom
         .into_iter()
         .map(Some)
-        .collect::<Vec<Option<Box<dyn Encode>>>>();
+        .collect::<Vec<Option<Rc<dyn Encode>>>>();
 
     let total = operations.len();
 
@@ -264,6 +263,7 @@ fn split(
     let op = load(*registers.last().unwrap());
 
     parked.insert(address(&op));
+
     last.push(op);
 
     for j in previous..total {
@@ -275,17 +275,17 @@ fn split(
     result
 }
 
-/// Boxed [`LoadRegister`] that reads `register` and pushes onto scratch.
-fn load(register: VMReg) -> Box<dyn Encode> {
-    Box::new(LoadRegister {
+/// Refcounted [`LoadRegister`] that reads `register` and pushes onto scratch.
+fn load(register: VMReg) -> Rc<dyn Encode> {
+    Rc::new(LoadRegister {
         width: VMWidth::Lower64,
         source: register,
     })
 }
 
-/// Boxed [`StoreRegister`] that pops from scratch and writes `register`.
-fn store(register: VMReg) -> Box<dyn Encode> {
-    Box::new(StoreRegister {
+/// Refcounted [`StoreRegister`] that pops from scratch and writes `register`.
+fn store(register: VMReg) -> Rc<dyn Encode> {
+    Rc::new(StoreRegister {
         width: VMWidth::Lower64,
         destination: register,
     })
@@ -338,7 +338,7 @@ fn dependencies(atoms: &[Atom]) -> (Vec<Vec<usize>>, Vec<usize>) {
 }
 
 /// Applies `order` to the schedulable head, appends the trailing branch atom, flattens to operations, and drops any adjacent [`VMReg::Flags`] save/restore pair.
-fn schedule(mut atoms: Vec<Atom>, order: &[usize]) -> Vec<Box<dyn Encode>> {
+fn schedule(mut atoms: Vec<Atom>, order: &[usize]) -> Vec<Rc<dyn Encode>> {
     let tail = match atoms.iter().rposition(branches) {
         Some(i) => atoms.split_off(i),
         None => Vec::new(),
@@ -358,8 +358,6 @@ fn schedule(mut atoms: Vec<Atom>, order: &[usize]) -> Vec<Box<dyn Encode>> {
 fn profile(atom: &Atom) -> Profile {
     let mut reads = 0;
     let mut writes = 0;
-    let mut flags_reads = false;
-    let mut flags_writes = false;
     let mut memory_reads = false;
     let mut memory_writes = false;
 
@@ -367,7 +365,6 @@ fn profile(atom: &Atom) -> Profile {
         for effect in op.reads() {
             match effect {
                 Effect::Register(r) if r != VMReg::None => reads |= bit(r),
-                Effect::Flags => flags_reads = true,
                 Effect::Memory => memory_reads = true,
                 _ => {}
             }
@@ -376,7 +373,6 @@ fn profile(atom: &Atom) -> Profile {
         for effect in op.writes() {
             match effect {
                 Effect::Register(r) if r != VMReg::None => writes |= bit(r),
-                Effect::Flags => flags_writes = true,
                 Effect::Memory => memory_writes = true,
                 _ => {}
             }
@@ -386,8 +382,6 @@ fn profile(atom: &Atom) -> Profile {
     Profile {
         reads,
         writes,
-        flags_reads,
-        flags_writes,
         memory_reads,
         memory_writes,
         accesses: accesses(atom),
@@ -400,8 +394,6 @@ fn conflicts(a: &Profile, b: &Profile) -> bool {
         || (a.reads & b.writes) != 0
         || (a.writes & b.writes) != 0
         || memory(a, b)
-        || (a.flags_writes && (b.flags_writes || b.flags_reads))
-        || (a.flags_reads && b.flags_writes)
 }
 
 /// Whether two atoms' memory accesses overlap, conservatively treating unpaired accesses as overlapping any other memory touch.
@@ -427,9 +419,11 @@ fn accesses(atom: &Atom) -> Option<Vec<Access>> {
     for i in 0..atom.len() {
         let op = &*atom[i];
 
-        let here = if let Some(l) = downcast::<LoadMemory>(op) {
+        let any: &dyn Any = op;
+
+        let here = if let Some(l) = any.downcast_ref::<LoadMemory>() {
             Some((bytes(l.width), false))
-        } else if let Some(s) = downcast::<StoreMemory>(op) {
+        } else if let Some(s) = any.downcast_ref::<StoreMemory>() {
             Some((bytes(s.width), true))
         } else {
             None
@@ -440,10 +434,10 @@ fn accesses(atom: &Atom) -> Option<Vec<Access>> {
                 return None;
             }
 
-            let addr = downcast::<LoadAddress>(&*atom[i - 1])?;
+            let load = (&*atom[i - 1] as &dyn Any).downcast_ref::<LoadAddress>()?;
 
             result.push(Access {
-                memory: addr.source,
+                memory: load.source,
                 width,
                 write,
             });
@@ -481,11 +475,7 @@ fn aliases(a: &Access, b: &Access) -> bool {
 
 /// Whether the atom writes [`VMReg::NBranch`].
 fn branches(atom: &Atom) -> bool {
-    atom.iter().any(|op| {
-        op.writes()
-            .iter()
-            .any(|e| matches!(e, Effect::Register(VMReg::NBranch)))
-    })
+    atom.iter().any(|op| op.branches())
 }
 
 /// Byte width of a [`VMWidth`].
@@ -498,14 +488,5 @@ fn bytes(width: VMWidth) -> i64 {
         2
     } else {
         1
-    }
-}
-
-/// Downcasts a `dyn Encode` reference to a concrete encoder type when its underlying type matches.
-fn downcast<T: Encode + 'static>(op: &dyn Encode) -> Option<&T> {
-    if op.type_id() == TypeId::of::<T>() {
-        Some(unsafe { &*(op as *const dyn Encode as *const T) })
-    } else {
-        None
     }
 }

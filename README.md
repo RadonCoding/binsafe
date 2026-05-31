@@ -43,7 +43,7 @@ The `tests` crate executes assembled bytecode through the VM against allocated e
 
 ## Usage
 
-`cargo run --bin obfuscator -- <filename> --virtualize --mutate`
+`cargo run --release --bin obfuscator -- <filename> --virtualize --mutate`
 
 ## Contributing
 

@@ -42,7 +42,7 @@ pub fn build(rt: &mut Runtime) {
     // mov rax, gs:[0x1480 + rax * 8]
     rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
     // mov r15, [rax + ...]
-    utils::vreg::load_reg(rt, rax, VMReg::VKey, r15);
+    utils::vreg::load_reg(rt, rax, VMReg::VAtt, r15);
 
     // add rcx, 0x2
     rt.asm.add(rcx, 0x2).unwrap();

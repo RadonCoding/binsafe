@@ -1,5 +1,6 @@
 pub mod bytecode;
 pub mod encoders;
+pub mod encrypt;
 pub mod functions;
 pub mod handlers;
 pub mod lifters;

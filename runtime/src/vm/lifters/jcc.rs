@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use iced_x86::{Code, Instruction, OpKind};
 
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMTest, VMWidth};
@@ -7,26 +8,26 @@ use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::ret::Ret;
 use crate::vm::encoders::{jcc::Jcc, Encode};
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let code = instruction.code();
 
     match code {
         Code::Jmp_rm64 => match instruction.op0_kind() {
             OpKind::Register => Some(vec![
-                Box::new(LoadRegister {
+                Rc::new(LoadRegister {
                     width: VMWidth::Lower64,
                     source: VMReg::from(instruction.op0_register()),
                 }),
-                Box::new(Jcc::jump()),
+                Rc::new(Jcc::jump()),
             ]),
             OpKind::Memory => Some(vec![
-                Box::new(LoadAddress {
+                Rc::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }),
-                Box::new(LoadMemory {
+                Rc::new(LoadMemory {
                     width: VMWidth::Lower64,
                 }),
-                Box::new(Jcc::jump()),
+                Rc::new(Jcc::jump()),
             ]),
             _ => None,
         },
@@ -35,7 +36,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
             let displacement = instruction.memory_displacement64().try_into().unwrap();
 
             Some(vec![
-                Box::new(LoadAddress {
+                Rc::new(LoadAddress {
                     source: VMMem {
                         base: VMReg::VImage,
                         index: VMReg::None,
@@ -44,7 +45,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Box::new(Jcc::jump()),
+                Rc::new(Jcc::jump()),
             ])
         }
 
@@ -52,7 +53,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
             let displacement = instruction.memory_displacement64().try_into().unwrap();
 
             Some(vec![
-                Box::new(LoadAddress {
+                Rc::new(LoadAddress {
                     source: VMMem {
                         base: VMReg::VImage,
                         index: VMReg::None,
@@ -61,28 +62,28 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Box::new(Jcc::call()),
+                Rc::new(Jcc::call()),
             ])
         }
 
-        Code::Retnq => Some(vec![Box::new(Ret)]),
+        Code::Retnq => Some(vec![Rc::new(Ret)]),
 
         Code::Call_rm64 => match instruction.op0_kind() {
             OpKind::Register => Some(vec![
-                Box::new(LoadRegister {
+                Rc::new(LoadRegister {
                     width: VMWidth::Lower64,
                     source: VMReg::from(instruction.op0_register()),
                 }),
-                Box::new(Jcc::call()),
+                Rc::new(Jcc::call()),
             ]),
             OpKind::Memory => Some(vec![
-                Box::new(LoadAddress {
+                Rc::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }),
-                Box::new(LoadMemory {
+                Rc::new(LoadMemory {
                     width: VMWidth::Lower64,
                 }),
-                Box::new(Jcc::call()),
+                Rc::new(Jcc::call()),
             ]),
             _ => None,
         },
@@ -161,7 +162,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
             // TODO: Mutation of conditions to equilavent logic
 
             Some(vec![
-                Box::new(LoadAddress {
+                Rc::new(LoadAddress {
                     source: VMMem {
                         base: VMReg::VImage,
                         index: VMReg::None,
@@ -170,7 +171,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Box::new(Jcc { logic, conditions }),
+                Rc::new(Jcc { logic, conditions }),
             ])
         }
     }
