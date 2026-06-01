@@ -12,6 +12,7 @@ use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::sub::Sub;
 use crate::vm::encoders::xor::Xor;
 use crate::vm::encoders::{Effect, Encode};
+use crate::vm::transform::{deadzones, Phase, Transform};
 
 struct Encryptor<'a> {
     operations: &'a mut Vec<Rc<dyn Encode>>,
@@ -21,40 +22,33 @@ struct Encryptor<'a> {
 }
 
 /// Encrypts every immediate against a rolling key held in [`VMReg::VImm`], emitting roll sequences between immediates.
-pub fn encrypt(operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
-    let mut operations = operations;
+pub struct Encrypt;
 
-    let key = rand::thread_rng().gen::<u64>();
+impl Transform for Encrypt {
+    fn phase(&self) -> Phase {
+        Phase::Encrypt
+    }
 
-    let mut encryptor = Encryptor::new(&mut operations, key);
+    fn run(&self, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
+        let mut operations = operations;
 
-    encryptor.process();
-    encryptor.prologue(key);
+        let key = rand::thread_rng().gen::<u64>();
 
-    operations
+        let mut encryptor = Encryptor::new(&mut operations, key);
+
+        encryptor.process();
+        encryptor.prologue(key);
+
+        operations
+    }
 }
 
 impl<'a> Encryptor<'a> {
     /// Builds an [`Encryptor`] with a deadzone mask derived from a depth-first flag-effect scan over `operations` and their children.
     fn new(operations: &'a mut Vec<Rc<dyn Encode>>, key: u64) -> Self {
-        let mut events = Vec::new();
-
-        scan(operations, &mut events);
-
-        let mut deadzones = vec![false; events.len()];
-        let mut live = true;
-
-        for (i, (reads, writes)) in events.iter().enumerate().rev() {
-            if *reads {
-                live = true;
-            }
-            if !live {
-                deadzones[i] = true;
-            }
-            if *writes {
-                live = false;
-            }
-        }
+        let deadzones = deadzones(operations, |effect| {
+            matches!(effect, Effect::Register(VMReg::Flags))
+        });
 
         Self {
             operations,
@@ -94,29 +88,6 @@ impl<'a> Encryptor<'a> {
     }
 }
 
-/// Recursively visits each leaf, recording whether it reads and whether it writes [`VMReg::Flags`].
-fn scan(operations: &mut Vec<Rc<dyn Encode>>, events: &mut Vec<(bool, bool)>) {
-    for op in operations.iter_mut() {
-        if let Some(children) = Rc::get_mut(op).unwrap().children() {
-            scan(children, events);
-
-            continue;
-        }
-
-        let reads = op
-            .reads()
-            .iter()
-            .any(|e| matches!(e, Effect::Register(VMReg::Flags)));
-
-        let writes = op
-            .writes()
-            .iter()
-            .any(|e| matches!(e, Effect::Register(VMReg::Flags)));
-
-        events.push((reads, writes));
-    }
-}
-
 /// Encrypts each leaf in place, descending into children with `roll` cleared and splicing a roll sequence after every immediate when `roll` is set.
 fn walk(
     operations: &mut Vec<Rc<dyn Encode>>,
@@ -135,9 +106,7 @@ fn walk(
             continue;
         }
 
-        if let Some(encrypted) = leaf(&operations[i], *key) {
-            operations[i] = encrypted;
-
+        if leaf(&mut operations[i], *key) {
             let p = *position;
             *position += 1;
 
@@ -155,30 +124,23 @@ fn walk(
     }
 }
 
-/// Returns an encrypted replacement for a [`LoadImmediate`] or [`LoadAddress`] when one matches, otherwise [`None`].
-fn leaf(operation: &Rc<dyn Encode>, key: u64) -> Option<Rc<dyn Encode>> {
-    let any: &dyn Any = &**operation;
+/// Encrypts the leaf in place when it matches [`LoadImmediate`] or [`LoadAddress`], returning whether a match was found.
+fn leaf(operation: &mut Rc<dyn Encode>, key: u64) -> bool {
+    let any: &mut dyn Any = Rc::get_mut(operation).unwrap();
 
-    if let Some(load) = any.downcast_ref::<LoadImmediate>() {
-        let mut source = load.source.clone();
+    if let Some(load) = any.downcast_mut::<LoadImmediate>() {
+        xor(&mut load.source, load.width, key);
 
-        xor(&mut source, load.width, key);
-
-        return Some(Rc::new(LoadImmediate {
-            width: load.width,
-            source,
-        }));
+        return true;
     }
 
-    if let Some(load) = any.downcast_ref::<LoadAddress>() {
-        let mut source = load.source;
+    if let Some(load) = any.downcast_mut::<LoadAddress>() {
+        load.source.displacement ^= (key & 0xFFFF_FFFF) as i32;
 
-        source.displacement ^= (key & 0xFFFF_FFFF) as i32;
-
-        return Some(Rc::new(LoadAddress { source }));
+        return true;
     }
 
-    None
+    false
 }
 
 /// XORs `source` byte-for-byte against the width-matching slice of `key`.

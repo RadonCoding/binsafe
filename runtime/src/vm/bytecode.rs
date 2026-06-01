@@ -9,6 +9,10 @@ use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
     add, and, cmov, cmp, jcc, lea, mov, movsx, movzx, or, pop, push, set, sub, test, xor,
 };
+use crate::vm::transform::encrypt::Encrypt;
+#[cfg(debug_assertions)]
+use crate::vm::transform::mutation::Mutation;
+use crate::vm::transform::{permute, Transform};
 
 mapped! {
     VMOp {
@@ -39,7 +43,7 @@ mapped! {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
 pub enum VMFlag {
     Carry = 0,      // CF
     Parity = 2,     // PF
@@ -242,76 +246,179 @@ impl Encode for VMCondition {
 
 pub struct Bytecode {
     #[cfg(debug_assertions)]
-    lifted: Vec<String>,
-    #[cfg(debug_assertions)]
-    permuted: Vec<String>,
-    #[cfg(debug_assertions)]
-    encrypted: Vec<String>,
+    snapshots: Vec<Snapshot>,
 
     pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    Lift,
+    Fusion,
+    Mutation,
+    Permute,
+    Encrypt,
+}
+
+impl Phase {
+    pub fn identifier(&self) -> &'static str {
+        match self {
+            Self::Lift => "lift",
+            Self::Fusion => "fusion",
+            Self::Mutation => "mutation",
+            Self::Permute => "permute",
+            Self::Encrypt => "encrypt",
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+struct Snapshot {
+    phase: Phase,
+    operations: Vec<(usize, String)>,
+}
+
+#[cfg(debug_assertions)]
+impl Snapshot {
+    fn take(phase: Phase, operations: &[Rc<dyn Encode>]) -> Self {
+        Self {
+            phase,
+            operations: operations
+                .iter()
+                .map(|operation| (address(operation), format!("{}", operation)))
+                .collect(),
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+fn address(operation: &Rc<dyn Encode>) -> usize {
+    &**operation as *const dyn Encode as *const () as usize
+}
+
+#[cfg(debug_assertions)]
+impl Bytecode {
+    fn trace(&self, target: usize) -> (Option<usize>, String) {
+        let mut original: Option<usize> = None;
+        let mut markers = String::new();
+        let mut previous: Option<&str> = None;
+        let mut last_seen: Option<usize> = None;
+
+        for (index, snapshot) in self.snapshots.iter().enumerate() {
+            let Some((position, (_, current))) = snapshot
+                .operations
+                .iter()
+                .enumerate()
+                .find(|(_, (other, _))| *other == target)
+            else {
+                continue;
+            };
+
+            match previous {
+                None => {
+                    if index == 0 {
+                        original = Some(position);
+                    } else {
+                        markers.push(letter(snapshot.phase));
+                    }
+                }
+                Some(prior) if prior != current.as_str() => {
+                    markers.push(letter(snapshot.phase));
+                }
+                _ => {}
+            }
+
+            previous = Some(current.as_str());
+            last_seen = Some(index);
+        }
+
+        if let Some(last) = last_seen {
+            let remover = last + 1;
+            if remover < self.snapshots.len() {
+                markers.push('-');
+                markers.push(letter(self.snapshots[remover].phase));
+            }
+        }
+
+        (original, markers)
+    }
+}
+
+#[cfg(debug_assertions)]
+fn letter(phase: Phase) -> char {
+    phase
+        .identifier()
+        .chars()
+        .next()
+        .unwrap()
+        .to_uppercase()
+        .next()
+        .unwrap()
 }
 
 #[cfg(debug_assertions)]
 impl std::fmt::Display for Bytecode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut lifted_positions = std::collections::HashMap::new();
+        use std::collections::{HashMap, HashSet};
 
-        for (i, line) in self.lifted.iter().enumerate() {
-            lifted_positions
-                .entry(line.as_str())
-                .or_insert_with(std::collections::VecDeque::new)
-                .push_back(i);
-        }
+        let last = self.snapshots.last().unwrap();
+        let surviving = last
+            .operations
+            .iter()
+            .map(|(addr, _)| *addr)
+            .collect::<HashSet<usize>>();
 
-        let mut permute_additions = std::collections::HashMap::<&str, usize>::new();
+        let render = |original: Option<usize>, markers: &str, display: &str| {
+            let original = match original {
+                Some(value) => format!("{:>3}", value),
+                None => "   ".to_string(),
+            };
+            format!("{} {:<4} {}", original, markers, display)
+        };
 
-        for op in &self.permuted {
-            *permute_additions.entry(op.as_str()).or_insert(0) += 1;
-        }
+        let mut lines = last
+            .operations
+            .iter()
+            .map(|(target, display)| {
+                let (original, markers) = self.trace(*target);
+                render(original, &markers, display)
+            })
+            .collect::<Vec<String>>();
 
-        for line in &self.lifted {
-            if let Some(count) = permute_additions.get_mut(line.as_str()) {
-                *count = count.saturating_sub(1);
+        let mut latest = HashMap::new();
+
+        for (snapshot_index, snapshot) in self.snapshots.iter().enumerate() {
+            for (position, (address, content)) in snapshot.operations.iter().enumerate() {
+                latest.insert(*address, (snapshot_index, position, content.clone()));
             }
         }
 
-        let lines = self
-            .encrypted
-            .iter()
-            .map(|op| {
-                if let Some(index) = lifted_positions
-                    .get_mut(op.as_str())
-                    .and_then(|queue| queue.pop_front())
-                {
-                    format!("  {:>3}   {}", index, op)
-                } else if permute_additions.get(op.as_str()).copied().unwrap_or(0) > 0 {
-                    *permute_additions.get_mut(op.as_str()).unwrap() -= 1;
-                    format!("    +   {}", op)
-                } else {
-                    format!("    *   {}", op)
-                }
-            })
-            .collect::<Vec<String>>()
-            .join("\n");
+        let mut removed = latest
+            .into_iter()
+            .filter(|(address, _)| !surviving.contains(address))
+            .filter_map(|(address, (index, position, content))| {
+                let remover = index + 1;
 
-        write!(f, "{}", lines)
+                (remover < self.snapshots.len()).then_some((remover, position, address, content))
+            })
+            .collect::<Vec<(usize, usize, usize, String)>>();
+
+        removed.sort_by_key(|(remover, position, _, _)| (*remover, *position));
+
+        for (_, _, address, content) in &removed {
+            let (original, markers) = self.trace(*address);
+            lines.push(render(original, &markers, content));
+        }
+
+        write!(f, "{}", lines.join("\n"))
     }
 }
 
 impl Bytecode {
-    fn new(
-        #[cfg(debug_assertions)] lifted: Vec<String>,
-        #[cfg(debug_assertions)] permuted: Vec<String>,
-        #[cfg(debug_assertions)] encrypted: Vec<String>,
-        bytes: Vec<u8>,
-    ) -> Self {
+    fn new(#[cfg(debug_assertions)] snapshots: Vec<Snapshot>, bytes: Vec<u8>) -> Self {
         Self {
             #[cfg(debug_assertions)]
-            lifted,
-            #[cfg(debug_assertions)]
-            permuted,
-            #[cfg(debug_assertions)]
-            encrypted,
+            snapshots,
             bytes,
         }
     }
@@ -405,90 +512,40 @@ pub fn assemble(mapper: &mut Mapper, operations: &[Rc<dyn Encode>]) -> Vec<u8> {
     bytes
 }
 
-/// Annotates the encrypted operation stream against the lifted baseline, marking each operation with its original lifted index, `+` for permuter-added ops, or `*` for encrypter-added ops.
-#[cfg(debug_assertions)]
-pub fn annotate(lifted: &[String], permuted: &[String], encrypted: &[String]) -> String {
-    use std::collections::HashMap;
-
-    let mut lifted_positions = HashMap::new();
-
-    for (i, line) in lifted.iter().enumerate() {
-        lifted_positions
-            .entry(line.as_str())
-            .or_insert_with(std::collections::VecDeque::new)
-            .push_back(i);
-    }
-
-    let mut permute_additions = HashMap::<&str, usize>::new();
-
-    for op in permuted {
-        *permute_additions.entry(op.as_str()).or_insert(0) += 1;
-    }
-
-    for line in lifted {
-        if let Some(count) = permute_additions.get_mut(line.as_str()) {
-            *count = count.saturating_sub(1);
-        }
-    }
-
-    encrypted
-        .iter()
-        .map(|op| {
-            if let Some(index) = lifted_positions
-                .get_mut(op.as_str())
-                .and_then(|queue| queue.pop_front())
-            {
-                format!("  {:>3}   {}", index, op)
-            } else if permute_additions.get(op.as_str()).copied().unwrap_or(0) > 0 {
-                *permute_additions.get_mut(op.as_str()).unwrap() -= 1;
-                format!("    +   {}", op)
-            } else {
-                format!("    *   {}", op)
-            }
-        })
-        .collect::<Vec<String>>()
-        .join("\n")
-}
-
 pub fn process<F>(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>, mut picker: F) -> Bytecode
 where
     F: FnMut(&[usize]) -> usize,
 {
-    let operations = crate::vm::mutation::mutate(operations);
+    let mut operations = operations;
 
     #[cfg(debug_assertions)]
-    let lifted = operations
-        .iter()
-        .map(|op| format!("{}", op))
-        .collect::<Vec<String>>();
+    let mut snapshots = vec![Snapshot::take(Phase::Lift, &operations)];
 
-    let operations = crate::vm::permute::permute(operations, &mut picker);
+    operations = Mutation.run(operations);
 
     #[cfg(debug_assertions)]
-    let permuted = operations
-        .iter()
-        .map(|op| format!("{}", op))
-        .collect::<Vec<String>>();
+    snapshots.push(Snapshot::take(Mutation.phase(), &operations));
 
-    let operations = crate::vm::encrypt::encrypt(operations);
+    operations = permute::permute(operations, &mut picker);
 
     #[cfg(debug_assertions)]
-    let encrypted = operations
-        .iter()
-        .map(|op| format!("{}", op))
-        .collect::<Vec<String>>();
+    snapshots.push(Snapshot::take(Phase::Permute, &operations));
 
-    let operations = crate::vm::permute::permute(operations, &mut picker);
+    operations = Encrypt.run(operations);
+
+    #[cfg(debug_assertions)]
+    snapshots.push(Snapshot::take(Encrypt.phase(), &operations));
+
+    operations = permute::permute(operations, &mut picker);
+
+    #[cfg(debug_assertions)]
+    snapshots.push(Snapshot::take(Phase::Permute, &operations));
 
     let bytes = assemble(mapper, &operations);
 
     Bytecode::new(
         #[cfg(debug_assertions)]
-        lifted,
-        #[cfg(debug_assertions)]
-        permuted,
-        #[cfg(debug_assertions)]
-        encrypted,
+        snapshots,
         bytes,
     )
 }

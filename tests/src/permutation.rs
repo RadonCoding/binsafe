@@ -4,7 +4,7 @@ use runtime::{
     vm::{
         bytecode::{self, VMReg},
         encoders::Encode,
-        permute,
+        transform::permute,
     },
 };
 use std::rc::Rc;
