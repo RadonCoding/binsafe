@@ -1,4 +1,3 @@
-use std::mem;
 use std::rc::Rc;
 
 use rand::seq::SliceRandom;
@@ -11,6 +10,7 @@ use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::Encode;
+use crate::vm::transform::atomize;
 
 /// Shuffles the physical order of atoms by chaining them in execution order through signed-offset [`Jcc`]s inside a [`Skip`] body.
 pub fn flatten(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
@@ -35,25 +35,6 @@ pub fn flatten(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<d
         result.extend(atom.iter().cloned());
     }
     result
-}
-
-/// Groups operations into depth-balanced atoms.
-fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
-    let mut atoms = Vec::new();
-    let mut current = Vec::new();
-    let mut depth = 0;
-
-    for op in operations {
-        depth += op.depth();
-        current.push(op);
-        if depth == 0 {
-            atoms.push(mem::take(&mut current));
-        }
-    }
-    if !current.is_empty() {
-        atoms.push(current);
-    }
-    atoms
 }
 
 /// Emits the first atom at the top level followed by a [`Skip`] whose body chains the remaining atoms in execution order, prefixed by a jump from the top-level atom into the body.

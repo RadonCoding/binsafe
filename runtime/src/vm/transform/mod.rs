@@ -17,6 +17,30 @@ pub trait Transform {
     fn run(&self, mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>>;
 }
 
+/// Groups operations into depth-balanced atoms, appending any trailing unbalanced run as a final atom.
+pub fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
+    let mut atoms = Vec::new();
+    let mut current = Vec::new();
+    let mut depth = 0;
+
+    for op in operations {
+        depth += op.depth();
+        current.push(op);
+        if depth == 0 {
+            atoms.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.is_empty() {
+        atoms.push(current);
+    }
+    atoms
+}
+
+/// Stable identity for a refcounted operation.
+pub fn address(op: &Rc<dyn Encode>) -> usize {
+    &**op as *const dyn Encode as *const () as usize
+}
+
 /// Recursively descends into [`Encode::children`], applying `f` to each level after its children have been processed.
 pub fn descend<F>(operations: &mut [Rc<dyn Encode>], mut f: F)
 where
