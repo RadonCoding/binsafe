@@ -6,6 +6,7 @@ use crate::vm::bytecode;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::{Effect, Encode};
 
+/// Operations paired with [`Jump`]s referenced by index so in-place size changes stay valid, with offsets recomputed at [`Chain::seal`].
 #[derive(Debug)]
 pub struct Chain {
     operations: Vec<Rc<dyn Encode>>,
