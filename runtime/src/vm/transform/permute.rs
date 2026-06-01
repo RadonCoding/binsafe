@@ -1,6 +1,5 @@
 use std::any::Any;
 use std::collections::HashSet;
-use std::mem;
 use std::rc::Rc;
 
 use crate::mapper::Mappable;
@@ -11,6 +10,7 @@ use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{Effect, Encode};
+use crate::vm::transform::{address, atomize};
 
 struct Access {
     memory: VMMem,
@@ -95,42 +95,6 @@ fn cleanup(operations: &mut Vec<Rc<dyn Encode>>, parked: &HashSet<usize>) {
 
         i += 1;
     }
-}
-
-/// Stable identity for a refcounted operation, used to tag [`decouple`]-inserted ops for [`cleanup`].
-fn address(op: &Rc<dyn Encode>) -> usize {
-    &**op as *const dyn Encode as *const () as usize
-}
-
-/// Groups operations into atoms where each atom leaves the scratch stack balanced.
-fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
-    let mut atoms = Vec::new();
-    let mut current = Vec::<Rc<dyn Encode>>::new();
-    let mut depth = 0;
-
-    for op in operations {
-        depth += op.depth();
-
-        current.push(op);
-
-        if depth == 0 {
-            atoms.push(mem::take(&mut current));
-        }
-    }
-
-    if !current.is_empty() {
-        let mut single = Vec::<Rc<dyn Encode>>::new();
-
-        for atom in atoms.drain(..) {
-            single.extend(atom);
-        }
-
-        single.extend(current);
-
-        atoms.push(single);
-    }
-
-    atoms
 }
 
 /// Splits each atom at every depth-1 cut by parking the single scratch value across the cut into a register that some later atom is about to kill.
