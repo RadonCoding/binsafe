@@ -10,9 +10,8 @@ use crate::vm::lifters::{
     add, and, cmov, cmp, jcc, lea, mov, movsx, movzx, or, pop, push, set, sub, test, xor,
 };
 use crate::vm::transform::encrypt::Encrypt;
-use crate::vm::transform::flatten;
 use crate::vm::transform::mutation::Mutation;
-use crate::vm::transform::{permute, Transform};
+use crate::vm::transform::{permute, scramble, Transform};
 
 mapped! {
     VMOp {
@@ -254,10 +253,9 @@ pub struct Bytecode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     Lift,
-    Fusion,
     Mutation,
     Permute,
-    Flatten,
+    Scramble,
     Encrypt,
 }
 
@@ -265,10 +263,9 @@ impl Phase {
     pub fn identifier(&self) -> &'static str {
         match self {
             Self::Lift => "lift",
-            Self::Fusion => "fusion",
             Self::Mutation => "mutation",
             Self::Permute => "permute",
-            Self::Flatten => "flatten",
+            Self::Scramble => "scramble",
             Self::Encrypt => "encrypt",
         }
     }
@@ -528,9 +525,9 @@ where
     #[cfg(debug_assertions)]
     snapshots.push(Snapshot::take(Phase::Permute, &operations));
 
-    operations = flatten::flatten(mapper, operations);
+    operations = scramble::scramble(mapper, operations);
     #[cfg(debug_assertions)]
-    snapshots.push(Snapshot::take(Phase::Flatten, &operations));
+    snapshots.push(Snapshot::take(Phase::Scramble, &operations));
 
     operations = Mutation.run(mapper, operations);
     #[cfg(debug_assertions)]

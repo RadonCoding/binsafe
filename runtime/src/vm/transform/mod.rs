@@ -7,9 +7,9 @@ use crate::vm::{
 };
 
 pub mod encrypt;
-pub mod flatten;
 pub mod mutation;
 pub mod permute;
+pub mod scramble;
 
 pub trait Transform {
     fn phase(&self) -> Phase;
@@ -59,10 +59,7 @@ where
 }
 
 /// Per-leaf deadzone mask computed against `effect` via a backward live-variable walk over the leaves.
-pub fn deadzones(
-    operations: &mut [Rc<dyn Encode>],
-    effect: impl Fn(&Effect) -> bool,
-) -> Vec<bool> {
+pub fn deadzones(operations: &mut [Rc<dyn Encode>], effect: impl Fn(&Effect) -> bool) -> Vec<bool> {
     let mut events = Vec::new();
 
     scan(operations, &mut events, &effect);

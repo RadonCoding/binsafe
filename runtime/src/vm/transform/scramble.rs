@@ -13,7 +13,7 @@ use crate::vm::encoders::Encode;
 use crate::vm::transform::atomize;
 
 /// Shuffles the physical order of atoms by chaining them in execution order through signed-offset [`Jcc`]s inside a [`Skip`] body.
-pub fn flatten(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
+pub fn scramble(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
     let atoms = atomize(operations);
 
     let cut = atoms
@@ -29,7 +29,7 @@ pub fn flatten(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<d
 
     let mut rng = rand::thread_rng();
 
-    let mut result = scramble(mapper, head.to_vec(), &mut rng);
+    let mut result = chain(mapper, head.to_vec(), &mut rng);
 
     for atom in tail {
         result.extend(atom.iter().cloned());
@@ -38,7 +38,7 @@ pub fn flatten(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<d
 }
 
 /// Emits the first atom at the top level followed by a [`Skip`] whose body chains the remaining atoms in execution order, prefixed by a jump from the top-level atom into the body.
-fn scramble<R: Rng>(
+fn chain<R: Rng>(
     mapper: &mut Mapper,
     head: Vec<Vec<Rc<dyn Encode>>>,
     rng: &mut R,
