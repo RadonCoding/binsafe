@@ -1,26 +1,28 @@
 use std::rc::Rc;
 
+use crate::mapper::Mapper;
 use crate::vm::{
     bytecode::Phase,
     encoders::{Effect, Encode},
 };
 
 pub mod encrypt;
+pub mod flatten;
 pub mod mutation;
 pub mod permute;
 
 pub trait Transform {
     fn phase(&self) -> Phase;
 
-    fn run(&self, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>>;
+    fn run(&self, mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>>;
 }
 
 /// Recursively descends into [`Encode::children`], applying `f` to each level after its children have been processed.
-pub fn descend<F>(operations: &mut Vec<Rc<dyn Encode>>, mut f: F)
+pub fn descend<F>(operations: &mut [Rc<dyn Encode>], mut f: F)
 where
-    F: FnMut(&mut Vec<Rc<dyn Encode>>),
+    F: FnMut(&mut [Rc<dyn Encode>]),
 {
-    fn go<F: FnMut(&mut Vec<Rc<dyn Encode>>)>(operations: &mut Vec<Rc<dyn Encode>>, f: &mut F) {
+    fn go<F: FnMut(&mut [Rc<dyn Encode>])>(operations: &mut [Rc<dyn Encode>], f: &mut F) {
         for op in operations.iter_mut() {
             if let Some(children) = Rc::get_mut(op).unwrap().children() {
                 go(children, f);
@@ -34,7 +36,7 @@ where
 
 /// Per-leaf deadzone mask computed against `effect` via a backward live-variable walk over the leaves.
 pub fn deadzones(
-    operations: &mut Vec<Rc<dyn Encode>>,
+    operations: &mut [Rc<dyn Encode>],
     effect: impl Fn(&Effect) -> bool,
 ) -> Vec<bool> {
     let mut events = Vec::new();
@@ -61,7 +63,7 @@ pub fn deadzones(
 
 /// Records each leaf's read/write flags for `effect`, recursing through children.
 fn scan(
-    operations: &mut Vec<Rc<dyn Encode>>,
+    operations: &mut [Rc<dyn Encode>],
     events: &mut Vec<(bool, bool)>,
     effect: &impl Fn(&Effect) -> bool,
 ) {

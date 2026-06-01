@@ -1,6 +1,5 @@
-use std::fmt;
-
 use crate::vm::encoders::Encode;
+use std::fmt;
 
 impl fmt::Display for dyn Encode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -9,6 +8,7 @@ impl fmt::Display for dyn Encode {
             .replace(" }", ")");
         let s = hex_bytes(&s);
         let s = hex_decimals(&s);
+        let s = indent(&s);
         write!(f, "{s}")
     }
 }
@@ -16,7 +16,6 @@ impl fmt::Display for dyn Encode {
 fn strip_fields(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut chars = input.chars().peekable();
-
     while let Some(ch) = chars.next() {
         if ch == ':' && chars.peek() == Some(&' ') {
             chars.next();
@@ -27,14 +26,12 @@ fn strip_fields(input: &str) -> String {
             out.push(ch);
         }
     }
-
     out
 }
 
 fn hex_bytes(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut chars = input.char_indices().peekable();
-
     while let Some((i, ch)) = chars.next() {
         if ch == '[' {
             if let Some(end) = input[i + 1..].find(']') {
@@ -42,7 +39,6 @@ fn hex_bytes(input: &str) -> String {
                     .split(',')
                     .map(|b| b.trim().parse::<u8>().ok())
                     .collect::<Option<Vec<u8>>>();
-
                 if let Some(bytes) = bytes {
                     let hex = match bytes.len() {
                         4 => Some(format!(
@@ -55,7 +51,6 @@ fn hex_bytes(input: &str) -> String {
                         )),
                         _ => None,
                     };
-
                     if let Some(hex) = hex {
                         out.push_str(&hex);
                         chars.nth(end);
@@ -66,18 +61,17 @@ fn hex_bytes(input: &str) -> String {
         }
         out.push(ch);
     }
-
     out
 }
 
 fn hex_decimals(input: &str) -> String {
     let chars = input.chars().collect::<Vec<char>>();
     let mut out = String::with_capacity(input.len());
+
     let mut i = 0;
 
     while i < chars.len() {
         let ch = chars[i];
-
         if ch == '0' && matches!(chars.get(i + 1), Some('x') | Some('X')) {
             out.extend(chars[i..i + 2].iter());
             i += 2;
@@ -87,7 +81,6 @@ fn hex_decimals(input: &str) -> String {
             }
             continue;
         }
-
         let prev_alnum = i > 0 && (chars[i - 1].is_ascii_alphanumeric() || chars[i - 1] == '_');
         let (start, negative) = match ch {
             '-' if !prev_alnum && matches!(chars.get(i + 1), Some(c) if c.is_ascii_digit()) => {
@@ -100,12 +93,10 @@ fn hex_decimals(input: &str) -> String {
                 continue;
             }
         };
-
         let mut end = start;
         while matches!(chars.get(end), Some(c) if c.is_ascii_digit()) {
             end += 1;
         }
-
         let digits = chars[start..end].iter().collect::<String>();
         match digits.parse::<i64>() {
             Ok(value) => {
@@ -121,6 +112,59 @@ fn hex_decimals(input: &str) -> String {
         }
         i = end;
     }
+    out
+}
 
+fn indent(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() * 2);
+    let mut chars = input.chars().peekable();
+    let mut stack = Vec::<(char, bool, usize)>::new();
+    let mut depth = 0usize;
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '(' => {
+                let expand = chars.peek() == Some(&'[');
+                stack.push(('(', expand, depth));
+                out.push('(');
+            }
+            ')' => {
+                stack.pop();
+                out.push(')');
+            }
+            '[' => {
+                let parent_expanded = stack.last().map(|e| e.1).unwrap_or(false);
+                let expand = parent_expanded
+                    && matches!(chars.peek(), Some(c) if c.is_ascii_alphabetic());
+                stack.push(('[', expand, depth));
+                out.push('[');
+                if expand {
+                    depth += 1;
+                    out.push('\n');
+                    out.push_str(&"    ".repeat(depth));
+                }
+            }
+            ']' => {
+                let (_, expand, open_depth) = stack.pop().unwrap_or(('[', false, depth));
+                if expand {
+                    depth = open_depth;
+                    out.push('\n');
+                    out.push_str(&"    ".repeat(depth));
+                }
+                out.push(']');
+            }
+            ',' => {
+                out.push(',');
+                if matches!(stack.last(), Some(('[', true, _))) {
+                    out.push('\n');
+                    out.push_str(&"    ".repeat(depth));
+                    if chars.peek() == Some(&' ') {
+                        chars.next();
+                    }
+                }
+            }
+            c => out.push(c),
+        }
+    }
     out
 }

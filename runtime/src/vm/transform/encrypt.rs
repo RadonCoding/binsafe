@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use rand::Rng;
 
+use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::add::Add;
 use crate::vm::encoders::load_address::LoadAddress;
@@ -15,6 +16,7 @@ use crate::vm::encoders::{Effect, Encode};
 use crate::vm::transform::{deadzones, Phase, Transform};
 
 struct Encryptor<'a> {
+    mapper: &'a mut Mapper,
     operations: &'a mut Vec<Rc<dyn Encode>>,
     deadzones: Vec<bool>,
     position: usize,
@@ -29,12 +31,12 @@ impl Transform for Encrypt {
         Phase::Encrypt
     }
 
-    fn run(&self, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
+    fn run(&self, mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
         let mut operations = operations;
 
         let key = rand::thread_rng().gen::<u64>();
 
-        let mut encryptor = Encryptor::new(&mut operations, key);
+        let mut encryptor = Encryptor::new(mapper, &mut operations, key);
 
         encryptor.process();
         encryptor.prologue(key);
@@ -45,12 +47,13 @@ impl Transform for Encrypt {
 
 impl<'a> Encryptor<'a> {
     /// Builds an [`Encryptor`] with a deadzone mask derived from a depth-first flag-effect scan over `operations` and their children.
-    fn new(operations: &'a mut Vec<Rc<dyn Encode>>, key: u64) -> Self {
+    fn new(mapper: &'a mut Mapper, operations: &'a mut Vec<Rc<dyn Encode>>, key: u64) -> Self {
         let deadzones = deadzones(operations, |effect| {
             matches!(effect, Effect::Register(VMReg::Flags))
         });
 
         Self {
+            mapper,
             operations,
             deadzones,
             position: 0,
@@ -61,6 +64,7 @@ impl<'a> Encryptor<'a> {
     /// Encrypts each operation in execution order, rolling the key after every immediate.
     fn process(&mut self) {
         walk(
+            self.mapper,
             self.operations,
             &mut self.position,
             &self.deadzones,
@@ -88,8 +92,9 @@ impl<'a> Encryptor<'a> {
     }
 }
 
-/// Encrypts each leaf in place, descending into children with `roll` cleared and splicing a roll sequence after every immediate when `roll` is set.
+/// Encrypts each leaf in place at the top level, splicing a roll sequence after every immediate, descending into children without rolling, and sealing each [`Skip`] with the key it entered with.
 fn walk(
+    mapper: &mut Mapper,
     operations: &mut Vec<Rc<dyn Encode>>,
     position: &mut usize,
     deadzones: &[bool],
@@ -99,9 +104,16 @@ fn walk(
     let mut i = 0;
 
     while i < operations.len() {
-        if let Some(children) = Rc::get_mut(&mut operations[i]).unwrap().children() {
-            walk(children, position, deadzones, key, false);
+        let entry = *key;
 
+        if let Some(children) = Rc::get_mut(&mut operations[i]).unwrap().children() {
+            nested(mapper, children, position, deadzones, key);
+            Rc::get_mut(&mut operations[i]).unwrap().seal(mapper, &mut |source| {
+                let bytes = entry.to_le_bytes();
+                for (i, byte) in source.iter_mut().enumerate() {
+                    *byte ^= bytes[i];
+                }
+            });
             i += 1;
             continue;
         }
@@ -124,19 +136,46 @@ fn walk(
     }
 }
 
+/// Encrypts each leaf in place inside a children slice without rolling, descending recursively and sealing nested [`Skip`]s.
+fn nested(
+    mapper: &mut Mapper,
+    operations: &mut [Rc<dyn Encode>],
+    position: &mut usize,
+    deadzones: &[bool],
+    key: &mut u64,
+) {
+    for operation in operations.iter_mut() {
+        let entry = *key;
+
+        if let Some(children) = Rc::get_mut(operation).unwrap().children() {
+            nested(mapper, children, position, deadzones, key);
+            Rc::get_mut(operation).unwrap().seal(mapper, &mut |source| {
+                let bytes = entry.to_le_bytes();
+                for (i, byte) in source.iter_mut().enumerate() {
+                    *byte ^= bytes[i];
+                }
+            });
+            continue;
+        }
+
+        leaf(operation, *key);
+
+        *position += 1;
+    }
+}
+
+
 /// Encrypts the leaf in place when it matches [`LoadImmediate`] or [`LoadAddress`], returning whether a match was found.
 fn leaf(operation: &mut Rc<dyn Encode>, key: u64) -> bool {
     let any: &mut dyn Any = Rc::get_mut(operation).unwrap();
 
     if let Some(load) = any.downcast_mut::<LoadImmediate>() {
         xor(&mut load.source, load.width, key);
-
         return true;
     }
 
     if let Some(load) = any.downcast_mut::<LoadAddress>() {
         load.source.displacement ^= (key & 0xFFFF_FFFF) as i32;
-
         return true;
     }
 

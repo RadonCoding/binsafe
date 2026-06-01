@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMCondition, VMLogic, VMOp, VMReg};
+use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMOp, VMReg, VMTest};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
@@ -51,10 +51,48 @@ impl Jcc {
         Self::always(VMLogic::CAND)
     }
 
+    pub fn skip() -> Self {
+        Self::always(VMLogic::SAND)
+    }
+
+    pub fn pass() -> Self {
+        Self::never(VMLogic::SAND)
+    }
+
     fn always(logic: VMLogic) -> Self {
         Self {
             logic,
-            conditions: vec![],
+            conditions: vec![tautology()],
         }
     }
+
+    fn never(logic: VMLogic) -> Self {
+        Self {
+            logic,
+            conditions: vec![contradiction()],
+        }
+    }
+}
+
+/// Canonical always-true sub-condition: a flag bit compared for equality against itself.
+pub fn tautology() -> VMCondition {
+    VMCondition {
+        test: VMTest::EQ,
+        lhs: VMFlag::Zero as u8,
+        rhs: VMFlag::Zero as u8,
+    }
+}
+
+/// Canonical always-false sub-condition: a flag bit compared for inequality against itself.
+pub fn contradiction() -> VMCondition {
+    VMCondition {
+        test: VMTest::NEQ,
+        lhs: VMFlag::Zero as u8,
+        rhs: VMFlag::Zero as u8,
+    }
+}
+
+/// Whether `condition` is the canonical [`tautology`] or [`contradiction`] sub-condition.
+pub fn is_canonical(condition: &VMCondition) -> bool {
+    matches!(condition.test, VMTest::EQ | VMTest::NEQ) && condition.lhs == condition.rhs
 }
