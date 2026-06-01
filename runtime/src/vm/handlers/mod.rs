@@ -7,6 +7,90 @@ use crate::{
     vm::bytecode::{VMOp, VMReg},
 };
 
+/// Emits a build function for an arithmetic handler whose only variation is the assembled mnemonic, loading the two scratch operands into r13 and r8, dispatching on width, then handing off to [`crate::runtime::FnDef::VmFlags`] before storing the result and restoring callee-saved registers.
+macro_rules! arithmetic {
+    ($op:ident) => {
+        use iced_x86::code_asm::{al, r12, r13, r13b, r13d, r13w, r8, r8b, r8d, r8w, rax, rdx};
+
+        use crate::{
+            runtime::{FnDef, Runtime},
+            vm::utils::{self, scratch, stack},
+        };
+
+        // unsigned char* (unsigned long*, unsigned char*)
+        pub fn build(rt: &mut Runtime) {
+            let mut epilogue = rt.asm.create_label();
+
+            // push r12
+            stack::push(rt, r12);
+            // push r13
+            stack::push(rt, r13);
+            // mov r12, rdx
+            rt.asm.mov(r12, rdx).unwrap();
+
+            // al -> width
+            utils::bytecode::read_byte(rt, r12, al);
+
+            // load r8
+            scratch::load(rt, r8);
+            // load r13
+            scratch::load(rt, r13);
+
+            utils::width::dispatch(
+                rt,
+                al,
+                &mut epilogue,
+                |rt| {
+                    rt.asm.$op(r13, r8).unwrap();
+                },
+                |rt| {
+                    rt.asm.$op(r13d, r8d).unwrap();
+                },
+                |rt| {
+                    rt.asm.$op(r13w, r8w).unwrap();
+                },
+                |rt| {
+                    rt.asm.$op(r13b, r8b).unwrap();
+                },
+                |rt| {
+                    rt.asm.$op(r13b, r8b).unwrap();
+                },
+                |rt| {
+                    rt.asm.$op(r13d, r8d).unwrap();
+                },
+                |rt| {
+                    rt.asm.$op(r13w, r8w).unwrap();
+                },
+                |rt| {
+                    rt.asm.$op(r13b, r8b).unwrap();
+                },
+            );
+
+            rt.asm.set_label(&mut epilogue).unwrap();
+            {
+                // pushfq
+                stack::pushfq(rt);
+                // call ...
+                stack::call(rt, rt.func_labels[&FnDef::VmFlags]);
+
+                // store r13
+                scratch::store(rt, r13);
+
+                // mov rax, r12
+                rt.asm.mov(rax, r12).unwrap();
+                // pop r13
+                stack::pop(rt, r13);
+                // pop r12
+                stack::pop(rt, r12);
+                // ret
+                stack::ret(rt);
+            }
+        }
+    };
+}
+
+pub(crate) use arithmetic;
+
 pub mod add;
 pub mod and;
 pub mod discard;

@@ -1,11 +1,9 @@
 pub mod bytecode;
 pub mod encoders;
-pub mod encrypt;
 pub mod functions;
 pub mod handlers;
 pub mod lifters;
-pub mod mutation;
-pub mod permute;
+pub mod transform;
 pub mod utils;
 
 use crate::vm::bytecode::VMReg;

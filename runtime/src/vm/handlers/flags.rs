@@ -10,6 +10,13 @@ use crate::{
 
 // void (unsigned long*, unsigned long)
 pub fn build(rt: &mut Runtime) {
+    // pop rax
+    stack::pop(rt, rax);
+    // pop rdx
+    stack::pop(rt, rdx);
+    // push rax
+    stack::push(rt, rax);
+
     // mov eax, [rcx + ...]
     utils::vreg::load_reg32(rt, rcx, VMReg::Flags, eax);
 

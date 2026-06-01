@@ -103,7 +103,7 @@ impl Protection for Virtualization {
         let mut dedup = HashMap::new();
 
         #[cfg(debug_assertions)]
-        let mut largest: Option<(usize, u32, String)> = None;
+        let mut logs = Vec::new();
 
         vcode.extend_from_slice(&self.attestation(engine));
 
@@ -134,8 +134,8 @@ impl Protection for Virtualization {
                 });
 
                 #[cfg(debug_assertions)]
-                if block.instructions.len() > largest.as_ref().map_or(0, |(m, _, _)| *m) {
-                    largest = Some((block.instructions.len(), block.rva, format!("{}", bytecode)));
+                if logs.len() < 100 {
+                    logs.push((block.rva, format!("{}", bytecode)));
                 }
 
                 let mut vblock = bytecode.bytes;
@@ -171,7 +171,7 @@ impl Protection for Virtualization {
         {
             use logger::debug;
 
-            if let Some((_, rva, log)) = largest {
+            for (rva, log) in logs {
                 debug!("VIRTUALIZED @ 0x{:08X}:\n{}", rva, log);
             }
         }
