@@ -1,17 +1,14 @@
 use std::any::Any;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use rand::seq::SliceRandom;
 use rand::Rng;
 use strum::IntoEnumIterator;
 
-use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMReg, VMTest};
-use crate::vm::encoders::jcc::Jcc;
-use crate::vm::encoders::load_register::LoadRegister;
-use crate::vm::encoders::sub::Sub;
-use crate::vm::encoders::xor::Xor;
-use crate::vm::encoders::{Effect, Encode};
+use crate::mapper::Mapper;
+use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMTest};
+use crate::vm::encoders::jcc::{is_canonical, Jcc};
+use crate::vm::encoders::Encode;
 use crate::vm::transform::{descend, Phase, Transform};
 
 /// Rewrites operations into logically equivalent randomized forms, descending into children.
@@ -22,7 +19,7 @@ impl Transform for Mutation {
         Phase::Mutation
     }
 
-    fn run(&self, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
+    fn run(&self, _mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
         let mut operations = operations;
         let mut rng = rand::thread_rng();
 
@@ -32,81 +29,59 @@ impl Transform for Mutation {
     }
 }
 
-/// Recursively rewrites each leaf in place, propagating a statically-known flag map across each level so [`Jcc`] predicates can include real conditions over flags whose values are determined.
+/// Recursively rewrites each [`Jcc`] in place, routing canonical-tautology Jccs to [`opaque`], canonical-contradiction Jccs to [`opaque_false`], and real-condition Jccs through [`mutated`].
 fn walk<R: Rng>(operations: &mut Vec<Rc<dyn Encode>>, rng: &mut R) {
     descend(operations, |operations| {
-        let mut known: HashMap<VMFlag, bool> = HashMap::new();
-
         for i in 0..operations.len() {
             let jcc = downcast::<Jcc>(&operations[i]).map(|j| (j.logic, j.conditions.clone()));
 
-            if let Some((logic, conditions)) = jcc {
-                let (logic, conditions) = if conditions.is_empty() {
-                    match logic {
-                        VMLogic::JAND => opaque(rng, VMLogic::JOR, VMLogic::JXOR, &known),
-                        VMLogic::CAND => opaque(rng, VMLogic::COR, VMLogic::CXOR, &known),
-                        VMLogic::SAND => opaque(rng, VMLogic::SOR, VMLogic::SXOR, &known),
-                        VMLogic::JOR | VMLogic::COR | VMLogic::SOR => {
-                            (logic, or_predicate(rng, &known))
-                        }
-                        VMLogic::JXOR | VMLogic::CXOR | VMLogic::SXOR => {
-                            (logic, xor_predicate(rng, &known))
-                        }
+            let Some((logic, conditions)) = jcc else {
+                continue;
+            };
+
+            let polarity = conditions.iter().find_map(|c| {
+                if !is_canonical(c) {
+                    return None;
+                }
+                match c.test {
+                    VMTest::EQ => Some(true),
+                    VMTest::NEQ => Some(false),
+                    _ => None,
+                }
+            });
+
+            let (logic, conditions) = match polarity {
+                Some(true) => match logic {
+                    VMLogic::JAND | VMLogic::JOR | VMLogic::JXOR => {
+                        opaque(rng, VMLogic::JOR, VMLogic::JXOR)
                     }
-                } else {
-                    (logic, mutated(rng, logic, conditions, &known))
-                };
+                    VMLogic::CAND | VMLogic::COR | VMLogic::CXOR => {
+                        opaque(rng, VMLogic::COR, VMLogic::CXOR)
+                    }
+                    VMLogic::SAND | VMLogic::SOR | VMLogic::SXOR => {
+                        opaque(rng, VMLogic::SOR, VMLogic::SXOR)
+                    }
+                },
+                Some(false) => match logic {
+                    VMLogic::JAND | VMLogic::JOR | VMLogic::JXOR => {
+                        opaque_false(rng, VMLogic::JOR, VMLogic::JXOR)
+                    }
+                    VMLogic::CAND | VMLogic::COR | VMLogic::CXOR => {
+                        opaque_false(rng, VMLogic::COR, VMLogic::CXOR)
+                    }
+                    VMLogic::SAND | VMLogic::SOR | VMLogic::SXOR => {
+                        opaque_false(rng, VMLogic::SOR, VMLogic::SXOR)
+                    }
+                },
+                None => (logic, mutated(rng, logic, conditions)),
+            };
 
-                let any: &mut dyn Any = Rc::get_mut(&mut operations[i]).unwrap();
-                let jcc = any.downcast_mut::<Jcc>().unwrap();
-                jcc.logic = logic;
-                jcc.conditions = conditions;
-            }
-
-            if zeroing(operations, i) {
-                known.clear();
-                known.insert(VMFlag::Zero, true);
-                known.insert(VMFlag::Parity, true);
-                known.insert(VMFlag::Sign, false);
-                known.insert(VMFlag::Carry, false);
-                known.insert(VMFlag::Overflow, false);
-                known.insert(VMFlag::Auxiliary, false);
-            } else if writes_flags(&*operations[i]) {
-                known.clear();
-            }
+            let any: &mut dyn Any = Rc::get_mut(&mut operations[i]).unwrap();
+            let jcc = any.downcast_mut::<Jcc>().unwrap();
+            jcc.logic = logic;
+            jcc.conditions = conditions;
         }
     });
-}
-
-/// Whether `operations[i]` is the consuming [`Xor`] or [`Sub`] of a pair of identical [`LoadRegister`]s, which always yields zero and a deterministic flag state.
-fn zeroing(operations: &[Rc<dyn Encode>], i: usize) -> bool {
-    if i < 2 {
-        return false;
-    }
-
-    let self_cancel =
-        downcast::<Xor>(&operations[i]).is_some() || downcast::<Sub>(&operations[i]).is_some();
-
-    if !self_cancel {
-        return false;
-    }
-
-    let Some(first) = downcast::<LoadRegister>(&operations[i - 2]) else {
-        return false;
-    };
-    let Some(second) = downcast::<LoadRegister>(&operations[i - 1]) else {
-        return false;
-    };
-
-    first.source == second.source && first.width == second.width
-}
-
-/// Whether `operation` writes [`VMReg::Flags`].
-fn writes_flags(operation: &dyn Encode) -> bool {
-    operation
-        .writes()
-        .iter()
-        .any(|effect| matches!(effect, Effect::Register(VMReg::Flags)))
 }
 
 /// Downcasts an operation to a concrete encoder type.
@@ -115,13 +90,8 @@ fn downcast<T: 'static>(operation: &Rc<dyn Encode>) -> Option<&T> {
     any.downcast_ref::<T>()
 }
 
-/// Expands each sub-condition through [`rewritten`] and appends fold-specific filler, drawing extra fold-neutral conditions from `known` when available, then shuffles.
-fn mutated<R: Rng>(
-    rng: &mut R,
-    logic: VMLogic,
-    conditions: Vec<VMCondition>,
-    known: &HashMap<VMFlag, bool>,
-) -> Vec<VMCondition> {
+/// Expands each AND-family sub-condition through [`rewritten`] and appends a [`neutral_pair`] to XOR-family Jccs, then shuffles.
+fn mutated<R: Rng>(rng: &mut R, logic: VMLogic, conditions: Vec<VMCondition>) -> Vec<VMCondition> {
     let mut conditions = conditions;
 
     match logic {
@@ -140,33 +110,11 @@ fn mutated<R: Rng>(
                     i += 1;
                 }
             }
-
-            if !known.is_empty() && rng.gen() {
-                for _ in 0..rng.gen_range(1..=2) {
-                    if let Some(condition) = known_true(rng, known) {
-                        conditions.push(condition);
-                    }
-                }
-            }
         }
-        VMLogic::JOR | VMLogic::COR | VMLogic::SOR => {
-            if !known.is_empty() && rng.gen() {
-                for _ in 0..rng.gen_range(1..=2) {
-                    if let Some(condition) = known_false(rng, known) {
-                        conditions.push(condition);
-                    }
-                }
-            }
-        }
+        VMLogic::JOR | VMLogic::COR | VMLogic::SOR => {}
         VMLogic::JXOR | VMLogic::CXOR | VMLogic::SXOR => {
             for _ in 0..rng.gen_range(0..=1) {
                 conditions.extend(neutral_pair(rng));
-            }
-
-            if !known.is_empty() && rng.gen() {
-                if let Some(condition) = known_false(rng, known) {
-                    conditions.push(condition);
-                }
             }
         }
     }
@@ -225,53 +173,79 @@ fn rewritten(condition: &VMCondition) -> Vec<Vec<VMCondition>> {
 }
 
 /// Builds a tautologically-true predicate by picking between the OR and XOR families and composing its sub-conditions accordingly.
-fn opaque<R: Rng>(
-    rng: &mut R,
-    or: VMLogic,
-    xor: VMLogic,
-    known: &HashMap<VMFlag, bool>,
-) -> (VMLogic, Vec<VMCondition>) {
+fn opaque<R: Rng>(rng: &mut R, or: VMLogic, xor: VMLogic) -> (VMLogic, Vec<VMCondition>) {
     if rng.gen() {
-        (or, or_predicate(rng, known))
+        (or, or_predicate(rng))
     } else {
-        (xor, xor_predicate(rng, known))
+        (xor, xor_predicate(rng))
     }
 }
 
-/// Composes a tautologically-true predicate from a [`tautology`] block optionally compounded with a second one or with a [`known_false`] absorber, each of which leaves the OR fold's outcome true.
-fn or_predicate<R: Rng>(rng: &mut R, known: &HashMap<VMFlag, bool>) -> Vec<VMCondition> {
+/// Composes a tautologically-true predicate from a [`tautology`] block optionally compounded with a second one, each of which leaves the OR fold's outcome true.
+fn or_predicate<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
     let mut conditions = tautology(rng);
 
     if rng.gen() {
         conditions.extend(tautology(rng));
     }
 
-    if !known.is_empty() && rng.gen() {
-        if let Some(condition) = known_false(rng, known) {
-            conditions.push(condition);
-        }
-    }
-
     conditions.shuffle(rng);
     conditions
 }
 
-/// Composes a tautologically-true predicate from a [`tautology`] block optionally compounded with a [`neutral_pair`] or with a [`known_false`] absorber that keeps the XOR fold odd.
-fn xor_predicate<R: Rng>(rng: &mut R, known: &HashMap<VMFlag, bool>) -> Vec<VMCondition> {
+/// Composes a tautologically-true predicate from a [`tautology`] block optionally compounded with a [`neutral_pair`] that keeps the XOR fold odd.
+fn xor_predicate<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
     let mut conditions = tautology(rng);
 
     if rng.gen() {
         conditions.extend(neutral_pair(rng));
     }
 
-    if !known.is_empty() && rng.gen() {
-        if let Some(condition) = known_false(rng, known) {
-            conditions.push(condition);
-        }
+    conditions.shuffle(rng);
+    conditions
+}
+
+/// Builds a tautologically-false predicate by picking between the OR and XOR families and composing its sub-conditions accordingly.
+fn opaque_false<R: Rng>(rng: &mut R, or: VMLogic, xor: VMLogic) -> (VMLogic, Vec<VMCondition>) {
+    if rng.gen() {
+        (or, or_false_predicate(rng))
+    } else {
+        (xor, xor_false_predicate(rng))
+    }
+}
+
+/// Composes a tautologically-false predicate from an [`antitautology`] absorber optionally compounded with another, each of which leaves the OR fold's outcome false.
+fn or_false_predicate<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
+    let mut conditions = vec![antitautology(rng)];
+
+    if rng.gen() {
+        conditions.push(antitautology(rng));
     }
 
     conditions.shuffle(rng);
     conditions
+}
+
+/// Composes a tautologically-false predicate from a [`neutral_pair`] optionally compounded with another, each of which keeps the XOR fold even.
+fn xor_false_predicate<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
+    let mut conditions = neutral_pair(rng);
+
+    if rng.gen() {
+        conditions.extend(neutral_pair(rng));
+    }
+
+    conditions.shuffle(rng);
+    conditions
+}
+
+/// Single anti-tautological sub-condition: a flag bit compared for inequality against itself.
+fn antitautology<R: Rng>(rng: &mut R) -> VMCondition {
+    let flag = pick(rng);
+    VMCondition {
+        test: VMTest::NEQ,
+        lhs: flag,
+        rhs: flag,
+    }
 }
 
 /// One of three tautological sub-condition shapes whose runtime-true count is always odd, so OR yields true and XOR contributes parity 1.
@@ -399,26 +373,3 @@ fn pick_three<R: Rng>(rng: &mut R) -> [u8; 3] {
     [flags[0] as u8, flags[1] as u8, flags[2] as u8]
 }
 
-/// CMP condition that always evaluates true given the runtime value `known` records for a randomly chosen flag.
-fn known_true<R: Rng>(rng: &mut R, known: &HashMap<VMFlag, bool>) -> Option<VMCondition> {
-    let entries = known.iter().collect::<Vec<_>>();
-    let (&flag, &value) = entries.choose(rng)?;
-
-    Some(VMCondition {
-        test: VMTest::CMP,
-        lhs: flag as u8,
-        rhs: if value { 1 } else { 0 },
-    })
-}
-
-/// CMP condition that always evaluates false given the runtime value `known` records for a randomly chosen flag.
-fn known_false<R: Rng>(rng: &mut R, known: &HashMap<VMFlag, bool>) -> Option<VMCondition> {
-    let entries = known.iter().collect::<Vec<_>>();
-    let (&flag, &value) = entries.choose(rng)?;
-
-    Some(VMCondition {
-        test: VMTest::CMP,
-        lhs: flag as u8,
-        rhs: if value { 0 } else { 1 },
-    })
-}

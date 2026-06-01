@@ -40,6 +40,8 @@ pub trait Encode: Debug + Any {
     fn children(&mut self) -> Option<&mut Vec<Rc<dyn Encode>>> {
         None
     }
+
+    fn seal(&mut self, _mapper: &mut Mapper, _transform: &mut dyn FnMut(&mut [u8])) {}
 }
 
 pub fn encode_immediate(value: u64) -> (VMWidth, usize) {
@@ -53,6 +55,7 @@ pub fn encode_immediate(value: u64) -> (VMWidth, usize) {
 
 pub mod add;
 pub mod and;
+pub mod chain;
 pub mod discard;
 pub mod jcc;
 pub mod load_address;

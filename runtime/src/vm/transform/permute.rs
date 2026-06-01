@@ -12,8 +12,6 @@ use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{Effect, Encode};
 
-type Atom = Vec<Rc<dyn Encode>>;
-
 struct Access {
     memory: VMMem,
     width: i64,
@@ -105,9 +103,9 @@ fn address(op: &Rc<dyn Encode>) -> usize {
 }
 
 /// Groups operations into atoms where each atom leaves the scratch stack balanced.
-fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Atom> {
+fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
     let mut atoms = Vec::new();
-    let mut current = Atom::new();
+    let mut current = Vec::<Rc<dyn Encode>>::new();
     let mut depth = 0;
 
     for op in operations {
@@ -121,7 +119,7 @@ fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Atom> {
     }
 
     if !current.is_empty() {
-        let mut single = Atom::new();
+        let mut single = Vec::<Rc<dyn Encode>>::new();
 
         for atom in atoms.drain(..) {
             single.extend(atom);
@@ -136,7 +134,10 @@ fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Atom> {
 }
 
 /// Splits each atom at every depth-1 cut by parking the single scratch value across the cut into a register that some later atom is about to kill.
-fn decouple(atoms: Vec<Atom>, live: &HashSet<VMReg>) -> (Vec<Atom>, HashSet<usize>) {
+fn decouple(
+    atoms: Vec<Vec<Rc<dyn Encode>>>,
+    live: &HashSet<VMReg>,
+) -> (Vec<Vec<Rc<dyn Encode>>>, HashSet<usize>) {
     let plans = (0..atoms.len())
         .map(|i| {
             let cuts = cuts(&atoms[i]);
@@ -163,7 +164,7 @@ fn decouple(atoms: Vec<Atom>, live: &HashSet<VMReg>) -> (Vec<Atom>, HashSet<usiz
 }
 
 /// Positions inside an atom where cumulative scratch depth equals one and exactly one value is sitting on top ready to be parked.
-fn cuts(atom: &Atom) -> Vec<usize> {
+fn cuts(atom: &Vec<Rc<dyn Encode>>) -> Vec<usize> {
     let mut points = Vec::new();
     let mut depth = 0;
 
@@ -179,7 +180,12 @@ fn cuts(atom: &Atom) -> Vec<usize> {
 }
 
 /// Finds `count` distinct registers, each fully overwritten by a 64- or 32-bit [`StoreRegister`] in some later atom and not read between the pair and that store.
-fn vacant(atoms: &[Atom], pair: usize, count: usize, live: &HashSet<VMReg>) -> Option<Vec<VMReg>> {
+fn vacant(
+    atoms: &[Vec<Rc<dyn Encode>>],
+    pair: usize,
+    count: usize,
+    live: &HashSet<VMReg>,
+) -> Option<Vec<VMReg>> {
     let (taken, _) = effects(&atoms[pair]);
     let mut result = Vec::with_capacity(count);
     let mut scanned = HashSet::new();
@@ -218,11 +224,11 @@ fn vacant(atoms: &[Atom], pair: usize, count: usize, live: &HashSet<VMReg>) -> O
 
 /// Splits an atom at the given cut positions, prepending a load and appending a store of the corresponding parking register at each boundary, recording each synthetic op into `parked`.
 fn split(
-    atom: Atom,
+    atom: Vec<Rc<dyn Encode>>,
     cuts: &[usize],
     registers: &[VMReg],
     parked: &mut HashSet<usize>,
-) -> Vec<Atom> {
+) -> Vec<Vec<Rc<dyn Encode>>> {
     let mut operations = atom
         .into_iter()
         .map(Some)
@@ -292,7 +298,7 @@ fn store(register: VMReg) -> Rc<dyn Encode> {
 }
 
 /// Register read and write sets for an atom.
-fn effects(atom: &Atom) -> (HashSet<VMReg>, HashSet<VMReg>) {
+fn effects(atom: &Vec<Rc<dyn Encode>>) -> (HashSet<VMReg>, HashSet<VMReg>) {
     let mut reads = HashSet::new();
     let mut writes = HashSet::new();
 
@@ -318,7 +324,7 @@ fn effects(atom: &Atom) -> (HashSet<VMReg>, HashSet<VMReg>) {
 }
 
 /// Conflict graph over the schedulable head as successor lists with indegree counts.
-fn dependencies(atoms: &[Atom]) -> (Vec<Vec<usize>>, Vec<usize>) {
+fn dependencies(atoms: &[Vec<Rc<dyn Encode>>]) -> (Vec<Vec<usize>>, Vec<usize>) {
     let head = atoms.iter().rposition(branches).unwrap_or(atoms.len());
     let profiles = atoms[..head].iter().map(profile).collect::<Vec<Profile>>();
 
@@ -338,13 +344,16 @@ fn dependencies(atoms: &[Atom]) -> (Vec<Vec<usize>>, Vec<usize>) {
 }
 
 /// Applies `order` to the schedulable head, appends the trailing branch atom, flattens to operations, and drops any adjacent [`VMReg::Flags`] save/restore pair.
-fn schedule(mut atoms: Vec<Atom>, order: &[usize]) -> Vec<Rc<dyn Encode>> {
+fn schedule(mut atoms: Vec<Vec<Rc<dyn Encode>>>, order: &[usize]) -> Vec<Rc<dyn Encode>> {
     let tail = match atoms.iter().rposition(branches) {
         Some(i) => atoms.split_off(i),
         None => Vec::new(),
     };
 
-    let mut pool = atoms.into_iter().map(Some).collect::<Vec<Option<Atom>>>();
+    let mut pool = atoms
+        .into_iter()
+        .map(Some)
+        .collect::<Vec<Option<Vec<Rc<dyn Encode>>>>>();
 
     order
         .iter()
@@ -354,8 +363,8 @@ fn schedule(mut atoms: Vec<Atom>, order: &[usize]) -> Vec<Rc<dyn Encode>> {
         .collect()
 }
 
-/// Pre-computed effect summary for an [`Atom`], cached by [`dependencies`] so each conflict pair doesn't re-walk the ops.
-fn profile(atom: &Atom) -> Profile {
+/// Pre-computed effect summary for an [`Vec<Rc<dyn Encode>>`], cached by [`dependencies`] so each conflict pair doesn't re-walk the ops.
+fn profile(atom: &Vec<Rc<dyn Encode>>) -> Profile {
     let mut register_reads = 0;
     let mut register_writes = 0;
     let mut memory_reads = false;
@@ -413,7 +422,7 @@ fn bit(reg: VMReg) -> u64 {
 }
 
 /// Pairs each [`LoadMemory`]/[`StoreMemory`] with its preceding [`LoadAddress`] to extract concrete addressed accesses.
-fn accesses(atom: &Atom) -> Option<Vec<Access>> {
+fn accesses(atom: &Vec<Rc<dyn Encode>>) -> Option<Vec<Access>> {
     let mut result = Vec::new();
 
     for i in 0..atom.len() {
@@ -474,7 +483,7 @@ fn aliases(a: &Access, b: &Access) -> bool {
 }
 
 /// Whether the atom writes [`VMReg::NBranch`].
-fn branches(atom: &Atom) -> bool {
+fn branches(atom: &Vec<Rc<dyn Encode>>) -> bool {
     atom.iter().any(|op| op.branches())
 }
 

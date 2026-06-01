@@ -134,7 +134,7 @@ impl Protection for Virtualization {
                 });
 
                 #[cfg(debug_assertions)]
-                if logs.len() < 100 {
+                if logs.len() < 10 {
                     logs.push((block.rva, format!("{}", bytecode)));
                 }
 

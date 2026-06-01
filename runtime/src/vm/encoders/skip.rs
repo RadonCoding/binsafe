@@ -9,39 +9,52 @@ use crate::vm::encoders::{Effect, Encode};
 #[derive(Debug)]
 pub struct Skip {
     expansion: Vec<Rc<dyn Encode>>,
+    width: VMWidth,
+    source: Vec<u8>,
 }
 
 impl Skip {
     pub fn new(
-        mapper: &mut Mapper,
+        _mapper: &mut Mapper,
         logic: VMLogic,
         conditions: Vec<VMCondition>,
         body: Vec<Rc<dyn Encode>>,
     ) -> Self {
-        let length = u8::try_from(body.iter().map(|op| op.size(mapper)).sum::<usize>()).unwrap();
-
-        let mut expansion = Vec::new();
-
-        expansion.push(Rc::new(LoadImmediate {
-            width: VMWidth::Lower8,
-            source: vec![length],
-        }) as Rc<dyn Encode>);
-
-        expansion.push(Rc::new(Jcc { logic, conditions }));
-
+        let mut expansion = Vec::with_capacity(1 + body.len());
+        expansion.push(Rc::new(Jcc { logic, conditions }) as Rc<dyn Encode>);
         expansion.extend(body);
 
-        Self { expansion }
+        Self {
+            expansion,
+            width: VMWidth::Lower8,
+            source: vec![0],
+        }
     }
 }
 
 impl Encode for Skip {
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        bytecode::assemble(mapper, &self.expansion)
+        let header = LoadImmediate {
+            width: self.width,
+            source: self.source.clone(),
+        };
+
+        let mut bytes = header.encode(mapper);
+        bytes.extend(bytecode::assemble(mapper, &self.expansion));
+        bytes
     }
 
     fn size(&self, mapper: &mut Mapper) -> usize {
-        self.expansion.iter().map(|op| op.size(mapper)).sum()
+        let body = self.expansion[1..]
+            .iter()
+            .map(|op| op.size(mapper))
+            .sum::<usize>();
+
+        let header = if body <= u8::MAX as usize { 3 } else { 4 };
+
+        let jcc = self.expansion[0].size(mapper);
+
+        header + jcc + body
     }
 
     fn reads(&self) -> Vec<Effect> {
@@ -62,5 +75,26 @@ impl Encode for Skip {
 
     fn children(&mut self) -> Option<&mut Vec<Rc<dyn Encode>>> {
         Some(&mut self.expansion)
+    }
+
+    fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8])) {
+        let length = self.expansion[1..]
+            .iter()
+            .map(|op| op.size(mapper))
+            .sum::<usize>();
+
+        let (width, mut source) = if length <= u8::MAX as usize {
+            (VMWidth::Lower8, vec![length as u8])
+        } else {
+            (
+                VMWidth::Lower16,
+                u16::try_from(length).unwrap().to_le_bytes().to_vec(),
+            )
+        };
+
+        transform(&mut source);
+
+        self.width = width;
+        self.source = source;
     }
 }

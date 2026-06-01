@@ -59,18 +59,24 @@ pub fn build(rt: &mut Runtime) {
             utils::bytecode::read_dword(rt, rdx, r8d);
             // xor r8d, r9d
             rt.asm.xor(r8d, r9d).unwrap();
+            // movsxd r8, r8d
+            rt.asm.movsxd(r8, r8d).unwrap();
         },
         |rt| {
             // r8d  -> source
             utils::bytecode::read_word_zx(rt, rdx, r8d);
             // xor r8w, r9w
             rt.asm.xor(r8w, r9w).unwrap();
+            // movsx r8, r8w
+            rt.asm.movsx(r8, r8w).unwrap();
         },
         |rt| {
             // r8d  -> source
             utils::bytecode::read_byte_zx(rt, rdx, r8d);
             // xor r8b, r9b
             rt.asm.xor(r8b, r9b).unwrap();
+            // movsx r8, r8b
+            rt.asm.movsx(r8, r8b).unwrap();
         },
     );
 

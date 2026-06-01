@@ -10,7 +10,7 @@ use crate::vm::lifters::{
     add, and, cmov, cmp, jcc, lea, mov, movsx, movzx, or, pop, push, set, sub, test, xor,
 };
 use crate::vm::transform::encrypt::Encrypt;
-#[cfg(debug_assertions)]
+use crate::vm::transform::flatten;
 use crate::vm::transform::mutation::Mutation;
 use crate::vm::transform::{permute, Transform};
 
@@ -84,8 +84,8 @@ mapped! {
         VImage, // Image Base
         VAtt, // Attestation Key
         VImm, // Immediate Key
-        VStack, // Virtual Stack Top
-        VScratch, // Virtual Scratch Top
+        VStack, // Virtual Stack
+        VScratch, // Virtual Scratch
     }
 }
 
@@ -257,6 +257,7 @@ pub enum Phase {
     Fusion,
     Mutation,
     Permute,
+    Flatten,
     Encrypt,
 }
 
@@ -267,6 +268,7 @@ impl Phase {
             Self::Fusion => "fusion",
             Self::Mutation => "mutation",
             Self::Permute => "permute",
+            Self::Flatten => "flatten",
             Self::Encrypt => "encrypt",
         }
     }
@@ -302,7 +304,7 @@ impl Bytecode {
         let mut original: Option<usize> = None;
         let mut markers = String::new();
         let mut previous: Option<&str> = None;
-        let mut last_seen: Option<usize> = None;
+        let mut closing: Option<usize> = None;
 
         for (index, snapshot) in self.snapshots.iter().enumerate() {
             let Some((position, (_, current))) = snapshot
@@ -329,13 +331,13 @@ impl Bytecode {
             }
 
             previous = Some(current.as_str());
-            last_seen = Some(index);
+            closing = Some(index);
         }
 
-        if let Some(last) = last_seen {
-            let remover = last + 1;
+        if let Some(closing) = closing {
+            let remover = closing + 1;
+
             if remover < self.snapshots.len() {
-                markers.push('-');
                 markers.push(letter(self.snapshots[remover].phase));
             }
         }
@@ -365,7 +367,7 @@ impl std::fmt::Display for Bytecode {
         let surviving = last
             .operations
             .iter()
-            .map(|(addr, _)| *addr)
+            .map(|(address, _)| *address)
             .collect::<HashSet<usize>>();
 
         let render = |original: Option<usize>, markers: &str, display: &str| {
@@ -373,6 +375,7 @@ impl std::fmt::Display for Bytecode {
                 Some(value) => format!("{:>3}", value),
                 None => "   ".to_string(),
             };
+            let display = display.replace('\n', "\n         ");
             format!("{} {:<4} {}", original, markers, display)
         };
 
@@ -521,23 +524,23 @@ where
     #[cfg(debug_assertions)]
     let mut snapshots = vec![Snapshot::take(Phase::Lift, &operations)];
 
-    operations = Mutation.run(operations);
-
-    #[cfg(debug_assertions)]
-    snapshots.push(Snapshot::take(Mutation.phase(), &operations));
-
     operations = permute::permute(operations, &mut picker);
-
     #[cfg(debug_assertions)]
     snapshots.push(Snapshot::take(Phase::Permute, &operations));
 
-    operations = Encrypt.run(operations);
+    operations = flatten::flatten(mapper, operations);
+    #[cfg(debug_assertions)]
+    snapshots.push(Snapshot::take(Phase::Flatten, &operations));
 
+    operations = Mutation.run(mapper, operations);
+    #[cfg(debug_assertions)]
+    snapshots.push(Snapshot::take(Mutation.phase(), &operations));
+
+    operations = Encrypt.run(mapper, operations);
     #[cfg(debug_assertions)]
     snapshots.push(Snapshot::take(Encrypt.phase(), &operations));
 
     operations = permute::permute(operations, &mut picker);
-
     #[cfg(debug_assertions)]
     snapshots.push(Snapshot::take(Phase::Permute, &operations));
 
