@@ -6,7 +6,7 @@ use crate::vm::encoders::{
     discard::Discard, imul::Imul, load_address::LoadAddress, load_immediate::LoadImmediate,
     load_memory::LoadMemory, load_register::LoadRegister, store_register::StoreRegister, Encode,
 };
-use crate::vm::lifters::{encode_immediate, extract_immediate, operation_width};
+use crate::vm::lifters::{operation_immediate, operation_width};
 
 pub fn wide<O: Encode + 'static>(
     instruction: &Instruction,
@@ -77,11 +77,12 @@ pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         }
         3 => {
             source(&mut operations, instruction, 1, width)?;
-            let value = extract_immediate(instruction, instruction.op_kind(2));
-            let (immediate_width, size) = encode_immediate(value);
+
+            let immediate = operation_immediate(instruction, instruction.op_kind(2));
+            let immediate_width = operation_width(instruction, instruction.op_kind(2))?;
             operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
-                source: value.to_le_bytes()[..size].to_vec(),
+                source: immediate.to_le_bytes()[..immediate_width.size()].to_vec(),
             }));
         }
         _ => return None,

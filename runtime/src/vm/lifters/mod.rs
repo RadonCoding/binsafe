@@ -33,17 +33,8 @@ pub mod test;
 pub mod unary;
 pub mod xor;
 
-pub fn encode_immediate(value: u64) -> (VMWidth, usize) {
-    match value {
-        0..=0xFF => (VMWidth::Lower8, 1),
-        0..=0xFFFF => (VMWidth::Lower16, 2),
-        0..=0xFFFFFFFF => (VMWidth::Lower32, 4),
-        _ => (VMWidth::Lower64, 8),
-    }
-}
-
-fn operation_width(instruction: &Instruction, op0_kind: OpKind) -> Option<VMWidth> {
-    match op0_kind {
+fn operation_width(instruction: &Instruction, kind: OpKind) -> Option<VMWidth> {
+    match kind {
         OpKind::Register => Some(VMWidth::from(instruction.op0_register())),
         OpKind::Memory => match instruction.memory_size().size() {
             1 => Some(VMWidth::Lower8),
@@ -52,6 +43,12 @@ fn operation_width(instruction: &Instruction, op0_kind: OpKind) -> Option<VMWidt
             8 => Some(VMWidth::Lower64),
             _ => None,
         },
+        kind if is_immediate(kind) => Some(match operation_immediate(instruction, kind) {
+            0..=0xFF => VMWidth::Lower8,
+            0..=0xFFFF => VMWidth::Lower16,
+            0..=0xFFFFFFFF => VMWidth::Lower32,
+            _ => VMWidth::Lower64,
+        }),
         _ => None,
     }
 }
@@ -70,7 +67,7 @@ fn is_immediate(kind: OpKind) -> bool {
     )
 }
 
-fn extract_immediate(instruction: &Instruction, kind: OpKind) -> u64 {
+fn operation_immediate(instruction: &Instruction, kind: OpKind) -> u64 {
     match kind {
         OpKind::Immediate8 => instruction.immediate8() as u64,
         OpKind::Immediate16 => instruction.immediate16() as u64,

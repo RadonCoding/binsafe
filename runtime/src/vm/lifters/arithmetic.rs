@@ -7,7 +7,7 @@ use crate::vm::encoders::{
     load_memory::LoadMemory, load_register::LoadRegister, store_memory::StoreMemory,
     store_register::StoreRegister, Encode,
 };
-use crate::vm::lifters::{encode_immediate, extract_immediate, is_immediate, operation_width};
+use crate::vm::lifters::{is_immediate, operation_immediate, operation_width};
 
 pub enum Tail {
     Writeback,
@@ -57,11 +57,11 @@ pub fn encode<O: Encode + 'static>(
             operations.push(Rc::new(LoadMemory { width }));
         }
         kind if is_immediate(kind) => {
-            let value = extract_immediate(instruction, kind);
-            let (immediate_width, size) = encode_immediate(value);
+            let immediate = operation_immediate(instruction, kind);
+            let immediate_width = operation_width(instruction, kind)?;
             operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
-                source: value.to_le_bytes()[..size].to_vec(),
+                source: immediate.to_le_bytes()[..immediate_width.size()].to_vec(),
             }));
         }
         _ => return None,

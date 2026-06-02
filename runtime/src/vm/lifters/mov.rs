@@ -6,81 +6,52 @@ use crate::vm::encoders::{
     load_address::LoadAddress, load_immediate::LoadImmediate, load_memory::LoadMemory,
     load_register::LoadRegister, store_memory::StoreMemory, store_register::StoreRegister, Encode,
 };
-use crate::vm::lifters::encode_immediate;
+use crate::vm::lifters::{operation_immediate, operation_width};
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let code = instruction.code();
 
     match code {
-        Code::Mov_r8_imm8 | Code::Mov_r16_imm16 | Code::Mov_r32_imm32 | Code::Mov_r64_imm64 => {
-            let (store_width, value) = match code {
-                Code::Mov_r8_imm8 => (
-                    VMWidth::from(instruction.op0_register()),
-                    instruction.immediate8() as u64,
-                ),
-                Code::Mov_r16_imm16 => (VMWidth::Lower16, instruction.immediate16() as u64),
-                Code::Mov_r32_imm32 => (VMWidth::Lower32, instruction.immediate32() as u64),
-                Code::Mov_r64_imm64 => (VMWidth::Lower64, instruction.immediate64()),
-                _ => unreachable!(),
-            };
-            let (load_width, size) = encode_immediate(value);
-            Some(vec![
-                Rc::new(LoadImmediate {
-                    width: load_width,
-                    source: value.to_le_bytes()[..size].to_vec(),
-                }),
-                Rc::new(StoreRegister {
-                    width: store_width,
-                    destination: VMReg::from(instruction.op0_register()),
-                }),
-            ])
-        }
+        Code::Mov_r8_imm8
+        | Code::Mov_r16_imm16
+        | Code::Mov_r32_imm32
+        | Code::Mov_r64_imm64
+        | Code::Mov_rm8_imm8
+        | Code::Mov_rm16_imm16
+        | Code::Mov_rm32_imm32
+        | Code::Mov_rm64_imm32 => {
+            let destination_width = operation_width(instruction, instruction.op0_kind())?;
 
-        Code::Mov_rm8_imm8 | Code::Mov_rm16_imm16 | Code::Mov_rm32_imm32 | Code::Mov_rm64_imm32
-            if instruction.op0_kind() == OpKind::Register =>
-        {
-            let (store_width, value) = match code {
-                Code::Mov_rm8_imm8 => (
-                    VMWidth::from(instruction.op0_register()),
-                    instruction.immediate8() as u64,
-                ),
-                Code::Mov_rm16_imm16 => (VMWidth::Lower16, instruction.immediate16() as u64),
-                Code::Mov_rm32_imm32 => (VMWidth::Lower32, instruction.immediate32() as u64),
-                Code::Mov_rm64_imm32 => (VMWidth::Lower64, instruction.immediate32to64() as u64),
-                _ => unreachable!(),
-            };
-            let (load_width, size) = encode_immediate(value);
-            Some(vec![
-                Rc::new(LoadImmediate {
-                    width: load_width,
-                    source: value.to_le_bytes()[..size].to_vec(),
-                }),
-                Rc::new(StoreRegister {
-                    width: store_width,
-                    destination: VMReg::from(instruction.op0_register()),
-                }),
-            ])
-        }
+            let source_immediate = operation_immediate(instruction, instruction.op1_kind());
+            let source_width = operation_width(instruction, instruction.op1_kind())?;
 
-        Code::Mov_rm8_imm8 | Code::Mov_rm16_imm16 | Code::Mov_rm32_imm32 | Code::Mov_rm64_imm32 => {
-            let (store_width, value) = match code {
-                Code::Mov_rm8_imm8 => (VMWidth::Lower8, instruction.immediate8() as u64),
-                Code::Mov_rm16_imm16 => (VMWidth::Lower16, instruction.immediate16() as u64),
-                Code::Mov_rm32_imm32 => (VMWidth::Lower32, instruction.immediate32() as u64),
-                Code::Mov_rm64_imm32 => (VMWidth::Lower64, instruction.immediate32to64() as u64),
-                _ => unreachable!(),
-            };
-            let (load_width, size) = encode_immediate(value);
-            Some(vec![
-                Rc::new(LoadImmediate {
-                    width: load_width,
-                    source: value.to_le_bytes()[..size].to_vec(),
-                }),
-                Rc::new(LoadAddress {
-                    source: VMMem::from(instruction),
-                }),
-                Rc::new(StoreMemory { width: store_width }),
-            ])
+            let mut operations = Vec::<Rc<dyn Encode>>::new();
+            operations.push(Rc::new(LoadImmediate {
+                width: source_width,
+                source: source_immediate.to_le_bytes()[..source_width.size()].to_vec(),
+            }));
+
+            match instruction.op0_kind() {
+                OpKind::Register => {
+                    let destination_register = VMReg::from(instruction.op0_register());
+
+                    operations.push(Rc::new(StoreRegister {
+                        width: destination_width,
+                        destination: destination_register,
+                    }));
+                }
+                OpKind::Memory => {
+                    operations.push(Rc::new(LoadAddress {
+                        source: VMMem::from(instruction),
+                    }));
+                    operations.push(Rc::new(StoreMemory {
+                        width: destination_width,
+                    }));
+                }
+                _ => return None,
+            }
+
+            Some(operations)
         }
 
         Code::Mov_r64_rm64 | Code::Mov_r32_rm32 | Code::Mov_r16_rm16 | Code::Mov_r8_rm8 => {
@@ -88,74 +59,73 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         }
 
         Code::Mov_rm64_r64 | Code::Mov_rm32_r32 | Code::Mov_rm16_r16 | Code::Mov_rm8_r8 => {
-            let source_register = instruction.op1_register();
-            let source_width = VMWidth::from(source_register);
-            let source = VMReg::from(source_register);
+            let source_width = VMWidth::from(instruction.op1_register());
+            let source_register = VMReg::from(instruction.op1_register());
+
+            let mut operations = Vec::<Rc<dyn Encode>>::new();
+            operations.push(Rc::new(LoadRegister {
+                width: source_width,
+                source: source_register,
+            }));
 
             match instruction.op0_kind() {
                 OpKind::Register => {
-                    let destination_register = instruction.op0_register();
-                    Some(vec![
-                        Rc::new(LoadRegister {
-                            width: source_width,
-                            source,
-                        }),
-                        Rc::new(StoreRegister {
-                            width: VMWidth::from(destination_register),
-                            destination: VMReg::from(destination_register),
-                        }),
-                    ])
+                    let destination_width = VMWidth::from(instruction.op0_register());
+                    let destination_register = VMReg::from(instruction.op0_register());
+
+                    operations.push(Rc::new(StoreRegister {
+                        width: destination_width,
+                        destination: destination_register,
+                    }));
                 }
-                OpKind::Memory => Some(vec![
-                    Rc::new(LoadRegister {
-                        width: source_width,
-                        source,
-                    }),
-                    Rc::new(LoadAddress {
+                OpKind::Memory => {
+                    operations.push(Rc::new(LoadAddress {
                         source: VMMem::from(instruction),
-                    }),
-                    Rc::new(StoreMemory {
+                    }));
+                    operations.push(Rc::new(StoreMemory {
                         width: source_width,
-                    }),
-                ]),
-                _ => None,
+                    }));
+                }
+                _ => return None,
             }
+
+            Some(operations)
         }
         _ => None,
     }
 }
 
 pub fn r_rm(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
-    let destination_register = instruction.op0_register();
-    let destination_width = VMWidth::from(destination_register);
-    let destination = VMReg::from(destination_register);
+    let destination_width = VMWidth::from(instruction.op0_register());
+    let destination_register = VMReg::from(instruction.op0_register());
+
+    let mut operations = Vec::<Rc<dyn Encode>>::new();
 
     match instruction.op1_kind() {
         OpKind::Register => {
-            let source_register = instruction.op1_register();
-            Some(vec![
-                Rc::new(LoadRegister {
-                    width: VMWidth::from(source_register),
-                    source: VMReg::from(source_register),
-                }),
-                Rc::new(StoreRegister {
-                    width: destination_width,
-                    destination,
-                }),
-            ])
+            let source_width = VMWidth::from(instruction.op1_register());
+            let source_register = VMReg::from(instruction.op1_register());
+
+            operations.push(Rc::new(LoadRegister {
+                width: source_width,
+                source: source_register,
+            }));
         }
-        OpKind::Memory => Some(vec![
-            Rc::new(LoadAddress {
+        OpKind::Memory => {
+            operations.push(Rc::new(LoadAddress {
                 source: VMMem::from(instruction),
-            }),
-            Rc::new(LoadMemory {
+            }));
+            operations.push(Rc::new(LoadMemory {
                 width: destination_width,
-            }),
-            Rc::new(StoreRegister {
-                width: destination_width,
-                destination,
-            }),
-        ]),
-        _ => None,
+            }));
+        }
+        _ => return None,
     }
+
+    operations.push(Rc::new(StoreRegister {
+        width: destination_width,
+        destination: destination_register,
+    }));
+
+    Some(operations)
 }

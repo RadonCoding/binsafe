@@ -6,7 +6,7 @@ use crate::vm::encoders::{
     load_address::LoadAddress, load_immediate::LoadImmediate, load_memory::LoadMemory,
     load_register::LoadRegister, store_memory::StoreMemory, store_register::StoreRegister, Encode,
 };
-use crate::vm::lifters::{encode_immediate, operation_width};
+use crate::vm::lifters::operation_width;
 
 pub fn encode<O: Encode + 'static>(
     instruction: &Instruction,
@@ -28,11 +28,11 @@ pub fn encode<O: Encode + 'static>(
     }
 
     if reverse {
-        operations.push(immediate(value));
+        operations.push(immediate(value, width));
         load(&mut operations, instruction, op0_kind, width);
     } else {
         load(&mut operations, instruction, op0_kind, width);
-        operations.push(immediate(value));
+        operations.push(immediate(value, width));
     }
 
     operations.push(Rc::new(make(width)));
@@ -86,10 +86,9 @@ fn load(
     }
 }
 
-fn immediate(value: u64) -> Rc<dyn Encode> {
-    let (width, size) = encode_immediate(value);
+fn immediate(value: u64, width: VMWidth) -> Rc<dyn Encode> {
     Rc::new(LoadImmediate {
         width,
-        source: value.to_le_bytes()[..size].to_vec(),
+        source: value.to_le_bytes()[..width.size()].to_vec(),
     })
 }

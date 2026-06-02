@@ -137,6 +137,17 @@ mapped! {
     }
 }
 
+impl VMWidth {
+    pub fn size(self) -> usize {
+        match self {
+            VMWidth::Lower8 | VMWidth::Higher8 | VMWidth::SLower8 => 1,
+            VMWidth::Lower16 | VMWidth::SLower16 => 2,
+            VMWidth::Lower32 | VMWidth::SLower32 => 4,
+            VMWidth::Lower64 => 8,
+        }
+    }
+}
+
 impl From<Register> for VMWidth {
     fn from(reg: Register) -> Self {
         match reg {
