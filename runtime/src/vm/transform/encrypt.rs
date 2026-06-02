@@ -194,7 +194,9 @@ fn xor(source: &mut [u8], width: VMWidth, key: u64) {
     }
 }
 
-/// Builds a random roll sequence (XOR against a width-sized constant, or a whole-key ROL/ROR by an 8-bit count) and updates `key` to match, bracketing with a [`VMReg::Flags`] save/restore when the flags are live.
+/// Builds a random roll sequence (XOR against a width-sized constant,
+/// or a whole-key ROL/ROR by an 8-bit count) and updates `key` to match,
+/// bracketing with a [`VMReg::Flags`] save/restore when the flags are live.
 fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
     let mut rng = rand::thread_rng();
 
@@ -213,7 +215,6 @@ fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
     }) as Rc<dyn Encode>);
 
     match rng.gen_range(0..3) {
-        // XOR the key against a width-sized constant.
         0 => {
             let (width, bytes) = match rng.gen_range(0..16) {
                 0..=9 => (VMWidth::Lower8, 1),
@@ -241,10 +242,8 @@ fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
 
             *key ^= constant;
         }
-        // Rotate the whole key left by an 8-bit count.
         1 => {
             let count = rng.gen_range(1..64u32);
-            // The count immediate is decrypted against VImm's low byte at runtime.
             let cipher = (count as u64 ^ *key) as u8;
 
             sequence.push(Rc::new(LoadImmediate {
@@ -257,7 +256,6 @@ fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
 
             *key = key.rotate_left(count);
         }
-        // Rotate the whole key right by an 8-bit count.
         _ => {
             let count = rng.gen_range(1..64u32);
             let cipher = (count as u64 ^ *key) as u8;

@@ -308,6 +308,92 @@ fn test_shr() {
 }
 
 #[test]
+fn test_sar() {
+    case!([instruction!(Sar_rm64_CL, Register::RAX, Register::CL)],
+          [Rax = 0xF111_1111_1111_1111, Rcx = 4], Rax => 0xFF11_1111_1111_1111);
+    case!([instruction!(Sar_rm32_imm8, Register::EAX, 4)],
+          [Rax = 0xF111_1111], Rax => 0xFF11_1111);
+    case!([instruction!(Sar_rm16_imm8, Register::AX, 4)],
+          [Rax = 0xF111], Rax => 0xFF11);
+    case!([instruction!(Sar_rm8_imm8, Register::AL, 4)],
+          [Rax = 0xF1], Rax => 0xFF);
+}
+
+#[test]
+fn test_inc() {
+    case!([instruction!(Inc_rm64, Register::RAX)],
+          [Rax = 0x1111_1111_1111_1111], Rax => 0x1111_1111_1111_1112);
+    case!([instruction!(Inc_rm32, Register::EAX)],
+          [Rax = 0x1111_1111], Rax => 0x1111_1112);
+    case!([instruction!(Inc_rm16, Register::AX)],
+          [Rax = 0x1111], Rax => 0x1112);
+    case!([instruction!(Inc_rm8, Register::AL)],
+          [Rax = 0x11], Rax => 0x12);
+}
+
+#[test]
+fn test_dec() {
+    case!([instruction!(Dec_rm64, Register::RAX)],
+          [Rax = 0x1111_1111_1111_1111], Rax => 0x1111_1111_1111_1110);
+    case!([instruction!(Dec_rm32, Register::EAX)],
+          [Rax = 0x1111_1111], Rax => 0x1111_1110);
+    case!([instruction!(Dec_rm16, Register::AX)],
+          [Rax = 0x1111], Rax => 0x1110);
+    case!([instruction!(Dec_rm8, Register::AL)],
+          [Rax = 0x11], Rax => 0x10);
+}
+
+#[test]
+fn test_neg() {
+    case!([instruction!(Neg_rm64, Register::RAX)],
+          [Rax = 0x1111_1111_1111_1111], Rax => 0xEEEE_EEEE_EEEE_EEEF);
+    case!([instruction!(Neg_rm32, Register::EAX)],
+          [Rax = 0x1111_1111], Rax => 0xEEEE_EEEF);
+    case!([instruction!(Neg_rm16, Register::AX)],
+          [Rax = 0x1111], Rax => 0xEEEF);
+    case!([instruction!(Neg_rm8, Register::AL)],
+          [Rax = 0x11], Rax => 0xEF);
+}
+
+#[test]
+fn test_not() {
+    case!([instruction!(Not_rm64, Register::RAX)],
+          [Rax = 0x1111_1111_1111_1111], Rax => 0xEEEE_EEEE_EEEE_EEEE);
+    case!([instruction!(Not_rm32, Register::EAX)],
+          [Rax = 0x1111_1111], Rax => 0xEEEE_EEEE);
+    case!([instruction!(Not_rm16, Register::AX)],
+          [Rax = 0x1111], Rax => 0xEEEE);
+    case!([instruction!(Not_rm8, Register::AL)],
+          [Rax = 0x11], Rax => 0xEE);
+}
+
+#[test]
+fn test_mul() {
+    case!([instruction!(Mul_rm64, Register::RBX)],
+          [Rax = 0x1111_1111_1111_1111, Rbx = 0x10], Rax => 0x1111_1111_1111_1110);
+    case!([instruction!(Mul_rm64, Register::RBX)],
+          [Rax = 0x1111_1111_1111_1111, Rbx = 0x10], Rdx => 0x1);
+    case!([instruction!(Mul_rm32, Register::EBX)],
+          [Rax = 0x1111_1111, Rbx = 0x10], Rax => 0x1111_1110);
+    case!([instruction!(Mul_rm32, Register::EBX)],
+          [Rax = 0x1111_1111, Rbx = 0x10], Rdx => 0x1);
+    case!([instruction!(Mul_rm8, Register::BL)],
+          [Rax = 0x11, Rbx = 0x10], Rax => 0x110);
+}
+
+#[test]
+fn test_imul() {
+    case!([instruction!(Imul_rm64, Register::RBX)],
+          [Rax = 0xFFFF_FFFF_FFFF_FFFF, Rbx = 0x10], Rax => 0xFFFF_FFFF_FFFF_FFF0);
+    case!([instruction!(Imul_rm64, Register::RBX)],
+          [Rax = 0xFFFF_FFFF_FFFF_FFFF, Rbx = 0x10], Rdx => 0xFFFF_FFFF_FFFF_FFFF);
+    case!([instruction!(Imul_r64_rm64, Register::RAX, Register::RBX)],
+          [Rax = 0x1111_1111_1111_1111, Rbx = 0x10], Rax => 0x1111_1111_1111_1110);
+    case!([instruction!(Imul_r32_rm32, Register::EAX, Register::EBX)],
+          [Rax = 0x1111_1111, Rbx = 0x10], Rax => 0x1111_1110);
+}
+
+#[test]
 fn test_cmov() {
     cmov_case!(Cmove_r64_rm64, 0x1111_1111, 0x1111_1111, 0x1111_1111);
     cmov_case!(Cmovne_r64_rm64, 0x1111_1111, 0x2222_2222, 0x1111_1111);
