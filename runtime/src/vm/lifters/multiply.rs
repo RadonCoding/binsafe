@@ -1,12 +1,12 @@
-use std::rc::Rc;
 use iced_x86::{Instruction, OpKind};
+use std::rc::Rc;
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 use crate::vm::encoders::{
-    discard::Discard, encode_immediate, imul::Imul, load_address::LoadAddress,
-    load_immediate::LoadImmediate, load_memory::LoadMemory, load_register::LoadRegister,
-    store_register::StoreRegister, Encode,
+    discard::Discard, imul::Imul, load_address::LoadAddress, load_immediate::LoadImmediate,
+    load_memory::LoadMemory, load_register::LoadRegister, store_register::StoreRegister, Encode,
 };
+use crate::vm::lifters::{encode_immediate, extract_immediate, operation_width};
 
 pub fn wide<O: Encode + 'static>(
     instruction: &Instruction,
@@ -77,7 +77,7 @@ pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         }
         3 => {
             source(&mut operations, instruction, 1, width)?;
-            let value = extract_immediate(instruction, instruction.op_kind(2))?;
+            let value = extract_immediate(instruction, instruction.op_kind(2));
             let (immediate_width, size) = encode_immediate(value);
             operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
@@ -120,30 +120,4 @@ fn source(
     }
 
     Some(())
-}
-
-fn extract_immediate(instruction: &Instruction, kind: OpKind) -> Option<u64> {
-    match kind {
-        OpKind::Immediate8to16 => Some(instruction.immediate8to16() as u16 as u64),
-        OpKind::Immediate8to32 => Some(instruction.immediate8to32() as u32 as u64),
-        OpKind::Immediate8to64 => Some(instruction.immediate8to64() as u64),
-        OpKind::Immediate16 => Some(instruction.immediate16() as u64),
-        OpKind::Immediate32 => Some(instruction.immediate32() as u64),
-        OpKind::Immediate32to64 => Some(instruction.immediate32to64() as u64),
-        _ => None,
-    }
-}
-
-fn operation_width(instruction: &Instruction, op0_kind: OpKind) -> Option<VMWidth> {
-    match op0_kind {
-        OpKind::Register => Some(VMWidth::from(instruction.op0_register())),
-        OpKind::Memory => match instruction.memory_size().size() {
-            1 => Some(VMWidth::Lower8),
-            2 => Some(VMWidth::Lower16),
-            4 => Some(VMWidth::Lower32),
-            8 => Some(VMWidth::Lower64),
-            _ => None,
-        },
-        _ => None,
-    }
 }

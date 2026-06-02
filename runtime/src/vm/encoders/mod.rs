@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMReg, VMWidth};
+use crate::vm::bytecode::VMReg;
 
 #[cfg(debug_assertions)]
 mod debug;
@@ -42,15 +42,6 @@ pub trait Encode: Debug + Any {
     }
 
     fn seal(&mut self, _mapper: &mut Mapper, _transform: &mut dyn FnMut(&mut [u8])) {}
-}
-
-pub fn encode_immediate(value: u64) -> (VMWidth, usize) {
-    match value {
-        0..=0xFF => (VMWidth::Lower8, 1),
-        0..=0xFFFF => (VMWidth::Lower16, 2),
-        0..=0xFFFFFFFF => (VMWidth::Lower32, 4),
-        _ => (VMWidth::Lower64, 8),
-    }
 }
 
 pub mod add;

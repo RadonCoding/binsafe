@@ -1,12 +1,12 @@
-use std::rc::Rc;
 use iced_x86::{Instruction, OpKind};
+use std::rc::Rc;
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 use crate::vm::encoders::{
-    encode_immediate, load_address::LoadAddress, load_immediate::LoadImmediate,
-    load_memory::LoadMemory, load_register::LoadRegister, store_memory::StoreMemory,
-    store_register::StoreRegister, Encode,
+    load_address::LoadAddress, load_immediate::LoadImmediate, load_memory::LoadMemory,
+    load_register::LoadRegister, store_memory::StoreMemory, store_register::StoreRegister, Encode,
 };
+use crate::vm::lifters::{encode_immediate, operation_width};
 
 pub fn encode<O: Encode + 'static>(
     instruction: &Instruction,
@@ -92,18 +92,4 @@ fn immediate(value: u64) -> Rc<dyn Encode> {
         width,
         source: value.to_le_bytes()[..size].to_vec(),
     })
-}
-
-fn operation_width(instruction: &Instruction, op0_kind: OpKind) -> Option<VMWidth> {
-    match op0_kind {
-        OpKind::Register => Some(VMWidth::from(instruction.op0_register())),
-        OpKind::Memory => match instruction.memory_size().size() {
-            1 => Some(VMWidth::Lower8),
-            2 => Some(VMWidth::Lower16),
-            4 => Some(VMWidth::Lower32),
-            8 => Some(VMWidth::Lower64),
-            _ => None,
-        },
-        _ => None,
-    }
 }

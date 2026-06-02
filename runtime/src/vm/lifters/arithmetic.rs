@@ -1,12 +1,13 @@
-use std::rc::Rc;
 use iced_x86::{Instruction, OpKind};
+use std::rc::Rc;
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 use crate::vm::encoders::{
-    discard::Discard, encode_immediate, load_address::LoadAddress, load_immediate::LoadImmediate,
+    discard::Discard, load_address::LoadAddress, load_immediate::LoadImmediate,
     load_memory::LoadMemory, load_register::LoadRegister, store_memory::StoreMemory,
     store_register::StoreRegister, Encode,
 };
+use crate::vm::lifters::{encode_immediate, extract_immediate, is_immediate, operation_width};
 
 pub enum Tail {
     Writeback,
@@ -90,46 +91,4 @@ pub fn encode<O: Encode + 'static>(
     }
 
     Some(operations)
-}
-
-fn operation_width(instruction: &Instruction, op0_kind: OpKind) -> Option<VMWidth> {
-    match op0_kind {
-        OpKind::Register => Some(VMWidth::from(instruction.op0_register())),
-        OpKind::Memory => match instruction.memory_size().size() {
-            1 => Some(VMWidth::Lower8),
-            2 => Some(VMWidth::Lower16),
-            4 => Some(VMWidth::Lower32),
-            8 => Some(VMWidth::Lower64),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-fn is_immediate(kind: OpKind) -> bool {
-    matches!(
-        kind,
-        OpKind::Immediate8
-            | OpKind::Immediate16
-            | OpKind::Immediate32
-            | OpKind::Immediate64
-            | OpKind::Immediate8to16
-            | OpKind::Immediate8to32
-            | OpKind::Immediate8to64
-            | OpKind::Immediate32to64
-    )
-}
-
-fn extract_immediate(instruction: &Instruction, kind: OpKind) -> u64 {
-    match kind {
-        OpKind::Immediate8 => instruction.immediate8() as u64,
-        OpKind::Immediate16 => instruction.immediate16() as u64,
-        OpKind::Immediate32 => instruction.immediate32() as u64,
-        OpKind::Immediate64 => instruction.immediate64(),
-        OpKind::Immediate8to16 => instruction.immediate8to16() as u16 as u64,
-        OpKind::Immediate8to32 => instruction.immediate8to32() as u32 as u64,
-        OpKind::Immediate8to64 => instruction.immediate8to64() as u64,
-        OpKind::Immediate32to64 => instruction.immediate32to64() as u64,
-        _ => unreachable!(),
-    }
 }

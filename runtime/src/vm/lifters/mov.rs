@@ -1,12 +1,12 @@
-use std::rc::Rc;
 use iced_x86::{Code, Instruction, OpKind};
+use std::rc::Rc;
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 use crate::vm::encoders::{
-    encode_immediate, load_address::LoadAddress, load_immediate::LoadImmediate,
-    load_memory::LoadMemory, load_register::LoadRegister, store_memory::StoreMemory,
-    store_register::StoreRegister, Encode,
+    load_address::LoadAddress, load_immediate::LoadImmediate, load_memory::LoadMemory,
+    load_register::LoadRegister, store_memory::StoreMemory, store_register::StoreRegister, Encode,
 };
+use crate::vm::lifters::encode_immediate;
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let code = instruction.code();
