@@ -9,8 +9,8 @@ use strum_macros::EnumIter;
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    add, and, cmov, cmp, jcc, lea, mov, movsx, movzx, or, pop, push, rol, ror, set, shl, shr, sub,
-    test, xor,
+    add, and, cmov, cmp, dec, imul, inc, jcc, lea, mov, movsx, movzx, mul, neg, not, or, pop, push,
+    rol, ror, sar, set, shl, shr, sub, test, xor,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -39,6 +39,9 @@ mapped! {
         Ror,
         Shl,
         Shr,
+        Sar,
+        Mul,
+        Imul,
         // Stack
         Push,
         Pop,
@@ -482,6 +485,13 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             Mnemonic::Ror => ror::encode(instruction)?,
             Mnemonic::Shl => shl::encode(instruction)?,
             Mnemonic::Shr => shr::encode(instruction)?,
+            Mnemonic::Sar => sar::encode(instruction)?,
+            Mnemonic::Inc => inc::encode(instruction)?,
+            Mnemonic::Dec => dec::encode(instruction)?,
+            Mnemonic::Neg => neg::encode(instruction)?,
+            Mnemonic::Not => not::encode(instruction)?,
+            Mnemonic::Mul => mul::encode(instruction)?,
+            Mnemonic::Imul => imul::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
             Mnemonic::Mov => mov::encode(instruction)?,
             Mnemonic::Movzx => movzx::encode(instruction)?,
@@ -505,6 +515,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Setp
             | Mnemonic::Sets => set::encode(mapper, instruction)?,
             Mnemonic::Nop => continue,
+            Mnemonic::Int3 => continue,
             _ => return None,
         };
 

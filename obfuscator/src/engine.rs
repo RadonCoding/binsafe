@@ -207,7 +207,7 @@ impl Engine {
         };
 
         let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
-        let mut block = Vec::<Instruction>::new();
+        let mut block = Vec::new();
         let mut inblock = false;
 
         while decoder.can_decode() {
