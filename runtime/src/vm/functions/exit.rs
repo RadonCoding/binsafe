@@ -6,7 +6,7 @@ use crate::{
 };
 
 pub fn build(rt: &mut Runtime) {
-    let mut use_vex = rt.asm.create_label();
+    let mut no_branch = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // mov r12d, [...]
@@ -32,14 +32,14 @@ pub fn build(rt: &mut Runtime) {
     // cmp [r12 + ...], 0x0
     utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
     // je ...
-    rt.asm.je(use_vex).unwrap();
+    rt.asm.je(no_branch).unwrap();
 
     // push [r12 + ...]
     utils::vreg::push(rt, r12, VMReg::NBranch);
     // jmp ...
     rt.asm.jmp(epilogue).unwrap();
 
-    rt.asm.set_label(&mut use_vex).unwrap();
+    rt.asm.set_label(&mut no_branch).unwrap();
     {
         // push [r12 + ...]
         utils::vreg::push(rt, r12, VMReg::NExit);
