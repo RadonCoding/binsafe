@@ -10,7 +10,7 @@ use crate::vm::lifters::operation_width;
 
 pub fn encode<O: Encode + 'static>(
     instruction: &Instruction,
-    value: u64,
+    immediate: u64,
     reverse: bool,
     preserve: bool,
     make: impl Fn(VMWidth) -> O,
@@ -28,20 +28,21 @@ pub fn encode<O: Encode + 'static>(
     }
 
     if reverse {
-        operations.push(immediate(value, width));
+        operations.push(immediate_load(immediate, width));
         load(&mut operations, instruction, op0_kind, width);
     } else {
         load(&mut operations, instruction, op0_kind, width);
-        operations.push(immediate(value, width));
+        operations.push(immediate_load(immediate, width));
     }
 
     operations.push(Rc::new(make(width)));
 
     match op0_kind {
         OpKind::Register => {
+            let destination_register = VMReg::from(instruction.op0_register());
             operations.push(Rc::new(StoreRegister {
                 width,
-                destination: VMReg::from(instruction.op0_register()),
+                destination: destination_register,
             }));
         }
         OpKind::Memory => {
@@ -71,9 +72,10 @@ fn load(
 ) {
     match op0_kind {
         OpKind::Register => {
+            let destination_register = VMReg::from(instruction.op0_register());
             operations.push(Rc::new(LoadRegister {
                 width,
-                source: VMReg::from(instruction.op0_register()),
+                source: destination_register,
             }));
         }
         OpKind::Memory => {
@@ -86,9 +88,9 @@ fn load(
     }
 }
 
-fn immediate(value: u64, width: VMWidth) -> Rc<dyn Encode> {
+fn immediate_load(immediate: u64, width: VMWidth) -> Rc<dyn Encode> {
     Rc::new(LoadImmediate {
         width,
-        source: value.to_le_bytes()[..width.size()].to_vec(),
+        source: immediate.to_le_bytes()[..width.size()].to_vec(),
     })
 }

@@ -15,20 +15,20 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         _ => return None,
     };
 
-    let destination_register = instruction.op0_register();
-    let destination = VMReg::from(destination_register);
-    let destination_width = match VMWidth::from(destination_register) {
+    let destination_width = match VMWidth::from(instruction.op0_register()) {
         VMWidth::Lower16 => VMWidth::Lower16,
         _ => VMWidth::Lower64,
     };
+    let destination_register = VMReg::from(instruction.op0_register());
 
     let mut operations = Vec::<Rc<dyn Encode>>::new();
 
     match instruction.op1_kind() {
         OpKind::Register => {
+            let source_register = VMReg::from(instruction.op1_register());
             operations.push(Rc::new(LoadRegister {
                 width: source_width,
-                source: VMReg::from(instruction.op1_register()),
+                source: source_register,
             }));
         }
         OpKind::Memory => {
@@ -44,7 +44,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
 
     operations.push(Rc::new(StoreRegister {
         width: destination_width,
-        destination,
+        destination: destination_register,
     }));
 
     Some(operations)

@@ -28,9 +28,10 @@ pub fn encode<O: Encode + 'static>(
 
     match op0_kind {
         OpKind::Register => {
+            let destination_register = VMReg::from(instruction.op0_register());
             operations.push(Rc::new(LoadRegister {
                 width,
-                source: VMReg::from(instruction.op0_register()),
+                source: destination_register,
             }));
         }
         OpKind::Memory => {
@@ -44,10 +45,11 @@ pub fn encode<O: Encode + 'static>(
 
     match op1_kind {
         OpKind::Register => {
-            let register = instruction.op1_register();
+            let source_width = VMWidth::from(instruction.op1_register());
+            let source_register = VMReg::from(instruction.op1_register());
             operations.push(Rc::new(LoadRegister {
-                width: VMWidth::from(register),
-                source: VMReg::from(register),
+                width: source_width,
+                source: source_register,
             }));
         }
         OpKind::Memory => {
@@ -72,9 +74,10 @@ pub fn encode<O: Encode + 'static>(
     match tail {
         Tail::Writeback => match op0_kind {
             OpKind::Register => {
+                let destination_register = VMReg::from(instruction.op0_register());
                 operations.push(Rc::new(StoreRegister {
                     width,
-                    destination: VMReg::from(instruction.op0_register()),
+                    destination: destination_register,
                 }));
             }
             OpKind::Memory => {
