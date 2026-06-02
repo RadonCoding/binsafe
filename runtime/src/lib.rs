@@ -14,3 +14,6 @@ pub(crate) use define_offset;
 
 pub const VM_STACK_SIZE: u64 = 0x200;
 pub const VM_SCRATCH_SIZE: u64 = 0x100;
+
+// PUSH imm32 + CALL rel32
+pub const VM_DISPATCH_SIZE: usize = 10;

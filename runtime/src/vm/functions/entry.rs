@@ -128,8 +128,6 @@ pub fn build(rt: &mut Runtime) {
     utils::vreg::store_reg(rt, r12, rax, VMReg::NExit);
     // mov [r12 + ...], rsp
     utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
-    // mov [r12 + ...], 0x0
-    utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
 
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();
@@ -170,9 +168,6 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.add(rdx, rcx).unwrap();
         // add rdx, 0x3
         rt.asm.add(rdx, 0x3i32).unwrap();
-
-        // mov [r12 + ...], 0x0
-        utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
 
         // mov rcx, r12
         rt.asm.mov(rcx, r12).unwrap();
@@ -216,9 +211,6 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.pop(rax).unwrap();
         // mov [r12 + ...], rax
         utils::vreg::store_reg(rt, r12, rax, VMReg::Flags);
-
-        // mov [r12 + ...], 0x0
-        utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
 
         // Pop the return address from the stack:
         // pop rdx

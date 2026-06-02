@@ -11,6 +11,7 @@ use logger::info;
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::bytecode;
+use runtime::VM_DISPATCH_SIZE;
 
 mod attestation;
 pub mod crypt;
@@ -41,9 +42,6 @@ pub struct Virtualization {
     vblocks: HashMap<u32, usize>,
     duplicates: usize,
 }
-
-// PUSH imm32 + CALL rel32
-const DISPATCH_SIZE: usize = 10;
 
 impl Virtualization {
     fn attestation(&self, engine: &mut Engine) -> Vec<u8> {
@@ -108,7 +106,7 @@ impl Protection for Virtualization {
         vcode.extend_from_slice(&self.attestation(engine));
 
         'outer: for block in &mut engine.blocks {
-            if block.size < DISPATCH_SIZE {
+            if block.size < VM_DISPATCH_SIZE {
                 continue;
             }
 
@@ -214,7 +212,7 @@ impl Protection for Virtualization {
             asm.call(ventry_rva).unwrap();
             let dispatch1 = asm.assemble(block.rva as u64).unwrap();
 
-            assert!(dispatch1.len() <= DISPATCH_SIZE);
+            assert!(dispatch1.len() <= VM_DISPATCH_SIZE);
 
             asm.reset();
 
