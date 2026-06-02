@@ -5,7 +5,7 @@ use crate::{
     vm::{
         bytecode::VMReg,
         utils::{self, lock, stack},
-        VREG_TO_REG,
+        VIRTUAL_TO_NATIVE,
     },
 };
 
@@ -274,9 +274,9 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut save_native_state).unwrap();
     {
-        for (vreg, reg) in VREG_TO_REG {
+        for (dst, src) in VIRTUAL_TO_NATIVE {
             // mov [r12 + ...], ...
-            utils::vreg::store_reg(rt, r12, *reg, *vreg);
+            utils::vreg::store_reg(rt, r12, *src, *dst);
         }
         // ret
         rt.asm.ret().unwrap();
@@ -284,16 +284,11 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut copy_native_state).unwrap();
     {
-        // lea rax, [...]
-        rt.asm
-            .lea(rax, ptr(rt.data_labels[&DataDef::VmGlobalState]))
-            .unwrap();
-
-        for (vreg, _reg) in VREG_TO_REG {
-            // push [rax + ...]
-            utils::vreg::push(rt, rax, *vreg);
-            // pop [r12 + ...]
-            utils::vreg::pop(rt, r12, *vreg);
+        for &(reg, _) in VIRTUAL_TO_NATIVE {
+            // mov rax, [...]
+            utils::vreg::load_reg(rt, ptr(rt.data_labels[&DataDef::VmGlobalState]), reg, rax);
+            // mov [r12 + ...], rax
+            utils::vreg::store_reg(rt, r12, rax, reg);
         }
         // ret
         rt.asm.ret().unwrap();
