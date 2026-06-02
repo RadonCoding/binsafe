@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{ecx, ptr, r12, r12b, r12d, rax, rcx, rdx, rsp};
+use iced_x86::code_asm::{ecx, ptr, r12, r12b, r12d, r13, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -95,6 +95,11 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
     // mov r12, [0x1480 + r12*8]
     rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
+
+    // lea r13, [...]
+    rt.asm
+        .lea(r13, ptr(rt.data_labels[&DataDef::VmGlobalState]))
+        .unwrap();
 
     // call ...
     rt.asm.call(copy_native_state).unwrap();
@@ -286,7 +291,7 @@ pub fn build(rt: &mut Runtime) {
     {
         for &(reg, _) in VIRTUAL_TO_NATIVE {
             // mov rax, [...]
-            utils::vreg::load_reg(rt, ptr(rt.data_labels[&DataDef::VmGlobalState]), reg, rax);
+            utils::vreg::load_reg(rt, r13, reg, rax);
             // mov [r12 + ...], rax
             utils::vreg::store_reg(rt, r12, rax, reg);
         }
