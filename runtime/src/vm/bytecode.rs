@@ -1,4 +1,6 @@
 use core::panic;
+#[cfg(debug_assertions)]
+use std::fmt;
 use std::rc::Rc;
 
 use iced_x86::{Instruction, Mnemonic, Register};
@@ -356,8 +358,8 @@ fn letter(phase: Phase) -> char {
 }
 
 #[cfg(debug_assertions)]
-impl std::fmt::Display for Bytecode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Bytecode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use std::collections::{HashMap, HashSet};
 
         let last = self.snapshots.last().unwrap();

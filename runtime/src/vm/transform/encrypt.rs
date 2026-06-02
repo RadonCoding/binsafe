@@ -92,7 +92,7 @@ impl<'a> Encryptor<'a> {
     }
 }
 
-/// Encrypts each leaf in place at the top level, splicing a roll sequence after every immediate, descending into children without rolling, and sealing each [`Skip`] with the key it entered with.
+/// Encrypts each leaf in place at the top level, splicing a roll sequence after every immediate, descending into children without rolling.
 fn walk(
     mapper: &mut Mapper,
     operations: &mut Vec<Rc<dyn Encode>>,
@@ -108,12 +108,15 @@ fn walk(
 
         if let Some(children) = Rc::get_mut(&mut operations[i]).unwrap().children() {
             nested(mapper, children, position, deadzones, key);
-            Rc::get_mut(&mut operations[i]).unwrap().seal(mapper, &mut |source| {
-                let bytes = entry.to_le_bytes();
-                for (i, byte) in source.iter_mut().enumerate() {
-                    *byte ^= bytes[i];
-                }
-            });
+            Rc::get_mut(&mut operations[i])
+                .unwrap()
+                .seal(mapper, &mut |source| {
+                    let bytes = entry.to_le_bytes();
+
+                    for (i, byte) in source.iter_mut().enumerate() {
+                        *byte ^= bytes[i];
+                    }
+                });
             i += 1;
             continue;
         }
@@ -136,7 +139,7 @@ fn walk(
     }
 }
 
-/// Encrypts each leaf in place inside a children slice without rolling, descending recursively and sealing nested [`Skip`]s.
+/// Encrypts each leaf in place inside a children slice without rolling, descending recursively.
 fn nested(
     mapper: &mut Mapper,
     operations: &mut [Rc<dyn Encode>],
@@ -163,7 +166,6 @@ fn nested(
         *position += 1;
     }
 }
-
 
 /// Encrypts the leaf in place when it matches [`LoadImmediate`] or [`LoadAddress`], returning whether a match was found.
 fn leaf(operation: &mut Rc<dyn Encode>, key: u64) -> bool {
