@@ -260,6 +260,54 @@ fn test_test() {
 }
 
 #[test]
+fn test_rol() {
+    case!([instruction!(Rol_rm64_CL, Register::RAX, Register::CL)],
+          [Rax = 0x1111_1111_1111_1111, Rcx = 4], Rax => 0x1111_1111_1111_1111);
+    case!([instruction!(Rol_rm32_imm8, Register::EAX, 4)],
+          [Rax = 0x1111_1111], Rax => 0x1111_1111);
+    case!([instruction!(Rol_rm16_imm8, Register::AX, 4)],
+          [Rax = 0x1111], Rax => 0x1111);
+    case!([instruction!(Rol_rm8_imm8, Register::AL, 4)],
+          [Rax = 0x11], Rax => 0x11);
+}
+
+#[test]
+fn test_ror() {
+    case!([instruction!(Ror_rm64_CL, Register::RAX, Register::CL)],
+          [Rax = 0x1111_1111_1111_1111, Rcx = 4], Rax => 0x1111_1111_1111_1111);
+    case!([instruction!(Ror_rm32_imm8, Register::EAX, 4)],
+          [Rax = 0x1111_1111], Rax => 0x1111_1111);
+    case!([instruction!(Ror_rm16_imm8, Register::AX, 4)],
+          [Rax = 0x1111], Rax => 0x1111);
+    case!([instruction!(Ror_rm8_imm8, Register::AL, 4)],
+          [Rax = 0x11], Rax => 0x11);
+}
+
+#[test]
+fn test_shl() {
+    case!([instruction!(Shl_rm64_CL, Register::RAX, Register::CL)],
+          [Rax = 0x1111_1111_1111_1111, Rcx = 4], Rax => 0x1111_1111_1111_1110);
+    case!([instruction!(Shl_rm32_imm8, Register::EAX, 4)],
+          [Rax = 0x1111_1111], Rax => 0x1111_1110);
+    case!([instruction!(Shl_rm16_imm8, Register::AX, 4)],
+          [Rax = 0x1111], Rax => 0x1110);
+    case!([instruction!(Shl_rm8_imm8, Register::AL, 4)],
+          [Rax = 0x11], Rax => 0x10);
+}
+
+#[test]
+fn test_shr() {
+    case!([instruction!(Shr_rm64_CL, Register::RAX, Register::CL)],
+          [Rax = 0x1111_1111_1111_1111, Rcx = 4], Rax => 0x0111_1111_1111_1111);
+    case!([instruction!(Shr_rm32_imm8, Register::EAX, 4)],
+          [Rax = 0x1111_1111], Rax => 0x0111_1111);
+    case!([instruction!(Shr_rm16_imm8, Register::AX, 4)],
+          [Rax = 0x1111], Rax => 0x0111);
+    case!([instruction!(Shr_rm8_imm8, Register::AL, 4)],
+          [Rax = 0x11], Rax => 0x01);
+}
+
+#[test]
 fn test_cmov() {
     cmov_case!(Cmove_r64_rm64, 0x1111_1111, 0x1111_1111, 0x1111_1111);
     cmov_case!(Cmovne_r64_rm64, 0x1111_1111, 0x2222_2222, 0x1111_1111);
