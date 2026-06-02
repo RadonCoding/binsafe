@@ -11,7 +11,7 @@ use iced_x86::code_asm::{
     r10, r11, r13, r14, r15, r8, r9, rax, rbp, rbx, rcx, rdi, rdx, rsi, AsmRegister64,
 };
 
-const VREG_TO_REG: &[(VMReg, AsmRegister64)] = &[
+const VIRTUAL_TO_NATIVE: &[(VMReg, AsmRegister64)] = &[
     (VMReg::Rax, rax),
     (VMReg::Rcx, rcx),
     (VMReg::Rdx, rdx),

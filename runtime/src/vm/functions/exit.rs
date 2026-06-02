@@ -2,7 +2,7 @@ use iced_x86::code_asm::{ptr, r12, r12d, rsp};
 
 use crate::{
     runtime::{DataDef, Runtime},
-    vm::{bytecode::VMReg, utils, VREG_TO_REG},
+    vm::{bytecode::VMReg, utils, VIRTUAL_TO_NATIVE},
 };
 
 pub fn build(rt: &mut Runtime) {
@@ -24,9 +24,9 @@ pub fn build(rt: &mut Runtime) {
     // popfq
     rt.asm.popfq().unwrap();
 
-    for (vreg, reg) in VREG_TO_REG {
+    for (src, dst) in VIRTUAL_TO_NATIVE {
         // mov ...,  [r12 + ...]
-        utils::vreg::load_reg(rt, r12, *vreg, *reg);
+        utils::vreg::load_reg(rt, r12, *src, *dst);
     }
 
     // cmp [r12 + ...], 0x0
