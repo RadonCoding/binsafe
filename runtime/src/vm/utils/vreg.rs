@@ -1,27 +1,17 @@
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
-use iced_x86::code_asm::{ptr, qword_ptr, AsmMemoryOperand, AsmRegister32, AsmRegister64};
+use iced_x86::code_asm::{ptr, qword_ptr, AsmRegister32, AsmRegister64};
 
 /// `mov {dst}, [{base} + {reg} * 8]`
-pub fn load_reg<B: Into<AsmMemoryOperand>>(
-    rt: &mut Runtime,
-    base: B,
-    reg: VMReg,
-    dst: AsmRegister64,
-) {
+pub fn load_reg(rt: &mut Runtime, base: AsmRegister64, reg: VMReg, dst: AsmRegister64) {
     rt.asm
-        .mov(dst, base.into() + rt.mapper.index(reg) * 8)
+        .mov(dst, ptr(base + rt.mapper.index(reg) * 8))
         .unwrap();
 }
 
 /// `mov {dst}, [{base} + {reg} * 8]`
-pub fn load_reg32<B: Into<AsmMemoryOperand>>(
-    rt: &mut Runtime,
-    base: B,
-    reg: VMReg,
-    dst: AsmRegister32,
-) {
+pub fn load_reg32(rt: &mut Runtime, base: AsmRegister64, reg: VMReg, dst: AsmRegister32) {
     rt.asm
-        .mov(dst, base.into() + rt.mapper.index(reg) * 8)
+        .mov(dst, ptr(base + rt.mapper.index(reg) * 8))
         .unwrap();
 }
 
@@ -40,33 +30,23 @@ pub fn load_mem(
 }
 
 /// `mov [{base} + {reg} * 8], {src}`
-pub fn store_reg<B: Into<AsmMemoryOperand>>(
-    rt: &mut Runtime,
-    base: B,
-    src: AsmRegister64,
-    reg: VMReg,
-) {
+pub fn store_reg(rt: &mut Runtime, base: AsmRegister64, src: AsmRegister64, reg: VMReg) {
     rt.asm
-        .mov(base.into() + rt.mapper.index(reg) * 8, src)
+        .mov(ptr(base + rt.mapper.index(reg) * 8), src)
         .unwrap();
 }
 
 /// `mov [{base} + {reg} * 8], {src}`
-pub fn store_reg32<B: Into<AsmMemoryOperand>>(
-    rt: &mut Runtime,
-    base: B,
-    src: AsmRegister32,
-    reg: VMReg,
-) {
+pub fn store_reg32(rt: &mut Runtime, base: AsmRegister64, src: AsmRegister32, reg: VMReg) {
     rt.asm
-        .mov(base.into() + rt.mapper.index(reg) * 8, src)
+        .mov(ptr(base + rt.mapper.index(reg) * 8), src)
         .unwrap();
 }
 
 /// `mov qword [{base} + {reg} * 8], {src}`
-pub fn store_imm<B: Into<AsmMemoryOperand>>(rt: &mut Runtime, base: B, src: i32, reg: VMReg) {
+pub fn store_imm(rt: &mut Runtime, base: AsmRegister64, src: i32, reg: VMReg) {
     rt.asm
-        .mov(qword_ptr(base.into() + rt.mapper.index(reg) * 8), src)
+        .mov(qword_ptr(base + rt.mapper.index(reg) * 8), src)
         .unwrap();
 }
 
@@ -85,96 +65,71 @@ pub fn store_mem(
 }
 
 /// `add [{base} + {reg} * 8], {src}`
-pub fn add_reg<B: Into<AsmMemoryOperand>>(
-    rt: &mut Runtime,
-    base: B,
-    src: AsmRegister64,
-    reg: VMReg,
-) {
+pub fn add_reg(rt: &mut Runtime, base: AsmRegister64, src: AsmRegister64, reg: VMReg) {
     rt.asm
-        .add(base.into() + rt.mapper.index(reg) * 8, src)
+        .add(ptr(base + rt.mapper.index(reg) * 8), src)
         .unwrap();
 }
 
 /// `add qword [{base} + {reg} * 8], {src}`
-pub fn add_imm<B: Into<AsmMemoryOperand>>(rt: &mut Runtime, base: B, src: i32, reg: VMReg) {
+pub fn add_imm(rt: &mut Runtime, base: AsmRegister64, src: i32, reg: VMReg) {
     rt.asm
-        .add(qword_ptr(base.into() + rt.mapper.index(reg) * 8), src)
+        .add(qword_ptr(base + rt.mapper.index(reg) * 8), src)
         .unwrap();
 }
 
 /// `add {dst}, [{base} + {reg} * 8]`
-pub fn reg_add<B: Into<AsmMemoryOperand>>(
-    rt: &mut Runtime,
-    base: B,
-    reg: VMReg,
-    dst: AsmRegister64,
-) {
+pub fn reg_add(rt: &mut Runtime, base: AsmRegister64, reg: VMReg, dst: AsmRegister64) {
     rt.asm
-        .add(dst, base.into() + rt.mapper.index(reg) * 8)
+        .add(dst, ptr(base + rt.mapper.index(reg) * 8))
         .unwrap();
 }
 
 /// `sub [{base} + {reg} * 8], {src}`
-pub fn sub_reg<B: Into<AsmMemoryOperand>>(
-    rt: &mut Runtime,
-    base: B,
-    src: AsmRegister64,
-    reg: VMReg,
-) {
+pub fn sub_reg(rt: &mut Runtime, base: AsmRegister64, src: AsmRegister64, reg: VMReg) {
     rt.asm
-        .sub(base.into() + rt.mapper.index(reg) * 8, src)
+        .sub(ptr(base + rt.mapper.index(reg) * 8), src)
         .unwrap();
 }
 
 /// `sub qword [{base} + {reg} * 8], {src}`
-pub fn sub_imm<B: Into<AsmMemoryOperand>>(rt: &mut Runtime, base: B, src: i32, reg: VMReg) {
+pub fn sub_imm(rt: &mut Runtime, base: AsmRegister64, src: i32, reg: VMReg) {
     rt.asm
-        .sub(qword_ptr(base.into() + rt.mapper.index(reg) * 8), src)
+        .sub(qword_ptr(base + rt.mapper.index(reg) * 8), src)
         .unwrap();
 }
 
 /// `sub {dst}, [{base} + {reg} * 8]`
-pub fn reg_sub<B: Into<AsmMemoryOperand>>(
-    rt: &mut Runtime,
-    base: B,
-    reg: VMReg,
-    dst: AsmRegister64,
-) {
+pub fn reg_sub(rt: &mut Runtime, base: AsmRegister64, reg: VMReg, dst: AsmRegister64) {
     rt.asm
-        .sub(dst, base.into() + rt.mapper.index(reg) * 8)
+        .sub(dst, ptr(base + rt.mapper.index(reg) * 8))
         .unwrap();
 }
 
 /// `cmp [{base} + {reg} * 8], {src}`
-pub fn cmp_reg<B: Into<AsmMemoryOperand>>(
-    rt: &mut Runtime,
-    base: B,
-    reg: VMReg,
-    src: AsmRegister64,
-) {
+pub fn cmp_reg(rt: &mut Runtime, base: AsmRegister64, reg: VMReg, src: AsmRegister64) {
     rt.asm
-        .cmp(base.into() + rt.mapper.index(reg) * 8, src)
+        .cmp(ptr(base + rt.mapper.index(reg) * 8), src)
         .unwrap();
 }
 
 /// `cmp qword [{base} + {reg} * 8], {src}`
-pub fn cmp_imm<B: Into<AsmMemoryOperand>>(rt: &mut Runtime, base: B, reg: VMReg, src: i32) {
+pub fn cmp_imm(rt: &mut Runtime, base: AsmRegister64, reg: VMReg, src: i32) {
     rt.asm
-        .cmp(qword_ptr(base.into() + rt.mapper.index(reg) * 8), src)
+        .cmp(qword_ptr(base + rt.mapper.index(reg) * 8), src)
         .unwrap();
 }
 
 /// `push qword [{base} + {reg} * 8]`
-pub fn push<B: Into<AsmMemoryOperand>>(rt: &mut Runtime, base: B, reg: VMReg) {
+pub fn push(rt: &mut Runtime, base: AsmRegister64, reg: VMReg) {
     rt.asm
-        .push(qword_ptr(base.into() + rt.mapper.index(reg) * 8))
+        .push(qword_ptr(base + rt.mapper.index(reg) * 8))
         .unwrap();
 }
 
 /// `pop qword [{base} + {reg} * 8]`
-pub fn pop<B: Into<AsmMemoryOperand>>(rt: &mut Runtime, base: B, reg: VMReg) {
+pub fn pop(rt: &mut Runtime, base: AsmRegister64, reg: VMReg) {
     rt.asm
-        .pop(qword_ptr(base.into() + rt.mapper.index(reg) * 8))
+        .pop(qword_ptr(base + rt.mapper.index(reg) * 8))
         .unwrap();
 }
