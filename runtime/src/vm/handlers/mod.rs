@@ -7,77 +7,126 @@ use crate::{
     vm::bytecode::{VMOp, VMReg},
 };
 
-/// Emits a build function for an arithmetic handler whose only variation is the assembled mnemonic, loading the two scratch operands into r13 and r8, dispatching on width, then handing off to [`crate::runtime::FnDef::VmFlags`] before storing the result and restoring callee-saved registers.
-macro_rules! arithmetic {
-    ($op:ident) => {
-        use iced_x86::code_asm::{al, r12, r13, r13b, r13d, r13w, r8, r8b, r8d, r8w, rax, rdx};
+#[macro_export]
+macro_rules! __arithmetic {
+    ($rt:expr, $operation:ident, r8, $epilogue:expr) => {
+        $crate::vm::utils::width::dispatch(
+            $rt,
+            al,
+            $epilogue,
+            |rt| {
+                rt.asm.$operation(r14, r8).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14d, r8d).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14w, r8w).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14b, r8b).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14b, r8b).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14d, r8d).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14w, r8w).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14b, r8b).unwrap();
+            },
+        );
+    };
+    ($rt:expr, $operation:ident, cl, $epilogue:expr) => {
+        $rt.asm.mov(cl, r8b).unwrap();
+        $crate::vm::utils::width::dispatch(
+            $rt,
+            al,
+            $epilogue,
+            |rt| {
+                rt.asm.$operation(r14, cl).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14d, cl).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14w, cl).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14b, cl).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14b, cl).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14d, cl).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14w, cl).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14b, cl).unwrap();
+            },
+        );
+    };
+}
 
+#[macro_export]
+macro_rules! arithmetic {
+    ($operation:ident) => {
+        $crate::arithmetic!($operation, r8);
+    };
+    ($operation:ident, $register:ident) => {
         use crate::{
             runtime::{FnDef, Runtime},
             vm::utils::{self, scratch, stack},
         };
+        use iced_x86::code_asm::*;
 
         // unsigned char* (unsigned long*, unsigned char*)
         pub fn build(rt: &mut Runtime) {
             let mut epilogue = rt.asm.create_label();
-
             // push r12
             stack::push(rt, r12);
             // push r13
             stack::push(rt, r13);
-            // mov r12, rdx
-            rt.asm.mov(r12, rdx).unwrap();
+            // push r14
+            stack::push(rt, r14);
+
+            // mov r12, rcx
+            rt.asm.mov(r12, rcx).unwrap();
+            // mov r13, rdx
+            rt.asm.mov(r13, rdx).unwrap();
 
             // al -> width
-            utils::bytecode::read_byte(rt, r12, al);
+            utils::bytecode::read_byte(rt, r13, al);
 
             // load r8
             scratch::load(rt, r8);
-            // load r13
-            scratch::load(rt, r13);
+            // load r14
+            scratch::load(rt, r14);
 
-            utils::width::dispatch(
-                rt,
-                al,
-                &mut epilogue,
-                |rt| {
-                    rt.asm.$op(r13, r8).unwrap();
-                },
-                |rt| {
-                    rt.asm.$op(r13d, r8d).unwrap();
-                },
-                |rt| {
-                    rt.asm.$op(r13w, r8w).unwrap();
-                },
-                |rt| {
-                    rt.asm.$op(r13b, r8b).unwrap();
-                },
-                |rt| {
-                    rt.asm.$op(r13b, r8b).unwrap();
-                },
-                |rt| {
-                    rt.asm.$op(r13d, r8d).unwrap();
-                },
-                |rt| {
-                    rt.asm.$op(r13w, r8w).unwrap();
-                },
-                |rt| {
-                    rt.asm.$op(r13b, r8b).unwrap();
-                },
-            );
+            $crate::__arithmetic!(rt, $operation, $register, &mut epilogue);
 
             rt.asm.set_label(&mut epilogue).unwrap();
             {
+                // mov rcx, r12
+                rt.asm.mov(rcx, r12).unwrap();
                 // pushfq
                 stack::pushfq(rt);
                 // call ...
                 stack::call(rt, rt.func_labels[&FnDef::VmFlags]);
 
-                // store r13
-                scratch::store(rt, r13);
+                // store r14
+                scratch::store(rt, r14);
 
-                // mov rax, r12
-                rt.asm.mov(rax, r12).unwrap();
+                // mov rax, r13
+                rt.asm.mov(rax, r13).unwrap();
+                // pop r14
+                stack::pop(rt, r14);
                 // pop r13
                 stack::pop(rt, r13);
                 // pop r12
@@ -88,7 +137,6 @@ macro_rules! arithmetic {
         }
     };
 }
-
 pub(crate) use arithmetic;
 
 pub mod add;
@@ -104,6 +152,10 @@ pub mod or;
 pub mod pop;
 pub mod push;
 pub mod ret;
+pub mod rol;
+pub mod ror;
+pub mod shl;
+pub mod shr;
 pub mod store_memory;
 pub mod store_register;
 pub mod sub;
@@ -126,6 +178,10 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::Or, FnDef::VmHandlerOr),
         (VMOp::Xor, FnDef::VmHandlerXor),
         (VMOp::Test, FnDef::VmHandlerTest),
+        (VMOp::Rol, FnDef::VmHandlerRol),
+        (VMOp::Ror, FnDef::VmHandlerRor),
+        (VMOp::Shl, FnDef::VmHandlerShl),
+        (VMOp::Shr, FnDef::VmHandlerShr),
         (VMOp::Push, FnDef::VmHandlerPush),
         (VMOp::Pop, FnDef::VmHandlerPop),
         (VMOp::Discard, FnDef::VmHandlerDiscard),

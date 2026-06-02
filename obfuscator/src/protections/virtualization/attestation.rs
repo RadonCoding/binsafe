@@ -1,3 +1,4 @@
+use rand::Rng;
 use runtime::runtime::{FnDef, ImportDef};
 use runtime::vm::bytecode::{VMMem, VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::add::Add;
@@ -12,7 +13,6 @@ use runtime::vm::encoders::store_register::StoreRegister;
 use runtime::vm::encoders::sub::Sub;
 use runtime::vm::encoders::xor::Xor;
 use runtime::vm::encoders::Encode;
-use rand::Rng;
 use std::rc::Rc;
 
 use crate::engine::Engine;
