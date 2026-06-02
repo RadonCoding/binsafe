@@ -8,13 +8,15 @@ use crate::vm::encoders::{
 };
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut operations: Vec<Rc<dyn Encode>> = vec![Rc::new(Pop)];
+    let mut operations = Vec::<Rc<dyn Encode>>::new();
+    operations.push(Rc::new(Pop));
 
     match instruction.op0_kind() {
         OpKind::Register => {
+            let destination_register = VMReg::from(instruction.op0_register());
             operations.push(Rc::new(StoreRegister {
                 width: VMWidth::Lower64,
-                destination: VMReg::from(instruction.op0_register()),
+                destination: destination_register,
             }));
         }
         OpKind::Memory => {

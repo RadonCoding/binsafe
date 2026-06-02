@@ -13,13 +13,16 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
 
     match code {
         Code::Jmp_rm64 => match instruction.op0_kind() {
-            OpKind::Register => Some(vec![
-                Rc::new(LoadRegister {
-                    width: VMWidth::Lower64,
-                    source: VMReg::from(instruction.op0_register()),
-                }),
-                Rc::new(Jcc::jump()),
-            ]),
+            OpKind::Register => {
+                let source_register = VMReg::from(instruction.op0_register());
+                Some(vec![
+                    Rc::new(LoadRegister {
+                        width: VMWidth::Lower64,
+                        source: source_register,
+                    }),
+                    Rc::new(Jcc::jump()),
+                ])
+            }
             OpKind::Memory => Some(vec![
                 Rc::new(LoadAddress {
                     source: VMMem::from(instruction),
@@ -69,13 +72,16 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         Code::Retnq => Some(vec![Rc::new(Ret)]),
 
         Code::Call_rm64 => match instruction.op0_kind() {
-            OpKind::Register => Some(vec![
-                Rc::new(LoadRegister {
-                    width: VMWidth::Lower64,
-                    source: VMReg::from(instruction.op0_register()),
-                }),
-                Rc::new(Jcc::call()),
-            ]),
+            OpKind::Register => {
+                let source_register = VMReg::from(instruction.op0_register());
+                Some(vec![
+                    Rc::new(LoadRegister {
+                        width: VMWidth::Lower64,
+                        source: source_register,
+                    }),
+                    Rc::new(Jcc::call()),
+                ])
+            }
             OpKind::Memory => Some(vec![
                 Rc::new(LoadAddress {
                     source: VMMem::from(instruction),
