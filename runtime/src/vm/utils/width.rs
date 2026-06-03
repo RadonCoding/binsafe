@@ -2,7 +2,7 @@ use iced_x86::code_asm::{AsmRegister8, CodeLabel};
 
 use crate::{runtime::Runtime, vm::bytecode::VMWidth};
 
-pub fn dispatch(
+pub fn dispatch_register(
     rt: &mut Runtime,
     width: AsmRegister8,
     epilogue: &mut CodeLabel,
@@ -119,5 +119,33 @@ pub fn dispatch(
     rt.asm.set_label(&mut l64).unwrap();
     {
         lower64(rt);
+    }
+}
+
+pub fn dispatch_vector(
+    rt: &mut Runtime,
+    width: AsmRegister8,
+    epilogue: &mut CodeLabel,
+    lower128: impl FnOnce(&mut Runtime),
+    lower256: impl FnOnce(&mut Runtime),
+) {
+    let mut l256 = rt.asm.create_label();
+
+    // cmp width, ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::Lower256) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(l256).unwrap();
+
+    {
+        lower128(rt);
+        // jmp ...
+        rt.asm.jmp(*epilogue).unwrap();
+    }
+
+    rt.asm.set_label(&mut l256).unwrap();
+    {
+        lower256(rt);
     }
 }

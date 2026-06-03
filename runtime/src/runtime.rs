@@ -25,6 +25,10 @@ mapped! {
         VmCrypt,
         VmDispatch,
         VmCleanup,
+        VmRegistersCapture,
+        VmRegistersRestore,
+        VmVectorsCapture,
+        VmVectorsRestore,
         /* VM HANDLERS */
         VmFunctionsInitialize,
         VmHandlersInitialize,
@@ -36,6 +40,8 @@ mapped! {
         VmHandlerLoadAddress,
         VmHandlerStoreRegister,
         VmHandlerStoreMemory,
+        VmHandlerLoadVector,
+        VmHandlerStoreVector,
         VmHandlerAdd,
         VmHandlerSub,
         VmHandlerAnd,
@@ -75,8 +81,9 @@ mapped! {
         Functions,
         VehStart,
         VmHandlers,
-        VmGlobalState,
-        VmStateTlsIndex,
+        VmGlobalRegisters,
+        VmRegistersTlsIndex,
+        VmVectorsTlsIndex,
         VmKeyTlsIndex,
         VmCleanupFlsIndex,
         VmTable,
@@ -321,6 +328,10 @@ impl Runtime {
             (FnDef::VmCrypt, vm::functions::crypt::build),
             (FnDef::VmDispatch, vm::functions::dispatch::build),
             (FnDef::VmCleanup, vm::functions::cleanup::build),
+            (FnDef::VmRegistersCapture, vm::functions::registers::capture),
+            (FnDef::VmRegistersRestore, vm::functions::registers::restore),
+            (FnDef::VmVectorsCapture, vm::functions::vectors::capture),
+            (FnDef::VmVectorsRestore, vm::functions::vectors::restore),
             (FnDef::VmFunctionsInitialize, vm::functions::initialize),
             (FnDef::VmHandlersInitialize, vm::handlers::initialize),
             (FnDef::VmHandlerJcc, vm::handlers::jcc::build),
@@ -345,6 +356,11 @@ impl Runtime {
             (
                 FnDef::VmHandlerStoreMemory,
                 vm::handlers::store_memory::build,
+            ),
+            (FnDef::VmHandlerLoadVector, vm::handlers::load_vector::build),
+            (
+                FnDef::VmHandlerStoreVector,
+                vm::handlers::store_vector::build,
             ),
             (FnDef::VmHandlerAdd, vm::handlers::add::build),
             (FnDef::VmHandlerSub, vm::handlers::sub::build),
@@ -386,9 +402,10 @@ impl Runtime {
 
         self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
         self.define_data_bytes(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
-        self.define_data_bytes(DataDef::VmGlobalState, &[0u8; VMReg::COUNT * 8]);
+        self.define_data_bytes(DataDef::VmGlobalRegisters, &[0u8; VMReg::COUNT * 8]);
 
-        self.define_data_dword(DataDef::VmStateTlsIndex, 0);
+        self.define_data_dword(DataDef::VmRegistersTlsIndex, 0);
+        self.define_data_dword(DataDef::VmVectorsTlsIndex, 0);
         self.define_data_dword(DataDef::VmKeyTlsIndex, 0);
         self.define_data_dword(DataDef::VmCleanupFlsIndex, 0);
 

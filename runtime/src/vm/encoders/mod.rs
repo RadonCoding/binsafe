@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::VMReg;
+use crate::vm::bytecode::{VMReg, VMVec};
 
 #[cfg(debug_assertions)]
 mod debug;
@@ -11,6 +11,7 @@ mod debug;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Effect {
     Register(VMReg),
+    Vector(VMVec),
     Memory,
 }
 
@@ -54,6 +55,7 @@ pub mod load_address;
 pub mod load_immediate;
 pub mod load_memory;
 pub mod load_register;
+pub mod load_vector;
 pub mod mul;
 pub mod or;
 pub mod pop;
@@ -67,6 +69,7 @@ pub mod shr;
 pub mod skip;
 pub mod store_memory;
 pub mod store_register;
+pub mod store_vector;
 pub mod sub;
 pub mod test;
 pub mod xor;

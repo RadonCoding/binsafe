@@ -5,7 +5,7 @@ use crate::{
     vm::{
         bytecode::VMReg,
         utils::{self, lock, stack},
-        VIRTUAL_TO_NATIVE,
+        REGISTERS_TO_NATIVE,
     },
 };
 
@@ -22,8 +22,7 @@ pub fn build(rt: &mut Runtime) {
     let mut initialize_state = rt.asm.create_label();
     let mut initialize_execution = rt.asm.create_label();
 
-    let mut save_native_state = rt.asm.create_label();
-    let mut copy_native_state = rt.asm.create_label();
+    let mut copy_native_registers = rt.asm.create_label();
 
     // pushfq
     rt.asm.pushfq().unwrap();
@@ -32,7 +31,7 @@ pub fn build(rt: &mut Runtime) {
 
     // mov r12d, [...]
     rt.asm
-        .mov(r12d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r12d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // test r12d, r12d
     rt.asm.test(r12d, r12d).unwrap();
@@ -63,14 +62,16 @@ pub fn build(rt: &mut Runtime) {
 
     // lea r12, [...]
     rt.asm
-        .lea(r12, ptr(rt.data_labels[&DataDef::VmGlobalState]))
+        .lea(r12, ptr(rt.data_labels[&DataDef::VmGlobalRegisters]))
         .unwrap();
     // call ...
-    rt.asm.call(save_native_state).unwrap();
+    rt.asm
+        .call(rt.func_labels[&FnDef::VmRegistersCapture])
+        .unwrap();
 
     // mov r12d, [...]
     rt.asm
-        .mov(r12d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r12d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // test r12d, r12d
     rt.asm.test(r12d, r12d).unwrap();
@@ -91,18 +92,18 @@ pub fn build(rt: &mut Runtime) {
 
     // mov r12d, [...]
     rt.asm
-        .mov(r12d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r12d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r12, [0x1480 + r12*8]
     rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
 
     // lea r13, [...]
     rt.asm
-        .lea(r13, ptr(rt.data_labels[&DataDef::VmGlobalState]))
+        .lea(r13, ptr(rt.data_labels[&DataDef::VmGlobalRegisters]))
         .unwrap();
 
     // call ...
-    rt.asm.call(copy_native_state).unwrap();
+    rt.asm.call(copy_native_registers).unwrap();
 
     // call ...
     rt.asm
@@ -153,7 +154,13 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut continue_attestation).unwrap();
     {
         // call ...
-        rt.asm.call(save_native_state).unwrap();
+        rt.asm
+            .call(rt.func_labels[&FnDef::VmRegistersCapture])
+            .unwrap();
+        // call ...
+        rt.asm
+            .call(rt.func_labels[&FnDef::VmVectorsCapture])
+            .unwrap();
         // Skip the pushes from prologue:
         // add rsp, 0x10
         rt.asm.add(rsp, 0x10i32).unwrap();
@@ -202,7 +209,13 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut initialize_state).unwrap();
     {
         // call ...
-        rt.asm.call(save_native_state).unwrap();
+        rt.asm
+            .call(rt.func_labels[&FnDef::VmRegistersCapture])
+            .unwrap();
+        // call ...
+        rt.asm
+            .call(rt.func_labels[&FnDef::VmVectorsCapture])
+            .unwrap();
     }
 
     rt.asm.set_label(&mut initialize_execution).unwrap();
@@ -277,19 +290,9 @@ pub fn build(rt: &mut Runtime) {
     // jmp ...
     rt.asm.jmp(rt.func_labels[&FnDef::VmExit]).unwrap();
 
-    rt.asm.set_label(&mut save_native_state).unwrap();
+    rt.asm.set_label(&mut copy_native_registers).unwrap();
     {
-        for (dst, src) in VIRTUAL_TO_NATIVE {
-            // mov [r12 + ...], ...
-            utils::vreg::store_reg(rt, r12, *src, *dst);
-        }
-        // ret
-        rt.asm.ret().unwrap();
-    }
-
-    rt.asm.set_label(&mut copy_native_state).unwrap();
-    {
-        for &(reg, _) in VIRTUAL_TO_NATIVE {
+        for &(reg, _) in REGISTERS_TO_NATIVE {
             // mov rax, [...]
             utils::vreg::load_reg(rt, r13, reg, rax);
             // mov [r12 + ...], rax

@@ -17,6 +17,6 @@ impl Encode for StoreMemory {
     }
 
     fn depth(&self) -> i32 {
-        -2
+        -(self.width.slots() + 1)
     }
 }

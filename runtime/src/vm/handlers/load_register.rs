@@ -17,7 +17,7 @@ pub fn build(rt: &mut Runtime) {
     // r8d -> source
     utils::bytecode::read_byte_zx(rt, rdx, r8d);
 
-    utils::width::dispatch(
+    utils::width::dispatch_register(
         rt,
         al,
         &mut epilogue,

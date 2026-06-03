@@ -33,7 +33,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.xor(rdx, rdx).unwrap();
     // mov r8d, [...]
     rt.asm
-        .mov(r8d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r8d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r8, gs:[0x1480 + r8*8]
     rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();
@@ -50,7 +50,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.xor(rdx, rdx).unwrap();
     // mov r8d, [...]
     rt.asm
-        .mov(r8d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r8d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r8, gs:[0x1480 + r8*8]
     rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();
@@ -67,7 +67,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.xor(rdx, rdx).unwrap();
     // mov r8d, [...]
     rt.asm
-        .mov(r8d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r8d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r8, gs:[0x1480 + r8*8]
     rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();

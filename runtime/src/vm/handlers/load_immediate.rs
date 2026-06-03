@@ -18,7 +18,7 @@ pub fn build(rt: &mut Runtime) {
     // mov r9, [rcx + ...]
     utils::vreg::load_reg(rt, rcx, VMReg::VImm, r9);
 
-    utils::width::dispatch(
+    utils::width::dispatch_register(
         rt,
         al,
         &mut epilogue,

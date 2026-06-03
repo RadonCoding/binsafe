@@ -4,6 +4,26 @@ use runtime::vm::bytecode::{self, VMFlag, VMReg};
 
 use crate::{decrypt, encrypt, instruction, Executor};
 
+use std::ffi::c_void;
+use std::sync::Once;
+use windows::Win32::System::Memory::{VirtualAlloc, MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE};
+
+/// Fake, mapped region every virtualized branch target points at, so the dispatch
+/// trampoline can read `[NBranch]` without faulting on unmapped memory.
+const BRANCH: u64 = 0x1111_1111;
+
+fn map_branch() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| unsafe {
+        let _ = VirtualAlloc(
+            Some((BRANCH & !0xFFFF) as *const c_void),
+            0x10000,
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE,
+        );
+    });
+}
+
 fn template(instructions: &[Instruction], setup: &[(VMReg, u64)], target: VMReg, expected: u64) {
     let mut executor = Executor::new();
 
@@ -17,6 +37,8 @@ fn template(instructions: &[Instruction], setup: &[(VMReg, u64)], target: VMReg,
     .bytes;
 
     encrypt(&mut bytecode);
+
+    map_branch();
 
     let state = executor.run(setup, &bytecode);
 
@@ -113,29 +135,25 @@ fn test_mov() {
 #[test]
 fn test_jcc() {
     case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(branch Je_rel8_64, 0x1111_1111)],
-          [Rax = 0x1111_1111], NBranch => 0x1111_1111);
+           instruction!(branch Je_rel8_64, BRANCH)],
+          [Rax = 0x1111_1111], NBranch => BRANCH);
     case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(branch Jne_rel8_64, 0x1111_1111)],
-          [Rax = 0x2222_2222], NBranch => 0x1111_1111);
+           instruction!(branch Jne_rel8_64, BRANCH)],
+          [Rax = 0x2222_2222], NBranch => BRANCH);
     case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(branch Ja_rel8_64, 0x1111_1111)],
-          [Rax = 0x2222_2222], NBranch => 0x1111_1111);
+           instruction!(branch Ja_rel8_64, BRANCH)],
+          [Rax = 0x2222_2222], NBranch => BRANCH);
     case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(branch Jae_rel8_64, 0x1111_1111)],
-          [Rax = 0x2222_2222], NBranch => 0x1111_1111);
+           instruction!(branch Jae_rel8_64, BRANCH)],
+          [Rax = 0x2222_2222], NBranch => BRANCH);
 }
 
 #[test]
 fn test_jmp() {
     case!([instruction!(Jmp_rm64, Register::RAX)],
-          [Rax = 0x1111_1111], NBranch => 0x1111_1111);
-    case!([instruction!(Jmp_rm64, Register::RBX)],
-          [Rbx = 0x1111_1111], NBranch => 0x1111_1111);
-    case!([instruction!(branch Jmp_rel8_64, 0x1111_1111)],
-          [VImage = 0x1000_0000], NBranch => 0x2111_1111);
-    case!([instruction!(branch Jmp_rel32_64, 0x1111_1111)],
-          [VImage = 0x1000_0000], NBranch => 0x2111_1111);
+          [Rax = BRANCH], NBranch => BRANCH);
+    case!([instruction!(branch Jmp_rel32_64, BRANCH)],
+          [], NBranch => BRANCH);
 }
 
 #[test]
@@ -206,17 +224,17 @@ binary!(
 #[test]
 fn test_cmp() {
     case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(branch Je_rel8_64, 0x1111_1111)],
-          [Rax = 0x1111_1111], NBranch => 0x1111_1111);
+           instruction!(branch Je_rel8_64, BRANCH)],
+          [Rax = 0x1111_1111], NBranch => BRANCH);
     case!([instruction!(Cmp_rm32_imm32, Register::EAX, 0x1111_1111),
-           instruction!(branch Je_rel8_64, 0x1111_1111)],
-          [Rax = 0x1111_1111], NBranch => 0x1111_1111);
+           instruction!(branch Je_rel8_64, BRANCH)],
+          [Rax = 0x1111_1111], NBranch => BRANCH);
     case!([instruction!(Cmp_rm16_imm16, Register::AX, 0x1111),
-           instruction!(branch Je_rel8_64, 0x1111_1111)],
-          [Rax = 0x1111], NBranch => 0x1111_1111);
+           instruction!(branch Je_rel8_64, BRANCH)],
+          [Rax = 0x1111], NBranch => BRANCH);
     case!([instruction!(Cmp_rm8_imm8, Register::AL, 0x11),
-           instruction!(branch Je_rel8_64, 0x1111_1111)],
-          [Rax = 0x11], NBranch => 0x1111_1111);
+           instruction!(branch Je_rel8_64, BRANCH)],
+          [Rax = 0x11], NBranch => BRANCH);
 }
 
 binary!(
@@ -246,17 +264,17 @@ binary!(
 #[test]
 fn test_test() {
     case!([instruction!(Test_rm64_imm32, Register::RAX, 0x00FF),
-           instruction!(branch Je_rel8_64, 0x1111_1111)],
-          [Rax = 0xFF00], NBranch => 0x1111_1111);
+           instruction!(branch Je_rel8_64, BRANCH)],
+          [Rax = 0xFF00], NBranch => BRANCH);
     case!([instruction!(Test_rm32_imm32, Register::EAX, 0x00FF),
-           instruction!(branch Je_rel8_64, 0x1111_1111)],
-          [Rax = 0xFF00], NBranch => 0x1111_1111);
+           instruction!(branch Je_rel8_64, BRANCH)],
+          [Rax = 0xFF00], NBranch => BRANCH);
     case!([instruction!(Test_rm16_imm16, Register::AX, 0x00FF),
-           instruction!(branch Je_rel8_64, 0x1111_1111)],
-          [Rax = 0xFF00], NBranch => 0x1111_1111);
+           instruction!(branch Je_rel8_64, BRANCH)],
+          [Rax = 0xFF00], NBranch => BRANCH);
     case!([instruction!(Test_rm8_imm8, Register::AL, 0x0F),
-           instruction!(branch Je_rel8_64, 0x1111_1111)],
-          [Rax = 0xF0], NBranch => 0x1111_1111);
+           instruction!(branch Je_rel8_64, BRANCH)],
+          [Rax = 0xF0], NBranch => BRANCH);
 }
 
 #[test]
@@ -477,6 +495,30 @@ fn test_movsx() {
           [Rax = 0xFFFF], Rbx => 0xFFFF_FFFF_FFFF_FFFF);
     case!([instruction!(Movsxd_r64_rm32, Register::RBX, Register::EAX)],
           [Rax = 0xFFFF_FFFF], Rbx => 0xFFFF_FFFF_FFFF_FFFF);
+}
+
+#[test]
+fn test_movups() {
+    let mut buf = [0u64; 4];
+
+    let base = buf.as_mut_ptr() as u64;
+
+    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x1111_1111_1111_1111u64),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base(Register::RCX),
+               Register::RAX),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base_displ(Register::RCX, 8),
+               Register::RAX),
+           instruction!(Movups_xmm_xmmm128, Register::XMM0,
+               MemoryOperand::with_base(Register::RCX)),
+           instruction!(Movups_xmm_xmmm128, Register::XMM1, Register::XMM0),
+           instruction!(Movups_xmmm128_xmm,
+               MemoryOperand::with_base_displ(Register::RCX, 16),
+               Register::XMM1),
+           instruction!(Mov_r64_rm64, Register::RBX,
+               MemoryOperand::with_base_displ(Register::RCX, 16))],
+          [Rcx = base], Rbx => 0x1111_1111_1111_1111);
 }
 
 #[test]

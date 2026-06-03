@@ -21,18 +21,23 @@ mod permutation;
 
 pub(crate) struct Executor {
     pub rt: Runtime,
-    pub mem: *mut c_void,
+    pub address: *mut c_void,
 }
 
-static TLS_STATE: OnceLock<u32> = OnceLock::new();
+static TLS_REGISTERS: OnceLock<u32> = OnceLock::new();
+static TLS_VECTORS: OnceLock<u32> = OnceLock::new();
 static TLS_KEY: OnceLock<u32> = OnceLock::new();
 static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
 
-fn initialize_tls() -> [(DataDef, u32); 3] {
+fn initialize_tls() -> [(DataDef, u32); 4] {
     [
         (
-            DataDef::VmStateTlsIndex,
-            *TLS_STATE.get_or_init(|| unsafe { TlsAlloc() }),
+            DataDef::VmRegistersTlsIndex,
+            *TLS_REGISTERS.get_or_init(|| unsafe { TlsAlloc() }),
+        ),
+        (
+            DataDef::VmVectorsTlsIndex,
+            *TLS_VECTORS.get_or_init(|| unsafe { TlsAlloc() }),
         ),
         (
             DataDef::VmKeyTlsIndex,
@@ -59,7 +64,7 @@ impl Executor {
         rt.define_data_qword(DataDef::VmKeyMul, Self::TEST_KEY_MUL);
         rt.define_data_qword(DataDef::VmKeyAdd, Self::TEST_KEY_ADD);
 
-        let mem = unsafe {
+        let address = unsafe {
             VirtualAlloc(
                 None,
                 Self::SIZE,
@@ -68,7 +73,7 @@ impl Executor {
             )
         };
 
-        Self { rt, mem }
+        Self { rt, address }
     }
 
     pub fn run(&mut self, setup: &[(VMReg, u64)], bytecode: &[u8]) -> [u64; VMReg::COUNT] {
@@ -89,7 +94,7 @@ impl Executor {
         // mov ecx, [...]
         self.rt
             .asm
-            .mov(ecx, ptr(self.rt.data_labels[&DataDef::VmStateTlsIndex]))
+            .mov(ecx, ptr(self.rt.data_labels[&DataDef::VmRegistersTlsIndex]))
             .unwrap();
         // mov rcx, [0x1480 + rcx*8]
         self.rt.asm.mov(rcx, ptr(0x1480 + rcx * 8).gs()).unwrap();
@@ -117,7 +122,7 @@ impl Executor {
         // mov esi, [...]
         self.rt
             .asm
-            .mov(esi, ptr(self.rt.data_labels[&DataDef::VmStateTlsIndex]))
+            .mov(esi, ptr(self.rt.data_labels[&DataDef::VmRegistersTlsIndex]))
             .unwrap();
         // mov rsi, [0x1480 + rsi*8]
         self.rt.asm.mov(rsi, ptr(0x1480 + rsi * 8).gs()).unwrap();
@@ -133,7 +138,7 @@ impl Executor {
 
         self.rt.define_data_bytes(DataDef::VmCode, bytecode);
 
-        let ip = self.mem as u64;
+        let ip = self.address as u64;
 
         let mut code = self.rt.assemble(ip);
 
@@ -145,10 +150,10 @@ impl Executor {
         assert!(code.len() <= Self::SIZE);
 
         unsafe {
-            ptr::copy_nonoverlapping(code.as_ptr(), self.mem as *mut u8, code.len());
+            ptr::copy_nonoverlapping(code.as_ptr(), self.address as *mut u8, code.len());
         }
 
-        let entry_point = unsafe { mem::transmute::<*mut c_void, extern "C" fn()>(self.mem) };
+        let entry_point = unsafe { mem::transmute::<*mut c_void, extern "C" fn()>(self.address) };
 
         entry_point();
 
@@ -159,7 +164,7 @@ impl Executor {
 impl Drop for Executor {
     fn drop(&mut self) {
         unsafe {
-            let _ = VirtualFree(self.mem, 0, MEM_RELEASE);
+            let _ = VirtualFree(self.address, 0, MEM_RELEASE);
         }
     }
 }

@@ -10,7 +10,7 @@ use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
     add, and, cmov, cmp, dec, imul, inc, jcc, lea, mov, movsx, movzx, mul, neg, not, or, pop, push,
-    rol, ror, sar, set, shl, shr, sub, test, xor,
+    rol, ror, sar, set, shl, shr, sub, test, vmov, xor,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -25,9 +25,11 @@ mapped! {
         LoadRegister,
         LoadMemory,
         LoadAddress,
+        LoadVector,
         // Store
         StoreRegister,
         StoreMemory,
+        StoreVector,
         // Arithmetic
         Add,
         Sub,
@@ -68,6 +70,7 @@ pub enum VMFlag {
 mapped! {
     VMReg {
         None,
+
         Rax,
         Rcx,
         Rdx,
@@ -85,6 +88,7 @@ mapped! {
         R14,
         R15,
         Flags,
+
         NEntry, // Native Entry
         NBranch, // Native Branch
         NExit, // Native Exit
@@ -95,6 +99,51 @@ mapped! {
         VImm, // Immediate Key
         VStack, // Virtual Stack
         VScratch, // Virtual Scratch
+    }
+}
+
+mapped! {
+    VMVec {
+        Ymm0,
+        Ymm1,
+        Ymm2,
+        Ymm3,
+        Ymm4,
+        Ymm5,
+        Ymm6,
+        Ymm7,
+        Ymm8,
+        Ymm9,
+        Ymm10,
+        Ymm11,
+        Ymm12,
+        Ymm13,
+        Ymm14,
+        Ymm15
+    }
+}
+
+impl From<Register> for VMVec {
+    fn from(reg: Register) -> Self {
+        match reg {
+            Register::XMM0 | Register::YMM0 => Self::Ymm0,
+            Register::XMM1 | Register::YMM1 => Self::Ymm1,
+            Register::XMM2 | Register::YMM2 => Self::Ymm2,
+            Register::XMM3 | Register::YMM3 => Self::Ymm3,
+            Register::XMM4 | Register::YMM4 => Self::Ymm4,
+            Register::XMM5 | Register::YMM5 => Self::Ymm5,
+            Register::XMM6 | Register::YMM6 => Self::Ymm6,
+            Register::XMM7 | Register::YMM7 => Self::Ymm7,
+            Register::XMM8 | Register::YMM8 => Self::Ymm8,
+            Register::XMM9 | Register::YMM9 => Self::Ymm9,
+            Register::XMM10 | Register::YMM10 => Self::Ymm10,
+            Register::XMM11 | Register::YMM11 => Self::Ymm11,
+            Register::XMM12 | Register::YMM12 => Self::Ymm12,
+            Register::XMM13 | Register::YMM13 => Self::Ymm13,
+            Register::XMM14 | Register::YMM14 => Self::Ymm14,
+            Register::XMM15 | Register::YMM15 => Self::Ymm15,
+            _ => panic!("unsupported register: {reg:?}"),
+        }
     }
 }
 
@@ -131,6 +180,8 @@ mapped! {
         Lower16,
         Lower32,
         Lower64,
+        Lower128,
+        Lower256,
         SLower8,
         SLower16,
         SLower32,
@@ -144,7 +195,13 @@ impl VMWidth {
             VMWidth::Lower16 | VMWidth::SLower16 => 2,
             VMWidth::Lower32 | VMWidth::SLower32 => 4,
             VMWidth::Lower64 => 8,
+            VMWidth::Lower128 => 16,
+            VMWidth::Lower256 => 32,
         }
+    }
+
+    pub fn slots(self) -> i32 {
+        (self.size() / 8).max(1) as i32
     }
 }
 
@@ -505,6 +562,9 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             Mnemonic::Imul => imul::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
             Mnemonic::Mov => mov::encode(instruction)?,
+            Mnemonic::Movaps | Mnemonic::Movups | Mnemonic::Movdqa | Mnemonic::Movdqu => {
+                vmov::encode(instruction)?
+            }
             Mnemonic::Movzx => movzx::encode(instruction)?,
             Mnemonic::Movsx | Mnemonic::Movsxd => movsx::encode(instruction)?,
             Mnemonic::Push => push::encode(instruction)?,

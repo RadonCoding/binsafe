@@ -3,7 +3,10 @@ use iced_x86::code_asm::{ecx, ptr, r12, r13, r8, rax, rcx, rdx, rsp};
 use crate::{
     mapper::Mappable,
     runtime::{DataDef, ImportDef, Runtime},
-    vm::{bytecode::VMReg, utils},
+    vm::{
+        bytecode::{VMReg, VMVec},
+        utils,
+    },
     VM_SCRATCH_SIZE, VM_STACK_SIZE,
 };
 
@@ -39,7 +42,23 @@ pub fn build(rt: &mut Runtime) {
 
     // mov ecx, [...]
     rt.asm
-        .mov(ecx, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(ecx, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
+        .unwrap();
+    // mov [0x1480 + rcx*8], rax
+    rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();
+
+    // mov rcx, r12
+    rt.asm.mov(rcx, r12).unwrap();
+    // mov rdx, 0x00000008 -> HEAP_ZERO_MEMORY
+    rt.asm.mov(rdx, 0x00000008u64).unwrap();
+    // mov r8, ...
+    rt.asm.mov(r8, (VMVec::COUNT * 32) as u64).unwrap();
+    // call r13
+    rt.asm.call(r13).unwrap();
+
+    // mov ecx, [...]
+    rt.asm
+        .mov(ecx, ptr(rt.data_labels[&DataDef::VmVectorsTlsIndex]))
         .unwrap();
     // mov [0x1480 + rcx*8], rax
     rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();
@@ -58,7 +77,7 @@ pub fn build(rt: &mut Runtime) {
 
     // mov ecx, [...]
     rt.asm
-        .mov(ecx, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(ecx, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov rcx, gs:[0x1480 + rcx*8]
     rt.asm.mov(rcx, ptr(0x1480 + rcx * 8).gs()).unwrap();
@@ -79,7 +98,7 @@ pub fn build(rt: &mut Runtime) {
 
     // mov ecx, [...]
     rt.asm
-        .mov(ecx, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(ecx, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov rcx, gs:[0x1480 + rcx*8]
     rt.asm.mov(rcx, ptr(0x1480 + rcx * 8).gs()).unwrap();

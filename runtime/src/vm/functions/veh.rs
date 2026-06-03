@@ -115,7 +115,7 @@ pub fn handler(rt: &mut Runtime) {
 
     // mov eax, [...]
     rt.asm
-        .mov(eax, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(eax, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov rax, gs:[0x1480 + rax*8]
     rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
