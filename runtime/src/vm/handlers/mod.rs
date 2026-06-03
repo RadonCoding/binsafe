@@ -40,7 +40,7 @@ macro_rules! __arithmetic {
             },
         );
     };
-    ($rt:expr, $operation:ident, cl, $epilogue:expr) => {
+    ($rt:expr, $operation:ident, shift, $epilogue:expr) => {
         $rt.asm.mov(cl, r8b).unwrap();
         $crate::vm::utils::width::dispatch_register(
             $rt,
@@ -72,6 +72,37 @@ macro_rules! __arithmetic {
             },
         );
     };
+    ($rt:expr, $operation:ident, bitscan, $epilogue:expr) => {
+        $crate::vm::utils::width::dispatch_register(
+            $rt,
+            al,
+            $epilogue,
+            |rt| {
+                rt.asm.$operation(r14, r8).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14d, r8d).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14w, r8w).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14w, r8w).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14w, r8w).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14d, r8d).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14w, r8w).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14w, r8w).unwrap();
+            },
+        );
+    };
 }
 
 #[macro_export]
@@ -89,6 +120,7 @@ macro_rules! arithmetic {
         // unsigned char* (unsigned long*, unsigned char*)
         pub fn build(rt: &mut Runtime) {
             let mut epilogue = rt.asm.create_label();
+
             // push r12
             stack::push(rt, r12);
             // push r13
@@ -148,8 +180,10 @@ macro_rules! multiply {
         };
         use iced_x86::code_asm::*;
 
+        // unsigned char* (unsigned long*, unsigned char*)
         pub fn build(rt: &mut Runtime) {
             let mut epilogue = rt.asm.create_label();
+
             // push r12
             stack::push(rt, r12);
             // push r13
@@ -309,6 +343,7 @@ pub mod load_register;
 pub mod load_vector;
 pub mod mul;
 pub mod or;
+pub mod pmovmskb;
 pub mod pop;
 pub mod push;
 pub mod ret;
@@ -322,6 +357,7 @@ pub mod store_register;
 pub mod store_vector;
 pub mod sub;
 pub mod test;
+pub mod tzcnt;
 pub mod xor;
 
 pub fn initialize(rt: &mut Runtime) {
@@ -349,9 +385,11 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::Sar, FnDef::VmHandlerSar),
         (VMOp::Mul, FnDef::VmHandlerMul),
         (VMOp::Imul, FnDef::VmHandlerImul),
+        (VMOp::Tzcnt, FnDef::VmHandlerTzcnt),
         (VMOp::Push, FnDef::VmHandlerPush),
         (VMOp::Pop, FnDef::VmHandlerPop),
         (VMOp::Discard, FnDef::VmHandlerDiscard),
+        (VMOp::Pmovmskb, FnDef::VmHandlerPmovmskb),
     ];
 
     let mut rng = rand::thread_rng();

@@ -9,8 +9,8 @@ use strum_macros::EnumIter;
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    add, and, branch, cmov, cmp, dec, imul, inc, lea, mov, movsx, movzx, mul, neg, not, or, pop,
-    push, rol, ror, sar, set, shl, shr, sub, test, vmov, xor,
+    add, and, branch, cmov, cmp, dec, imul, inc, lea, mov, movsx, movzx, mul, neg, not, or,
+    pmovmskb, pop, push, rol, ror, sar, set, shl, shr, sub, test, tzcnt, vmov, xor,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -44,6 +44,7 @@ mapped! {
         Sar,
         Mul,
         Imul,
+        Tzcnt,
         // Stack
         Push,
         Pop,
@@ -52,6 +53,8 @@ mapped! {
         Cmpxchg,
         Xadd,
         Xchg,
+        // Vector
+        Pmovmskb,
         // Nop
         Nop,
     }
@@ -564,6 +567,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             Mnemonic::Not => not::encode(instruction)?,
             Mnemonic::Mul => mul::encode(instruction)?,
             Mnemonic::Imul => imul::encode(instruction)?,
+            Mnemonic::Tzcnt => tzcnt::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
             Mnemonic::Mov => mov::encode(instruction)?,
             Mnemonic::Movaps
@@ -576,6 +580,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             Mnemonic::Movsx | Mnemonic::Movsxd => movsx::encode(instruction)?,
             Mnemonic::Push => push::encode(instruction)?,
             Mnemonic::Pop => pop::encode(instruction)?,
+            Mnemonic::Pmovmskb => pmovmskb::encode(instruction)?,
             Mnemonic::Seta
             | Mnemonic::Setae
             | Mnemonic::Setb
