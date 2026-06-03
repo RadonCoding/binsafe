@@ -60,6 +60,7 @@ mapped! {
         VmHandlerPop,
         VmHandlerDiscard,
         VmHandlerPmovmskb,
+        VmHandlerPcmpeqb,
         /* VM ARITHMETIC */
         VmFlags,
         /* VM VEH */
@@ -382,6 +383,7 @@ impl Runtime {
             (FnDef::VmHandlerPop, vm::handlers::pop::build),
             (FnDef::VmHandlerDiscard, vm::handlers::discard::build),
             (FnDef::VmHandlerPmovmskb, vm::handlers::pmovmskb::build),
+            (FnDef::VmHandlerPcmpeqb, vm::handlers::pcmpeqb::build),
             (FnDef::VmFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (

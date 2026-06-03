@@ -343,6 +343,7 @@ pub mod load_register;
 pub mod load_vector;
 pub mod mul;
 pub mod or;
+pub mod pcmpeqb;
 pub mod pmovmskb;
 pub mod pop;
 pub mod push;
@@ -390,6 +391,7 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::Pop, FnDef::VmHandlerPop),
         (VMOp::Discard, FnDef::VmHandlerDiscard),
         (VMOp::Pmovmskb, FnDef::VmHandlerPmovmskb),
+        (VMOp::Pcmpeqb, FnDef::VmHandlerPcmpeqb),
     ];
 
     let mut rng = rand::thread_rng();

@@ -2,27 +2,7 @@ use iced_x86::{Instruction, MemoryOperand, Register};
 use rand::Rng;
 use runtime::vm::bytecode::{self, VMFlag, VMReg};
 
-use crate::{decrypt, encrypt, instruction, Executor};
-
-use std::ffi::c_void;
-use std::sync::Once;
-use windows::Win32::System::Memory::{VirtualAlloc, MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE};
-
-/// Fake, mapped region every virtualized branch target points at, so the dispatch
-/// trampoline can read `[NBranch]` without faulting on unmapped memory.
-const BRANCH: u64 = 0x1111_1111;
-
-fn map_branch() {
-    static ONCE: Once = Once::new();
-    ONCE.call_once(|| unsafe {
-        let _ = VirtualAlloc(
-            Some((BRANCH & !0xFFFF) as *const c_void),
-            0x10000,
-            MEM_COMMIT | MEM_RESERVE,
-            PAGE_READWRITE,
-        );
-    });
-}
+use crate::{decrypt, encrypt, instruction, Executor, BRANCH};
 
 fn template(instructions: &[Instruction], setup: &[(VMReg, u64)], target: VMReg, expected: u64) {
     let mut executor = Executor::new();
@@ -37,8 +17,6 @@ fn template(instructions: &[Instruction], setup: &[(VMReg, u64)], target: VMReg,
     .bytes;
 
     encrypt(&mut bytecode);
-
-    map_branch();
 
     let state = executor.run(setup, &bytecode);
 
@@ -527,18 +505,51 @@ fn test_pmovmskb() {
 
     let base = buf.as_mut_ptr() as u64;
 
-    case!([instruction!(Mov_r64_imm64, Register::RAX, 0xFF00FF00FF00FF00u64),
+    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x0000_0000_0000_0000u64),
            instruction!(Mov_rm64_r64,
                MemoryOperand::with_base(Register::RCX),
                Register::RAX),
-           instruction!(Mov_r64_imm64, Register::RAX, 0x00FF00FF00FF00FFu64),
+           instruction!(Mov_r64_imm64, Register::RAX, 0xFFFF_FFFF_FFFF_FFFFu64),
            instruction!(Mov_rm64_r64,
                MemoryOperand::with_base_displ(Register::RCX, 8),
                Register::RAX),
            instruction!(Movups_xmm_xmmm128, Register::XMM0,
                MemoryOperand::with_base(Register::RCX)),
            instruction!(Pmovmskb_r32_xmm, Register::EAX, Register::XMM0)],
-          [Rcx = base], Rax => 0x55AA);
+          [Rcx = base], Rax => 0xFF00);
+}
+
+#[test]
+fn test_pcmpeqb() {
+    let mut buf = [0u64; 6];
+
+    let base = buf.as_mut_ptr() as u64;
+
+    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x1111_1111_1111_1111u64),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base(Register::RCX),
+               Register::RAX),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base_displ(Register::RCX, 8),
+               Register::RAX),
+           instruction!(Mov_r64_imm64, Register::RAX, 0x1111_1111_0000_0000u64),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base_displ(Register::RCX, 16),
+               Register::RAX),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base_displ(Register::RCX, 24),
+               Register::RAX),
+           instruction!(Movups_xmm_xmmm128, Register::XMM0,
+               MemoryOperand::with_base(Register::RCX)),
+           instruction!(Movups_xmm_xmmm128, Register::XMM1,
+               MemoryOperand::with_base_displ(Register::RCX, 16)),
+           instruction!(Pcmpeqb_xmm_xmmm128, Register::XMM0, Register::XMM1),
+           instruction!(Movups_xmmm128_xmm,
+               MemoryOperand::with_base_displ(Register::RCX, 32),
+               Register::XMM0),
+           instruction!(Mov_r64_rm64, Register::RBX,
+               MemoryOperand::with_base_displ(Register::RCX, 32))],
+          [Rcx = base], Rbx => 0xFFFF_FFFF_0000_0000u64);
 }
 
 #[test]
