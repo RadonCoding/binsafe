@@ -12,13 +12,15 @@ pub mod dispatch;
 pub mod entry;
 pub mod exit;
 pub mod ginit;
+pub mod registers;
 pub mod tinit;
+pub mod vectors;
 pub mod veh;
 
 pub fn initialize(rt: &mut Runtime) {
     // mov eax, [...]
     rt.asm
-        .mov(eax, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(eax, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov rax, [0x1480 + rcx*8]
     rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();

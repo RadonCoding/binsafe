@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{ptr, r11, r11d, AsmRegister64};
+use iced_x86::code_asm::{ptr, r11, r11d, AsmRegister64, AsmRegisterXmm, AsmRegisterYmm};
 
 use crate::{
     runtime::{DataDef, Runtime},
@@ -8,11 +8,11 @@ use crate::{
 pub fn store(rt: &mut Runtime, src: AsmRegister64) {
     // mov r11d, [...]
     rt.asm
-        .mov(r11d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r11, gs:[0x1480 + r11*8]
     rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
-    // sub qword [r11 + ...], 0x8
+    // sub [r11 + ...], 0x8
     vreg::sub_imm(rt, r11, 0x8, VMReg::VScratch);
     // mov r11, [r11 + ...]
     vreg::load_reg(rt, r11, VMReg::VScratch, r11);
@@ -23,14 +23,74 @@ pub fn store(rt: &mut Runtime, src: AsmRegister64) {
 pub fn load(rt: &mut Runtime, dst: AsmRegister64) {
     // mov r11d, [...]
     rt.asm
-        .mov(r11d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r11, gs:[0x1480 + r11*8]
     rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
-    // add qword [r11 + ...], 0x8
+    // add [r11 + ...], 0x8
     vreg::add_imm(rt, r11, 0x8, VMReg::VScratch);
     // mov r11, [r11 + ...]
     vreg::load_reg(rt, r11, VMReg::VScratch, r11);
     // mov ..., [r11 - 0x8]
     rt.asm.mov(dst, ptr(r11 - 0x8)).unwrap();
+}
+
+pub fn store_128(rt: &mut Runtime, src: AsmRegisterXmm) {
+    // mov r11d, [...]
+    rt.asm
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
+        .unwrap();
+    // mov r11, gs:[0x1480 + r11*8]
+    rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
+    // sub [r11 + ...], 0x10
+    vreg::sub_imm(rt, r11, 0x10, VMReg::VScratch);
+    // mov r11, [r11 + ...]
+    vreg::load_reg(rt, r11, VMReg::VScratch, r11);
+    // movups [r11], ...
+    rt.asm.movups(ptr(r11), src).unwrap();
+}
+
+pub fn load_128(rt: &mut Runtime, dst: AsmRegisterXmm) {
+    // mov r11d, [...]
+    rt.asm
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
+        .unwrap();
+    // mov r11, gs:[0x1480 + r11*8]
+    rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
+    // add [r11 + ...], 0x10
+    vreg::add_imm(rt, r11, 0x10, VMReg::VScratch);
+    // mov r11, [r11 + ...]
+    vreg::load_reg(rt, r11, VMReg::VScratch, r11);
+    // movups ..., [r11 - 0x10]
+    rt.asm.movups(dst, ptr(r11 - 0x10)).unwrap();
+}
+
+pub fn store_256(rt: &mut Runtime, src: AsmRegisterYmm) {
+    // mov r11d, [...]
+    rt.asm
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
+        .unwrap();
+    // mov r11, gs:[0x1480 + r11*8]
+    rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
+    // sub [r11 + ...], 0x20
+    vreg::sub_imm(rt, r11, 0x20, VMReg::VScratch);
+    // mov r11, [r11 + ...]
+    vreg::load_reg(rt, r11, VMReg::VScratch, r11);
+    // vmovups [r11], ...
+    rt.asm.vmovups(ptr(r11), src).unwrap();
+}
+
+pub fn load_256(rt: &mut Runtime, dst: AsmRegisterYmm) {
+    // mov r11d, [...]
+    rt.asm
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
+        .unwrap();
+    // mov r11, gs:[0x1480 + r11*8]
+    rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
+    // add [r11 + ...], 0x20
+    vreg::add_imm(rt, r11, 0x20, VMReg::VScratch);
+    // mov r11, [r11 + ...]
+    vreg::load_reg(rt, r11, VMReg::VScratch, r11);
+    // vmovups ..., [r11 - 0x20]
+    rt.asm.vmovups(dst, ptr(r11 - 0x20)).unwrap();
 }

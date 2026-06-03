@@ -5,4 +5,5 @@ pub mod lock;
 pub mod scratch;
 pub mod stack;
 pub mod vreg;
+pub mod vvec;
 pub mod width;

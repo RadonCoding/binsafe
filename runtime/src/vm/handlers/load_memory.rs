@@ -1,12 +1,16 @@
-use iced_x86::code_asm::{al, byte_ptr, dword_ptr, ptr, r8, r9, r9d, rax, rdx, word_ptr};
+use iced_x86::code_asm::{al, byte_ptr, dword_ptr, ptr, r8, r9, r9d, rax, rdx, word_ptr, xmm0};
 
 use crate::{
     runtime::Runtime,
-    vm::utils::{self, scratch, stack},
+    vm::{
+        bytecode::VMWidth,
+        utils::{self, scratch, stack},
+    },
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
+    let mut vector = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // al -> width
@@ -15,7 +19,14 @@ pub fn build(rt: &mut Runtime) {
     // load r8
     scratch::load(rt, r8);
 
-    utils::width::dispatch(
+    // cmp al, ...
+    rt.asm
+        .cmp(al, rt.mapper.index(VMWidth::Lower128) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(vector).unwrap();
+
+    utils::width::dispatch_register(
         rt,
         al,
         &mut epilogue,
@@ -57,6 +68,19 @@ pub fn build(rt: &mut Runtime) {
     {
         // store r9
         scratch::store(rt, r9);
+
+        // mov rax, rdx
+        rt.asm.mov(rax, rdx).unwrap();
+        // ret
+        stack::ret(rt);
+    }
+
+    rt.asm.set_label(&mut vector).unwrap();
+    {
+        // movups xmm0, [r8]
+        rt.asm.movups(xmm0, ptr(r8)).unwrap();
+        // store xmm0
+        scratch::store_128(rt, xmm0);
 
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();

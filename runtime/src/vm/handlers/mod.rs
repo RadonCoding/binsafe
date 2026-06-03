@@ -10,7 +10,7 @@ use crate::{
 #[macro_export]
 macro_rules! __arithmetic {
     ($rt:expr, $operation:ident, r8, $epilogue:expr) => {
-        $crate::vm::utils::width::dispatch(
+        $crate::vm::utils::width::dispatch_register(
             $rt,
             al,
             $epilogue,
@@ -42,7 +42,7 @@ macro_rules! __arithmetic {
     };
     ($rt:expr, $operation:ident, cl, $epilogue:expr) => {
         $rt.asm.mov(cl, r8b).unwrap();
-        $crate::vm::utils::width::dispatch(
+        $crate::vm::utils::width::dispatch_register(
             $rt,
             al,
             $epilogue,
@@ -172,7 +172,7 @@ macro_rules! multiply {
             // load r14
             scratch::load(rt, r14);
 
-            utils::width::dispatch(
+            utils::width::dispatch_register(
                 rt,
                 al,
                 &mut epilogue,
@@ -306,6 +306,7 @@ pub mod load_address;
 pub mod load_immediate;
 pub mod load_memory;
 pub mod load_register;
+pub mod load_vector;
 pub mod mul;
 pub mod or;
 pub mod pop;
@@ -318,6 +319,7 @@ pub mod shl;
 pub mod shr;
 pub mod store_memory;
 pub mod store_register;
+pub mod store_vector;
 pub mod sub;
 pub mod test;
 pub mod xor;
@@ -332,6 +334,8 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::LoadAddress, FnDef::VmHandlerLoadAddress),
         (VMOp::StoreRegister, FnDef::VmHandlerStoreRegister),
         (VMOp::StoreMemory, FnDef::VmHandlerStoreMemory),
+        (VMOp::LoadVector, FnDef::VmHandlerLoadVector),
+        (VMOp::StoreVector, FnDef::VmHandlerStoreVector),
         (VMOp::Add, FnDef::VmHandlerAdd),
         (VMOp::Sub, FnDef::VmHandlerSub),
         (VMOp::And, FnDef::VmHandlerAnd),
@@ -355,7 +359,7 @@ pub fn initialize(rt: &mut Runtime) {
 
     // mov eax, [...]
     rt.asm
-        .mov(eax, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(eax, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov rax, [0x1480 + rcx*8]
     rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();

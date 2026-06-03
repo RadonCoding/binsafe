@@ -1,8 +1,8 @@
 use iced_x86::code_asm::{ptr, r12, r12d, rsp};
 
 use crate::{
-    runtime::{DataDef, Runtime},
-    vm::{bytecode::VMReg, utils, VIRTUAL_TO_NATIVE},
+    runtime::{DataDef, FnDef, Runtime},
+    vm::{bytecode::VMReg, utils},
 };
 
 pub fn build(rt: &mut Runtime) {
@@ -11,7 +11,7 @@ pub fn build(rt: &mut Runtime) {
 
     // mov r12d, [...]
     rt.asm
-        .mov(r12d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r12d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r12, gs:[0x1480 + r12*8]
     rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
@@ -19,15 +19,14 @@ pub fn build(rt: &mut Runtime) {
     // mov rsp, [r12 + ...]
     utils::vreg::load_reg(rt, r12, VMReg::Rsp, rsp);
 
-    // push [r12 + ...]
-    utils::vreg::push(rt, r12, VMReg::Flags);
-    // popfq
-    rt.asm.popfq().unwrap();
-
-    for (src, dst) in VIRTUAL_TO_NATIVE {
-        // mov ...,  [r12 + ...]
-        utils::vreg::load_reg(rt, r12, *src, *dst);
-    }
+    // call ...
+    rt.asm
+        .call(rt.func_labels[&FnDef::VmVectorsRestore])
+        .unwrap();
+    // call ...
+    rt.asm
+        .call(rt.func_labels[&FnDef::VmRegistersRestore])
+        .unwrap();
 
     // cmp [r12 + ...], 0x0
     utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
@@ -47,6 +46,11 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
+        // push [r12 + ...]
+        utils::vreg::push(rt, r12, VMReg::Flags);
+        // popfq
+        rt.asm.popfq().unwrap();
+
         // mov r12, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::R12, r12);
 

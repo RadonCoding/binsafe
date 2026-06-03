@@ -16,9 +16,9 @@ pub fn build(rt: &mut Runtime) {
     let mut setup_block = rt.asm.create_label();
     let mut start_block = rt.asm.create_label();
     let mut execute_loop = rt.asm.create_label();
-    let mut check_branch = rt.asm.create_label();
+    let mut check_loop = rt.asm.create_label();
+    let mut check_exit = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
-    let mut exit = rt.asm.create_label();
 
     // push r12
     stack::push(rt, r12);
@@ -70,7 +70,7 @@ pub fn build(rt: &mut Runtime) {
         // cmp r13, r14
         rt.asm.cmp(r13, r14).unwrap();
         // je ...
-        rt.asm.je(check_branch).unwrap();
+        rt.asm.je(check_loop).unwrap();
 
         // r8d -> operation
         utils::bytecode::read_byte_zx(rt, r13, r8d);
@@ -96,19 +96,19 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jmp(execute_loop).unwrap();
     }
 
-    rt.asm.set_label(&mut check_branch).unwrap();
+    rt.asm.set_label(&mut check_loop).unwrap();
     {
         // cmp [r12 + ...], 0x0
         utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
         // je ...
-        rt.asm.je(epilogue).unwrap();
+        rt.asm.je(check_exit).unwrap();
 
         // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NEntry, rax);
         // cmp [r12 + ...],
         utils::vreg::cmp_reg(rt, r12, VMReg::NBranch, rax);
         // jne ...
-        rt.asm.jne(epilogue).unwrap();
+        rt.asm.jne(check_exit).unwrap();
 
         // If the branch points to the native entry then re-execute the block:
         // mov r13, [...]
@@ -117,7 +117,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jmp(start_block).unwrap();
     }
 
-    rt.asm.set_label(&mut epilogue).unwrap();
+    rt.asm.set_label(&mut check_exit).unwrap();
     {
         // Re-encrypt the current block:
         // mov rcx, [r12 + ...]
@@ -133,14 +133,14 @@ pub fn build(rt: &mut Runtime) {
         // cmp [r12 + ...], 0x0
         utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
         // je ...
-        rt.asm.je(exit).unwrap();
+        rt.asm.je(epilogue).unwrap();
 
         // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NBranch, rax);
         // cmp byte [rax], 0x68
         rt.asm.cmp(byte_ptr(rax), 0x68).unwrap();
         // jne ...
-        rt.asm.jne(exit).unwrap();
+        rt.asm.jne(epilogue).unwrap();
 
         // mov ecx, [rax + 0x1]
         rt.asm.mov(ecx, ptr(rax + 0x1)).unwrap();
@@ -193,7 +193,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jmp(setup_block).unwrap();
     }
 
-    rt.asm.set_label(&mut exit).unwrap();
+    rt.asm.set_label(&mut epilogue).unwrap();
     {
         // pop r14
         stack::pop(rt, r14);

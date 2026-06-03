@@ -4,7 +4,7 @@ use std::mem;
 use std::rc::Rc;
 
 use crate::mapper::Mappable;
-use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
+use crate::vm::bytecode::{VMMem, VMReg, VMVec, VMWidth};
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
@@ -22,6 +22,8 @@ struct Access {
 struct Profile {
     register_reads: u64,
     register_writes: u64,
+    vector_reads: u32,
+    vector_writes: u32,
     memory_reads: bool,
     memory_writes: bool,
     accesses: Option<Vec<Access>>,
@@ -363,6 +365,8 @@ fn schedule(mut atoms: Vec<Vec<Rc<dyn Encode>>>, order: &[usize]) -> Vec<Rc<dyn 
 fn profile(atom: &Vec<Rc<dyn Encode>>) -> Profile {
     let mut register_reads = 0;
     let mut register_writes = 0;
+    let mut vector_reads = 0;
+    let mut vector_writes = 0;
     let mut memory_reads = false;
     let mut memory_writes = false;
 
@@ -370,6 +374,7 @@ fn profile(atom: &Vec<Rc<dyn Encode>>) -> Profile {
         for effect in op.reads() {
             match effect {
                 Effect::Register(r) if r != VMReg::None => register_reads |= bit(r),
+                Effect::Vector(v) => vector_reads |= vector_bit(v),
                 Effect::Memory => memory_reads = true,
                 _ => {}
             }
@@ -378,6 +383,7 @@ fn profile(atom: &Vec<Rc<dyn Encode>>) -> Profile {
         for effect in op.writes() {
             match effect {
                 Effect::Register(r) if r != VMReg::None => register_writes |= bit(r),
+                Effect::Vector(v) => vector_writes |= vector_bit(v),
                 Effect::Memory => memory_writes = true,
                 _ => {}
             }
@@ -387,6 +393,8 @@ fn profile(atom: &Vec<Rc<dyn Encode>>) -> Profile {
     Profile {
         register_reads,
         register_writes,
+        vector_reads,
+        vector_writes,
         memory_reads,
         memory_writes,
         accesses: accesses(atom),
@@ -398,6 +406,9 @@ fn conflicts(a: &Profile, b: &Profile) -> bool {
     (a.register_writes & b.register_reads) != 0
         || (a.register_reads & b.register_writes) != 0
         || (a.register_writes & b.register_writes) != 0
+        || (a.vector_writes & b.vector_reads) != 0
+        || (a.vector_reads & b.vector_writes) != 0
+        || (a.vector_writes & b.vector_writes) != 0
         || memory(a, b)
 }
 
@@ -415,6 +426,11 @@ fn memory(a: &Profile, b: &Profile) -> bool {
 /// Bit position assigned to a [`VMReg`] inside the register bitmask.
 fn bit(reg: VMReg) -> u64 {
     1u64 << VMReg::VARIANTS.iter().position(|&r| r == reg).unwrap()
+}
+
+/// Bit position assigned to a [`VMVec`] inside the vector bitmask.
+fn vector_bit(vec: VMVec) -> u32 {
+    1u32 << VMVec::VARIANTS.iter().position(|&v| v == vec).unwrap()
 }
 
 /// Pairs each [`LoadMemory`]/[`StoreMemory`] with its preceding [`LoadAddress`] to extract concrete addressed accesses.
@@ -485,7 +501,11 @@ fn branches(atom: &Vec<Rc<dyn Encode>>) -> bool {
 
 /// Byte width of a [`VMWidth`].
 fn bytes(width: VMWidth) -> i64 {
-    if width == VMWidth::Lower64 {
+    if width == VMWidth::Lower256 {
+        32
+    } else if width == VMWidth::Lower128 {
+        16
+    } else if width == VMWidth::Lower64 {
         8
     } else if width == VMWidth::Lower32 || width == VMWidth::SLower32 {
         4

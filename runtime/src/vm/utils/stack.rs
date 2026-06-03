@@ -10,7 +10,7 @@ use crate::{
 pub fn push(rt: &mut Runtime, src: AsmRegister64) {
     // mov r11d, [...]
     rt.asm
-        .mov(r11d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r11, gs:[0x1480 + r11*8]
     rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
@@ -25,7 +25,7 @@ pub fn push(rt: &mut Runtime, src: AsmRegister64) {
 pub fn pop(rt: &mut Runtime, dst: AsmRegister64) {
     // mov r11d, [...]
     rt.asm
-        .mov(r11d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r11, gs:[0x1480 + r11*8]
     rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
@@ -46,7 +46,7 @@ where
 
     // mov r11d, [...]
     rt.asm
-        .mov(r11d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r11, gs:[0x1480 + r11*8]
     rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
@@ -57,7 +57,7 @@ where
 
     // mov r11d, [...]
     rt.asm
-        .mov(r11d, ptr(rt.data_labels[&DataDef::VmStateTlsIndex]))
+        .mov(r11d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
     // mov r11, gs:[0x1480 + r11*8]
     rt.asm.mov(r11, ptr(0x1480 + r11 * 8).gs()).unwrap();
@@ -82,6 +82,7 @@ where
     let mut ret = rt.asm.create_label();
     call_with_label(rt, target, &mut ret);
     rt.asm.set_label(&mut ret).unwrap();
+    rt.asm.zero_bytes().unwrap();
 }
 
 pub fn call_with_label<T>(rt: &mut Runtime, target: T, ret: &CodeLabel)

@@ -15,4 +15,8 @@ impl Encode for LoadMemory {
     fn reads(&self) -> Vec<super::Effect> {
         vec![Effect::Memory]
     }
+
+    fn depth(&self) -> i32 {
+        self.width.slots() - 1
+    }
 }

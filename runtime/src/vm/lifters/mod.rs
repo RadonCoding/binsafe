@@ -31,6 +31,7 @@ pub mod shr;
 pub mod sub;
 pub mod test;
 pub mod unary;
+pub mod vmov;
 pub mod xor;
 
 fn operation_width(instruction: &Instruction, kind: OpKind) -> Option<VMWidth> {
