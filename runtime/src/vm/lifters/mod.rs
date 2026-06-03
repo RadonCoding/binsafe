@@ -5,12 +5,12 @@ use crate::vm::bytecode::VMWidth;
 pub mod add;
 pub mod and;
 pub mod arithmetic;
+pub mod branch;
 pub mod cmov;
 pub mod cmp;
 pub mod dec;
 pub mod imul;
 pub mod inc;
-pub mod jcc;
 pub mod lea;
 pub mod mov;
 pub mod movsx;
@@ -42,7 +42,7 @@ fn operation_width(instruction: &Instruction, kind: OpKind) -> Option<VMWidth> {
             2 => Some(VMWidth::Lower16),
             4 => Some(VMWidth::Lower32),
             8 => Some(VMWidth::Lower64),
-            _ => None,
+            _ => panic!("unsupported code: {:?}", instruction.code()),
         },
         kind if is_immediate(kind) => Some(match operation_immediate(instruction, kind) {
             0..=0xFF => VMWidth::Lower8,
@@ -50,7 +50,7 @@ fn operation_width(instruction: &Instruction, kind: OpKind) -> Option<VMWidth> {
             0..=0xFFFFFFFF => VMWidth::Lower32,
             _ => VMWidth::Lower64,
         }),
-        _ => None,
+        _ => unreachable!(),
     }
 }
 

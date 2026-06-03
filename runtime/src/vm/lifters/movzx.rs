@@ -11,7 +11,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let source_width = match instruction.code() {
         Code::Movzx_r16_rm8 | Code::Movzx_r32_rm8 | Code::Movzx_r64_rm8 => VMWidth::Lower8,
         Code::Movzx_r16_rm16 | Code::Movzx_r32_rm16 | Code::Movzx_r64_rm16 => VMWidth::Lower16,
-        _ => return None,
+        _ => panic!("unsupported code: {:?}", instruction.code()),
     };
 
     let destination_width = match VMWidth::from(instruction.op0_register()) {
@@ -38,7 +38,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                 width: source_width,
             }));
         }
-        _ => return None,
+        _ => unreachable!(),
     }
 
     operations.push(Rc::new(StoreRegister {

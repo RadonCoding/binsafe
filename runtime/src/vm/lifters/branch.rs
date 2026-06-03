@@ -1,5 +1,5 @@
-use std::rc::Rc;
 use iced_x86::{Code, Instruction, OpKind};
+use std::rc::Rc;
 
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMTest, VMWidth};
 use crate::vm::encoders::load_address::LoadAddress;
@@ -32,7 +32,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                 }),
                 Rc::new(Jcc::jump()),
             ]),
-            _ => None,
+            _ => unreachable!(),
         },
 
         Code::Jmp_rel32_64 | Code::Jmp_rel8_64 => {
@@ -91,7 +91,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                 }),
                 Rc::new(Jcc::call()),
             ]),
-            _ => None,
+            _ => unreachable!(),
         },
 
         _ => {
@@ -162,10 +162,8 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                 }
                 // JS = SF=1
                 Code::Js_rel32_64 | Code::Js_rel8_64 => (VMLogic::JAND, vec![cmp(VMFlag::Sign, 1)]),
-                _ => return None,
+                _ => panic!("unsupported code: {code:?}"),
             };
-
-            // TODO: Mutation of conditions to equilavent logic
 
             Some(vec![
                 Rc::new(LoadAddress {

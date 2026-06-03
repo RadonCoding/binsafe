@@ -9,7 +9,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         Code::Lea_r64_m => VMWidth::Lower64,
         Code::Lea_r32_m => VMWidth::Lower32,
         Code::Lea_r16_m => VMWidth::Lower16,
-        _ => return None,
+        _ => panic!("unsupported code: {:?}", instruction.code()),
     };
 
     let destination_register = VMReg::from(instruction.op0_register());

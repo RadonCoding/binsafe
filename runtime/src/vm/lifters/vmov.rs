@@ -13,6 +13,8 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     match code {
         Code::Movaps_xmm_xmmm128
         | Code::Movups_xmm_xmmm128
+        | Code::Movapd_xmm_xmmm128
+        | Code::Movupd_xmm_xmmm128
         | Code::Movdqa_xmm_xmmm128
         | Code::Movdqu_xmm_xmmm128 => {
             let destination = VMVec::from(instruction.op0_register());
@@ -34,7 +36,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                         width: VMWidth::Lower128,
                     }));
                 }
-                _ => return None,
+                _ => unreachable!(),
             }
 
             operations.push(Rc::new(StoreVector {
@@ -47,6 +49,8 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
 
         Code::Movaps_xmmm128_xmm
         | Code::Movups_xmmm128_xmm
+        | Code::Movapd_xmmm128_xmm
+        | Code::Movupd_xmmm128_xmm
         | Code::Movdqa_xmmm128_xmm
         | Code::Movdqu_xmmm128_xmm => {
             let source = VMVec::from(instruction.op1_register());
@@ -72,12 +76,12 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                         width: VMWidth::Lower128,
                     }));
                 }
-                _ => return None,
+                _ => unreachable!(),
             }
 
             Some(operations)
         }
 
-        _ => None,
+        _ => panic!("unsupported code: {code:?}"),
     }
 }

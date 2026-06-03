@@ -27,7 +27,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                 width: VMWidth::Lower64,
             }));
         }
-        _ => return None,
+        _ => unreachable!(),
     }
 
     Some(operations)

@@ -5,7 +5,7 @@ use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMFlag, VMLogic};
 use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::Encode;
-use crate::vm::lifters::jcc::{cmp, eq, neq};
+use crate::vm::lifters::branch::{cmp, eq, neq};
 use crate::vm::lifters::mov;
 
 pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
@@ -64,7 +64,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
         Code::Cmovs_r16_rm16 | Code::Cmovs_r32_rm32 | Code::Cmovs_r64_rm64 => {
             (VMLogic::SAND, vec![cmp(VMFlag::Sign, 0)])
         }
-        _ => return None,
+        _ => panic!("unsupported code: {:?}", instruction.code()),
     };
 
     let body = mov::r_rm(instruction)?;

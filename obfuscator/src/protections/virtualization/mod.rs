@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::{i32, mem};
 
@@ -7,6 +7,7 @@ use crate::protections::Protection;
 use exe::Buffer;
 use exe::{PE, RVA};
 use iced_x86::code_asm::CodeAssembler;
+use iced_x86::Mnemonic;
 use logger::info;
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
@@ -41,6 +42,8 @@ pub struct Virtualization {
     keys: Keys,
     vblocks: HashMap<u32, usize>,
     duplicates: usize,
+    blocked: usize,
+    missing: HashMap<Mnemonic, usize>,
 }
 
 impl Virtualization {
@@ -112,7 +115,26 @@ impl Protection for Virtualization {
 
             let lifted = match bytecode::lift(&mut engine.rt.mapper, &block.instructions) {
                 Some(ops) if !ops.is_empty() => ops,
-                _ => continue 'outer,
+                _ => {
+                    self.blocked += 1;
+
+                    let mut seen = HashSet::new();
+
+                    for instruction in &block.instructions {
+                        let mnemonic = instruction.mnemonic();
+
+                        if !seen.insert(mnemonic) {
+                            continue;
+                        }
+
+                        if bytecode::lift(&mut engine.rt.mapper, std::slice::from_ref(instruction))
+                            .is_none()
+                        {
+                            *self.missing.entry(mnemonic).or_default() += 1;
+                        }
+                    }
+                    continue 'outer;
+                }
             };
 
             let vblock = bytecode::assemble(&mut engine.rt.mapper, &lifted);
@@ -236,13 +258,28 @@ impl Protection for Virtualization {
             engine.replace(i, &dispatch2);
         }
 
-        let total = engine.blocks.len();
-        let virtualized = self.vblocks.len();
-        let percentage = (virtualized as f64 / total.max(1) as f64) * 100.0;
-
         info!(
             "VIRTUALIZED: {}/{} blocks ({:.2}%) [duplicates: {}]",
-            virtualized, total, percentage, self.duplicates
+            self.vblocks.len(),
+            engine.blocks.len(),
+            (self.vblocks.len() as f64 / engine.blocks.len().max(1) as f64) * 100.0,
+            self.duplicates
         );
+
+        if self.blocked > 0 {
+            info!(
+                "MISSING: {}/{} blocks ({:.2}%)",
+                self.blocked,
+                engine.blocks.len(),
+                (self.blocked as f64 / engine.blocks.len().max(1) as f64) * 100.0
+            );
+
+            let mut causes = self.missing.iter().collect::<Vec<(&Mnemonic, &usize)>>();
+            causes.sort_by(|a, b| b.1.cmp(a.1));
+
+            for (mnemonic, count) in causes {
+                info!("    {} x {:?}", count, mnemonic);
+            }
+        }
     }
 }

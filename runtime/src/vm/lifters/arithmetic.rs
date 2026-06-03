@@ -40,7 +40,7 @@ pub fn encode<O: Encode + 'static>(
             }));
             operations.push(Rc::new(LoadMemory { width }));
         }
-        _ => return None,
+        _ => unreachable!(),
     }
 
     match op1_kind {
@@ -66,7 +66,7 @@ pub fn encode<O: Encode + 'static>(
                 source: immediate.to_le_bytes()[..immediate_width.size()].to_vec(),
             }));
         }
-        _ => return None,
+        _ => unreachable!(),
     }
 
     operations.push(Rc::new(make(width)));

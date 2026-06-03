@@ -34,7 +34,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                 source: immediate.to_le_bytes()[..immediate_width.size()].to_vec(),
             }));
         }
-        _ => return None,
+        _ => unreachable!(),
     }
 
     operations.push(Rc::new(Push));
