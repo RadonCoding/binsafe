@@ -1,1 +1,1 @@
-crate::vm::handlers::arithmetic!(sar, cl);
+crate::vm::handlers::arithmetic!(sar, shift);

@@ -55,9 +55,11 @@ mapped! {
         VmHandlerSar,
         VmHandlerMul,
         VmHandlerImul,
+        VmHandlerTzcnt,
         VmHandlerPush,
         VmHandlerPop,
         VmHandlerDiscard,
+        VmHandlerPmovmskb,
         /* VM ARITHMETIC */
         VmFlags,
         /* VM VEH */
@@ -375,9 +377,11 @@ impl Runtime {
             (FnDef::VmHandlerSar, vm::handlers::sar::build),
             (FnDef::VmHandlerMul, vm::handlers::mul::build),
             (FnDef::VmHandlerImul, vm::handlers::imul::build),
+            (FnDef::VmHandlerTzcnt, vm::handlers::tzcnt::build),
             (FnDef::VmHandlerPush, vm::handlers::push::build),
             (FnDef::VmHandlerPop, vm::handlers::pop::build),
             (FnDef::VmHandlerDiscard, vm::handlers::discard::build),
+            (FnDef::VmHandlerPmovmskb, vm::handlers::pmovmskb::build),
             (FnDef::VmFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (

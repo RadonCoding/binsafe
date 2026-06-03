@@ -522,6 +522,36 @@ fn test_movups() {
 }
 
 #[test]
+fn test_pmovmskb() {
+    let mut buf = [0u64; 2];
+
+    let base = buf.as_mut_ptr() as u64;
+
+    case!([instruction!(Mov_r64_imm64, Register::RAX, 0xFF00FF00FF00FF00u64),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base(Register::RCX),
+               Register::RAX),
+           instruction!(Mov_r64_imm64, Register::RAX, 0x00FF00FF00FF00FFu64),
+           instruction!(Mov_rm64_r64,
+               MemoryOperand::with_base_displ(Register::RCX, 8),
+               Register::RAX),
+           instruction!(Movups_xmm_xmmm128, Register::XMM0,
+               MemoryOperand::with_base(Register::RCX)),
+           instruction!(Pmovmskb_r32_xmm, Register::EAX, Register::XMM0)],
+          [Rcx = base], Rax => 0x55AA);
+}
+
+#[test]
+fn test_tzcnt() {
+    case!([instruction!(Tzcnt_r16_rm16, Register::BX, Register::AX)],
+          [Rax = 0x100], Rbx => 8);
+    case!([instruction!(Tzcnt_r32_rm32, Register::EBX, Register::EAX)],
+          [Rax = 0x100], Rbx => 8);
+    case!([instruction!(Tzcnt_r64_rm64, Register::RBX, Register::RAX)],
+          [Rax = 0x100], Rbx => 8);
+}
+
+#[test]
 fn test_flags() {
     // PF
     case!([instruction!(Add_rm64_imm8, Register::RAX, 0x1)],
