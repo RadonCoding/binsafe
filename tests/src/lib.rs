@@ -12,6 +12,7 @@ use runtime::{
 use windows::Win32::System::{
     Memory::{
         VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
+        PAGE_READWRITE,
     },
     Threading::{FlsAlloc, TlsAlloc},
 };
@@ -24,10 +25,14 @@ pub(crate) struct Executor {
     pub address: *mut c_void,
 }
 
+pub(crate) const BRANCH: u64 = 0x1111_1111;
+
 static TLS_REGISTERS: OnceLock<u32> = OnceLock::new();
 static TLS_VECTORS: OnceLock<u32> = OnceLock::new();
 static TLS_KEY: OnceLock<u32> = OnceLock::new();
 static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
+
+static MAPPED: OnceLock<()> = OnceLock::new();
 
 fn initialize_tls() -> [(DataDef, u32); 4] {
     [
@@ -58,6 +63,15 @@ impl Executor {
     pub const SIZE: usize = 0x10000;
 
     pub fn new() -> Self {
+        MAPPED.get_or_init(|| unsafe {
+            let _ = VirtualAlloc(
+                Some((BRANCH & !0xFFFF) as *const c_void),
+                0x10000,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_READWRITE,
+            );
+        });
+
         let mut rt = Runtime::new(64);
 
         rt.define_data_qword(DataDef::VmKeySeed, Self::TEST_KEY_SEED);

@@ -10,7 +10,7 @@ use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
     add, and, branch, cmov, cmp, dec, imul, inc, lea, mov, movsx, movzx, mul, neg, not, or,
-    pmovmskb, pop, push, rol, ror, sar, set, shl, shr, sub, test, tzcnt, vmov, xor,
+    pcmpeqb, pmovmskb, pop, push, rol, ror, sar, set, shl, shr, sub, test, tzcnt, vmov, xor,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -55,6 +55,7 @@ mapped! {
         Xchg,
         // Vector
         Pmovmskb,
+        Pcmpeqb,
         // Nop
         Nop,
     }
@@ -581,6 +582,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             Mnemonic::Push => push::encode(instruction)?,
             Mnemonic::Pop => pop::encode(instruction)?,
             Mnemonic::Pmovmskb => pmovmskb::encode(instruction)?,
+            Mnemonic::Pcmpeqb => pcmpeqb::encode(instruction)?,
             Mnemonic::Seta
             | Mnemonic::Setae
             | Mnemonic::Setb

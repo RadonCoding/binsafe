@@ -58,6 +58,7 @@ pub mod load_register;
 pub mod load_vector;
 pub mod mul;
 pub mod or;
+pub mod pcmpeqb;
 pub mod pmovmskb;
 pub mod pop;
 pub mod push;

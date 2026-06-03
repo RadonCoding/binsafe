@@ -20,6 +20,7 @@ pub mod multiply;
 pub mod neg;
 pub mod not;
 pub mod or;
+pub mod pcmpeqb;
 pub mod pmovmskb;
 pub mod pop;
 pub mod push;
