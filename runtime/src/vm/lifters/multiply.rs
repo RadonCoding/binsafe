@@ -59,7 +59,7 @@ pub fn wide<O: Encode + 'static>(
 
 pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     if instruction.op0_kind() != OpKind::Register {
-        return None;
+        unreachable!()
     }
 
     let destination = instruction.op0_register();
@@ -85,7 +85,7 @@ pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                 source: immediate.to_le_bytes()[..immediate_width.size()].to_vec(),
             }));
         }
-        _ => return None,
+        _ => unreachable!(),
     }
 
     operations.push(Rc::new(Imul { width }));
@@ -117,7 +117,7 @@ fn source(
             }));
             operations.push(Rc::new(LoadMemory { width }));
         }
-        _ => return None,
+        _ => unreachable!(),
     }
 
     Some(())

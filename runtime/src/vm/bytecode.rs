@@ -9,8 +9,8 @@ use strum_macros::EnumIter;
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    add, and, cmov, cmp, dec, imul, inc, jcc, lea, mov, movsx, movzx, mul, neg, not, or, pop, push,
-    rol, ror, sar, set, shl, shr, sub, test, vmov, xor,
+    add, and, branch, cmov, cmp, dec, imul, inc, lea, mov, movsx, movzx, mul, neg, not, or, pop,
+    push, rol, ror, sar, set, shl, shr, sub, test, vmov, xor,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -48,6 +48,10 @@ mapped! {
         Push,
         Pop,
         Discard,
+        // Atomic
+        Cmpxchg,
+        Xadd,
+        Xchg,
         // Nop
         Nop,
     }
@@ -525,7 +529,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Js
             | Mnemonic::Jmp
             | Mnemonic::Call
-            | Mnemonic::Ret => jcc::encode(instruction)?,
+            | Mnemonic::Ret => branch::encode(instruction)?,
             Mnemonic::Cmove
             | Mnemonic::Cmovne
             | Mnemonic::Cmova
@@ -562,9 +566,12 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             Mnemonic::Imul => imul::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
             Mnemonic::Mov => mov::encode(instruction)?,
-            Mnemonic::Movaps | Mnemonic::Movups | Mnemonic::Movdqa | Mnemonic::Movdqu => {
-                vmov::encode(instruction)?
-            }
+            Mnemonic::Movaps
+            | Mnemonic::Movups
+            | Mnemonic::Movapd
+            | Mnemonic::Movupd
+            | Mnemonic::Movdqa
+            | Mnemonic::Movdqu => vmov::encode(instruction)?,
             Mnemonic::Movzx => movzx::encode(instruction)?,
             Mnemonic::Movsx | Mnemonic::Movsxd => movsx::encode(instruction)?,
             Mnemonic::Push => push::encode(instruction)?,
@@ -585,8 +592,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Seto
             | Mnemonic::Setp
             | Mnemonic::Sets => set::encode(mapper, instruction)?,
-            Mnemonic::Nop => continue,
-            Mnemonic::Int3 => continue,
+            Mnemonic::Nop | Mnemonic::Int3 | Mnemonic::Ud2 => continue,
             _ => return None,
         };
 

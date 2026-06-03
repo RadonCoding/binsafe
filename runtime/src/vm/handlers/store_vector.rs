@@ -34,10 +34,6 @@ pub fn build(rt: &mut Runtime) {
             scratch::load_128(rt, xmm0);
             // movups [r8 + r9], xmm0
             rt.asm.movups(ptr(r8 + r9), xmm0).unwrap();
-            // xorps xmm0,  xmm0
-            rt.asm.xorps(xmm0, xmm0).unwrap();
-            // movups [r8 + r9+0x10], xmm0
-            rt.asm.movups(ptr(r8 + r9 + 0x10), xmm0).unwrap();
         },
         |rt| {
             // load ymm0

@@ -9,7 +9,7 @@ use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::Encode;
-use crate::vm::lifters::jcc::{cmp, eq, neq};
+use crate::vm::lifters::branch::{cmp, eq, neq};
 
 pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let code = instruction.code();
@@ -59,7 +59,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
         Code::Setp_rm8 => (VMLogic::SAND, vec![cmp(VMFlag::Parity, 0)]),
         // SETS = SF=1
         Code::Sets_rm8 => (VMLogic::SAND, vec![cmp(VMFlag::Sign, 0)]),
-        _ => return None,
+        _ => panic!("unsupported code: {:?}", instruction.code()),
     };
 
     let zero = || -> Rc<dyn Encode> {
@@ -112,7 +112,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
                 }),
             ];
         }
-        _ => return None,
+        _ => unreachable!(),
     }
 
     operations.push(Rc::new(Skip::new(mapper, logic, conditions, body)));

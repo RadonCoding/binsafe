@@ -48,7 +48,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                         width: destination_width,
                     }));
                 }
-                _ => return None,
+                _ => unreachable!(),
             }
 
             Some(operations)
@@ -86,12 +86,12 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                         width: source_width,
                     }));
                 }
-                _ => return None,
+                _ => unreachable!(),
             }
 
             Some(operations)
         }
-        _ => None,
+        _ => panic!("unsupported code: {code:?}"),
     }
 }
 
@@ -119,7 +119,7 @@ pub fn r_rm(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                 width: destination_width,
             }));
         }
-        _ => return None,
+        _ => unreachable!(),
     }
 
     operations.push(Rc::new(StoreRegister {
