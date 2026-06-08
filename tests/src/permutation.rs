@@ -96,7 +96,7 @@ fn exhaust(instructions: &[Instruction], setup: &[(VMReg, u64)], memory: &mut [u
 
     let mut enumerator = Enumerator::default();
 
-    let mut reference: Option<Run> = None;
+    let mut reference = None;
 
     loop {
         memory.copy_from_slice(&baseline);

@@ -12,6 +12,7 @@ pub mod dispatch;
 pub mod entry;
 pub mod exit;
 pub mod ginit;
+pub mod lookup;
 pub mod registers;
 pub mod tinit;
 pub mod vectors;

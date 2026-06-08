@@ -9,8 +9,8 @@ use strum_macros::EnumIter;
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    add, and, branch, cmov, cmp, dec, imul, inc, lea, mov, movsx, movzx, mul, neg, not, or,
-    pcmpeqb, pmovmskb, pop, push, rol, ror, sar, set, shl, shr, sub, test, tzcnt, vmov, xor,
+    arithmetic, bitwise, branch, cmov, extend, lea, movss, multiply, pcmpeqb, pmovmskb, set, stack,
+    transfer, tzcnt,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -43,8 +43,7 @@ mapped! {
         Shr,
         Sar,
         Mul,
-        Imul,
-        Tzcnt,
+        TrailingZeros,
         // Stack
         Push,
         Pop,
@@ -54,8 +53,12 @@ mapped! {
         Xadd,
         Xchg,
         // Vector
-        Pmovmskb,
-        Pcmpeqb,
+        PackedByteMask,
+        PackedByteEqual,
+        VectorAnd,
+        VectorOr,
+        VectorXor,
+        VectorAndNot,
         // Nop
         Nop,
     }
@@ -193,6 +196,7 @@ mapped! {
         SLower8,
         SLower16,
         SLower32,
+        SLower64,
     }
 }
 
@@ -202,7 +206,7 @@ impl VMWidth {
             VMWidth::Lower8 | VMWidth::Higher8 | VMWidth::SLower8 => 1,
             VMWidth::Lower16 | VMWidth::SLower16 => 2,
             VMWidth::Lower32 | VMWidth::SLower32 => 4,
-            VMWidth::Lower64 => 8,
+            VMWidth::Lower64 | VMWidth::SLower64 => 8,
             VMWidth::Lower128 => 16,
             VMWidth::Lower256 => 32,
         }
@@ -210,6 +214,16 @@ impl VMWidth {
 
     pub fn slots(self) -> i32 {
         (self.size() / 8).max(1) as i32
+    }
+
+    pub fn signed(self) -> Self {
+        match self {
+            VMWidth::Lower8 | VMWidth::Higher8 | VMWidth::SLower8 => VMWidth::SLower8,
+            VMWidth::Lower16 | VMWidth::SLower16 => VMWidth::SLower16,
+            VMWidth::Lower32 | VMWidth::SLower32 => VMWidth::SLower32,
+            VMWidth::Lower64 | VMWidth::SLower64 => VMWidth::SLower64,
+            other => other,
+        }
     }
 }
 
@@ -229,6 +243,8 @@ impl From<Register> for VMWidth {
             reg if (reg >= Register::RAX && reg <= Register::R15) || reg == Register::RIP => {
                 Self::Lower64
             }
+            reg if reg >= Register::XMM0 && reg <= Register::XMM31 => Self::Lower128,
+            reg if reg >= Register::YMM0 && reg <= Register::YMM31 => Self::Lower256,
             _ => panic!("unsupported register: {reg:?}"),
         }
     }
@@ -251,7 +267,7 @@ impl From<Register> for VMSeg {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VMMem {
     pub base: VMReg,
     pub index: VMReg,
@@ -316,7 +332,7 @@ mapped! {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct VMCondition {
     pub test: VMTest,
     pub lhs: u8,
@@ -333,7 +349,7 @@ pub struct Bytecode {
     #[cfg(debug_assertions)]
     snapshots: Vec<Snapshot>,
 
-    pub bytes: Vec<u8>,
+    pub operations: Vec<Rc<dyn Encode>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -501,11 +517,14 @@ impl fmt::Display for Bytecode {
 }
 
 impl Bytecode {
-    fn new(#[cfg(debug_assertions)] snapshots: Vec<Snapshot>, bytes: Vec<u8>) -> Self {
+    fn new(
+        #[cfg(debug_assertions)] snapshots: Vec<Snapshot>,
+        operations: Vec<Rc<dyn Encode>>,
+    ) -> Self {
         Self {
             #[cfg(debug_assertions)]
             snapshots,
-            bytes,
+            operations,
         }
     }
 }
@@ -550,39 +569,52 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Cmovo
             | Mnemonic::Cmovp
             | Mnemonic::Cmovs => cmov::encode(mapper, instruction)?,
-            Mnemonic::Add => add::encode(instruction)?,
-            Mnemonic::Sub => sub::encode(instruction)?,
-            Mnemonic::Cmp => cmp::encode(instruction)?,
-            Mnemonic::And => and::encode(instruction)?,
-            Mnemonic::Or => or::encode(instruction)?,
-            Mnemonic::Xor => xor::encode(instruction)?,
-            Mnemonic::Test => test::encode(instruction)?,
-            Mnemonic::Rol => rol::encode(instruction)?,
-            Mnemonic::Ror => ror::encode(instruction)?,
-            Mnemonic::Shl => shl::encode(instruction)?,
-            Mnemonic::Shr => shr::encode(instruction)?,
-            Mnemonic::Sar => sar::encode(instruction)?,
-            Mnemonic::Inc => inc::encode(instruction)?,
-            Mnemonic::Dec => dec::encode(instruction)?,
-            Mnemonic::Neg => neg::encode(instruction)?,
-            Mnemonic::Not => not::encode(instruction)?,
-            Mnemonic::Mul => mul::encode(instruction)?,
-            Mnemonic::Imul => imul::encode(instruction)?,
+            Mnemonic::Add
+            | Mnemonic::Sub
+            | Mnemonic::Cmp
+            | Mnemonic::Test
+            | Mnemonic::Rol
+            | Mnemonic::Ror
+            | Mnemonic::Shl
+            | Mnemonic::Shr
+            | Mnemonic::Sar
+            | Mnemonic::Inc
+            | Mnemonic::Dec
+            | Mnemonic::Neg
+            | Mnemonic::Not => arithmetic::encode(instruction)?,
+            Mnemonic::Mul | Mnemonic::Imul => multiply::encode(instruction)?,
             Mnemonic::Tzcnt => tzcnt::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
-            Mnemonic::Mov => mov::encode(instruction)?,
-            Mnemonic::Movaps
+            Mnemonic::Mov
+            | Mnemonic::Movaps
             | Mnemonic::Movups
             | Mnemonic::Movapd
             | Mnemonic::Movupd
             | Mnemonic::Movdqa
-            | Mnemonic::Movdqu => vmov::encode(instruction)?,
-            Mnemonic::Movzx => movzx::encode(instruction)?,
-            Mnemonic::Movsx | Mnemonic::Movsxd => movsx::encode(instruction)?,
-            Mnemonic::Push => push::encode(instruction)?,
-            Mnemonic::Pop => pop::encode(instruction)?,
+            | Mnemonic::Movdqu => transfer::encode(instruction)?,
+            Mnemonic::Movss => movss::encode(instruction)?,
+            Mnemonic::Movzx | Mnemonic::Movsx | Mnemonic::Movsxd => extend::encode(instruction)?,
+            Mnemonic::Push | Mnemonic::Pop => stack::encode(instruction)?,
             Mnemonic::Pmovmskb => pmovmskb::encode(instruction)?,
             Mnemonic::Pcmpeqb => pcmpeqb::encode(instruction)?,
+            Mnemonic::And
+            | Mnemonic::Or
+            | Mnemonic::Xor
+            | Mnemonic::Pand
+            | Mnemonic::Andps
+            | Mnemonic::Andpd
+            | Mnemonic::Vandps
+            | Mnemonic::Por
+            | Mnemonic::Orps
+            | Mnemonic::Orpd
+            | Mnemonic::Pxor
+            | Mnemonic::Xorps
+            | Mnemonic::Xorpd
+            | Mnemonic::Vpxor
+            | Mnemonic::Vxorps
+            | Mnemonic::Pandn
+            | Mnemonic::Andnps
+            | Mnemonic::Andnpd => bitwise::encode(instruction)?,
             Mnemonic::Seta
             | Mnemonic::Setae
             | Mnemonic::Setb
@@ -618,7 +650,7 @@ pub fn assemble(mapper: &mut Mapper, operations: &[Rc<dyn Encode>]) -> Vec<u8> {
     bytes
 }
 
-pub fn process<F>(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>, mut picker: F) -> Bytecode
+pub fn transform<F>(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>, mut picker: F) -> Bytecode
 where
     F: FnMut(&[usize]) -> usize,
 {
@@ -647,11 +679,9 @@ where
     #[cfg(debug_assertions)]
     snapshots.push(Snapshot::take(Phase::Permute, &operations));
 
-    let bytes = assemble(mapper, &operations);
-
     Bytecode::new(
         #[cfg(debug_assertions)]
         snapshots,
-        bytes,
+        operations,
     )
 }

@@ -51,6 +51,10 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.movzx(r9, byte_ptr(r8)).unwrap();
         },
         |rt| {
+            // mov r9, [r8]
+            rt.asm.mov(r9, ptr(r8)).unwrap();
+        },
+        |rt| {
             // movsxd r9, dword ptr [r8]
             rt.asm.movsxd(r9, dword_ptr(r8)).unwrap();
         },

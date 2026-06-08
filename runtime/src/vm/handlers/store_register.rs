@@ -43,6 +43,10 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.mov(ptr(rcx + r8 * 8), r9b).unwrap();
         },
         |rt| {
+            // mov [rcx + r8*8], r9
+            rt.asm.mov(ptr(rcx + r8 * 8), r9).unwrap();
+        },
+        |rt| {
             // mov [rcx + r8*8], r9d
             rt.asm.mov(ptr(rcx + r8 * 8), r9d).unwrap();
         },

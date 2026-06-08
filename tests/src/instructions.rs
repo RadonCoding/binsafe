@@ -11,14 +11,14 @@ fn template(instructions: &[Instruction], setup: &[(VMReg, u64)], target: VMReg,
 
     let mut rng = rand::thread_rng();
 
-    let mut bytecode = bytecode::process(&mut executor.rt.mapper, lifted, |ready| {
+    let bytecode = bytecode::transform(&mut executor.rt.mapper, lifted, |ready| {
         rng.gen_range(0..ready.len())
-    })
-    .bytes;
+    });
+    let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &bytecode.operations);
 
-    encrypt(&mut bytecode);
+    encrypt(&mut bytes);
 
-    let state = executor.run(setup, &bytecode);
+    let state = executor.run(setup, &bytes);
 
     let received = state[(executor.rt.mapper.index(target)) as usize];
 

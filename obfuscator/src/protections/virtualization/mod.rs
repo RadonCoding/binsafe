@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::{i32, mem};
+use std::{i32, mem, slice};
 
 use crate::engine::Engine;
 use crate::protections::Protection;
@@ -58,7 +58,7 @@ impl Virtualization {
         for (_index, operations) in blocks.into_iter().enumerate() {
             let mut rng = rand::thread_rng();
 
-            let bytecode = bytecode::process(&mut engine.rt.mapper, operations, |ready| {
+            let bytecode = bytecode::transform(&mut engine.rt.mapper, operations, |ready| {
                 rng.gen_range(0..ready.len())
             });
 
@@ -68,7 +68,7 @@ impl Virtualization {
                 log.push(format!("  BLOCK {}:\n{}", index, bytecode));
             }
 
-            let mut vblock = bytecode.bytes;
+            let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &bytecode.operations);
 
             let key = if vcode.is_empty() {
                 self.keys.seed
@@ -101,12 +101,14 @@ impl Protection for Virtualization {
         let mut vtable = Vec::new();
         let mut vcode = Vec::new();
 
-        let mut dedup = HashMap::new();
-
         #[cfg(debug_assertions)]
         let mut logs = Vec::new();
 
         vcode.extend_from_slice(&self.attestation(engine));
+
+        let mut lookup = HashMap::new();
+        let mut programs = Vec::new();
+        let mut groups = Vec::new();
 
         'outer: for block in &mut engine.blocks {
             if block.size < VM_DISPATCH_SIZE {
@@ -127,7 +129,7 @@ impl Protection for Virtualization {
                             continue;
                         }
 
-                        if bytecode::lift(&mut engine.rt.mapper, std::slice::from_ref(instruction))
+                        if bytecode::lift(&mut engine.rt.mapper, slice::from_ref(instruction))
                             .is_none()
                         {
                             *self.missing.entry(mnemonic).or_default() += 1;
@@ -137,19 +139,14 @@ impl Protection for Virtualization {
                 }
             };
 
-            let vblock = bytecode::assemble(&mut engine.rt.mapper, &lifted);
-
             let mut hasher = DefaultHasher::new();
-            vblock.hash(&mut hasher);
+            bytecode::assemble(&mut engine.rt.mapper, &lifted).hash(&mut hasher);
             let hash = hasher.finish();
 
-            let vcode_offset = if let Some(&offset) = dedup.get(&hash) {
-                self.duplicates += 1;
-                offset
-            } else {
+            if lookup.get(&hash).is_none() {
                 let mut rng = rand::thread_rng();
 
-                let bytecode = bytecode::process(&mut engine.rt.mapper, lifted, |ready| {
+                let bytecode = bytecode::transform(&mut engine.rt.mapper, lifted, |ready| {
                     rng.gen_range(0..ready.len())
                 });
 
@@ -158,33 +155,44 @@ impl Protection for Virtualization {
                     logs.push((block.rva, format!("{}", bytecode)));
                 }
 
-                let mut vblock = bytecode.bytes;
+                let index = programs.len();
+                programs.push(bytecode.operations);
 
-                let key = u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap());
+                groups.push(vec![block]);
 
-                crypt::encrypt(
-                    &mut vblock,
-                    key,
-                    self.keys.mul,
-                    self.keys.add,
-                    self.keys.att,
-                );
+                lookup.insert(hash, index);
+            } else {
+                self.duplicates += 1;
+                let index = lookup[&hash];
+                groups[index].push(block);
+            }
+        }
 
-                let vcode_offset = TryInto::<u32>::try_into(vcode.len()).unwrap();
-                vcode.extend_from_slice(&vblock);
+        for (program, group) in programs.iter().zip(groups) {
+            let mut vblock = bytecode::assemble(&mut engine.rt.mapper, program);
 
-                dedup.insert(hash, vcode_offset);
+            let key = u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap());
 
-                vcode_offset
-            };
+            crypt::encrypt(
+                &mut vblock,
+                key,
+                self.keys.mul,
+                self.keys.add,
+                self.keys.att,
+            );
 
-            // Store the offset of this VM-block's VM-table entry
-            let vtable_offset = vtable.len();
-            self.vblocks.insert(block.rva, vtable_offset);
+            let offset = TryInto::<u32>::try_into(vcode.len()).unwrap();
+            vcode.extend_from_slice(&vblock);
 
-            // Store the placeholder for stub displacement and offset in the linear VM-code
-            vtable.extend_from_slice(&0u32.to_le_bytes());
-            vtable.extend_from_slice(&vcode_offset.to_le_bytes());
+            for block in group {
+                // Store the index of this VM-block's VM-table entry
+                let index = vtable.len() / 8;
+                self.vblocks.insert(block.rva, index);
+
+                // Store the placeholder for stub displacement and offset in the linear VM-code
+                vtable.extend_from_slice(&0u32.to_le_bytes());
+                vtable.extend_from_slice(&offset.to_le_bytes());
+            }
         }
 
         #[cfg(debug_assertions)]
@@ -224,9 +232,9 @@ impl Protection for Virtualization {
                 continue;
             }
 
-            let vtable_offset = self.vblocks[&block.rva];
+            let index = self.vblocks[&block.rva];
             // OR with 0x10000000 to force PUSH imm32, to ensure consistent size after encrypting
-            let vtable_index = (vtable_offset / 8) as i32 | 0x10000000;
+            let vtable_index = index as i32 | 0x10000000;
 
             let mut asm = CodeAssembler::new(engine.bitness).unwrap();
 
@@ -251,7 +259,7 @@ impl Protection for Virtualization {
             unsafe {
                 let displacement = (block.size - dispatch2.len()) as u32;
                 vtable
-                    .add(vtable_offset)
+                    .add(index * 8)
                     .copy_from(displacement.to_le_bytes().as_ptr(), mem::size_of::<u32>());
             }
 

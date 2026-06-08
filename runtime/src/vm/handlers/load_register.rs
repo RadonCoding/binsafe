@@ -1,6 +1,4 @@
-use iced_x86::code_asm::{
-    al, byte_ptr, dword_ptr, ptr, r8, r8d, r9, r9d, rax, rcx, rdx, word_ptr,
-};
+use iced_x86::code_asm::{al, byte_ptr, dword_ptr, ptr, r8, r8d, r9, r9d, rax, rcx, rdx, word_ptr};
 
 use crate::{
     runtime::Runtime,
@@ -30,27 +28,31 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.mov(r9d, ptr(rcx + r8 * 8)).unwrap();
         },
         |rt| {
-            // movzx r9, word ptr [rcx + r8*8]
+            // movzx r9, [rcx + r8*8]
             rt.asm.movzx(r9, word_ptr(rcx + r8 * 8)).unwrap();
         },
         |rt| {
-            // movzx r9, byte ptr [rcx + r8*8 + 0x1]
+            // movzx r9, [rcx + r8*8 + 0x1]
             rt.asm.movzx(r9, byte_ptr(rcx + r8 * 8 + 0x1)).unwrap();
         },
         |rt| {
-            // movzx r9, byte ptr [rcx + r8*8]
+            // movzx r9, [rcx + r8*8]
             rt.asm.movzx(r9, byte_ptr(rcx + r8 * 8)).unwrap();
         },
         |rt| {
-            // movsxd r9, dword ptr [rcx + r8*8]
+            // mov r9, [rcx + r8*8]
+            rt.asm.mov(r9, ptr(rcx + r8 * 8)).unwrap();
+        },
+        |rt| {
+            // movsxd r9, [rcx + r8*8]
             rt.asm.movsxd(r9, dword_ptr(rcx + r8 * 8)).unwrap();
         },
         |rt| {
-            // movsx r9, word ptr [rcx + r8*8]
+            // movsx r9, [rcx + r8*8]
             rt.asm.movsx(r9, word_ptr(rcx + r8 * 8)).unwrap();
         },
         |rt| {
-            // movsx r9, byte ptr [rcx + r8*8]
+            // movsx r9, [rcx + r8*8]
             rt.asm.movsx(r9, byte_ptr(rcx + r8 * 8)).unwrap();
         },
     );

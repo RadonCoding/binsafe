@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{ecx, ptr, r12, r12b, r12d, r13, rax, rcx, rdx, rsp};
+use iced_x86::code_asm::{ptr, r8, r12, r12b, r12d, r13, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -233,49 +233,18 @@ pub fn build(rt: &mut Runtime) {
         // Pop the return address from the stack:
         // pop rdx
         rt.asm.pop(rdx).unwrap();
-        // mov [r12 + ...], rdx
-        utils::vreg::store_reg(rt, r12, rdx, VMReg::NExit);
-        // mov [r12 + ...], rdx
-        utils::vreg::store_reg(rt, r12, rdx, VMReg::NEntry);
-
-        // Subtract the image base from the return address:
-        // sub rdx, [...]
-        utils::vreg::reg_sub(rt, r12, VMReg::VImage, rdx);
 
         // Pop the VM-table index from the stack:
-        // pop rcx
-        rt.asm.pop(rcx).unwrap();
+        // pop r8
+        rt.asm.pop(r8).unwrap();
 
-        // Resolve the VM-table entry using the index:
-        // xor rcx, rdx
-        rt.asm.xor(rcx, rdx).unwrap();
-        // and ecx, 0x0FFFFFFF
-        rt.asm.and(ecx, 0x0FFFFFFF).unwrap();
-        // lea rdx, [...]
-        rt.asm
-            .lea(rdx, ptr(rt.data_labels[&DataDef::VmTable]))
-            .unwrap();
-        // lea rdx, [rdx + rcx*8]
-        rt.asm.lea(rdx, ptr(rdx + rcx * 8)).unwrap();
-
-        // Apply the displacement of the caller stub to the native entry and exit points:
-        // mov ecx, [rdx]
-        rt.asm.mov(ecx, ptr(rdx)).unwrap();
-        // sub [r12 + ...], rcx
-        utils::vreg::sub_reg(rt, r12, rcx, VMReg::NEntry);
-        // add [r12 + ...], rcx
-        utils::vreg::add_reg(rt, r12, rcx, VMReg::NExit);
-
-        // Read the offset into VM-code from the VM-table:
-        // mov ecx, [rdx + 0x4]
-        rt.asm.mov(ecx, ptr(rdx + 0x4)).unwrap();
-
-        // lea rdx, [...]
-        rt.asm
-            .lea(rdx, ptr(rt.data_labels[&DataDef::VmCode]))
-            .unwrap();
-        // add rdx, rcx
-        rt.asm.add(rdx, rcx).unwrap();
+        // Resolve the VM-table entry into the block pointer:
+        // mov rcx, r12
+        rt.asm.mov(rcx, r12).unwrap();
+        // call ...
+        stack::call(rt, rt.func_labels[&FnDef::VmLookup]);
+        // mov rdx, rax
+        rt.asm.mov(rdx, rax).unwrap();
 
         // Stack now points to where it was before the caller stub:
         // mov [r12 + ...], rsp

@@ -1,6 +1,4 @@
-use iced_x86::code_asm::{
-    byte_ptr, eax, ecx, edx, ptr, r12, r13, r14, r8, r8b, r8d, rax, rcx, rdx,
-};
+use iced_x86::code_asm::{byte_ptr, eax, ptr, r12, r13, r14, r8, r8b, r8d, rax, rcx, rdx};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -129,65 +127,37 @@ pub fn build(rt: &mut Runtime) {
         // call ...
         stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 
-        // If the branch points to a dispatch stub then link to that block:
-        // cmp [r12 + ...], 0x0
-        utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
+        // mov rax, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::NExit, rax);
+        // mov rcx, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::NBranch, rcx);
+        // test rcx, rcx
+        rt.asm.test(rcx, rcx).unwrap();
+        // cmovnz rax, rcx
+        rt.asm.cmovne(rax, rcx).unwrap();
+        // test rax, rax
+        rt.asm.test(rax, rax).unwrap();
         // je ...
         rt.asm.je(epilogue).unwrap();
-
-        // mov rax, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::NBranch, rax);
-        // cmp byte [rax], 0x68
+        // cmp [rax], 0x68
         rt.asm.cmp(byte_ptr(rax), 0x68).unwrap();
         // jne ...
         rt.asm.jne(epilogue).unwrap();
 
-        // mov ecx, [rax + 0x1]
-        rt.asm.mov(ecx, ptr(rax + 0x1)).unwrap();
+        // mov r8d, [rax + 0x1]
+        rt.asm.mov(r8d, ptr(rax + 0x1)).unwrap();
 
         // add rax, ...
         rt.asm.add(rax, VM_DISPATCH_SIZE as i32).unwrap();
 
+        // mov rcx, r12
+        rt.asm.mov(rcx, r12).unwrap();
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
-        // sub rdx, [r12 + ...]
-        utils::vreg::reg_sub(rt, r12, VMReg::VImage, rdx);
-
-        // xor ecx, edx
-        rt.asm.xor(ecx, edx).unwrap();
-        // and ecx, 0x0FFFFFFF
-        rt.asm.and(ecx, 0x0FFFFFFF).unwrap();
-
-        // lea rdx, [...]
-        rt.asm
-            .lea(rdx, ptr(rt.data_labels[&DataDef::VmTable]))
-            .unwrap();
-        // mov r8d, [rdx + rcx*8]
-        rt.asm.mov(r8d, ptr(rdx + rcx * 8)).unwrap();
-        // mov edx, [rdx + rcx*8 + 0x4]
-        rt.asm.mov(edx, ptr(rdx + rcx * 8 + 0x4)).unwrap();
-
-        // lea r13, [...]
-        rt.asm
-            .lea(r13, ptr(rt.data_labels[&DataDef::VmCode]))
-            .unwrap();
-        // add r13, rdx
-        rt.asm.add(r13, rdx).unwrap();
-
-        // Apply the displacement to the native entry and exit points:
-        // mov rdx, rax
-        rt.asm.mov(rdx, rax).unwrap();
-        // add rdx, r8
-        rt.asm.add(rdx, r8).unwrap();
-        // mov [r12 + ...], rdx
-        utils::vreg::store_reg(rt, r12, rdx, VMReg::NExit);
-
-        // mov rdx, rax
-        rt.asm.mov(rdx, rax).unwrap();
-        // sub rdx, r8
-        rt.asm.sub(rdx, r8).unwrap();
-        // mov [r12 + ...], rdx
-        utils::vreg::store_reg(rt, r12, rdx, VMReg::NEntry);
+        // call ...
+        stack::call(rt, rt.func_labels[&FnDef::VmLookup]);
+        // mov r13, rax
+        rt.asm.mov(r13, rax).unwrap();
 
         // jmp ...
         rt.asm.jmp(setup_block).unwrap();

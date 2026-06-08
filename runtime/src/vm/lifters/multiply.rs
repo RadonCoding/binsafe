@@ -1,12 +1,24 @@
-use iced_x86::{Instruction, OpKind};
+use iced_x86::{Instruction, Mnemonic, OpKind};
 use std::rc::Rc;
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 use crate::vm::encoders::{
-    discard::Discard, imul::Imul, load_address::LoadAddress, load_immediate::LoadImmediate,
-    load_memory::LoadMemory, load_register::LoadRegister, store_register::StoreRegister, Encode,
+    discard::Discard, load_address::LoadAddress, load_immediate::LoadImmediate,
+    load_memory::LoadMemory, load_register::LoadRegister, mul::Mul, store_register::StoreRegister,
+    Encode,
 };
 use crate::vm::lifters::{operation_immediate, operation_width};
+
+pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+    match instruction.mnemonic() {
+        Mnemonic::Mul => wide(instruction, |width| Mul { width }),
+        Mnemonic::Imul if instruction.op_count() == 1 => wide(instruction, |width| Mul {
+            width: width.signed(),
+        }),
+        Mnemonic::Imul => narrow(instruction),
+        mnemonic => panic!("unsupported mnemonic: {mnemonic:?}"),
+    }
+}
 
 pub fn wide<O: Encode + 'static>(
     instruction: &Instruction,
@@ -78,17 +90,19 @@ pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         3 => {
             source(&mut operations, instruction, 1, width)?;
 
-            let immediate = operation_immediate(instruction, instruction.op_kind(2));
+            let immediate_source = operation_immediate(instruction, instruction.op_kind(2));
             let immediate_width = operation_width(instruction, instruction.op_kind(2))?;
             operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
-                source: immediate.to_le_bytes()[..immediate_width.size()].to_vec(),
+                source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),
             }));
         }
         _ => unreachable!(),
     }
 
-    operations.push(Rc::new(Imul { width }));
+    operations.push(Rc::new(Mul {
+        width: width.signed(),
+    }));
     operations.push(Rc::new(StoreRegister {
         width,
         destination: VMReg::from(destination),

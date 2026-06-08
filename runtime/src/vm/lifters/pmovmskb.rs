@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::vm::bytecode::{VMReg, VMVec, VMWidth};
 use crate::vm::encoders::{
-    load_vector::LoadVector, pmovmskb::Pmovmskb, store_register::StoreRegister, Encode,
+    load_vector::LoadVector, packed_byte_mask::PackedByteMask, store_register::StoreRegister, Encode,
 };
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
@@ -15,7 +15,9 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             width: VMWidth::Lower128,
             source,
         }),
-        Rc::new(Pmovmskb),
+        Rc::new(PackedByteMask {
+            width: VMWidth::Lower128,
+        }),
         Rc::new(StoreRegister {
             width: VMWidth::Lower32,
             destination,

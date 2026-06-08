@@ -2,40 +2,21 @@ use iced_x86::{Instruction, OpKind};
 
 use crate::vm::bytecode::VMWidth;
 
-pub mod add;
-pub mod and;
 pub mod arithmetic;
+pub mod bitwise;
 pub mod branch;
 pub mod cmov;
-pub mod cmp;
-pub mod dec;
-pub mod imul;
-pub mod inc;
+pub mod extend;
 pub mod lea;
-pub mod mov;
-pub mod movsx;
-pub mod movzx;
-pub mod mul;
+pub mod movss;
 pub mod multiply;
-pub mod neg;
-pub mod not;
-pub mod or;
 pub mod pcmpeqb;
 pub mod pmovmskb;
-pub mod pop;
-pub mod push;
-pub mod rol;
-pub mod ror;
-pub mod sar;
 pub mod set;
-pub mod shl;
-pub mod shr;
-pub mod sub;
-pub mod test;
+pub mod stack;
+pub mod transfer;
 pub mod tzcnt;
 pub mod unary;
-pub mod vmov;
-pub mod xor;
 
 fn operation_width(instruction: &Instruction, kind: OpKind) -> Option<VMWidth> {
     match kind {
@@ -45,6 +26,8 @@ fn operation_width(instruction: &Instruction, kind: OpKind) -> Option<VMWidth> {
             2 => Some(VMWidth::Lower16),
             4 => Some(VMWidth::Lower32),
             8 => Some(VMWidth::Lower64),
+            16 => Some(VMWidth::Lower128),
+            32 => Some(VMWidth::Lower256),
             _ => panic!("unsupported code: {:?}", instruction.code()),
         },
         kind if is_immediate(kind) => Some(match operation_immediate(instruction, kind) {

@@ -1,5 +1,5 @@
-use std::rc::Rc;
 use iced_x86::{Code, Instruction};
+use std::rc::Rc;
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 use crate::vm::encoders::{load_address::LoadAddress, store_register::StoreRegister, Encode};
