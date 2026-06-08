@@ -3,13 +3,13 @@ use crate::vm::bytecode::{VMOp, VMReg, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
-pub struct Tzcnt {
+pub struct TrailingZeros {
     pub width: VMWidth,
 }
 
-impl Encode for Tzcnt {
+impl Encode for TrailingZeros {
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::Tzcnt), mapper.index(self.width)]
+        vec![mapper.index(VMOp::TrailingZeros), mapper.index(self.width)]
     }
 
     fn writes(&self) -> Vec<super::Effect> {

@@ -11,7 +11,6 @@ use crate::vm::encoders::jcc::{is_canonical, Jcc};
 use crate::vm::encoders::Encode;
 use crate::vm::transform::{descend, Phase, Transform};
 
-/// Rewrites operations into logically equivalent randomized forms, descending into children.
 pub struct Mutation;
 
 impl Transform for Mutation {
@@ -22,20 +21,18 @@ impl Transform for Mutation {
     fn run(&self, _mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
         let mut operations = operations;
         let mut rng = rand::thread_rng();
-
         walk(&mut operations, &mut rng);
-
         operations
     }
 }
 
-/// Recursively rewrites each [`Jcc`] in place, routing canonical-tautology Jccs to [`opaque`], canonical-contradiction Jccs to [`opaque_false`], and real-condition Jccs through [`mutated`].
+/// Rewrites each [`Jcc`] in place, dispatching always-true and always-false branches to [`opaque`], and runtime branches to [`mutated`].
 fn walk<R: Rng>(operations: &mut Vec<Rc<dyn Encode>>, rng: &mut R) {
     descend(operations, |operations| {
         for i in 0..operations.len() {
-            let jcc = downcast::<Jcc>(&operations[i]).map(|j| (j.logic, j.conditions.clone()));
-
-            let Some((logic, conditions)) = jcc else {
+            let Some((logic, conditions)) =
+                downcast::<Jcc>(&operations[i]).map(|j| (j.logic, j.conditions.clone()))
+            else {
                 continue;
             };
 
@@ -50,29 +47,15 @@ fn walk<R: Rng>(operations: &mut Vec<Rc<dyn Encode>>, rng: &mut R) {
                 }
             });
 
+            let (or, xor) = match logic {
+                VMLogic::JAND | VMLogic::JOR | VMLogic::JXOR => (VMLogic::JOR, VMLogic::JXOR),
+                VMLogic::CAND | VMLogic::COR | VMLogic::CXOR => (VMLogic::COR, VMLogic::CXOR),
+                VMLogic::SAND | VMLogic::SOR | VMLogic::SXOR => (VMLogic::SOR, VMLogic::SXOR),
+            };
+
             let (logic, conditions) = match polarity {
-                Some(true) => match logic {
-                    VMLogic::JAND | VMLogic::JOR | VMLogic::JXOR => {
-                        opaque(rng, VMLogic::JOR, VMLogic::JXOR)
-                    }
-                    VMLogic::CAND | VMLogic::COR | VMLogic::CXOR => {
-                        opaque(rng, VMLogic::COR, VMLogic::CXOR)
-                    }
-                    VMLogic::SAND | VMLogic::SOR | VMLogic::SXOR => {
-                        opaque(rng, VMLogic::SOR, VMLogic::SXOR)
-                    }
-                },
-                Some(false) => match logic {
-                    VMLogic::JAND | VMLogic::JOR | VMLogic::JXOR => {
-                        opaque_false(rng, VMLogic::JOR, VMLogic::JXOR)
-                    }
-                    VMLogic::CAND | VMLogic::COR | VMLogic::CXOR => {
-                        opaque_false(rng, VMLogic::COR, VMLogic::CXOR)
-                    }
-                    VMLogic::SAND | VMLogic::SOR | VMLogic::SXOR => {
-                        opaque_false(rng, VMLogic::SOR, VMLogic::SXOR)
-                    }
-                },
+                Some(true) => opaque(rng, or, xor, true),
+                Some(false) => opaque(rng, or, xor, false),
                 None => (logic, mutated(rng, logic, conditions)),
             };
 
@@ -86,21 +69,20 @@ fn walk<R: Rng>(operations: &mut Vec<Rc<dyn Encode>>, rng: &mut R) {
 
 /// Downcasts an operation to a concrete encoder type.
 fn downcast<T: 'static>(operation: &Rc<dyn Encode>) -> Option<&T> {
-    let any: &dyn Any = &**operation;
-    any.downcast_ref::<T>()
+    (&**operation as &dyn Any).downcast_ref::<T>()
 }
 
-/// Expands each AND-family sub-condition through [`rewritten`] and appends a [`neutral_pair`] to XOR-family Jccs, then shuffles.
-fn mutated<R: Rng>(rng: &mut R, logic: VMLogic, conditions: Vec<VMCondition>) -> Vec<VMCondition> {
-    let mut conditions = conditions;
-
+/// Expands each AND-family sub-condition through [`rewritten`] and appends a [`neutral_pair`] to XOR-family [`Jcc`]s, then shuffles.
+fn mutated<R: Rng>(
+    rng: &mut R,
+    logic: VMLogic,
+    mut conditions: Vec<VMCondition>,
+) -> Vec<VMCondition> {
     match logic {
         VMLogic::JAND | VMLogic::CAND | VMLogic::SAND => {
             let mut i = 0;
-
             while i < conditions.len() {
                 let rewrites = rewritten(&conditions[i]);
-
                 if !rewrites.is_empty() && rng.gen() {
                     let chosen = rewrites.choose(rng).cloned().unwrap();
                     let length = chosen.len();
@@ -111,14 +93,15 @@ fn mutated<R: Rng>(rng: &mut R, logic: VMLogic, conditions: Vec<VMCondition>) ->
                 }
             }
         }
-        VMLogic::JOR | VMLogic::COR | VMLogic::SOR => {}
         VMLogic::JXOR | VMLogic::CXOR | VMLogic::SXOR => {
-            for _ in 0..rng.gen_range(0..=1) {
-                conditions.extend(neutral_pair(rng));
+            if rng.gen() {
+                let condition = condition(rng);
+                conditions.push(condition);
+                conditions.push(condition);
             }
         }
+        _ => {}
     }
-
     conditions.shuffle(rng);
     conditions
 }
@@ -172,73 +155,40 @@ fn rewritten(condition: &VMCondition) -> Vec<Vec<VMCondition>> {
     }
 }
 
-/// Builds a tautologically-true predicate by picking between the OR and XOR families and composing its sub-conditions accordingly.
-fn opaque<R: Rng>(rng: &mut R, or: VMLogic, xor: VMLogic) -> (VMLogic, Vec<VMCondition>) {
+/// Builds an always-true or always-false predicate by picking between the OR and XOR families.
+fn opaque<R: Rng>(
+    rng: &mut R,
+    or: VMLogic,
+    xor: VMLogic,
+    polarity: bool,
+) -> (VMLogic, Vec<VMCondition>) {
     if rng.gen() {
-        (or, or_predicate(rng))
+        let mut conditions = if polarity {
+            tautology(rng)
+        } else {
+            vec![antitautology(rng)]
+        };
+        conditions.shuffle(rng);
+        (or, conditions)
     } else {
-        (xor, xor_predicate(rng))
+        let mut conditions = tautology(rng);
+
+        if polarity {
+            if rng.gen() {
+                let c = condition(rng);
+                conditions.push(c.clone());
+                conditions.push(c);
+            }
+        } else {
+            let condition = condition(rng);
+            conditions = vec![condition, condition];
+        }
+        conditions.shuffle(rng);
+        (xor, conditions)
     }
 }
 
-/// Composes a tautologically-true predicate from a [`tautology`] block optionally compounded with a second one, each of which leaves the OR fold's outcome true.
-fn or_predicate<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
-    let mut conditions = tautology(rng);
-
-    if rng.gen() {
-        conditions.extend(tautology(rng));
-    }
-
-    conditions.shuffle(rng);
-    conditions
-}
-
-/// Composes a tautologically-true predicate from a [`tautology`] block optionally compounded with a [`neutral_pair`] that keeps the XOR fold odd.
-fn xor_predicate<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
-    let mut conditions = tautology(rng);
-
-    if rng.gen() {
-        conditions.extend(neutral_pair(rng));
-    }
-
-    conditions.shuffle(rng);
-    conditions
-}
-
-/// Builds a tautologically-false predicate by picking between the OR and XOR families and composing its sub-conditions accordingly.
-fn opaque_false<R: Rng>(rng: &mut R, or: VMLogic, xor: VMLogic) -> (VMLogic, Vec<VMCondition>) {
-    if rng.gen() {
-        (or, or_false_predicate(rng))
-    } else {
-        (xor, xor_false_predicate(rng))
-    }
-}
-
-/// Composes a tautologically-false predicate from an [`antitautology`] absorber optionally compounded with another, each of which leaves the OR fold's outcome false.
-fn or_false_predicate<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
-    let mut conditions = vec![antitautology(rng)];
-
-    if rng.gen() {
-        conditions.push(antitautology(rng));
-    }
-
-    conditions.shuffle(rng);
-    conditions
-}
-
-/// Composes a tautologically-false predicate from a [`neutral_pair`] optionally compounded with another, each of which keeps the XOR fold even.
-fn xor_false_predicate<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
-    let mut conditions = neutral_pair(rng);
-
-    if rng.gen() {
-        conditions.extend(neutral_pair(rng));
-    }
-
-    conditions.shuffle(rng);
-    conditions
-}
-
-/// Single anti-tautological sub-condition: a flag bit compared for inequality against itself.
+/// A flag bit compared for inequality against itself, always evaluates false at runtime.
 fn antitautology<R: Rng>(rng: &mut R) -> VMCondition {
     let flag = pick(rng);
     VMCondition {
@@ -248,7 +198,7 @@ fn antitautology<R: Rng>(rng: &mut R) -> VMCondition {
     }
 }
 
-/// One of three tautological sub-condition shapes whose runtime-true count is always odd, so OR yields true and XOR contributes parity 1.
+/// One or two sub-conditions that always include an odd number of true results.
 fn tautology<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
     match rng.gen_range(0..3) {
         0 => cmp_pair(rng).to_vec(),
@@ -257,20 +207,7 @@ fn tautology<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
     }
 }
 
-/// Batch of sub-conditions whose combined XOR contribution is zero,
-/// drawn from either a self-cancelling duplicate of an arbitrary single condition or, less often, a pair of [`tautology`] blocks.
-fn neutral_pair<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
-    if rng.gen_ratio(1, 3) {
-        let mut conditions = tautology(rng);
-        conditions.extend(tautology(rng));
-        conditions
-    } else {
-        let condition = condition(rng);
-        vec![condition.clone(), condition]
-    }
-}
-
-/// Pair of sub-conditions comparing the same randomly chosen flag's bit against both possible values, exactly one of which evaluates true at runtime.
+/// Two sub-conditions comparing the same flag bit against both possible values, exactly one of which is true at runtime.
 fn cmp_pair<R: Rng>(rng: &mut R) -> [VMCondition; 2] {
     let flag = pick(rng);
     [
@@ -287,7 +224,7 @@ fn cmp_pair<R: Rng>(rng: &mut R) -> [VMCondition; 2] {
     ]
 }
 
-/// Pair of sub-conditions testing equality and inequality of two distinct randomly chosen flag bits, exactly one of which evaluates true at runtime.
+/// Two sub-conditions testing equality and inequality of two distinct flag bits, exactly one of which is true at runtime.
 fn eq_pair<R: Rng>(rng: &mut R) -> [VMCondition; 2] {
     let [a, b] = pick_two(rng);
     [
@@ -304,19 +241,18 @@ fn eq_pair<R: Rng>(rng: &mut R) -> [VMCondition; 2] {
     ]
 }
 
-/// Three pairwise equality and inequality sub-conditions over three distinct randomly chosen flag bits,
-/// drawn from four rotations that each force an odd number of trues by pigeonhole or the contrapositive of transitivity.
+/// Three pairwise sub-conditions over three distinct flag bits, always with an odd number true at runtime.
 fn triple_eq<R: Rng>(rng: &mut R) -> [VMCondition; 3] {
     let [a, b, c] = pick_three(rng);
-    let eq = |lhs, rhs| VMCondition {
+    let eq = |l, r| VMCondition {
         test: VMTest::EQ,
-        lhs,
-        rhs,
+        lhs: l,
+        rhs: r,
     };
-    let neq = |lhs, rhs| VMCondition {
+    let neq = |l, r| VMCondition {
         test: VMTest::NEQ,
-        lhs,
-        rhs,
+        lhs: l,
+        rhs: r,
     };
     match rng.gen_range(0..4) {
         0 => [eq(a, b), eq(b, c), eq(a, c)],
@@ -355,21 +291,20 @@ fn condition<R: Rng>(rng: &mut R) -> VMCondition {
 
 /// Randomly chosen [`VMFlag`] bit.
 fn pick<R: Rng>(rng: &mut R) -> u8 {
-    let flags = VMFlag::iter().collect::<Vec<VMFlag>>();
+    let flags = VMFlag::iter().collect::<Vec<_>>();
     *flags.choose(rng).unwrap() as u8
 }
 
 /// Two distinct randomly chosen [`VMFlag`] bits.
 fn pick_two<R: Rng>(rng: &mut R) -> [u8; 2] {
-    let mut flags = VMFlag::iter().collect::<Vec<VMFlag>>();
+    let mut flags = VMFlag::iter().collect::<Vec<_>>();
     flags.shuffle(rng);
     [flags[0] as u8, flags[1] as u8]
 }
 
 /// Three distinct randomly chosen [`VMFlag`] bits.
 fn pick_three<R: Rng>(rng: &mut R) -> [u8; 3] {
-    let mut flags = VMFlag::iter().collect::<Vec<VMFlag>>();
+    let mut flags = VMFlag::iter().collect::<Vec<_>>();
     flags.shuffle(rng);
     [flags[0] as u8, flags[1] as u8, flags[2] as u8]
 }
-

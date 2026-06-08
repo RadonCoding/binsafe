@@ -55,6 +55,12 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.xor(r8b, r9b).unwrap();
         },
         |rt| {
+            // r8  -> source
+            utils::bytecode::read_qword(rt, rdx, r8);
+            // xor r8, r9
+            rt.asm.xor(r8, r9).unwrap();
+        },
+        |rt| {
             // r8d  -> source
             utils::bytecode::read_dword(rt, rdx, r8d);
             // xor r8d, r9d

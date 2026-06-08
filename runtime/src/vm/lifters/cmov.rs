@@ -6,7 +6,7 @@ use crate::vm::bytecode::{VMFlag, VMLogic};
 use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::branch::{cmp, eq, neq};
-use crate::vm::lifters::mov;
+use crate::vm::lifters::transfer;
 
 pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let code = instruction.code();
@@ -67,7 +67,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
         _ => panic!("unsupported code: {:?}", instruction.code()),
     };
 
-    let body = mov::r_rm(instruction)?;
+    let body = transfer::encode(instruction)?;
 
     Some(vec![Rc::new(Skip::new(mapper, logic, conditions, body))])
 }

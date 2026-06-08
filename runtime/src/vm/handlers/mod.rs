@@ -30,6 +30,9 @@ macro_rules! __arithmetic {
                 rt.asm.$operation(r14b, r8b).unwrap();
             },
             |rt| {
+                rt.asm.$operation(r14, r8).unwrap();
+            },
+            |rt| {
                 rt.asm.$operation(r14d, r8d).unwrap();
             },
             |rt| {
@@ -62,6 +65,9 @@ macro_rules! __arithmetic {
                 rt.asm.$operation(r14b, cl).unwrap();
             },
             |rt| {
+                rt.asm.$operation(r14, cl).unwrap();
+            },
+            |rt| {
                 rt.asm.$operation(r14d, cl).unwrap();
             },
             |rt| {
@@ -91,6 +97,9 @@ macro_rules! __arithmetic {
             },
             |rt| {
                 rt.asm.$operation(r14w, r8w).unwrap();
+            },
+            |rt| {
+                rt.asm.$operation(r14, r8).unwrap();
             },
             |rt| {
                 rt.asm.$operation(r14d, r8d).unwrap();
@@ -171,170 +180,10 @@ macro_rules! arithmetic {
 }
 pub(crate) use arithmetic;
 
-#[macro_export]
-macro_rules! multiply {
-    ($operation:ident) => {
-        use crate::{
-            runtime::{FnDef, Runtime},
-            vm::utils::{self, scratch, stack},
-        };
-        use iced_x86::code_asm::*;
-
-        // unsigned char* (unsigned long*, unsigned char*)
-        pub fn build(rt: &mut Runtime) {
-            let mut epilogue = rt.asm.create_label();
-
-            // push r12
-            stack::push(rt, r12);
-            // push r13
-            stack::push(rt, r13);
-            // push r14
-            stack::push(rt, r14);
-            // push r15
-            stack::push(rt, r15);
-
-            // mov r12, rcx
-            rt.asm.mov(r12, rcx).unwrap();
-            // mov r13, rdx
-            rt.asm.mov(r13, rdx).unwrap();
-
-            // al -> width
-            utils::bytecode::read_byte(rt, r13, al);
-
-            // load r8
-            scratch::load(rt, r8);
-            // load r14
-            scratch::load(rt, r14);
-
-            utils::width::dispatch_register(
-                rt,
-                al,
-                &mut epilogue,
-                |rt| {
-                    // mov rax, r14
-                    rt.asm.mov(rax, r14).unwrap();
-                    // rdx:rax = rax * r8
-                    rt.asm.$operation(r8).unwrap();
-                    // mov r14, rax
-                    rt.asm.mov(r14, rax).unwrap();
-                    // mov r15, rdx
-                    rt.asm.mov(r15, rdx).unwrap();
-                },
-                |rt| {
-                    // mov rax, r14
-                    rt.asm.mov(rax, r14).unwrap();
-                    // edx:eax = eax * r8d
-                    rt.asm.$operation(r8d).unwrap();
-                    // mov r14, rax
-                    rt.asm.mov(r14, rax).unwrap();
-                    // mov r15, rdx
-                    rt.asm.mov(r15, rdx).unwrap();
-                },
-                |rt| {
-                    // mov rax, r14
-                    rt.asm.mov(rax, r14).unwrap();
-                    // dx:ax = ax * r8w
-                    rt.asm.$operation(r8w).unwrap();
-                    // mov r14, rax
-                    rt.asm.mov(r14, rax).unwrap();
-                    // mov r15, rdx
-                    rt.asm.mov(r15, rdx).unwrap();
-                },
-                |rt| {
-                    // mov rax, r14
-                    rt.asm.mov(rax, r14).unwrap();
-                    // ax = al * r8b
-                    rt.asm.$operation(r8b).unwrap();
-                    // movzx ecx, ah
-                    rt.asm.movzx(ecx, ah).unwrap();
-                    // movzx r14d, al
-                    rt.asm.movzx(r14d, al).unwrap();
-                    // mov r15, rcx
-                    rt.asm.mov(r15, rcx).unwrap();
-                },
-                |rt| {
-                    // mov rax, r14
-                    rt.asm.mov(rax, r14).unwrap();
-                    // ax = al * r8b
-                    rt.asm.$operation(r8b).unwrap();
-                    // movzx ecx, ah
-                    rt.asm.movzx(ecx, ah).unwrap();
-                    // movzx r14d, al
-                    rt.asm.movzx(r14d, al).unwrap();
-                    // mov r15, rcx
-                    rt.asm.mov(r15, rcx).unwrap();
-                },
-                |rt| {
-                    // mov rax, r14
-                    rt.asm.mov(rax, r14).unwrap();
-                    // edx:eax = eax * r8d
-                    rt.asm.$operation(r8d).unwrap();
-                    // mov r14, rax
-                    rt.asm.mov(r14, rax).unwrap();
-                    // mov r15, rdx
-                    rt.asm.mov(r15, rdx).unwrap();
-                },
-                |rt| {
-                    // mov rax, r14
-                    rt.asm.mov(rax, r14).unwrap();
-                    // dx:ax = ax * r8w
-                    rt.asm.$operation(r8w).unwrap();
-                    // mov r14, rax
-                    rt.asm.mov(r14, rax).unwrap();
-                    // mov r15, rdx
-                    rt.asm.mov(r15, rdx).unwrap();
-                },
-                |rt| {
-                    // mov rax, r14
-                    rt.asm.mov(rax, r14).unwrap();
-                    // ax = al * r8b
-                    rt.asm.$operation(r8b).unwrap();
-                    // movzx ecx, ah
-                    rt.asm.movzx(ecx, ah).unwrap();
-                    // movzx r14d, al
-                    rt.asm.movzx(r14d, al).unwrap();
-                    // mov r15, rcx
-                    rt.asm.mov(r15, rcx).unwrap();
-                },
-            );
-
-            rt.asm.set_label(&mut epilogue).unwrap();
-            {
-                // mov rcx, r12
-                rt.asm.mov(rcx, r12).unwrap();
-                // pushfq
-                stack::pushfq(rt);
-                // call ...
-                stack::call(rt, rt.func_labels[&FnDef::VmFlags]);
-
-                // store r15
-                scratch::store(rt, r15);
-                // store r14
-                scratch::store(rt, r14);
-
-                // mov rax, r13
-                rt.asm.mov(rax, r13).unwrap();
-                // pop r15
-                stack::pop(rt, r15);
-                // pop r14
-                stack::pop(rt, r14);
-                // pop r13
-                stack::pop(rt, r13);
-                // pop r12
-                stack::pop(rt, r12);
-                // ret
-                stack::ret(rt);
-            }
-        }
-    };
-}
-pub(crate) use multiply;
-
 pub mod add;
 pub mod and;
 pub mod discard;
 pub mod flags;
-pub mod imul;
 pub mod jcc;
 pub mod load_address;
 pub mod load_immediate;
@@ -343,8 +192,8 @@ pub mod load_register;
 pub mod load_vector;
 pub mod mul;
 pub mod or;
-pub mod pcmpeqb;
-pub mod pmovmskb;
+pub mod packed_byte_equal;
+pub mod packed_byte_mask;
 pub mod pop;
 pub mod push;
 pub mod ret;
@@ -358,7 +207,12 @@ pub mod store_register;
 pub mod store_vector;
 pub mod sub;
 pub mod test;
-pub mod tzcnt;
+pub mod trailing_zeros;
+pub mod vector;
+pub mod vector_and;
+pub mod vector_and_not;
+pub mod vector_or;
+pub mod vector_xor;
 pub mod xor;
 
 pub fn initialize(rt: &mut Runtime) {
@@ -385,13 +239,16 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::Shr, FnDef::VmHandlerShr),
         (VMOp::Sar, FnDef::VmHandlerSar),
         (VMOp::Mul, FnDef::VmHandlerMul),
-        (VMOp::Imul, FnDef::VmHandlerImul),
-        (VMOp::Tzcnt, FnDef::VmHandlerTzcnt),
+        (VMOp::TrailingZeros, FnDef::VmHandlerTrailingZeros),
         (VMOp::Push, FnDef::VmHandlerPush),
         (VMOp::Pop, FnDef::VmHandlerPop),
         (VMOp::Discard, FnDef::VmHandlerDiscard),
-        (VMOp::Pmovmskb, FnDef::VmHandlerPmovmskb),
-        (VMOp::Pcmpeqb, FnDef::VmHandlerPcmpeqb),
+        (VMOp::PackedByteMask, FnDef::VmHandlerPackedByteMask),
+        (VMOp::PackedByteEqual, FnDef::VmHandlerPackedByteEqual),
+        (VMOp::VectorAnd, FnDef::VmHandlerVectorAnd),
+        (VMOp::VectorOr, FnDef::VmHandlerVectorOr),
+        (VMOp::VectorXor, FnDef::VmHandlerVectorXor),
+        (VMOp::VectorAndNot, FnDef::VmHandlerVectorAndNot),
     ];
 
     let mut rng = rand::thread_rng();
