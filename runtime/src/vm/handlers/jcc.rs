@@ -405,7 +405,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut check_result).unwrap();
     {
         // load rax
-        utils::scratch::load(rt, rax);
+        utils::scratch::load(rt, rcx, rax);
 
         // test r15b, r15b
         rt.asm.test(r15b, r15b).unwrap();

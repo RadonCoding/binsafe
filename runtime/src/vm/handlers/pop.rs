@@ -14,7 +14,7 @@ pub fn build(rt: &mut Runtime) {
     utils::vreg::add_imm(rt, rcx, 0x8, VMReg::Rsp);
 
     // store r9
-    scratch::store(rt, r9);
+    scratch::store(rt, rcx, r9);
 
     // mov rax, rdx
     rt.asm.mov(rax, rdx).unwrap();

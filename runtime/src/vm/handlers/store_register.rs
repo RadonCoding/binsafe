@@ -16,7 +16,7 @@ pub fn build(rt: &mut Runtime) {
     utils::bytecode::read_byte_zx(rt, rdx, r8d);
 
     // load r9
-    scratch::load(rt, r9);
+    scratch::load(rt, rcx, r9);
 
     utils::width::dispatch_register(
         rt,

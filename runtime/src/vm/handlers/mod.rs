@@ -146,9 +146,9 @@ macro_rules! arithmetic {
             utils::bytecode::read_byte(rt, r13, al);
 
             // load r8
-            scratch::load(rt, r8);
+            scratch::load(rt, rcx, r8);
             // load r14
-            scratch::load(rt, r14);
+            scratch::load(rt, rcx, r14);
 
             $crate::__arithmetic!(rt, $operation, $register, &mut epilogue);
 
@@ -162,7 +162,7 @@ macro_rules! arithmetic {
                 stack::call(rt, rt.func_labels[&FnDef::VmFlags]);
 
                 // store r14
-                scratch::store(rt, r14);
+                scratch::store(rt, rcx, r14);
 
                 // mov rax, r13
                 rt.asm.mov(rax, r13).unwrap();

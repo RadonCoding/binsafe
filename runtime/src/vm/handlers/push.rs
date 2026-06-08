@@ -9,7 +9,7 @@ use crate::{
 // unsigned char* (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
     // load r9
-    scratch::load(rt, r9);
+    scratch::load(rt, rcx, r9);
 
     // sub [rcx + ...], 0x8
     utils::vreg::sub_imm(rt, rcx, 0x8, VMReg::Rsp);

@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, rax, rdx, xmm0, xmm1, ymm0, ymm1};
+use iced_x86::code_asm::{al, rax, rcx, rdx, xmm0, xmm1, ymm0, ymm1};
 
 use crate::{
     runtime::Runtime,
@@ -7,11 +7,7 @@ use crate::{
 
 // Shared body for whole-vector bitwise operations: pops two vectors, applies the
 // native operation, pushes one result. The width selects the 128-bit or 256-bit form.
-pub fn bitwise(
-    rt: &mut Runtime,
-    sse: impl FnOnce(&mut Runtime),
-    avx: impl FnOnce(&mut Runtime),
-) {
+pub fn bitwise(rt: &mut Runtime, sse: impl FnOnce(&mut Runtime), avx: impl FnOnce(&mut Runtime)) {
     let mut epilogue = rt.asm.create_label();
 
     // al -> width
@@ -23,21 +19,21 @@ pub fn bitwise(
         &mut epilogue,
         |rt| {
             // load xmm1
-            scratch::load_128(rt, xmm1);
+            scratch::load_128(rt, rcx, xmm1);
             // load xmm0
-            scratch::load_128(rt, xmm0);
+            scratch::load_128(rt, rcx, xmm0);
             sse(rt);
             // store xmm0
-            scratch::store_128(rt, xmm0);
+            scratch::store_128(rt, rcx, xmm0);
         },
         |rt| {
             // load ymm1
-            scratch::load_256(rt, ymm1);
+            scratch::load_256(rt, rcx, ymm1);
             // load ymm0
-            scratch::load_256(rt, ymm0);
+            scratch::load_256(rt, rcx, ymm0);
             avx(rt);
             // store ymm0
-            scratch::store_256(rt, ymm0);
+            scratch::store_256(rt, rcx, ymm0);
         },
     );
 

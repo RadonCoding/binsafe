@@ -89,7 +89,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut epilogue).unwrap();
     {
         // store r8
-        scratch::store(rt, r8);
+        scratch::store(rt, rcx, r8);
 
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
