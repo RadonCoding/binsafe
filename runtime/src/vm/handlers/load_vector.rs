@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, eax, ptr, r8, r8d, r9, r9d, rax, rdx, xmm0, ymm0};
+use iced_x86::code_asm::{al, eax, ptr, r8, r8d, r9, r9d, rax, rcx, rdx, xmm0, ymm0};
 
 use crate::{
     runtime::{DataDef, Runtime},
@@ -51,13 +51,13 @@ pub fn build(rt: &mut Runtime) {
             // movups xmm0, [r8 + r9]
             rt.asm.movups(xmm0, ptr(r8 + r9)).unwrap();
             // store xmm0
-            scratch::store_128(rt, xmm0);
+            scratch::store_128(rt, rcx, xmm0);
         },
         |rt| {
             // vmovups ymm0, [r8 + r9]
             rt.asm.vmovups(ymm0, ptr(r8 + r9)).unwrap();
             // store ymm0
-            scratch::store_256(rt, ymm0);
+            scratch::store_256(rt, rcx, ymm0);
         },
     );
 
@@ -74,7 +74,7 @@ pub fn build(rt: &mut Runtime) {
         // mov eax, [r8 + r9]
         rt.asm.mov(eax, ptr(r8 + r9)).unwrap();
         // store rax
-        scratch::store(rt, rax);
+        scratch::store(rt, rcx, rax);
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
@@ -84,7 +84,7 @@ pub fn build(rt: &mut Runtime) {
         // mov rax, [r8 + r9]
         rt.asm.mov(rax, ptr(r8 + r9)).unwrap();
         // store rax
-        scratch::store(rt, rax);
+        scratch::store(rt, rcx, rax);
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }

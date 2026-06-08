@@ -27,9 +27,9 @@ pub fn build(rt: &mut Runtime) {
     utils::bytecode::read_byte(rt, r13, al);
 
     // load r8
-    scratch::load(rt, r8);
+    scratch::load(rt, rcx, r8);
     // load r14
-    scratch::load(rt, r14);
+    scratch::load(rt, rcx, r14);
 
     utils::width::dispatch_register(
         rt,
@@ -56,9 +56,9 @@ pub fn build(rt: &mut Runtime) {
         stack::call(rt, rt.func_labels[&FnDef::VmFlags]);
 
         // store r15
-        scratch::store(rt, r15);
+        scratch::store(rt, rcx, r15);
         // store r14
-        scratch::store(rt, r14);
+        scratch::store(rt, rcx, r14);
 
         // mov rax, r13
         rt.asm.mov(rax, r13).unwrap();

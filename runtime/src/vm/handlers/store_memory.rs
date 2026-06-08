@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, ptr, r8, r9, r9b, r9d, r9w, rax, rdx, xmm0};
+use iced_x86::code_asm::{al, ptr, r8, r9, r9b, r9d, r9w, rax, rcx, rdx, xmm0};
 
 use crate::{
     runtime::Runtime,
@@ -17,7 +17,7 @@ pub fn build(rt: &mut Runtime) {
     utils::bytecode::read_byte(rt, rdx, al);
 
     // load r8
-    scratch::load(rt, r8);
+    scratch::load(rt, rcx, r8);
 
     // cmp al, ...
     rt.asm
@@ -27,7 +27,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.je(vector).unwrap();
 
     // load r9
-    scratch::load(rt, r9);
+    scratch::load(rt, rcx, r9);
 
     utils::width::dispatch_register(
         rt,
@@ -82,7 +82,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut vector).unwrap();
     {
         // load xmm0
-        scratch::load_128(rt, xmm0);
+        scratch::load_128(rt, rcx, xmm0);
         // movups [r8], xmm0
         rt.asm.movups(ptr(r8), xmm0).unwrap();
 
