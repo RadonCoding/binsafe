@@ -12,7 +12,7 @@ use logger::info;
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::bytecode;
-use runtime::VM_DISPATCH_SIZE;
+use runtime::{VM_DISPATCH_SIZE, VM_TRAMPOLINE_SIZE};
 
 mod attestation;
 pub mod crypt;
@@ -41,6 +41,7 @@ impl Default for Keys {
 pub struct Virtualization {
     keys: Keys,
     vblocks: HashMap<u32, usize>,
+    trampolines: HashMap<u32, usize>,
     duplicates: usize,
     blocked: usize,
     missing: HashMap<Mnemonic, usize>,
@@ -111,7 +112,7 @@ impl Protection for Virtualization {
         let mut groups = Vec::new();
 
         'outer: for block in &mut engine.blocks {
-            if block.size < VM_DISPATCH_SIZE {
+            if block.size < VM_TRAMPOLINE_SIZE {
                 continue;
             }
 
@@ -189,6 +190,18 @@ impl Protection for Virtualization {
             }
         }
 
+        // Blocks too small for an inline stub get a JMP to a trampoline that carries it
+        for block in &engine.blocks {
+            if self.vblocks.contains_key(&block.rva) && block.size < VM_DISPATCH_SIZE {
+                self.trampolines.insert(block.rva, self.trampolines.len());
+            }
+        }
+
+        engine.rt.define_data_bytes(
+            DataDef::VmTrampolines,
+            &vec![0u8; self.trampolines.len() * VM_DISPATCH_SIZE],
+        );
+
         #[cfg(debug_assertions)]
         {
             use logger::debug;
@@ -219,45 +232,93 @@ impl Protection for Virtualization {
         let vtable_offset = engine.pe.translate(RVA(vtable_rva).into()).unwrap();
         let vtable = unsafe { engine.pe.as_ptr().add(vtable_offset) as *mut u8 };
 
-        for i in 0..engine.blocks.len() {
-            let block = &engine.blocks[i];
+        let trampolines_rva = engine
+            .rt
+            .lookup(engine.rt.data_labels[&DataDef::VmTrampolines])
+            as u32;
+        let trampolines_offset = engine.pe.translate(RVA(trampolines_rva).into()).unwrap();
+        let trampolines = unsafe { engine.pe.as_ptr().add(trampolines_offset) as *mut u8 };
 
-            if !self.vblocks.contains_key(&block.rva) {
+        for i in 0..engine.blocks.len() {
+            let rva = engine.blocks[i].rva;
+            let size = engine.blocks[i].size;
+
+            if !self.vblocks.contains_key(&rva) {
                 continue;
             }
 
-            let index = self.vblocks[&block.rva];
-            // OR with 0x10000000 to force PUSH imm32, to ensure consistent size after encrypting
-            let vtable_index = index as i32 | 0x10000000;
+            let vtable_index = self.vblocks[&rva];
 
-            let mut asm = CodeAssembler::new(engine.bitness).unwrap();
+            if size >= VM_DISPATCH_SIZE {
+                let mut asm = CodeAssembler::new(engine.bitness).unwrap();
 
-            asm.push(vtable_index).unwrap();
-            asm.call(ventry_rva).unwrap();
-            let dispatch1 = asm.assemble(block.rva as u64).unwrap();
+                asm.push(vtable_index as i32 | 0x10000000).unwrap();
+                asm.call(ventry_rva).unwrap();
+                let dispatch1 = asm.assemble(rva as u64).unwrap();
 
-            assert!(dispatch1.len() <= VM_DISPATCH_SIZE);
+                assert!(dispatch1.len() <= VM_DISPATCH_SIZE);
 
-            asm.reset();
+                asm.reset();
 
-            // Stub has to be assembled twice so that the runtime return address can be calculated
-            let return_address = block.rva as i32 + dispatch1.len() as i32;
+                // Stub has to be assembled twice so that the runtime return address can be calculated
+                let return_address = rva as i32 + dispatch1.len() as i32;
 
-            asm.push(vtable_index ^ return_address).unwrap();
-            asm.call(ventry_rva).unwrap();
-            let dispatch2 = asm.assemble(block.rva as u64).unwrap();
+                asm.push((vtable_index as i32 | 0x10000000) ^ return_address)
+                    .unwrap();
+                asm.call(ventry_rva).unwrap();
+                let dispatch2 = asm.assemble(rva as u64).unwrap();
 
-            assert_eq!(dispatch1.len(), dispatch2.len());
+                assert_eq!(dispatch1.len(), dispatch2.len());
 
-            // Patch the stub displacement placeholder in the VM-table
-            unsafe {
-                let displacement = (block.size - dispatch2.len()) as u32;
-                vtable
-                    .add(index * 8)
-                    .copy_from(displacement.to_le_bytes().as_ptr(), mem::size_of::<u32>());
+                // Patch the stub displacement placeholder in the VM-table
+                unsafe {
+                    let displacement = (size - dispatch2.len()) as u32;
+                    vtable
+                        .add(vtable_index * 8)
+                        .copy_from(displacement.to_le_bytes().as_ptr(), mem::size_of::<u32>());
+                }
+
+                engine.replace(i, &dispatch2);
+            } else {
+                let trampoline = self.trampolines[&rva];
+                let trampoline_rva = trampolines_rva + (trampoline * VM_DISPATCH_SIZE) as u32;
+
+                let mut asm = CodeAssembler::new(engine.bitness).unwrap();
+
+                let return_address = trampoline_rva + VM_DISPATCH_SIZE as u32;
+
+                asm.push((vtable_index as i32 | 0x10000000) ^ return_address as i32)
+                    .unwrap();
+                asm.call(ventry_rva).unwrap();
+                let dispatch = asm.assemble(trampoline_rva as u64).unwrap();
+
+                assert_eq!(dispatch.len(), VM_DISPATCH_SIZE);
+
+                unsafe {
+                    trampolines
+                        .add(trampoline * VM_DISPATCH_SIZE)
+                        .copy_from(dispatch.as_ptr(), VM_DISPATCH_SIZE);
+                }
+
+                // Signed displacement since the trampoline sits ahead of the block
+                unsafe {
+                    let displacement = (rva as i64 + size as i64 - return_address as i64) as i32;
+                    vtable.add(vtable_index * 8).copy_from(
+                        (displacement as u32).to_le_bytes().as_ptr(),
+                        mem::size_of::<u32>(),
+                    );
+                }
+
+                asm.reset();
+
+                asm.jmp(trampoline_rva as u64).unwrap();
+
+                let branch = asm.assemble(rva as u64).unwrap();
+
+                assert!(branch.len() <= size);
+
+                engine.replace(i, &branch);
             }
-
-            engine.replace(i, &dispatch2);
         }
 
         info!(

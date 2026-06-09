@@ -17,3 +17,6 @@ pub const VM_SCRATCH_SIZE: u64 = 0x100;
 
 // PUSH imm32 + CALL rel32
 pub const VM_DISPATCH_SIZE: usize = 10;
+
+// JMP rel32
+pub const VM_TRAMPOLINE_SIZE: usize = 5;
