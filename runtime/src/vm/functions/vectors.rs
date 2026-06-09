@@ -2,7 +2,7 @@ use iced_x86::code_asm::{eax, ecx, ptr, rax, CodeLabel};
 
 use crate::{
     runtime::{DataDef, Runtime},
-    vm::{utils, VECTORS_TO_NATIVE},
+    vm::{bytecode::VMReg, utils, VECTORS_TO_NATIVE},
 };
 
 pub fn capture(rt: &mut Runtime) {
@@ -10,12 +10,7 @@ pub fn capture(rt: &mut Runtime) {
 
     detect(rt, sse);
 
-    // mov rax, [...]
-    rt.asm
-        .mov(eax, ptr(rt.data_labels[&DataDef::VmVectorsTlsIndex]))
-        .unwrap();
-    // mov rax, [0x1480 + rax*8]
-    rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
+    base(rt);
 
     for (vec, ymm, _) in VECTORS_TO_NATIVE {
         // vmovups [rax + ...], ...
@@ -26,12 +21,7 @@ pub fn capture(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut sse).unwrap();
     {
-        // mov rax, [...]
-        rt.asm
-            .mov(eax, ptr(rt.data_labels[&DataDef::VmVectorsTlsIndex]))
-            .unwrap();
-        // mov rax, [0x1480 + rax*8]
-        rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
+        base(rt);
 
         for (vec, _, xmm) in VECTORS_TO_NATIVE {
             // movups [rax + ...], ...
@@ -47,12 +37,7 @@ pub fn restore(rt: &mut Runtime) {
 
     detect(rt, sse);
 
-    // mov rax, [...]
-    rt.asm
-        .mov(eax, ptr(rt.data_labels[&DataDef::VmVectorsTlsIndex]))
-        .unwrap();
-    // mov rax, [0x1480 + rax*8]
-    rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
+    base(rt);
 
     for (src, dst, _) in VECTORS_TO_NATIVE {
         // vmovups ..., [rax + ...]
@@ -63,12 +48,7 @@ pub fn restore(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut sse).unwrap();
     {
-        // mov rax, [...]
-        rt.asm
-            .mov(eax, ptr(rt.data_labels[&DataDef::VmVectorsTlsIndex]))
-            .unwrap();
-        // mov rax, [0x1480 + rax*8]
-        rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
+        base(rt);
 
         for (src, _, dst) in VECTORS_TO_NATIVE {
             // movups ..., [rax + ...]
@@ -77,6 +57,17 @@ pub fn restore(rt: &mut Runtime) {
         // ret
         rt.asm.ret().unwrap();
     }
+}
+
+fn base(rt: &mut Runtime) {
+    // mov eax, [...]
+    rt.asm
+        .mov(eax, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
+        .unwrap();
+    // mov rax, gs:[0x1480 + rax*8]
+    rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
+    // mov rax, [rax + ...]
+    utils::vreg::load_reg(rt, rax, VMReg::VVector, rax);
 }
 
 fn detect(rt: &mut Runtime, sse: CodeLabel) {

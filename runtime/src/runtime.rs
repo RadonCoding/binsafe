@@ -90,7 +90,6 @@ mapped! {
         VmHandlers,
         VmGlobalRegisters,
         VmRegistersTlsIndex,
-        VmVectorsTlsIndex,
         VmKeyTlsIndex,
         VmCleanupFlsIndex,
         VmTable,
@@ -419,7 +418,6 @@ impl Runtime {
         self.define_data_bytes(DataDef::VmGlobalRegisters, &[0u8; VMReg::COUNT * 8]);
 
         self.define_data_dword(DataDef::VmRegistersTlsIndex, 0);
-        self.define_data_dword(DataDef::VmVectorsTlsIndex, 0);
         self.define_data_dword(DataDef::VmKeyTlsIndex, 0);
         self.define_data_dword(DataDef::VmCleanupFlsIndex, 0);
 

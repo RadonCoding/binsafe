@@ -110,6 +110,7 @@ mapped! {
         VImm, // Immediate Key
         VStack, // Virtual Stack
         VScratch, // Virtual Scratch
+        VVector, // Virtual Vectors
     }
 }
 

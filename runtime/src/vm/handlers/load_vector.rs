@@ -1,9 +1,9 @@
-use iced_x86::code_asm::{al, eax, ptr, r8, r8d, r9, r9d, rax, rcx, rdx, xmm0, ymm0};
+use iced_x86::code_asm::{al, eax, ptr, r8, r9, r9d, rax, rcx, rdx, xmm0, ymm0};
 
 use crate::{
-    runtime::{DataDef, Runtime},
+    runtime::Runtime,
     vm::{
-        bytecode::VMWidth,
+        bytecode::{VMReg, VMWidth},
         utils::{self, scratch},
     },
 };
@@ -14,21 +14,16 @@ pub fn build(rt: &mut Runtime) {
     let mut narrow32 = rt.asm.create_label();
     let mut narrow64 = rt.asm.create_label();
 
-    // mov r8d, [...]
-    rt.asm
-        .mov(r8d, ptr(rt.data_labels[&DataDef::VmVectorsTlsIndex]))
-        .unwrap();
-    // mov r8, gs:[0x1480 + r8*8]
-    rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();
-
     // al -> width
     utils::bytecode::read_byte(rt, rdx, al);
 
     // r9d -> source
     utils::bytecode::read_byte_zx(rt, rdx, r9d);
-
     // shl r9, 0x5
     rt.asm.shl(r9, 0x5).unwrap();
+
+    // mov r8, [rcx + ...]
+    utils::vreg::load_reg(rt, rcx, VMReg::VVector, r8);
 
     // cmp al, ...
     rt.asm

@@ -66,6 +66,7 @@ fn snapshot(executor: &mut Executor, state: [u64; VMReg::COUNT]) -> Vec<(VMReg, 
                     | VMReg::VImm
                     | VMReg::VStack
                     | VMReg::VScratch
+                    | VMReg::VVector
             )
         })
         .map(|r| (*r, state[executor.rt.mapper.index(*r) as usize]))
