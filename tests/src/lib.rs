@@ -7,7 +7,7 @@ use obfuscator::protections::virtualization::crypt;
 use runtime::{
     mapper::Mappable,
     runtime::{DataDef, FnDef, Runtime},
-    vm::{self, bytecode::VMReg},
+    vm::bytecode::VMReg,
 };
 use windows::Win32::System::{
     Memory::{
@@ -132,7 +132,7 @@ impl Executor {
             .lea(rcx, ptr(self.rt.data_labels[&DataDef::VmCode]))
             .unwrap();
         // call ...
-        vm::utils::stack::call(&mut self.rt, dispatch);
+        self.rt.asm.call(dispatch).unwrap();
 
         let mut state = [0u64; VMReg::COUNT];
 

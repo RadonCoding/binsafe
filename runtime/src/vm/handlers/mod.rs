@@ -122,7 +122,7 @@ macro_rules! arithmetic {
     ($operation:ident, $register:ident) => {
         use crate::{
             runtime::{FnDef, Runtime},
-            vm::utils::{self, scratch, stack},
+            vm::utils::{self, scratch},
         };
         use iced_x86::code_asm::*;
 
@@ -131,11 +131,11 @@ macro_rules! arithmetic {
             let mut epilogue = rt.asm.create_label();
 
             // push r12
-            stack::push(rt, r12);
+            rt.asm.push(r12).unwrap();
             // push r13
-            stack::push(rt, r13);
+            rt.asm.push(r13).unwrap();
             // push r14
-            stack::push(rt, r14);
+            rt.asm.push(r14).unwrap();
 
             // mov r12, rcx
             rt.asm.mov(r12, rcx).unwrap();
@@ -157,9 +157,9 @@ macro_rules! arithmetic {
                 // mov rcx, r12
                 rt.asm.mov(rcx, r12).unwrap();
                 // pushfq
-                stack::pushfq(rt);
+                rt.asm.pushfq().unwrap();
                 // call ...
-                stack::call(rt, rt.func_labels[&FnDef::VmFlags]);
+                rt.asm.call(rt.func_labels[&FnDef::VmFlags]).unwrap();
 
                 // store r14
                 scratch::store(rt, rcx, r14);
@@ -167,13 +167,13 @@ macro_rules! arithmetic {
                 // mov rax, r13
                 rt.asm.mov(rax, r13).unwrap();
                 // pop r14
-                stack::pop(rt, r14);
+                rt.asm.pop(r14).unwrap();
                 // pop r13
-                stack::pop(rt, r13);
+                rt.asm.pop(r13).unwrap();
                 // pop r12
-                stack::pop(rt, r12);
+                rt.asm.pop(r12).unwrap();
                 // ret
-                stack::ret(rt);
+                rt.asm.ret().unwrap();
             }
         }
     };

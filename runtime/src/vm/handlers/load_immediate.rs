@@ -4,7 +4,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::VMReg,
-        utils::{self, scratch, stack},
+        utils::{self, scratch},
     },
 };
 
@@ -94,6 +94,6 @@ pub fn build(rt: &mut Runtime) {
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
         // ret
-        stack::ret(rt);
+        rt.asm.ret().unwrap();
     }
 }

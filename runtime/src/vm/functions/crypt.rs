@@ -4,7 +4,7 @@ use crate::{
     runtime::{DataDef, Runtime},
     vm::{
         bytecode::VMReg,
-        utils::{self, stack},
+        utils::{self},
     },
 };
 
@@ -24,11 +24,11 @@ pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // push r13
-    stack::push(rt, r13);
+    rt.asm.push(r13).unwrap();
     // push r14
-    stack::push(rt, r14);
+    rt.asm.push(r14).unwrap();
     // push r15
-    stack::push(rt, r15);
+    rt.asm.push(r15).unwrap();
 
     // mov r13, [r12 + ...]
     utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
@@ -220,12 +220,12 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut epilogue).unwrap();
     {
         // pop r15
-        stack::pop(rt, r15);
+        rt.asm.pop(r15).unwrap();
         // pop r14
-        stack::pop(rt, r14);
+        rt.asm.pop(r14).unwrap();
         // pop r13
-        stack::pop(rt, r13);
+        rt.asm.pop(r13).unwrap();
         // ret
-        stack::ret(rt);
+        rt.asm.ret().unwrap();
     }
 }

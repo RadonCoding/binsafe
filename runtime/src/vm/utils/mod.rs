@@ -3,7 +3,6 @@ pub mod bytecode;
 pub mod debug;
 pub mod lock;
 pub mod scratch;
-pub mod stack;
 pub mod vreg;
 pub mod vvec;
 pub mod width;

@@ -4,7 +4,7 @@ use crate::{
     runtime::{BoolDef, DataDef, FnDef, ImportDef, Runtime},
     vm::{
         bytecode::VMReg,
-        utils::{self, stack},
+        utils::{self},
     },
 };
 
@@ -143,7 +143,7 @@ pub fn handler(rt: &mut Runtime) {
     // xor rcx, rcx
     rt.asm.xor(rcx, rcx).unwrap();
     // call ...
-    stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
+    rt.asm.call(rt.func_labels[&FnDef::VmCrypt]).unwrap();
 
     // mov rax, -0x1 -> EXCEPTION_CONTINUE_EXECUTION
     rt.asm.mov(rax, -0x1i64 as u64).unwrap();

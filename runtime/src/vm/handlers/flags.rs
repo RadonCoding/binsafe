@@ -4,18 +4,18 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{VMFlag, VMReg},
-        utils::{self, stack},
+        utils::{self},
     },
 };
 
 // void (unsigned long*, unsigned long)
 pub fn build(rt: &mut Runtime) {
     // pop rax
-    stack::pop(rt, rax);
+    rt.asm.pop(rax).unwrap();
     // pop rdx
-    stack::pop(rt, rdx);
+    rt.asm.pop(rdx).unwrap();
     // push rax
-    stack::push(rt, rax);
+    rt.asm.push(rax).unwrap();
 
     // mov eax, [rcx + ...]
     utils::vreg::load_reg32(rt, rcx, VMReg::Flags, eax);
@@ -43,5 +43,5 @@ pub fn build(rt: &mut Runtime) {
     utils::vreg::store_reg32(rt, rcx, eax, VMReg::Flags);
 
     // ret
-    stack::ret(rt);
+    rt.asm.ret().unwrap();
 }

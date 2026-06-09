@@ -1,5 +1,5 @@
 use crate::vm::bytecode::{VMLogic, VMTest};
-use crate::vm::utils::{self, stack};
+use crate::vm::utils::{self};
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
 use iced_x86::code_asm::{
     eax, r13, r13b, r13d, r14, r14d, r15, r15b, r8, r8b, r8d, r9b, r9d, rax, rcx, rdx,
@@ -31,11 +31,11 @@ pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // push r13
-    stack::push(rt, r13);
+    rt.asm.push(r13).unwrap();
     // push r14
-    stack::push(rt, r14);
+    rt.asm.push(r14).unwrap();
     // push r15
-    stack::push(rt, r15);
+    rt.asm.push(r15).unwrap();
 
     // mov eax, [rcx + ...]
     utils::vreg::load_reg32(rt, rcx, VMReg::Flags, eax);
@@ -483,12 +483,12 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(rax, rdx).unwrap();
 
         // pop r15
-        stack::pop(rt, r15);
+        rt.asm.pop(r15).unwrap();
         // pop r14
-        stack::pop(rt, r14);
+        rt.asm.pop(r14).unwrap();
         // pop r13
-        stack::pop(rt, r13);
+        rt.asm.pop(r13).unwrap();
         // ret
-        stack::ret(rt);
+        rt.asm.ret().unwrap();
     }
 }

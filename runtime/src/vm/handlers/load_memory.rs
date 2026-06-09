@@ -6,7 +6,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::VMWidth,
-        utils::{self, scratch, stack},
+        utils::{self, scratch},
     },
 };
 
@@ -78,7 +78,7 @@ pub fn build(rt: &mut Runtime) {
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
         // ret
-        stack::ret(rt);
+        rt.asm.ret().unwrap();
     }
 
     rt.asm.set_label(&mut vector).unwrap();
@@ -91,6 +91,6 @@ pub fn build(rt: &mut Runtime) {
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
         // ret
-        stack::ret(rt);
+        rt.asm.ret().unwrap();
     }
 }

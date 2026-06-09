@@ -2,7 +2,7 @@ use iced_x86::code_asm::{al, byte_ptr, dword_ptr, ptr, r8, r8d, r9, r9d, rax, rc
 
 use crate::{
     runtime::Runtime,
-    vm::utils::{self, scratch, stack},
+    vm::utils::{self, scratch},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -65,6 +65,6 @@ pub fn build(rt: &mut Runtime) {
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
         // ret
-        stack::ret(rt);
+        rt.asm.ret().unwrap();
     }
 }
