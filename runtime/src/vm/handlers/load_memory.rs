@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, dword_ptr, ptr, r8, r9, r9d, rax, rcx, rdx, word_ptr, xmm0,
+    al, byte_ptr, dword_ptr, ptr, r8, r9, r9d, rax, r12, rcx, word_ptr, xmm0,
 };
 
 use crate::{
@@ -10,16 +10,16 @@ use crate::{
     },
 };
 
-// unsigned char* (unsigned long*, unsigned char*)
+// unsigned char* (unsigned char*)
 pub fn build(rt: &mut Runtime) {
     let mut vector = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // al -> width
-    utils::bytecode::read_byte(rt, rdx, al);
+    utils::bytecode::read_byte(rt, rcx, al);
 
     // load r8
-    scratch::load(rt, rcx, r8);
+    scratch::load(rt, r12, r8);
 
     // cmp al, ...
     rt.asm
@@ -73,10 +73,10 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut epilogue).unwrap();
     {
         // store r9
-        scratch::store(rt, rcx, r9);
+        scratch::store(rt, r12, r9);
 
-        // mov rax, rdx
-        rt.asm.mov(rax, rdx).unwrap();
+        // mov rax, rcx
+        rt.asm.mov(rax, rcx).unwrap();
         // ret
         rt.asm.ret().unwrap();
     }
@@ -86,10 +86,10 @@ pub fn build(rt: &mut Runtime) {
         // movups xmm0, [r8]
         rt.asm.movups(xmm0, ptr(r8)).unwrap();
         // store xmm0
-        scratch::store_128(rt, rcx, xmm0);
+        scratch::store_128(rt, r12, xmm0);
 
-        // mov rax, rdx
-        rt.asm.mov(rax, rdx).unwrap();
+        // mov rax, rcx
+        rt.asm.mov(rax, rcx).unwrap();
         // ret
         rt.asm.ret().unwrap();
     }

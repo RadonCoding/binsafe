@@ -241,8 +241,6 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.pop(r8).unwrap();
 
         // Resolve the VM-table entry into the block pointer:
-        // mov rcx, r12
-        rt.asm.mov(rcx, r12).unwrap();
         // call ...
         rt.asm.call(rt.func_labels[&FnDef::VmLookup]).unwrap();
         // mov rcx, rax

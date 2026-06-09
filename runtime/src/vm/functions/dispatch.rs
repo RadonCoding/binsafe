@@ -72,10 +72,8 @@ pub fn build(rt: &mut Runtime) {
         // mov rax, [rax + r8*8]
         rt.asm.mov(rax, ptr(rax + r8 * 8)).unwrap();
 
-        // mov rcx, r12
-        rt.asm.mov(rcx, r12).unwrap();
-        // mov rdx, r13
-        rt.asm.mov(rdx, r13).unwrap();
+        // mov rcx, r13
+        rt.asm.mov(rcx, r13).unwrap();
         // call rax
         rt.asm.call(rax).unwrap();
 
@@ -138,8 +136,6 @@ pub fn build(rt: &mut Runtime) {
         // add rax, ...
         rt.asm.add(rax, VM_DISPATCH_SIZE as i32).unwrap();
 
-        // mov rcx, r12
-        rt.asm.mov(rcx, r12).unwrap();
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
         // call ...
