@@ -124,17 +124,19 @@ pub fn build(rt: &mut Runtime) {
     rt.asm
         .call(rt.func_labels[&FnDef::VmHandlersInitialize])
         .unwrap();
+
+    // mov [r12 + ...], rsp
+    utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
+
+    // mov rsp, [r12 + ...]
+    utils::vreg::load_reg(rt, r12, VMReg::VStack, rsp);
+
     // lea rax, [...]
     rt.asm
         .lea(rax, ptr(rt.func_labels[&FnDef::VmEntry]))
         .unwrap();
     // mov [r12 + ...], rax
     utils::vreg::store_reg(rt, r12, rax, VMReg::NExit);
-    // mov [r12 + ...], rsp
-    utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
-
-    // mov rsp, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VStack, rsp);
 
     // lea rcx, [...]
     rt.asm
