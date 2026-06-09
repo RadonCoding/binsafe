@@ -40,7 +40,7 @@ impl Default for Keys {
 #[derive(Default)]
 pub struct Virtualization {
     keys: Keys,
-    vblocks: HashMap<u32, usize>,
+    virtualized: HashMap<u32, usize>,
     trampolines: HashMap<u32, usize>,
     duplicates: usize,
     blocked: usize,
@@ -182,7 +182,7 @@ impl Protection for Virtualization {
             for block in group {
                 // Store the index of this VM-block's VM-table entry
                 let index = vtable.len() / 8;
-                self.vblocks.insert(block.rva, index);
+                self.virtualized.insert(block.rva, index);
 
                 // Store the placeholder for stub displacement and offset in the linear VM-code
                 vtable.extend_from_slice(&0u32.to_le_bytes());
@@ -190,9 +190,9 @@ impl Protection for Virtualization {
             }
         }
 
-        // Blocks too small for an inline stub get a JMP to a trampoline that carries it
+        // Reserve a trampoline slot for each block too small for an inline stub
         for block in &engine.blocks {
-            if self.vblocks.contains_key(&block.rva) && block.size < VM_DISPATCH_SIZE {
+            if self.virtualized.contains_key(&block.rva) && block.size < VM_DISPATCH_SIZE {
                 self.trampolines.insert(block.rva, self.trampolines.len());
             }
         }
@@ -243,11 +243,11 @@ impl Protection for Virtualization {
             let rva = engine.blocks[i].rva;
             let size = engine.blocks[i].size;
 
-            if !self.vblocks.contains_key(&rva) {
+            if !self.virtualized.contains_key(&rva) {
                 continue;
             }
 
-            let vtable_index = self.vblocks[&rva];
+            let vtable_index = self.virtualized[&rva];
 
             if size >= VM_DISPATCH_SIZE {
                 let mut asm = CodeAssembler::new(engine.bitness).unwrap();
@@ -300,7 +300,7 @@ impl Protection for Virtualization {
                         .copy_from(dispatch.as_ptr(), VM_DISPATCH_SIZE);
                 }
 
-                // Signed displacement since the trampoline sits ahead of the block
+                // Patch the stub displacement placeholder in the VM-table to redirect to original block
                 unsafe {
                     let displacement = (rva as i64 + size as i64 - return_address as i64) as i32;
                     vtable.add(vtable_index * 8).copy_from(
@@ -323,9 +323,9 @@ impl Protection for Virtualization {
 
         info!(
             "VIRTUALIZED: {}/{} blocks ({:.2}%) [duplicates: {}]",
-            self.vblocks.len(),
+            self.virtualized.len(),
             engine.blocks.len(),
-            (self.vblocks.len() as f64 / engine.blocks.len().max(1) as f64) * 100.0,
+            (self.virtualized.len() as f64 / engine.blocks.len().max(1) as f64) * 100.0,
             self.duplicates
         );
 
