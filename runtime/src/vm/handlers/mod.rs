@@ -126,43 +126,37 @@ macro_rules! arithmetic {
         };
         use iced_x86::code_asm::*;
 
-        // unsigned char* (unsigned long*, unsigned char*)
+        // unsigned char* (unsigned char*)
         pub fn build(rt: &mut Runtime) {
             let mut epilogue = rt.asm.create_label();
 
-            // push r12
-            rt.asm.push(r12).unwrap();
             // push r13
             rt.asm.push(r13).unwrap();
             // push r14
             rt.asm.push(r14).unwrap();
 
-            // mov r12, rcx
-            rt.asm.mov(r12, rcx).unwrap();
-            // mov r13, rdx
-            rt.asm.mov(r13, rdx).unwrap();
+            // mov r13, rcx
+            rt.asm.mov(r13, rcx).unwrap();
 
             // al -> width
             utils::bytecode::read_byte(rt, r13, al);
 
             // load r8
-            scratch::load(rt, rcx, r8);
+            scratch::load(rt, r12, r8);
             // load r14
-            scratch::load(rt, rcx, r14);
+            scratch::load(rt, r12, r14);
 
             $crate::__arithmetic!(rt, $operation, $register, &mut epilogue);
 
             rt.asm.set_label(&mut epilogue).unwrap();
             {
-                // mov rcx, r12
-                rt.asm.mov(rcx, r12).unwrap();
                 // pushfq
                 rt.asm.pushfq().unwrap();
                 // call ...
                 rt.asm.call(rt.func_labels[&FnDef::VmFlags]).unwrap();
 
                 // store r14
-                scratch::store(rt, rcx, r14);
+                scratch::store(rt, r12, r14);
 
                 // mov rax, r13
                 rt.asm.mov(rax, r13).unwrap();
@@ -170,8 +164,6 @@ macro_rules! arithmetic {
                 rt.asm.pop(r14).unwrap();
                 // pop r13
                 rt.asm.pop(r13).unwrap();
-                // pop r12
-                rt.asm.pop(r12).unwrap();
                 // ret
                 rt.asm.ret().unwrap();
             }

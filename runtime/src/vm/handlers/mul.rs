@@ -5,27 +5,23 @@ use crate::{
     vm::utils::{self, scratch},
 };
 
-// unsigned char* (unsigned long*, unsigned char*)
+// unsigned char* (unsigned char*)
 pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
-    // push r12
-    rt.asm.push(r12).unwrap();
     // push r13
     rt.asm.push(r13).unwrap();
 
-    // mov r12, rcx
-    rt.asm.mov(r12, rcx).unwrap();
-    // mov r13, rdx
-    rt.asm.mov(r13, rdx).unwrap();
+    // mov r13, rcx
+    rt.asm.mov(r13, rcx).unwrap();
 
     // al -> width
     utils::bytecode::read_byte(rt, r13, al);
 
     // load r8
-    scratch::load(rt, rcx, r8);
-    // load rt, rcx, r9
-    scratch::load(rt, rcx, r9);
+    scratch::load(rt, r12, r8);
+    // load r9
+    scratch::load(rt, r12, r9);
 
     utils::width::dispatch_register(
         rt,
@@ -49,8 +45,6 @@ pub fn build(rt: &mut Runtime) {
         // store r9
         scratch::store(rt, r12, r9);
 
-        // mov rcx, r12
-        rt.asm.mov(rcx, r12).unwrap();
         // pushfq
         rt.asm.pushfq().unwrap();
         // call ...
@@ -60,8 +54,6 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(rax, r13).unwrap();
         // pop r13
         rt.asm.pop(r13).unwrap();
-        // pop r12
-        rt.asm.pop(r12).unwrap();
         // ret
         rt.asm.ret().unwrap();
     }

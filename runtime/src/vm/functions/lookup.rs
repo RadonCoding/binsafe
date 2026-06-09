@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{eax, ptr, r8, r8d, r9, r9d, rax, rcx, rdx};
+use iced_x86::code_asm::{eax, ptr, r12, r8, r8d, r9, r9d, rax, rdx};
 
 use crate::{
     runtime::{DataDef, Runtime},
@@ -8,13 +8,13 @@ use crate::{
     },
 };
 
-// unsigned char* (unsigned long*, unsigned char*, unsigned int)
+// unsigned char* (unsigned char*, unsigned int)
 pub fn build(rt: &mut Runtime) {
     // Subtract the image base from the return address:
     // mov r9, rdx
     rt.asm.mov(r9, rdx).unwrap();
-    // sub r9, [rcx + ...]
-    utils::vreg::reg_sub(rt, rcx, VMReg::VImage, r9);
+    // sub r9, [r12 + ...]
+    utils::vreg::reg_sub(rt, r12, VMReg::VImage, r9);
 
     // Resolve the VM-table entry using the index:
     // xor r8d, r9d
@@ -40,16 +40,16 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r9, rdx).unwrap();
     // add r9, rax
     rt.asm.add(r9, rax).unwrap();
-    // mov [rcx + ...], r9
-    utils::vreg::store_reg(rt, rcx, r9, VMReg::NExit);
+    // mov [r12 + ...], r9
+    utils::vreg::store_reg(rt, r12, r9, VMReg::NExit);
 
     // Apply the displacement of the caller stub to the native entry point:
     // mov r9, rdx
     rt.asm.mov(r9, rdx).unwrap();
     // sub r9, rax
     rt.asm.sub(r9, rax).unwrap();
-    // mov [rcx + ...], r9
-    utils::vreg::store_reg(rt, rcx, r9, VMReg::NEntry);
+    // mov [r12 + ...], r9
+    utils::vreg::store_reg(rt, r12, r9, VMReg::NEntry);
 
     // Compute the block pointer from the offset into VM-code:
     // lea rax, [...]

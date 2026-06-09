@@ -1,17 +1,17 @@
-use iced_x86::code_asm::{r9, rax, rcx, rdx};
+use iced_x86::code_asm::{r9, rax, r12, rcx};
 
 use crate::{
     runtime::Runtime,
     vm::utils::{scratch},
 };
 
-// unsigned char* (unsigned long*, unsigned char*)
+// unsigned char* (unsigned char*)
 pub fn build(rt: &mut Runtime) {
     // load r9
-    scratch::load(rt, rcx, r9);
+    scratch::load(rt, r12, r9);
 
-    // mov rax, rdx
-    rt.asm.mov(rax, rdx).unwrap();
+    // mov rax, rcx
+    rt.asm.mov(rax, rcx).unwrap();
     // ret
     rt.asm.ret().unwrap();
 }
