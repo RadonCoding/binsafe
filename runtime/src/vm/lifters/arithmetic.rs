@@ -45,7 +45,7 @@ pub fn binary<O: Encode + 'static>(
     let op0_kind = instruction.op0_kind();
     let op1_kind = instruction.op1_kind();
 
-    let width = operation_width(instruction, op0_kind)?;
+    let width = operation_width(instruction, op0_kind);
 
     let mut operations = Vec::<Rc<dyn Encode>>::new();
 
@@ -83,7 +83,7 @@ pub fn binary<O: Encode + 'static>(
         }
         kind if is_immediate(kind) => {
             let immediate_source = operation_immediate(instruction, kind);
-            let immediate_width = operation_width(instruction, kind)?;
+            let immediate_width = operation_width(instruction, kind);
             operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
                 source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),

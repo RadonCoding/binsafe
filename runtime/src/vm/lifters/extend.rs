@@ -34,7 +34,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             }));
         }
         OpKind::Memory => {
-            let source_width = operation_width(instruction, OpKind::Memory)?;
+            let source_width = operation_width(instruction, OpKind::Memory);
             let source_width = if signed {
                 source_width.signed()
             } else {
