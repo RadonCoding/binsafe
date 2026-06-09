@@ -2,7 +2,7 @@ use iced_x86::code_asm::{al, rax, rcx, rdx, xmm0, xmm1, ymm0, ymm1};
 
 use crate::{
     runtime::Runtime,
-    vm::utils::{self, scratch, stack},
+    vm::utils::{self, scratch},
 };
 
 pub fn bitwise(rt: &mut Runtime, sse: impl FnOnce(&mut Runtime), avx: impl FnOnce(&mut Runtime)) {
@@ -40,6 +40,6 @@ pub fn bitwise(rt: &mut Runtime, sse: impl FnOnce(&mut Runtime), avx: impl FnOnc
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
         // ret
-        stack::ret(rt);
+        rt.asm.ret().unwrap();
     }
 }

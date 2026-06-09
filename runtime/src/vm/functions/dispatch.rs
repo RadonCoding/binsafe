@@ -4,7 +4,7 @@ use crate::{
     runtime::{DataDef, FnDef, Runtime},
     vm::{
         bytecode::VMReg,
-        utils::{self, stack},
+        utils::{self},
     },
     VM_DISPATCH_SIZE,
 };
@@ -19,9 +19,9 @@ pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // push r13
-    stack::push(rt, r13);
+    rt.asm.push(r13).unwrap();
     // push r14
-    stack::push(rt, r14);
+    rt.asm.push(r14).unwrap();
 
     // mov r13, rcx
     rt.asm.mov(r13, rcx).unwrap();
@@ -44,7 +44,7 @@ pub fn build(rt: &mut Runtime) {
         // mov rcx, 0x1
         rt.asm.mov(rcx, 0x1u64).unwrap();
         // call ...
-        stack::call_with_label(rt, rt.func_labels[&FnDef::VmCrypt], &start_block);
+        rt.asm.call(rt.func_labels[&FnDef::VmCrypt]).unwrap();
     }
 
     rt.asm.set_label(&mut start_block).unwrap();
@@ -77,7 +77,7 @@ pub fn build(rt: &mut Runtime) {
         // mov rdx, r13
         rt.asm.mov(rdx, r13).unwrap();
         // call rax
-        stack::call(rt, rax);
+        rt.asm.call(rax).unwrap();
 
         // mov r13, rax
         rt.asm.mov(r13, rax).unwrap();
@@ -113,7 +113,7 @@ pub fn build(rt: &mut Runtime) {
         // xor rcx, rcx
         rt.asm.xor(rcx, rcx).unwrap();
         // call ...
-        stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
+        rt.asm.call(rt.func_labels[&FnDef::VmCrypt]).unwrap();
 
         // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NExit, rax);
@@ -143,7 +143,7 @@ pub fn build(rt: &mut Runtime) {
         // mov rdx, rax
         rt.asm.mov(rdx, rax).unwrap();
         // call ...
-        stack::call(rt, rt.func_labels[&FnDef::VmLookup]);
+        rt.asm.call(rt.func_labels[&FnDef::VmLookup]).unwrap();
         // mov r13, rax
         rt.asm.mov(r13, rax).unwrap();
 
@@ -154,10 +154,10 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut epilogue).unwrap();
     {
         // pop r14
-        stack::pop(rt, r14);
+        rt.asm.pop(r14).unwrap();
         // pop r13
-        stack::pop(rt, r13);
+        rt.asm.pop(r13).unwrap();
         // ret
-        stack::ret(rt);
+        rt.asm.ret().unwrap();
     }
 }

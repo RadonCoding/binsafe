@@ -2,7 +2,7 @@ use std::mem;
 
 use crate::{
     runtime::{FnDef, Runtime},
-    vm::utils::{lock, stack},
+    vm::utils::lock,
 };
 use iced_x86::code_asm::{ptr, qword_ptr, r10, r11, r8, r9, rax, rcx, rdx, rsp, AsmRegister64};
 
@@ -158,7 +158,7 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
     // or rax, rdx
     rt.asm.or(rax, rdx).unwrap();
     // push rax
-    stack::push(rt, rax);
+    rt.asm.push(rax).unwrap();
 
     // pop rdx
     rt.asm.pop(rdx).unwrap();
@@ -181,7 +181,7 @@ pub fn stop_profiling(rt: &mut Runtime, message: &str) {
     // or rax, rdx
     rt.asm.or(rax, rdx).unwrap();
     // pop rdx
-    stack::pop(rt, rdx);
+    rt.asm.pop(rdx).unwrap();
     // sub rax, rdx
     rt.asm.sub(rax, rdx).unwrap();
 

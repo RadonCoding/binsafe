@@ -1,10 +1,6 @@
 use iced_x86::code_asm::{r8, r9, rax, rcx, rdx};
 
-use crate::{
-    runtime::Runtime,
-    vm::bytecode::VMReg,
-    vm::utils::{stack, vreg},
-};
+use crate::{runtime::Runtime, vm::bytecode::VMReg, vm::utils::vreg};
 
 // unsigned char* (unsigned long*, unsigned char*)
 pub fn build(rt: &mut Runtime) {
@@ -18,5 +14,5 @@ pub fn build(rt: &mut Runtime) {
     // mov rax, rdx
     rt.asm.mov(rax, rdx).unwrap();
     // ret
-    stack::ret(rt);
+    rt.asm.ret().unwrap();
 }

@@ -2,7 +2,7 @@ use iced_x86::code_asm::*;
 
 use crate::{
     runtime::{FnDef, Runtime},
-    vm::utils::{self, scratch, stack},
+    vm::utils::{self, scratch},
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -10,9 +10,9 @@ pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // push r12
-    stack::push(rt, r12);
+    rt.asm.push(r12).unwrap();
     // push r13
-    stack::push(rt, r13);
+    rt.asm.push(r13).unwrap();
 
     // mov r12, rcx
     rt.asm.mov(r12, rcx).unwrap();
@@ -52,18 +52,18 @@ pub fn build(rt: &mut Runtime) {
         // mov rcx, r12
         rt.asm.mov(rcx, r12).unwrap();
         // pushfq
-        stack::pushfq(rt);
+        rt.asm.pushfq().unwrap();
         // call ...
-        stack::call(rt, rt.func_labels[&FnDef::VmFlags]);
+        rt.asm.call(rt.func_labels[&FnDef::VmFlags]).unwrap();
 
         // mov rax, r13
         rt.asm.mov(rax, r13).unwrap();
         // pop r13
-        stack::pop(rt, r13);
+        rt.asm.pop(r13).unwrap();
         // pop r12
-        stack::pop(rt, r12);
+        rt.asm.pop(r12).unwrap();
         // ret
-        stack::ret(rt);
+        rt.asm.ret().unwrap();
     }
 }
 
