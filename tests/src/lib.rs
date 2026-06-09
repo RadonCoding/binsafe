@@ -2,7 +2,7 @@
 
 use std::{ffi::c_void, mem, ptr, sync::OnceLock};
 
-use iced_x86::code_asm::{ecx, esi, ptr, rax, rcx, rdi, rdx, rsi};
+use iced_x86::code_asm::{esi, ptr, r12, r12d, rax, rcx, rdi, rsi};
 use obfuscator::protections::virtualization::crypt;
 use runtime::{
     mapper::Mappable,
@@ -105,28 +105,31 @@ impl Executor {
             .call(self.rt.func_labels[&FnDef::VmHandlersInitialize])
             .unwrap();
 
-        // mov ecx, [...]
+        // mov r12d, [...]
         self.rt
             .asm
-            .mov(ecx, ptr(self.rt.data_labels[&DataDef::VmRegistersTlsIndex]))
+            .mov(
+                r12d,
+                ptr(self.rt.data_labels[&DataDef::VmRegistersTlsIndex]),
+            )
             .unwrap();
-        // mov rcx, [0x1480 + rcx*8]
-        self.rt.asm.mov(rcx, ptr(0x1480 + rcx * 8).gs()).unwrap();
+        // mov r12, [0x1480 + r12*8]
+        self.rt.asm.mov(r12, ptr(0x1480 + r12d * 8).gs()).unwrap();
 
-        for &(reg, val) in setup {
+        for &(dst, src) in setup {
             // mov rax, ...
-            self.rt.asm.mov(rax, val).unwrap();
-            // mov [rcx + ...], rax
+            self.rt.asm.mov(rax, src).unwrap();
+            // mov [r12 + ...], rax
             self.rt
                 .asm
-                .mov(ptr(rcx + self.rt.mapper.index(reg) * 8), rax)
+                .mov(ptr(r12 + self.rt.mapper.index(dst) * 8), rax)
                 .unwrap();
         }
 
-        // lea rdx, [...]
+        // lea rcx, [...]
         self.rt
             .asm
-            .lea(rdx, ptr(self.rt.data_labels[&DataDef::VmCode]))
+            .lea(rcx, ptr(self.rt.data_labels[&DataDef::VmCode]))
             .unwrap();
         // call ...
         vm::utils::stack::call(&mut self.rt, dispatch);

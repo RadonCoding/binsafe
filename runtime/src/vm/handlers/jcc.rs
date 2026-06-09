@@ -2,7 +2,7 @@ use crate::vm::bytecode::{VMLogic, VMTest};
 use crate::vm::utils::{self, stack};
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
 use iced_x86::code_asm::{
-    r12, r12d, r13, r13b, r13d, r14, r14d, r15, r15b, r8, r8b, r8d, r9b, r9d, rax, rcx, rdx,
+    eax, r13, r13b, r13d, r14, r14d, r15, r15b, r8, r8b, r8d, r9b, r9d, rax, rcx, rdx,
 };
 
 // unsigned char* (unsigned long*, unsigned char*)
@@ -30,15 +30,15 @@ pub fn build(rt: &mut Runtime) {
     let mut handle_skip = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
-    // push r12
-    stack::push(rt, r12);
     // push r13
     stack::push(rt, r13);
     // push r14
     stack::push(rt, r14);
+    // push r15
+    stack::push(rt, r15);
 
-    // mov r12d, [rcx + ...]
-    utils::vreg::load_reg32(rt, rcx, VMReg::Flags, r12d);
+    // mov eax, [rcx + ...]
+    utils::vreg::load_reg32(rt, rcx, VMReg::Flags, eax);
 
     // r13d -> logic
     utils::bytecode::read_byte_zx(rt, rdx, r13d);
@@ -127,8 +127,8 @@ pub fn build(rt: &mut Runtime) {
         // r9b -> rhs
         utils::bytecode::read_byte(rt, rdx, r9b);
 
-        // bt r12d, r8d
-        rt.asm.bt(r12d, r8d).unwrap();
+        // bt eax, r8d
+        rt.asm.bt(eax, r8d).unwrap();
         // setc r8b
         rt.asm.setc(r8b).unwrap();
         // cmp r8b, r9b
@@ -147,12 +147,12 @@ pub fn build(rt: &mut Runtime) {
         // r9d -> rhs
         utils::bytecode::read_byte_zx(rt, rdx, r9d);
 
-        // bt r12d, r8d
-        rt.asm.bt(r12d, r8d).unwrap();
+        // bt eax, r8d
+        rt.asm.bt(eax, r8d).unwrap();
         // setc r8b
         rt.asm.setc(r8b).unwrap();
-        // bt r12d, r9d
-        rt.asm.bt(r12d, r9d).unwrap();
+        // bt eax, r9d
+        rt.asm.bt(eax, r9d).unwrap();
         // setc r9b
         rt.asm.setc(r9b).unwrap();
         // cmp r8b, r9b
@@ -171,12 +171,12 @@ pub fn build(rt: &mut Runtime) {
         // r9d -> rhs
         utils::bytecode::read_byte_zx(rt, rdx, r9d);
 
-        // bt r12d, r8d
-        rt.asm.bt(r12d, r8d).unwrap();
+        // bt eax, r8d
+        rt.asm.bt(eax, r8d).unwrap();
         // setc r8b
         rt.asm.setc(r8b).unwrap();
-        // bt r12d, r9d
-        rt.asm.bt(r12d, r9d).unwrap();
+        // bt eax, r9d
+        rt.asm.bt(eax, r9d).unwrap();
         // setc r9b
         rt.asm.setc(r9b).unwrap();
         // cmp r8b, r9b
@@ -229,8 +229,8 @@ pub fn build(rt: &mut Runtime) {
         // r9b -> rhs
         utils::bytecode::read_byte(rt, rdx, r9b);
 
-        // bt r12d, r8d
-        rt.asm.bt(r12d, r8d).unwrap();
+        // bt eax, r8d
+        rt.asm.bt(eax, r8d).unwrap();
         // setc r8b
         rt.asm.setc(r8b).unwrap();
         // cmp r8b, r9b
@@ -249,12 +249,12 @@ pub fn build(rt: &mut Runtime) {
         // r9d -> rhs
         utils::bytecode::read_byte_zx(rt, rdx, r9d);
 
-        // bt r12d, r8d
-        rt.asm.bt(r12d, r8d).unwrap();
+        // bt eax, r8d
+        rt.asm.bt(eax, r8d).unwrap();
         // setc r8b
         rt.asm.setc(r8b).unwrap();
-        // bt r12d, r9d
-        rt.asm.bt(r12d, r9d).unwrap();
+        // bt eax, r9d
+        rt.asm.bt(eax, r9d).unwrap();
         // setc r9b
         rt.asm.setc(r9b).unwrap();
         // cmp r8b, r9b
@@ -273,12 +273,12 @@ pub fn build(rt: &mut Runtime) {
         // r9d -> rhs
         utils::bytecode::read_byte_zx(rt, rdx, r9d);
 
-        // bt r12d, r8d
-        rt.asm.bt(r12d, r8d).unwrap();
+        // bt eax, r8d
+        rt.asm.bt(eax, r8d).unwrap();
         // setc r8b
         rt.asm.setc(r8b).unwrap();
-        // bt r12d, r9d
-        rt.asm.bt(r12d, r9d).unwrap();
+        // bt eax, r9d
+        rt.asm.bt(eax, r9d).unwrap();
         // setc r9b
         rt.asm.setc(r9b).unwrap();
         // cmp r8b, r9b
@@ -331,8 +331,8 @@ pub fn build(rt: &mut Runtime) {
         // r9b -> rhs
         utils::bytecode::read_byte(rt, rdx, r9b);
 
-        // bt r12d, r8d
-        rt.asm.bt(r12d, r8d).unwrap();
+        // bt eax, r8d
+        rt.asm.bt(eax, r8d).unwrap();
         // setc r8b
         rt.asm.setc(r8b).unwrap();
         // cmp r8b, r9b
@@ -351,12 +351,12 @@ pub fn build(rt: &mut Runtime) {
         // r9d -> rhs
         utils::bytecode::read_byte_zx(rt, rdx, r9d);
 
-        // bt r12d, r8d
-        rt.asm.bt(r12d, r8d).unwrap();
+        // bt eax, r8d
+        rt.asm.bt(eax, r8d).unwrap();
         // setc r8b
         rt.asm.setc(r8b).unwrap();
-        // bt r12d, r9d
-        rt.asm.bt(r12d, r9d).unwrap();
+        // bt eax, r9d
+        rt.asm.bt(eax, r9d).unwrap();
         // setc r9b
         rt.asm.setc(r9b).unwrap();
         // cmp r8b, r9b
@@ -375,12 +375,12 @@ pub fn build(rt: &mut Runtime) {
         // r9d -> rhs
         utils::bytecode::read_byte_zx(rt, rdx, r9d);
 
-        // bt r12d, r8d
-        rt.asm.bt(r12d, r8d).unwrap();
+        // bt eax, r8d
+        rt.asm.bt(eax, r8d).unwrap();
         // setc r8b
         rt.asm.setc(r8b).unwrap();
-        // bt r12d, r9d
-        rt.asm.bt(r12d, r9d).unwrap();
+        // bt eax, r9d
+        rt.asm.bt(eax, r9d).unwrap();
         // setc r9b
         rt.asm.setc(r9b).unwrap();
         // cmp r8b, r9b
@@ -482,12 +482,12 @@ pub fn build(rt: &mut Runtime) {
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
 
+        // pop r15
+        stack::pop(rt, r15);
         // pop r14
         stack::pop(rt, r14);
         // pop r13
         stack::pop(rt, r13);
-        // pop r12
-        stack::pop(rt, r12);
         // ret
         stack::ret(rt);
     }
