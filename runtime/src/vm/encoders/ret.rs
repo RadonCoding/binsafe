@@ -21,6 +21,10 @@ impl Encode for Ret {
         ]
     }
 
+    fn depth(&self) -> i32 {
+        -1
+    }
+
     fn branches(&self) -> bool {
         true
     }

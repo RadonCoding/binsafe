@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMTest, VMWidth};
 use crate::vm::encoders::load_address::LoadAddress;
+use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::ret::Ret;
@@ -69,7 +70,21 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             ])
         }
 
-        Code::Retnq => Some(vec![Rc::new(Ret)]),
+        Code::Retnq | Code::Retnq_imm16 => {
+            let immediate_width = VMWidth::Lower16;
+            let immediate_source = if instruction.op_count() > 0 {
+                instruction.immediate16()
+            } else {
+                0
+            };
+            Some(vec![
+                Rc::new(LoadImmediate {
+                    width: immediate_width,
+                    source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),
+                }),
+                Rc::new(Ret),
+            ])
+        }
 
         Code::Call_rm64 => match instruction.op0_kind() {
             OpKind::Register => {

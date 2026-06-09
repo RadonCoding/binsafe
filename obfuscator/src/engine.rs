@@ -1,12 +1,13 @@
 use exe::{
-    Arch, Buffer, CCharString, ImageSectionHeader, Offset, PETranslation, RelocationDirectory,
-    RelocationValue, SectionCharacteristics, VecPE, HDR32_MAGIC, HDR64_MAGIC, PE, RVA,
+    Arch, Buffer, CCharString, ExportDirectory, ImageDirectoryEntry, ImageSectionHeader, Offset,
+    PETranslation, RelocationDirectory, RelocationValue, SectionCharacteristics, Thunk, ThunkData,
+    ThunkFunctions, VecPE, HDR32_MAGIC, HDR64_MAGIC, PE, RVA,
 };
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};
 use logger::info;
 use rand::Rng;
 use runtime::runtime::{FnDef, Runtime};
-use std::{collections::HashSet, fmt, mem, path::Path};
+use std::{collections::HashMap, fmt, mem, path::Path};
 
 use crate::{exceptions, protections::Protection};
 
@@ -15,6 +16,11 @@ pub struct Block {
     pub offset: usize,
     pub size: usize,
     pub instructions: Vec<Instruction>,
+}
+
+pub enum Reference {
+    Hard,
+    Soft(Vec<u32>),
 }
 
 impl fmt::Display for Block {
@@ -43,8 +49,12 @@ impl fmt::Display for Block {
 pub struct Engine {
     pub pe: VecPE,
     pub bitness: u32,
+
     pub blocks: Vec<Block>,
+    pub references: HashMap<u32, Reference>,
+
     pub rt: Runtime,
+
     protections: Vec<Box<dyn Protection>>,
 }
 
@@ -67,6 +77,7 @@ impl Engine {
             pe,
             bitness,
             blocks: Vec::new(),
+            references: HashMap::new(),
             rt: Runtime::new(bitness),
             protections: Vec::new(),
         }
@@ -131,14 +142,32 @@ impl Engine {
         let ip = code_section.virtual_address.0 as u64;
         let code = code_section.read(&self.pe).unwrap();
 
-        let mut jumps = HashSet::new();
-        jumps.insert(entry_point.0);
+        let mut references = HashMap::new();
+
+        references.insert(entry_point.0, Reference::Hard);
 
         let handlers = exceptions::get_exception_handlers(&self.pe);
 
         for handler in handlers {
             if code_section.has_rva(RVA(handler)) {
-                jumps.insert(handler);
+                references.insert(handler, Reference::Hard);
+            }
+        }
+
+        if let Ok(exports) = ExportDirectory::parse(&self.pe) {
+            if let Ok(directory) = self.pe.get_data_directory(ImageDirectoryEntry::Export) {
+                let start = directory.virtual_address;
+                let end = RVA(start.0 + directory.size);
+
+                if let Ok(functions) = exports.get_functions(&self.pe) {
+                    for function in functions {
+                        if let ThunkData::Function(rva) = function.parse_export(start, end) {
+                            if code_section.has_rva(rva) {
+                                references.insert(rva.0, Reference::Hard);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -154,7 +183,7 @@ impl Engine {
                     let target_rva = (target_va - image_base) as u32;
 
                     if code_section.has_rva(RVA(target_rva)) {
-                        jumps.insert(target_rva);
+                        references.insert(target_rva, Reference::Hard);
                     }
                 }
             }
@@ -172,20 +201,31 @@ impl Engine {
             }
 
             match instruction.flow_control() {
-                FlowControl::ConditionalBranch
-                | FlowControl::UnconditionalBranch
-                | FlowControl::Call => {
+                FlowControl::ConditionalBranch | FlowControl::UnconditionalBranch => {
                     let target = instruction.near_branch_target() as u32;
 
                     if code_section.has_rva(RVA(target)) {
-                        jumps.insert(target);
+                        match references
+                            .entry(target)
+                            .or_insert_with(|| Reference::Soft(Vec::new()))
+                        {
+                            Reference::Soft(sources) => sources.push(instruction.ip() as u32),
+                            Reference::Hard => {}
+                        }
+                    }
+                }
+                FlowControl::Call => {
+                    let target = instruction.near_branch_target() as u32;
+
+                    if code_section.has_rva(RVA(target)) {
+                        references.insert(target, Reference::Hard);
                     }
                 }
                 _ => {}
             }
         }
 
-        let mut sorted = jumps.into_iter().collect::<Vec<u32>>();
+        let mut sorted = references.keys().copied().collect::<Vec<u32>>();
         sorted.sort();
 
         let mut capture = |block: &mut Vec<Instruction>, end: u32| {
@@ -211,11 +251,11 @@ impl Engine {
         let mut inblock = false;
 
         while decoder.can_decode() {
-            let current = decoder.ip() as u32;
+            let rva = decoder.ip() as u32;
 
-            if sorted.binary_search(&current).is_ok() {
+            if sorted.binary_search(&rva).is_ok() {
                 if inblock {
-                    capture(&mut block, current);
+                    capture(&mut block, rva);
                 }
                 inblock = true;
             }
@@ -257,6 +297,8 @@ impl Engine {
                 inblock = false;
             }
         }
+
+        self.references = references;
 
         info!("Found {} blocks", self.blocks.len());
     }

@@ -88,11 +88,6 @@ pub fn print_q(rt: &mut Runtime, q: AsmRegister64) {
     // mov rax, ...
     rt.asm.mov(rax, q).unwrap();
 
-    let stack_size = 0x20;
-
-    // sub rsp, ...
-    rt.asm.sub(rsp, stack_size as i32).unwrap();
-
     // mov rcx, rsp
     rt.asm.mov(rcx, rsp).unwrap();
     // mov rdx, ...
@@ -104,9 +99,6 @@ pub fn print_q(rt: &mut Runtime, q: AsmRegister64) {
     rt.asm.mov(rcx, rsp).unwrap();
     // call ...
     rt.asm.call(rt.func_labels[&FnDef::Print]).unwrap();
-
-    // add rsp, ...
-    rt.asm.add(rsp, stack_size as i32).unwrap();
 
     // pop r11
     rt.asm.pop(r11).unwrap();
