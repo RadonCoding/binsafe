@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{eax, ptr, r12, r8, r8d, r9, r9d, rax, rdx};
+use iced_x86::code_asm::{dword_ptr, ptr, r12, r8, r8d, r9, r9d, rax, rdx};
 
 use crate::{
     runtime::{DataDef, Runtime},
@@ -30,8 +30,8 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.lea(r9, ptr(r9 + r8 * 8)).unwrap();
 
     // Read the displacement and the offset into VM-code from the VM-table:
-    // mov eax, [r9]
-    rt.asm.mov(eax, ptr(r9)).unwrap();
+    // movsxd rax, [r9]
+    rt.asm.movsxd(rax, dword_ptr(r9)).unwrap();
     // mov r8d, [r9 + 0x4]
     rt.asm.mov(r8d, ptr(r9 + 0x4)).unwrap();
 

@@ -1,4 +1,6 @@
-use iced_x86::code_asm::{byte_ptr, eax, ptr, r12, r13, r14, r8, r8d, rax, rcx, rdx};
+use iced_x86::code_asm::{
+    byte_ptr, dword_ptr, eax, ptr, r12, r13, r14, r8, r8d, r9, rax, rcx, rdx,
+};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -6,7 +8,7 @@ use crate::{
         bytecode::VMReg,
         utils::{self},
     },
-    VM_DISPATCH_SIZE,
+    VM_DISPATCH_SIZE, VM_TRAMPOLINE_SIZE,
 };
 
 // void (unsigned char*)
@@ -16,6 +18,7 @@ pub fn build(rt: &mut Runtime) {
     let mut execute_loop = rt.asm.create_label();
     let mut check_loop = rt.asm.create_label();
     let mut check_exit = rt.asm.create_label();
+    let mut resolved = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // push r13
@@ -125,26 +128,42 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.test(rax, rax).unwrap();
         // je ...
         rt.asm.je(epilogue).unwrap();
-        // cmp [rax], 0x68
-        rt.asm.cmp(byte_ptr(rax), 0x68).unwrap();
+
+        // Follow an indirect JMP rel32 entry into its trampoline:
+        // cmp [rax], 0xE9
+        rt.asm.cmp(byte_ptr(rax), 0xE9).unwrap();
         // jne ...
-        rt.asm.jne(epilogue).unwrap();
+        rt.asm.jne(resolved).unwrap();
+        // movsxd r9, [rax + 0x1]
+        rt.asm.movsxd(r9, dword_ptr(rax + 0x1)).unwrap();
+        // lea rax, [rax + ...]
+        rt.asm.lea(rax, ptr(rax + VM_TRAMPOLINE_SIZE)).unwrap();
+        // add rax, r9
+        rt.asm.add(rax, r9).unwrap();
 
-        // mov r8d, [rax + 0x1]
-        rt.asm.mov(r8d, ptr(rax + 0x1)).unwrap();
+        rt.asm.set_label(&mut resolved).unwrap();
+        {
+            // cmp [rax], 0x68
+            rt.asm.cmp(byte_ptr(rax), 0x68).unwrap();
+            // jne ...
+            rt.asm.jne(epilogue).unwrap();
 
-        // add rax, ...
-        rt.asm.add(rax, VM_DISPATCH_SIZE as i32).unwrap();
+            // mov r8d, [rax + 0x1]
+            rt.asm.mov(r8d, ptr(rax + 0x1)).unwrap();
 
-        // mov rdx, rax
-        rt.asm.mov(rdx, rax).unwrap();
-        // call ...
-        rt.asm.call(rt.func_labels[&FnDef::VmLookup]).unwrap();
-        // mov r13, rax
-        rt.asm.mov(r13, rax).unwrap();
+            // add rax, ...
+            rt.asm.add(rax, VM_DISPATCH_SIZE as i32).unwrap();
 
-        // jmp ...
-        rt.asm.jmp(setup_block).unwrap();
+            // mov rdx, rax
+            rt.asm.mov(rdx, rax).unwrap();
+            // call ...
+            rt.asm.call(rt.func_labels[&FnDef::VmLookup]).unwrap();
+            // mov r13, rax
+            rt.asm.mov(r13, rax).unwrap();
+
+            // jmp ...
+            rt.asm.jmp(setup_block).unwrap();
+        }
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();
