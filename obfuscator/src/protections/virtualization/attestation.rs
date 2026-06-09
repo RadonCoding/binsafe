@@ -47,7 +47,9 @@ const PRESERVED: &[VMReg] = &[
 
 pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
     let mut rng = rand::thread_rng();
-    let mut expected: u64 = 0;
+
+    let mut expected = 0;
+
     let mut blocks = Vec::<Vec<Rc<dyn Encode>>>::new();
 
     let mut block = Vec::<Rc<dyn Encode>>::new();

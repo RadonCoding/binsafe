@@ -10,8 +10,8 @@ use crate::vm::bytecode::{VMReg, VMVec};
 use iced_x86::code_asm::{
     r10, r11, r13, r14, r15, r8, r9, rax, rbp, rbx, rcx, rdi, rdx, rsi, xmm0, xmm1, xmm10, xmm11,
     xmm12, xmm13, xmm14, xmm15, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7, xmm8, xmm9, ymm0, ymm1, ymm10,
-    ymm11, ymm12, ymm13, ymm14, ymm15, ymm2, ymm3, ymm4, ymm5, ymm6, ymm7, ymm8, ymm9, AsmRegister64,
-    AsmRegisterXmm, AsmRegisterYmm,
+    ymm11, ymm12, ymm13, ymm14, ymm15, ymm2, ymm3, ymm4, ymm5, ymm6, ymm7, ymm8, ymm9,
+    AsmRegister64, AsmRegisterXmm, AsmRegisterYmm,
 };
 
 const REGISTERS_TO_NATIVE: &[(VMReg, AsmRegister64)] = &[
@@ -26,6 +26,7 @@ const REGISTERS_TO_NATIVE: &[(VMReg, AsmRegister64)] = &[
     (VMReg::R9, r9),
     (VMReg::R10, r10),
     (VMReg::R11, r11),
+    // (VMReg::R12, r12),
     (VMReg::R13, r13),
     (VMReg::R14, r14),
     (VMReg::R15, r15),

@@ -79,18 +79,18 @@ pub fn call<T>(rt: &mut Runtime, target: T)
 where
     CodeAssembler: CodeAsmJmp<T>,
 {
-    let mut ret = rt.asm.create_label();
-    call_with_label(rt, target, &mut ret);
-    rt.asm.set_label(&mut ret).unwrap();
+    let mut label = rt.asm.create_label();
+    call_with_label(rt, target, &mut label);
+    rt.asm.set_label(&mut label).unwrap();
     rt.asm.zero_bytes().unwrap();
 }
 
-pub fn call_with_label<T>(rt: &mut Runtime, target: T, ret: &CodeLabel)
+pub fn call_with_label<T>(rt: &mut Runtime, target: T, label: &CodeLabel)
 where
     CodeAssembler: CodeAsmJmp<T>,
 {
     // lea r10, [...]
-    rt.asm.lea(r10, ptr(*ret)).unwrap();
+    rt.asm.lea(r10, ptr(*label)).unwrap();
     // push r10
     push(rt, r10);
     // jmp ...

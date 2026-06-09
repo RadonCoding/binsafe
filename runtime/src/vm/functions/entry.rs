@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{ptr, r8, r12, r12b, r12d, r13, rax, rcx, rdx, rsp};
+use iced_x86::code_asm::{ptr, r12, r12b, r12d, r8, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -9,7 +9,6 @@ use crate::{
     },
 };
 
-// void (unsigned int)
 pub fn build(rt: &mut Runtime) {
     let mut acquire_global_lock = rt.asm.create_label();
 
@@ -97,18 +96,14 @@ pub fn build(rt: &mut Runtime) {
     // mov r12, [0x1480 + r12*8]
     rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
 
-    // lea r13, [...]
+    // lea rcx, [...]
     rt.asm
-        .lea(r13, ptr(rt.data_labels[&DataDef::VmGlobalRegisters]))
+        .lea(rcx, ptr(rt.data_labels[&DataDef::VmGlobalRegisters]))
         .unwrap();
-
+    // mov rdx, r12
+    rt.asm.mov(rdx, r12).unwrap();
     // call ...
     rt.asm.call(copy_native_registers).unwrap();
-
-    // call ...
-    rt.asm
-        .call(rt.func_labels[&FnDef::VmVehInitialize])
-        .unwrap();
 
     // mov rax, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
     rt.asm.mov(rax, ptr(0x60).gs()).unwrap();
@@ -119,13 +114,16 @@ pub fn build(rt: &mut Runtime) {
 
     // call ...
     rt.asm
+        .call(rt.func_labels[&FnDef::VmVehInitialize])
+        .unwrap();
+    // call ...
+    rt.asm
         .call(rt.func_labels[&FnDef::VmFunctionsInitialize])
         .unwrap();
     // call ...
     rt.asm
         .call(rt.func_labels[&FnDef::VmHandlersInitialize])
         .unwrap();
-
     // lea rax, [...]
     rt.asm
         .lea(rax, ptr(rt.func_labels[&FnDef::VmEntry]))
@@ -262,10 +260,10 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut copy_native_registers).unwrap();
     {
         for &(reg, _) in REGISTERS_TO_NATIVE {
-            // mov rax, [...]
-            utils::vreg::load_reg(rt, r13, reg, rax);
-            // mov [r12 + ...], rax
-            utils::vreg::store_reg(rt, r12, rax, reg);
+            // mov rax, [rcx + ...]
+            utils::vreg::load_reg(rt, rcx, reg, rax);
+            // mov [rdx + ...], rax
+            utils::vreg::store_reg(rt, rdx, rax, reg);
         }
         // ret
         rt.asm.ret().unwrap();

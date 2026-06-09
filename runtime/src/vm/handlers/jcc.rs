@@ -36,8 +36,6 @@ pub fn build(rt: &mut Runtime) {
     stack::push(rt, r13);
     // push r14
     stack::push(rt, r14);
-    // push r15
-    stack::push(rt, r15);
 
     // mov r12d, [rcx + ...]
     utils::vreg::load_reg32(rt, rcx, VMReg::Flags, r12d);
@@ -484,8 +482,6 @@ pub fn build(rt: &mut Runtime) {
         // mov rax, rdx
         rt.asm.mov(rax, rdx).unwrap();
 
-        // pop r15
-        stack::pop(rt, r15);
         // pop r14
         stack::pop(rt, r14);
         // pop r13

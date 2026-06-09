@@ -13,10 +13,6 @@ pub fn build(rt: &mut Runtime) {
     stack::push(rt, r12);
     // push r13
     stack::push(rt, r13);
-    // push r14
-    stack::push(rt, r14);
-    // push r15
-    stack::push(rt, r15);
 
     // mov r12, rcx
     rt.asm.mov(r12, rcx).unwrap();
@@ -28,8 +24,8 @@ pub fn build(rt: &mut Runtime) {
 
     // load r8
     scratch::load(rt, rcx, r8);
-    // load r14
-    scratch::load(rt, rcx, r14);
+    // load rt, rcx, r9
+    scratch::load(rt, rcx, r9);
 
     utils::width::dispatch_register(
         rt,
@@ -48,6 +44,11 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
+        // store r8
+        scratch::store(rt, r12, r8);
+        // store r9
+        scratch::store(rt, r12, r9);
+
         // mov rcx, r12
         rt.asm.mov(rcx, r12).unwrap();
         // pushfq
@@ -55,17 +56,8 @@ pub fn build(rt: &mut Runtime) {
         // call ...
         stack::call(rt, rt.func_labels[&FnDef::VmFlags]);
 
-        // store r15
-        scratch::store(rt, rcx, r15);
-        // store r14
-        scratch::store(rt, rcx, r14);
-
         // mov rax, r13
         rt.asm.mov(rax, r13).unwrap();
-        // pop r15
-        stack::pop(rt, r15);
-        // pop r14
-        stack::pop(rt, r14);
         // pop r13
         stack::pop(rt, r13);
         // pop r12
@@ -76,8 +68,8 @@ pub fn build(rt: &mut Runtime) {
 }
 
 fn wide(rt: &mut Runtime, signed: bool) {
-    // mov rax, r14
-    rt.asm.mov(rax, r14).unwrap();
+    // mov rax, r9
+    rt.asm.mov(rax, r9).unwrap();
     if signed {
         // rdx:rax = rax * r8
         rt.asm.imul(r8).unwrap();
@@ -85,15 +77,15 @@ fn wide(rt: &mut Runtime, signed: bool) {
         // rdx:rax = rax * r8
         rt.asm.mul(r8).unwrap();
     }
-    // mov r14, rax
-    rt.asm.mov(r14, rax).unwrap();
-    // mov r15, rdx
-    rt.asm.mov(r15, rdx).unwrap();
+    // mov r9, rax
+    rt.asm.mov(r9, rax).unwrap();
+    // mov r8, rdx
+    rt.asm.mov(r8, rdx).unwrap();
 }
 
 fn dword(rt: &mut Runtime, signed: bool) {
-    // mov rax, r14
-    rt.asm.mov(rax, r14).unwrap();
+    // mov rax, r9
+    rt.asm.mov(rax, r9).unwrap();
     if signed {
         // edx:eax = eax * r8d
         rt.asm.imul(r8d).unwrap();
@@ -101,15 +93,15 @@ fn dword(rt: &mut Runtime, signed: bool) {
         // edx:eax = eax * r8d
         rt.asm.mul(r8d).unwrap();
     }
-    // mov r14, rax
-    rt.asm.mov(r14, rax).unwrap();
-    // mov r15, rdx
-    rt.asm.mov(r15, rdx).unwrap();
+    // mov r9, rax
+    rt.asm.mov(r9, rax).unwrap();
+    // mov r8, rdx
+    rt.asm.mov(r8, rdx).unwrap();
 }
 
 fn word(rt: &mut Runtime, signed: bool) {
-    // mov rax, r14
-    rt.asm.mov(rax, r14).unwrap();
+    // mov rax, r9
+    rt.asm.mov(rax, r9).unwrap();
     if signed {
         // dx:ax = ax * r8w
         rt.asm.imul(r8w).unwrap();
@@ -117,15 +109,15 @@ fn word(rt: &mut Runtime, signed: bool) {
         // dx:ax = ax * r8w
         rt.asm.mul(r8w).unwrap();
     }
-    // mov r14, rax
-    rt.asm.mov(r14, rax).unwrap();
-    // mov r15, rdx
-    rt.asm.mov(r15, rdx).unwrap();
+    // mov r9, rax
+    rt.asm.mov(r9, rax).unwrap();
+    // mov r8, rdx
+    rt.asm.mov(r8, rdx).unwrap();
 }
 
 fn byte(rt: &mut Runtime, signed: bool) {
-    // mov rax, r14
-    rt.asm.mov(rax, r14).unwrap();
+    // mov rax, r9
+    rt.asm.mov(rax, r9).unwrap();
     if signed {
         // ax = al * r8b
         rt.asm.imul(r8b).unwrap();
@@ -135,8 +127,8 @@ fn byte(rt: &mut Runtime, signed: bool) {
     }
     // movzx ecx, ah
     rt.asm.movzx(ecx, ah).unwrap();
-    // movzx r14d, al
-    rt.asm.movzx(r14d, al).unwrap();
-    // mov r15, rcx
-    rt.asm.mov(r15, rcx).unwrap();
+    // movzx r9d, al
+    rt.asm.movzx(r9d, al).unwrap();
+    // mov r8, rcx
+    rt.asm.mov(r8, rcx).unwrap();
 }
