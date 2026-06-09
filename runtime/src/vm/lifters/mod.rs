@@ -18,25 +18,25 @@ pub mod transfer;
 pub mod tzcnt;
 pub mod unary;
 
-fn operation_width(instruction: &Instruction, kind: OpKind) -> Option<VMWidth> {
+fn operation_width(instruction: &Instruction, kind: OpKind) -> VMWidth {
     match kind {
-        OpKind::Register => Some(VMWidth::from(instruction.op0_register())),
+        OpKind::Register => VMWidth::from(instruction.op0_register()),
         OpKind::Memory => match instruction.memory_size().size() {
-            1 => Some(VMWidth::Lower8),
-            2 => Some(VMWidth::Lower16),
-            4 => Some(VMWidth::Lower32),
-            8 => Some(VMWidth::Lower64),
-            16 => Some(VMWidth::Lower128),
-            32 => Some(VMWidth::Lower256),
+            1 => VMWidth::Lower8,
+            2 => VMWidth::Lower16,
+            4 => VMWidth::Lower32,
+            8 => VMWidth::Lower64,
+            16 => VMWidth::Lower128,
+            32 => VMWidth::Lower256,
             _ => panic!("unsupported code: {:?}", instruction.code()),
         },
-        kind if is_immediate(kind) => Some(match operation_immediate(instruction, kind) {
+        kind if is_immediate(kind) => match operation_immediate(instruction, kind) {
             0..=0xFF => VMWidth::Lower8,
             0..=0xFFFF => VMWidth::Lower16,
             0..=0xFFFFFFFF => VMWidth::Lower32,
             _ => VMWidth::Lower64,
-        }),
-        _ => unreachable!(),
+        },
+        _ => panic!("unsupported kind: {kind:?}",),
     }
 }
 

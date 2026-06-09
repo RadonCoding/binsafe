@@ -25,7 +25,7 @@ pub fn wide<O: Encode + 'static>(
     make: impl Fn(VMWidth) -> O,
 ) -> Option<Vec<Rc<dyn Encode>>> {
     let op0_kind = instruction.op0_kind();
-    let width = operation_width(instruction, op0_kind)?;
+    let width = operation_width(instruction, op0_kind);
 
     let accumulator = match width {
         VMWidth::Higher8 => VMWidth::Lower8,
@@ -91,7 +91,7 @@ pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             source(&mut operations, instruction, 1, width)?;
 
             let immediate_source = operation_immediate(instruction, instruction.op_kind(2));
-            let immediate_width = operation_width(instruction, instruction.op_kind(2))?;
+            let immediate_width = operation_width(instruction, instruction.op_kind(2));
             operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
                 source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),

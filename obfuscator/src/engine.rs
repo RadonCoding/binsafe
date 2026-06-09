@@ -1,6 +1,6 @@
 use exe::{
     Arch, Buffer, CCharString, ExportDirectory, ImageDirectoryEntry, ImageSectionHeader, Offset,
-    PETranslation, RelocationDirectory, RelocationValue, SectionCharacteristics, Thunk, ThunkData,
+    PETranslation, RelocationDirectory, RelocationValue, SectionCharacteristics, ThunkData,
     ThunkFunctions, VecPE, HDR32_MAGIC, HDR64_MAGIC, PE, RVA,
 };
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};

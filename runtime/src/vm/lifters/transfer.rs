@@ -12,7 +12,7 @@ use crate::vm::lifters::{is_immediate, operation_immediate, operation_width};
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let mut operations = Vec::<Rc<dyn Encode>>::new();
 
-    let destination_width = operation_width(instruction, instruction.op0_kind())?;
+    let destination_width = operation_width(instruction, instruction.op0_kind());
 
     match instruction.op1_kind() {
         OpKind::Register => {
@@ -43,7 +43,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         }
         kind if is_immediate(kind) => {
             let immediate_source = operation_immediate(instruction, kind);
-            let immediate_width = operation_width(instruction, kind)?;
+            let immediate_width = operation_width(instruction, kind);
             operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
                 source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),

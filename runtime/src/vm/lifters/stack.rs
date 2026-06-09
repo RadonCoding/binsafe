@@ -38,7 +38,7 @@ fn push(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         }
         OpKind::Immediate8 | OpKind::Immediate16 | OpKind::Immediate32 | OpKind::Immediate8to64 => {
             let immediate_source = operation_immediate(instruction, instruction.op0_kind());
-            let immediate_width = operation_width(instruction, instruction.op0_kind())?;
+            let immediate_width = operation_width(instruction, instruction.op0_kind());
             operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
                 source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),

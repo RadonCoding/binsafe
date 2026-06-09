@@ -8,6 +8,7 @@ use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::ret::Ret;
 use crate::vm::encoders::{jcc::Jcc, Encode};
+use crate::vm::lifters::operation_width;
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let code = instruction.code();
@@ -71,7 +72,11 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         }
 
         Code::Retnq | Code::Retnq_imm16 => {
-            let immediate_width = VMWidth::Lower16;
+            let immediate_width = if instruction.op_count() > 0 {
+                operation_width(instruction, instruction.op0_kind())
+            } else {
+                VMWidth::Lower8
+            };
             let immediate_source = if instruction.op_count() > 0 {
                 instruction.immediate16()
             } else {
