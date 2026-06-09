@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{byte_ptr, eax, ptr, r12, r13, r14, r8, r8b, r8d, rax, rcx, rdx};
+use iced_x86::code_asm::{byte_ptr, eax, ptr, r12, r13, r14, r8, r8d, rax, rcx, rdx};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -9,7 +9,7 @@ use crate::{
     VM_DISPATCH_SIZE,
 };
 
-// void (unsigned long*, unsigned char*)
+// void (unsigned char*)
 pub fn build(rt: &mut Runtime) {
     let mut setup_block = rt.asm.create_label();
     let mut start_block = rt.asm.create_label();
@@ -18,24 +18,20 @@ pub fn build(rt: &mut Runtime) {
     let mut check_exit = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
-    // push r12
-    stack::push(rt, r12);
     // push r13
     stack::push(rt, r13);
     // push r14
     stack::push(rt, r14);
 
-    // mov r12, rcx
-    rt.asm.mov(r12, rcx).unwrap();
-    // mov r13, rdx
-    rt.asm.mov(r13, rdx).unwrap();
+    // mov r13, rcx
+    rt.asm.mov(r13, rcx).unwrap();
 
     rt.asm.set_label(&mut setup_block).unwrap();
     {
         // Initialize block pointer and block length:
         // mov [r12 + ...], r13
         utils::vreg::store_reg(rt, r12, r13, VMReg::BPointer);
-        // movzx rax, [r13]; add r13, 0x2
+        // eax = length
         utils::bytecode::read_word_zx(rt, r13, eax);
         // mov [r12 + ...], rax
         utils::vreg::store_reg(rt, r12, rax, VMReg::BLength);
@@ -45,12 +41,8 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.lea(r14, ptr(r13 + rax)).unwrap();
 
         // Decrypt the block:
-        // mov rcx, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BPointer, rcx);
-        // mov rdx, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BLength, rdx);
-        // mov r8b, 0x1
-        rt.asm.mov(r8b, 0x1).unwrap();
+        // mov rcx, 0x1
+        rt.asm.mov(rcx, 0x1u64).unwrap();
         // call ...
         stack::call_with_label(rt, rt.func_labels[&FnDef::VmCrypt], &start_block);
     }
@@ -118,12 +110,8 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut check_exit).unwrap();
     {
         // Re-encrypt the current block:
-        // mov rcx, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BPointer, rcx);
-        // mov rdx, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BLength, rdx);
-        // xor r8b, r8b
-        rt.asm.xor(r8b, r8b).unwrap();
+        // xor rcx, rcx
+        rt.asm.xor(rcx, rcx).unwrap();
         // call ...
         stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 
@@ -169,8 +157,6 @@ pub fn build(rt: &mut Runtime) {
         stack::pop(rt, r14);
         // pop r13
         stack::pop(rt, r13);
-        // pop r12
-        stack::pop(rt, r12);
         // ret
         stack::ret(rt);
     }

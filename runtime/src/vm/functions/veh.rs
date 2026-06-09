@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, byte_ptr, eax, ecx, ptr, r12, r13, r14, r8b, rax, rcx, rdx, rsp};
+use iced_x86::code_asm::{al, byte_ptr, eax, ptr, r12, r12d, r13, r14, r15, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{BoolDef, DataDef, FnDef, ImportDef, Runtime},
@@ -62,9 +62,9 @@ const VM_TO_CONTEXT: &[(VMReg, i32)] = &[
     (VMReg::R9, 0xC0),
     (VMReg::R10, 0xC8),
     (VMReg::R11, 0xD0),
-    (VMReg::R12, 0xD8),
-    (VMReg::R13, 0xE0),
-    (VMReg::R14, 0xE8),
+    (VMReg::R13, 0xD8),
+    (VMReg::R14, 0xE0),
+    (VMReg::R15, 0xE8),
     (VMReg::R15, 0xF0),
     (VMReg::NEntry, 0xF8),
     (VMReg::Flags, 0x44),
@@ -81,19 +81,21 @@ pub fn handler(rt: &mut Runtime) {
     rt.asm.push(r13).unwrap();
     // push r14
     rt.asm.push(r14).unwrap();
+    // push r15
+    rt.asm.push(r15).unwrap();
 
     // sub rsp, 0x28
     rt.asm.sub(rsp, 0x28).unwrap();
 
-    // mov r12, rcx
-    rt.asm.mov(r12, rcx).unwrap();
-    // mov r13, [r12] -> EXCEPTION_RECORD *EXCEPTION_POINTERS->ExceptionRecord
-    rt.asm.mov(r13, ptr(r12)).unwrap();
-    // mov r14, [r12 + 0x8] -> CONTEXT *EXCEPTION_POINTERS->ContextRecord
-    rt.asm.mov(r14, ptr(r12 + 0x8)).unwrap();
+    // mov r13, rcx
+    rt.asm.mov(r13, rcx).unwrap();
+    // mov r14, [r13] -> EXCEPTION_RECORD *EXCEPTION_POINTERS->ExceptionRecord
+    rt.asm.mov(r14, ptr(r13)).unwrap();
+    // mov r15, [r13 + 0x8] -> CONTEXT *EXCEPTION_POINTERS->ContextRecord
+    rt.asm.mov(r15, ptr(r13 + 0x8)).unwrap();
 
-    // mov rax, [r13 + 0x10] -> PVOID EXCEPTION_RECORD->ExceptionAddress
-    rt.asm.mov(rax, ptr(r13 + 0x10)).unwrap();
+    // mov rax, [r14 + 0x10] -> PVOID EXCEPTION_RECORD->ExceptionAddress
+    rt.asm.mov(rax, ptr(r14 + 0x10)).unwrap();
 
     // lea rcx, [...]
     rt.asm
@@ -113,37 +115,33 @@ pub fn handler(rt: &mut Runtime) {
     // jae ...
     rt.asm.jae(continue_search).unwrap();
 
-    // mov eax, [...]
+    // mov r12d, [...]
     rt.asm
-        .mov(eax, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
+        .mov(r12d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
-    // mov rax, gs:[0x1480 + rax*8]
-    rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
+    // mov r12, gs:[0x1480 + r12*8]
+    rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
 
     for (vreg, offset) in VM_TO_CONTEXT {
-        // mov rcx, [rax + ...]
-        utils::vreg::load_reg(rt, rax, *vreg, rcx);
+        // mov rax, [rax + ...]
+        utils::vreg::load_reg(rt, r12, *vreg, rcx);
 
         if *vreg == VMReg::Flags {
-            // mov [r14 + ...], ecx
-            rt.asm.mov(ptr(r14 + *offset), ecx).unwrap();
+            // mov [r15 + ...], eax
+            rt.asm.mov(ptr(r15 + *offset), eax).unwrap();
         } else {
-            // mov [r14 + ...], rcx
-            rt.asm.mov(ptr(r14 + *offset), rcx).unwrap();
+            // mov [r15 + ...], rax
+            rt.asm.mov(ptr(r15 + *offset), rax).unwrap();
         }
 
         if *vreg == VMReg::NEntry {
-            // mov [r13 + 0x10], rcx -> PVOID EXCEPTION_RECORD->ExceptionAddress
-            rt.asm.mov(ptr(r13 + 0x10), rcx).unwrap();
+            // mov [r14 + 0x10], rax -> PVOID EXCEPTION_RECORD->ExceptionAddress
+            rt.asm.mov(ptr(r14 + 0x10), rax).unwrap();
         }
     }
 
-    // mov rcx, [rax + ...]
-    utils::vreg::load_reg(rt, rax, VMReg::BPointer, rcx);
-    // mov rdx, [rax + ...]
-    utils::vreg::load_reg(rt, rax, VMReg::BLength, rdx);
-    // xor r8b, r8b
-    rt.asm.xor(r8b, r8b).unwrap();
+    // xor rcx, rcx
+    rt.asm.xor(rcx, rcx).unwrap();
     // call ...
     stack::call(rt, rt.func_labels[&FnDef::VmCrypt]);
 
@@ -162,6 +160,8 @@ pub fn handler(rt: &mut Runtime) {
     {
         // add rsp, 0x28
         rt.asm.add(rsp, 0x28).unwrap();
+        // pop r15
+        rt.asm.pop(r15).unwrap();
         // pop r14
         rt.asm.pop(r14).unwrap();
         // pop r13

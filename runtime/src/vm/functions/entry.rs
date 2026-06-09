@@ -133,11 +133,9 @@ pub fn build(rt: &mut Runtime) {
     // mov [r12 + ...], rsp
     utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
 
-    // mov rcx, r12
-    rt.asm.mov(rcx, r12).unwrap();
-    // lea rdx, [...]
+    // lea rcx, [...]
     rt.asm
-        .lea(rdx, ptr(rt.data_labels[&DataDef::VmCode]))
+        .lea(rcx, ptr(rt.data_labels[&DataDef::VmCode]))
         .unwrap();
     // call ...
     stack::call(rt, rt.func_labels[&FnDef::VmDispatch]);
@@ -166,21 +164,19 @@ pub fn build(rt: &mut Runtime) {
         utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
 
         // Set the block pointer past the padding, length word, and lock byte:
-        // mov rdx, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BPointer, rdx);
         // mov rcx, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BLength, rcx);
-        // add rcx, 0x7
-        rt.asm.add(rcx, 0x7i32).unwrap();
-        // and rcx, -0x8
-        rt.asm.and(rcx, -0x8i32).unwrap();
-        // add rdx, rcx
-        rt.asm.add(rdx, rcx).unwrap();
-        // add rdx, 0x3
-        rt.asm.add(rdx, 0x3i32).unwrap();
+        utils::vreg::load_reg(rt, r12, VMReg::BPointer, rcx);
+        // mov rdx, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::BLength, rdx);
+        // add rdx, 0x7
+        rt.asm.add(rdx, 0x7i32).unwrap();
+        // and rdx, -0x8
+        rt.asm.and(rdx, -0x8i32).unwrap();
+        // add rcx, rdx
+        rt.asm.add(rcx, rdx).unwrap();
+        // add rcx, 0x3
+        rt.asm.add(rcx, 0x3i32).unwrap();
 
-        // mov rcx, r12
-        rt.asm.mov(rcx, r12).unwrap();
         // call ...
         stack::call(rt, rt.func_labels[&FnDef::VmDispatch]);
 
@@ -241,16 +237,14 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(rcx, r12).unwrap();
         // call ...
         stack::call(rt, rt.func_labels[&FnDef::VmLookup]);
-        // mov rdx, rax
-        rt.asm.mov(rdx, rax).unwrap();
+        // mov rcx, rax
+        rt.asm.mov(rcx, rax).unwrap();
 
         // Stack now points to where it was before the caller stub:
         // mov [r12 + ...], rsp
         utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
     }
 
-    // mov rcx, r12
-    rt.asm.mov(rcx, r12).unwrap();
     // call ...
     stack::call(rt, rt.func_labels[&FnDef::VmDispatch]);
 
