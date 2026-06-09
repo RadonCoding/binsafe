@@ -123,6 +123,7 @@ fn walk(
 
         if leaf(&mut operations[i], *key) {
             let p = *position;
+
             *position += 1;
 
             if roll {
@@ -152,8 +153,10 @@ fn nested(
 
         if let Some(children) = Rc::get_mut(operation).unwrap().children() {
             nested(mapper, children, position, deadzones, key);
+
             Rc::get_mut(operation).unwrap().seal(mapper, &mut |source| {
                 let bytes = entry.to_le_bytes();
+
                 for (i, byte) in source.iter_mut().enumerate() {
                     *byte ^= bytes[i];
                 }

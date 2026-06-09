@@ -68,7 +68,7 @@ impl Virtualization {
                 log.push(format!("  BLOCK {}:\n{}", index, bytecode));
             }
 
-            let mut vblock = bytecode::assemble(&mut engine.rt.mapper, &bytecode.operations);
+            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &bytecode.operations);
 
             let key = if vcode.is_empty() {
                 self.keys.seed
@@ -76,9 +76,9 @@ impl Virtualization {
                 u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap())
             };
 
-            crypt::encrypt(&mut vblock, key, self.keys.mul, self.keys.add, 0);
+            crypt::encrypt(&mut bytes, key, self.keys.mul, self.keys.add, 0);
 
-            vcode.extend_from_slice(&vblock);
+            vcode.extend_from_slice(&bytes);
         }
 
         #[cfg(debug_assertions)]
@@ -169,20 +169,14 @@ impl Protection for Virtualization {
         }
 
         for (program, group) in programs.iter().zip(groups) {
-            let mut vblock = bytecode::assemble(&mut engine.rt.mapper, program);
+            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, program);
 
             let key = u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap());
 
-            crypt::encrypt(
-                &mut vblock,
-                key,
-                self.keys.mul,
-                self.keys.add,
-                self.keys.att,
-            );
+            crypt::encrypt(&mut bytes, key, self.keys.mul, self.keys.add, self.keys.att);
 
             let offset = TryInto::<u32>::try_into(vcode.len()).unwrap();
-            vcode.extend_from_slice(&vblock);
+            vcode.extend_from_slice(&bytes);
 
             for block in group {
                 // Store the index of this VM-block's VM-table entry
