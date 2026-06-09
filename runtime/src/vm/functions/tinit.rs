@@ -58,10 +58,12 @@ pub fn build(rt: &mut Runtime) {
 
     // mov ecx, [...]
     rt.asm
-        .mov(ecx, ptr(rt.data_labels[&DataDef::VmVectorsTlsIndex]))
+        .mov(ecx, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
-    // mov [0x1480 + rcx*8], rax
-    rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();
+    // mov rcx, gs:[0x1480 + rcx*8]
+    rt.asm.mov(rcx, ptr(0x1480 + rcx * 8).gs()).unwrap();
+    // mov [rcx + ...], rax
+    utils::vreg::store_reg(rt, rcx, rax, VMReg::VVector);
 
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();

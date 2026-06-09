@@ -28,21 +28,16 @@ pub(crate) struct Executor {
 pub(crate) const BRANCH: u64 = 0x1111_1111;
 
 static TLS_REGISTERS: OnceLock<u32> = OnceLock::new();
-static TLS_VECTORS: OnceLock<u32> = OnceLock::new();
 static TLS_KEY: OnceLock<u32> = OnceLock::new();
 static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
 
 static MAPPED: OnceLock<()> = OnceLock::new();
 
-fn initialize_tls() -> [(DataDef, u32); 4] {
+fn initialize_tls() -> [(DataDef, u32); 3] {
     [
         (
             DataDef::VmRegistersTlsIndex,
             *TLS_REGISTERS.get_or_init(|| unsafe { TlsAlloc() }),
-        ),
-        (
-            DataDef::VmVectorsTlsIndex,
-            *TLS_VECTORS.get_or_init(|| unsafe { TlsAlloc() }),
         ),
         (
             DataDef::VmKeyTlsIndex,

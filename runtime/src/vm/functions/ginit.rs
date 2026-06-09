@@ -25,13 +25,6 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.call(r12).unwrap();
     // mov [...], eax
     rt.asm
-        .mov(ptr(rt.data_labels[&DataDef::VmVectorsTlsIndex]), eax)
-        .unwrap();
-
-    // call r12
-    rt.asm.call(r12).unwrap();
-    // mov [...], eax
-    rt.asm
         .mov(ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]), eax)
         .unwrap();
 
