@@ -164,3 +164,179 @@ pub fn dispatch_vector(
         lower256(rt);
     }
 }
+
+pub fn dispatch_size(
+    rt: &mut Runtime,
+    width: AsmRegister8,
+    epilogue: &mut CodeLabel,
+    ymmword: impl FnOnce(&mut Runtime),
+    xmmword: impl FnOnce(&mut Runtime),
+    qword: impl FnOnce(&mut Runtime),
+    dword: impl FnOnce(&mut Runtime),
+    word: impl FnOnce(&mut Runtime),
+    byte: impl FnOnce(&mut Runtime),
+) {
+    let mut b = rt.asm.create_label();
+    let mut w = rt.asm.create_label();
+    let mut d = rt.asm.create_label();
+    let mut q = rt.asm.create_label();
+    let mut x = rt.asm.create_label();
+    let mut y = rt.asm.create_label();
+
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::Lower256) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(y).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::Lower128) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(x).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::Lower64) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(q).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::Lower32) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(d).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::Lower16) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(w).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::Higher8) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(b).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::SLower64) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(q).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::SLower32) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(d).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::SLower16) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(w).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::SLower8) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(b).unwrap();
+
+    rt.asm.set_label(&mut b).unwrap();
+    {
+        byte(rt);
+        // jmp ...
+        rt.asm.jmp(*epilogue).unwrap();
+    }
+
+    rt.asm.set_label(&mut w).unwrap();
+    {
+        word(rt);
+        // jmp ...
+        rt.asm.jmp(*epilogue).unwrap();
+    }
+
+    rt.asm.set_label(&mut d).unwrap();
+    {
+        dword(rt);
+        // jmp ...
+        rt.asm.jmp(*epilogue).unwrap();
+    }
+
+    rt.asm.set_label(&mut q).unwrap();
+    {
+        qword(rt);
+        // jmp ...
+        rt.asm.jmp(*epilogue).unwrap();
+    }
+
+    rt.asm.set_label(&mut x).unwrap();
+    {
+        xmmword(rt);
+        // jmp ...
+        rt.asm.jmp(*epilogue).unwrap();
+    }
+
+    rt.asm.set_label(&mut y).unwrap();
+    {
+        ymmword(rt);
+    }
+}
+
+pub fn dispatch_lane_or_vector(
+    rt: &mut Runtime,
+    width: AsmRegister8,
+    epilogue: &mut CodeLabel,
+    lower32: impl FnOnce(&mut Runtime),
+    lower64: impl FnOnce(&mut Runtime),
+    lower128: impl FnOnce(&mut Runtime),
+    lower256: impl FnOnce(&mut Runtime),
+) {
+    let mut l64 = rt.asm.create_label();
+    let mut l128 = rt.asm.create_label();
+    let mut l256 = rt.asm.create_label();
+
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::Lower256) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(l256).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::Lower128) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(l128).unwrap();
+    // cmp ..., ...
+    rt.asm
+        .cmp(width, rt.mapper.index(VMWidth::Lower64) as i32)
+        .unwrap();
+    // je ...
+    rt.asm.je(l64).unwrap();
+
+    lower32(rt);
+    // jmp ...
+    rt.asm.jmp(*epilogue).unwrap();
+
+    rt.asm.set_label(&mut l64).unwrap();
+    {
+        lower64(rt);
+        // jmp ...
+        rt.asm.jmp(*epilogue).unwrap();
+    }
+
+    rt.asm.set_label(&mut l128).unwrap();
+    {
+        lower128(rt);
+        // jmp ...
+        rt.asm.jmp(*epilogue).unwrap();
+    }
+
+    rt.asm.set_label(&mut l256).unwrap();
+    {
+        lower256(rt);
+    }
+}

@@ -5,8 +5,6 @@ use crate::{
     vm::utils::{self, scratch, stack},
 };
 
-// Shared body for whole-vector bitwise operations: pops two vectors, applies the
-// native operation, pushes one result. The width selects the 128-bit or 256-bit form.
 pub fn bitwise(rt: &mut Runtime, sse: impl FnOnce(&mut Runtime), avx: impl FnOnce(&mut Runtime)) {
     let mut epilogue = rt.asm.create_label();
 
