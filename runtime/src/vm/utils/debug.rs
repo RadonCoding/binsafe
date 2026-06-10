@@ -49,7 +49,7 @@ pub fn print_s(rt: &mut Runtime, s: &str) {
     // mov rcx, rsp
     rt.asm.mov(rcx, rsp).unwrap();
     // call ...
-    rt.asm.call(rt.func_labels[&FnDef::Print]).unwrap();
+    rt.asm.call(rt.function_labels[&FnDef::Print]).unwrap();
     // add rsp, ...
     rt.asm.add(rsp, stack_size as i32).unwrap();
 
@@ -93,12 +93,12 @@ pub fn print_q(rt: &mut Runtime, q: AsmRegister64) {
     // mov rdx, ...
     rt.asm.mov(rdx, rax).unwrap();
     // call ...
-    rt.asm.call(rt.func_labels[&FnDef::Fmtdec]).unwrap();
+    rt.asm.call(rt.function_labels[&FnDef::Fmtdec]).unwrap();
 
     // mov rcx, rsp
     rt.asm.mov(rcx, rsp).unwrap();
     // call ...
-    rt.asm.call(rt.func_labels[&FnDef::Print]).unwrap();
+    rt.asm.call(rt.function_labels[&FnDef::Print]).unwrap();
 
     // pop r11
     rt.asm.pop(r11).unwrap();

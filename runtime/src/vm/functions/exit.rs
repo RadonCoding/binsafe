@@ -14,11 +14,11 @@ pub fn build(rt: &mut Runtime) {
 
     // call ...
     rt.asm
-        .call(rt.func_labels[&FnDef::VmVectorsRestore])
+        .call(rt.function_labels[&FnDef::VmVectorsRestore])
         .unwrap();
     // call ...
     rt.asm
-        .call(rt.func_labels[&FnDef::VmRegistersRestore])
+        .call(rt.function_labels[&FnDef::VmRegistersRestore])
         .unwrap();
 
     // cmp [r12 + ...], 0x0

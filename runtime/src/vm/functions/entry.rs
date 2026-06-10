@@ -65,7 +65,7 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
     // call ...
     rt.asm
-        .call(rt.func_labels[&FnDef::VmRegistersCapture])
+        .call(rt.function_labels[&FnDef::VmRegistersCapture])
         .unwrap();
 
     // mov r12d, [...]
@@ -81,12 +81,12 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut invoke_ginit).unwrap();
     {
-        rt.asm.call(rt.func_labels[&FnDef::VmGInit]).unwrap();
+        rt.asm.call(rt.function_labels[&FnDef::VmGInit]).unwrap();
     }
 
     rt.asm.set_label(&mut invoke_tinit).unwrap();
     {
-        rt.asm.call(rt.func_labels[&FnDef::VmTInit]).unwrap();
+        rt.asm.call(rt.function_labels[&FnDef::VmTInit]).unwrap();
     }
 
     // mov r12d, [...]
@@ -112,19 +112,6 @@ pub fn build(rt: &mut Runtime) {
     // mov [r12 + ...], rax
     utils::vreg::store_reg(rt, r12, rax, VMReg::VImage);
 
-    // call ...
-    rt.asm
-        .call(rt.func_labels[&FnDef::VmVehInitialize])
-        .unwrap();
-    // call ...
-    rt.asm
-        .call(rt.func_labels[&FnDef::VmFunctionsInitialize])
-        .unwrap();
-    // call ...
-    rt.asm
-        .call(rt.func_labels[&FnDef::VmHandlersInitialize])
-        .unwrap();
-
     // mov [r12 + ...], rsp
     utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
 
@@ -133,7 +120,7 @@ pub fn build(rt: &mut Runtime) {
 
     // lea rax, [...]
     rt.asm
-        .lea(rax, ptr(rt.func_labels[&FnDef::VmEntry]))
+        .lea(rax, ptr(rt.function_labels[&FnDef::VmEntry]))
         .unwrap();
     // mov [r12 + ...], rax
     utils::vreg::store_reg(rt, r12, rax, VMReg::NExit);
@@ -143,24 +130,24 @@ pub fn build(rt: &mut Runtime) {
         .lea(rcx, ptr(rt.data_labels[&DataDef::VmCode]))
         .unwrap();
     // call ...
-    rt.asm.call(rt.func_labels[&FnDef::VmDispatch]).unwrap();
+    rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
 
     // cmp [r12 + ...], 0x0
     utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
     // je ...
     rt.asm.je(finish_attestation).unwrap();
     // jmp ...
-    rt.asm.jmp(rt.func_labels[&FnDef::VmExit]).unwrap();
+    rt.asm.jmp(rt.function_labels[&FnDef::VmExit]).unwrap();
 
     rt.asm.set_label(&mut continue_attestation).unwrap();
     {
         // call ...
         rt.asm
-            .call(rt.func_labels[&FnDef::VmRegistersCapture])
+            .call(rt.function_labels[&FnDef::VmRegistersCapture])
             .unwrap();
         // call ...
         rt.asm
-            .call(rt.func_labels[&FnDef::VmVectorsCapture])
+            .call(rt.function_labels[&FnDef::VmVectorsCapture])
             .unwrap();
         // Skip the pushes from prologue:
         // add rsp, 0x10
@@ -186,7 +173,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.add(rcx, 0x3i32).unwrap();
 
         // call ...
-        rt.asm.call(rt.func_labels[&FnDef::VmDispatch]).unwrap();
+        rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
 
         // cmp [r12 + ...], 0x0
         utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
@@ -194,7 +181,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.je(finish_attestation).unwrap();
 
         // jmp ...
-        rt.asm.jmp(rt.func_labels[&FnDef::VmExit]).unwrap();
+        rt.asm.jmp(rt.function_labels[&FnDef::VmExit]).unwrap();
     }
 
     rt.asm.set_label(&mut finish_attestation).unwrap();
@@ -212,11 +199,11 @@ pub fn build(rt: &mut Runtime) {
     {
         // call ...
         rt.asm
-            .call(rt.func_labels[&FnDef::VmRegistersCapture])
+            .call(rt.function_labels[&FnDef::VmRegistersCapture])
             .unwrap();
         // call ...
         rt.asm
-            .call(rt.func_labels[&FnDef::VmVectorsCapture])
+            .call(rt.function_labels[&FnDef::VmVectorsCapture])
             .unwrap();
     }
 
@@ -242,7 +229,7 @@ pub fn build(rt: &mut Runtime) {
 
         // Resolve the VM-table entry into the block pointer:
         // call ...
-        rt.asm.call(rt.func_labels[&FnDef::VmLookup]).unwrap();
+        rt.asm.call(rt.function_labels[&FnDef::VmLookup]).unwrap();
         // mov rcx, rax
         rt.asm.mov(rcx, rax).unwrap();
 
@@ -255,10 +242,10 @@ pub fn build(rt: &mut Runtime) {
     }
 
     // call ...
-    rt.asm.call(rt.func_labels[&FnDef::VmDispatch]).unwrap();
+    rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
 
     // jmp ...
-    rt.asm.jmp(rt.func_labels[&FnDef::VmExit]).unwrap();
+    rt.asm.jmp(rt.function_labels[&FnDef::VmExit]).unwrap();
 
     rt.asm.set_label(&mut copy_native_registers).unwrap();
     {

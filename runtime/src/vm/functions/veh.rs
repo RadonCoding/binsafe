@@ -30,7 +30,7 @@ pub fn initialize(rt: &mut Runtime) {
     rt.asm.mov(rcx, 0x1u64).unwrap();
     // lea rdx, [...]
     rt.asm
-        .lea(rdx, ptr(rt.func_labels[&FnDef::VmVehHandler]))
+        .lea(rdx, ptr(rt.function_labels[&FnDef::VmVehHandler]))
         .unwrap();
     // call rax
     rt.asm.call(rax).unwrap();
@@ -143,7 +143,7 @@ pub fn handler(rt: &mut Runtime) {
     // xor rcx, rcx
     rt.asm.xor(rcx, rcx).unwrap();
     // call ...
-    rt.asm.call(rt.func_labels[&FnDef::VmCrypt]).unwrap();
+    rt.asm.call(rt.function_labels[&FnDef::VmCrypt]).unwrap();
 
     // mov rax, -0x1 -> EXCEPTION_CONTINUE_EXECUTION
     rt.asm.mov(rax, -0x1i64 as u64).unwrap();

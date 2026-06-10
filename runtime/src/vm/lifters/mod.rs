@@ -5,18 +5,22 @@ use crate::vm::bytecode::VMWidth;
 pub mod arithmetic;
 pub mod bitwise;
 pub mod branch;
+pub mod bsr;
+pub mod bswap;
+pub mod bt;
 pub mod cmov;
-pub mod extend;
+pub mod cmpxchg;
+pub mod divide;
 pub mod lea;
 pub mod movss;
 pub mod multiply;
-pub mod pcmpeqb;
-pub mod pmovmskb;
 pub mod set;
 pub mod stack;
 pub mod transfer;
 pub mod tzcnt;
 pub mod unary;
+pub mod xadd;
+pub mod xchg;
 
 fn operation_width(instruction: &Instruction, kind: OpKind) -> VMWidth {
     match kind {

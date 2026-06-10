@@ -20,7 +20,7 @@ pub fn build(rt: &mut Runtime) {
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();
     // call ...
-    rt.asm.call(rt.func_labels[&FnDef::Strlen]).unwrap();
+    rt.asm.call(rt.function_labels[&FnDef::Strlen]).unwrap();
     // mov r13, rax
     rt.asm.mov(r13, rax).unwrap();
 

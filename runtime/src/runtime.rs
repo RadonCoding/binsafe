@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 
 use iced_x86::{
     code_asm::{rcx, CodeAssembler, CodeLabel},
@@ -56,15 +56,25 @@ mapped! {
         VmHandlerSar,
         VmHandlerMul,
         VmHandlerTrailingZeros,
+        VmHandlerBitScanReverse,
+        VmHandlerByteSwap,
+        VmHandlerBitTest,
+        VmHandlerBitTestSet,
+        VmHandlerBitTestReset,
+        VmHandlerBitTestComplement,
+        VmHandlerAddCarry,
+        VmHandlerSubBorrow,
+        VmHandlerExchange,
+        VmHandlerExchangeAdd,
+        VmHandlerCompareExchange,
         VmHandlerPush,
         VmHandlerPop,
         VmHandlerDiscard,
-        VmHandlerPackedByteMask,
-        VmHandlerPackedByteEqual,
         VmHandlerVectorAnd,
         VmHandlerVectorOr,
         VmHandlerVectorXor,
         VmHandlerVectorAndNot,
+        VmHandlerDivide,
         /* VM ARITHMETIC */
         VmFlags,
         /* VM VEH */
@@ -179,17 +189,23 @@ enum EmissionTask {
 
 pub struct Runtime {
     pub asm: CodeAssembler,
-    pub func_labels: HashMap<FnDef, CodeLabel>,
+
+    pub function_labels: HashMap<FnDef, CodeLabel>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
-    data: HashMap<DataDef, Vec<u8>>,
     pub bool_labels: HashMap<BoolDef, CodeLabel>,
-    bools: HashMap<BoolDef, bool>,
     pub string_labels: HashMap<StringDef, CodeLabel>,
+
+    data: HashMap<DataDef, Vec<u8>>,
+    bools: HashMap<BoolDef, bool>,
     strings: HashMap<StringDef, Vec<u8>>,
+
     imports: HashMap<ImportDef, usize>,
+
     addresses: HashMap<CodeLabel, u64>,
+
     fixups: HashMap<CodeLabel, (CodeLabel, u64, Option<usize>)>,
     chains: Vec<usize>,
+
     pub mapper: Mapper,
 }
 
@@ -197,10 +213,10 @@ impl Runtime {
     pub fn new(bitness: u32) -> Self {
         let mut asm = CodeAssembler::new(bitness).unwrap();
 
-        let mut func_labels = HashMap::new();
+        let mut function_labels = HashMap::new();
 
         for def in FnDef::VARIANTS {
-            func_labels.insert(*def, asm.create_label());
+            function_labels.insert(*def, asm.create_label());
         }
 
         let mut data_labels = HashMap::new();
@@ -229,18 +245,24 @@ impl Runtime {
 
         Self {
             asm,
-            func_labels,
+
+            function_labels,
             data_labels,
-            data: HashMap::new(),
             bool_labels,
-            bools: HashMap::new(),
             string_labels,
+
+            data: HashMap::new(),
+            bools: HashMap::new(),
             strings: HashMap::new(),
+
             imports,
+
             addresses: HashMap::new(),
+
             fixups: HashMap::new(),
-            mapper: Mapper::new(),
             chains: Vec::new(),
+
+            mapper: Mapper::new(),
         }
     }
 
@@ -267,7 +289,7 @@ impl Runtime {
     }
 
     fn set_func_label(&mut self, def: FnDef) {
-        let label = self.func_labels.get_mut(&def).unwrap();
+        let label = self.function_labels.get_mut(&def).unwrap();
         self.asm.set_label(label).unwrap();
     }
 
@@ -321,7 +343,9 @@ impl Runtime {
         self.asm.mov(rcx, self.mapper.index(def) as u64).unwrap();
 
         // call ...
-        self.asm.call(self.func_labels[&FnDef::Resolve]).unwrap();
+        self.asm
+            .call(self.function_labels[&FnDef::Resolve])
+            .unwrap();
     }
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
@@ -386,17 +410,38 @@ impl Runtime {
                 FnDef::VmHandlerTrailingZeros,
                 vm::handlers::trailing_zeros::build,
             ),
+            (
+                FnDef::VmHandlerBitScanReverse,
+                vm::handlers::bit_scan_reverse::build,
+            ),
+            (FnDef::VmHandlerByteSwap, vm::handlers::byte_swap::build),
+            (FnDef::VmHandlerBitTest, vm::handlers::bit_test::build),
+            (
+                FnDef::VmHandlerBitTestSet,
+                vm::handlers::bit_test_set::build,
+            ),
+            (
+                FnDef::VmHandlerBitTestReset,
+                vm::handlers::bit_test_reset::build,
+            ),
+            (
+                FnDef::VmHandlerBitTestComplement,
+                vm::handlers::bit_test_complement::build,
+            ),
+            (FnDef::VmHandlerAddCarry, vm::handlers::add_carry::build),
+            (FnDef::VmHandlerSubBorrow, vm::handlers::sub_borrow::build),
+            (FnDef::VmHandlerExchange, vm::handlers::exchange::build),
+            (
+                FnDef::VmHandlerExchangeAdd,
+                vm::handlers::exchange_add::build,
+            ),
+            (
+                FnDef::VmHandlerCompareExchange,
+                vm::handlers::compare_exchange::build,
+            ),
             (FnDef::VmHandlerPush, vm::handlers::push::build),
             (FnDef::VmHandlerPop, vm::handlers::pop::build),
             (FnDef::VmHandlerDiscard, vm::handlers::discard::build),
-            (
-                FnDef::VmHandlerPackedByteMask,
-                vm::handlers::packed_byte_mask::build,
-            ),
-            (
-                FnDef::VmHandlerPackedByteEqual,
-                vm::handlers::packed_byte_equal::build,
-            ),
             (FnDef::VmHandlerVectorAnd, vm::handlers::vector_and::build),
             (FnDef::VmHandlerVectorOr, vm::handlers::vector_or::build),
             (FnDef::VmHandlerVectorXor, vm::handlers::vector_xor::build),
@@ -404,6 +449,7 @@ impl Runtime {
                 FnDef::VmHandlerVectorAndNot,
                 vm::handlers::vector_and_not::build,
             ),
+            (FnDef::VmHandlerDivide, vm::handlers::divide::build),
             (FnDef::VmFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (
@@ -532,7 +578,7 @@ impl Runtime {
             .unwrap();
 
         let labels = self
-            .func_labels
+            .function_labels
             .values()
             .chain(self.data_labels.values())
             .chain(self.bool_labels.values())
@@ -548,13 +594,12 @@ impl Runtime {
 
         let mut states = HashMap::new();
 
-        let mut fixups = self
-            .fixups
-            .iter()
-            .collect::<Vec<(&CodeLabel, &(CodeLabel, u64, Option<usize>))>>();
+        let mut fixups = mem::take(&mut self.fixups)
+            .into_iter()
+            .collect::<Vec<(CodeLabel, (CodeLabel, u64, Option<usize>))>>();
         fixups.sort_by_key(|(src, _)| result.label_ip(src).unwrap());
 
-        for (&src, &(target, key, chain)) in fixups {
+        for (src, (target, key, chain)) in fixups {
             let rva = result.label_ip(&src).unwrap();
             let offset = (rva - ip) as usize;
 

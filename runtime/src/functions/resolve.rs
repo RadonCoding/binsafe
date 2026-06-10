@@ -119,7 +119,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(rdx, r12).unwrap();
         // call ...
         rt.asm
-            .call(rt.func_labels[&FnDef::CompareUnicodeToAnsi])
+            .call(rt.function_labels[&FnDef::CompareUnicodeToAnsi])
             .unwrap();
 
         // test rax, rax
@@ -212,7 +212,7 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.mov(rdx, r13).unwrap();
             // call ...
             rt.asm
-                .call(rt.func_labels[&FnDef::CompareAnsiToAnsi])
+                .call(rt.function_labels[&FnDef::CompareAnsiToAnsi])
                 .unwrap();
 
             // test rax, rax

@@ -1,10 +1,9 @@
-use crate::vm::utils;
-use iced_x86::code_asm::{eax, ptr, r8, rax, rcx, rdx};
+use iced_x86::code_asm::{ptr, r8, rax, rcx, rdx};
 use rand::seq::SliceRandom;
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
-    vm::bytecode::{VMOp, VMReg},
+    vm::bytecode::VMOp,
 };
 
 #[macro_export]
@@ -112,14 +111,56 @@ macro_rules! __arithmetic {
             },
         );
     };
+    ($rt:expr, $operation:ident, carry, $epilogue:expr) => {
+        // r9d -> flags
+        $crate::vm::utils::vreg::load_reg32($rt, r12, $crate::vm::bytecode::VMReg::Flags, r9d);
+        $crate::vm::utils::width::dispatch_register(
+            $rt,
+            al,
+            $epilogue,
+            |rt| {
+                rt.asm.bt(r9d, 0i32).unwrap();
+                rt.asm.$operation(r14, r8).unwrap();
+            },
+            |rt| {
+                rt.asm.bt(r9d, 0i32).unwrap();
+                rt.asm.$operation(r14d, r8d).unwrap();
+            },
+            |rt| {
+                rt.asm.bt(r9d, 0i32).unwrap();
+                rt.asm.$operation(r14w, r8w).unwrap();
+            },
+            |rt| {
+                rt.asm.bt(r9d, 0i32).unwrap();
+                rt.asm.$operation(r14b, r8b).unwrap();
+            },
+            |rt| {
+                rt.asm.bt(r9d, 0i32).unwrap();
+                rt.asm.$operation(r14b, r8b).unwrap();
+            },
+            |rt| {
+                rt.asm.bt(r9d, 0i32).unwrap();
+                rt.asm.$operation(r14, r8).unwrap();
+            },
+            |rt| {
+                rt.asm.bt(r9d, 0i32).unwrap();
+                rt.asm.$operation(r14d, r8d).unwrap();
+            },
+            |rt| {
+                rt.asm.bt(r9d, 0i32).unwrap();
+                rt.asm.$operation(r14w, r8w).unwrap();
+            },
+            |rt| {
+                rt.asm.bt(r9d, 0i32).unwrap();
+                rt.asm.$operation(r14b, r8b).unwrap();
+            },
+        );
+    };
 }
 
 #[macro_export]
 macro_rules! arithmetic {
-    ($operation:ident) => {
-        $crate::arithmetic!($operation, r8);
-    };
-    ($operation:ident, $register:ident) => {
+    ($operation:ident, $register:ident, $mask:expr) => {
         use crate::{
             runtime::{FnDef, Runtime},
             vm::utils::{self, scratch},
@@ -150,10 +191,12 @@ macro_rules! arithmetic {
 
             rt.asm.set_label(&mut epilogue).unwrap();
             {
+                // mov rcx, ...
+                rt.asm.mov(rcx, $mask).unwrap();
                 // pushfq
                 rt.asm.pushfq().unwrap();
                 // call ...
-                rt.asm.call(rt.func_labels[&FnDef::VmFlags]).unwrap();
+                rt.asm.call(rt.function_labels[&FnDef::VmFlags]).unwrap();
 
                 // store r14
                 scratch::store(rt, r12, r14);
@@ -173,8 +216,19 @@ macro_rules! arithmetic {
 pub(crate) use arithmetic;
 
 pub mod add;
+pub mod add_carry;
 pub mod and;
+pub mod bit_scan_reverse;
+pub mod bit_test;
+pub mod bit_test_complement;
+pub mod bit_test_reset;
+pub mod bit_test_set;
+pub mod byte_swap;
+pub mod compare_exchange;
 pub mod discard;
+pub mod divide;
+pub mod exchange;
+pub mod exchange_add;
 pub mod flags;
 pub mod jcc;
 pub mod load_address;
@@ -198,6 +252,7 @@ pub mod store_memory;
 pub mod store_register;
 pub mod store_vector;
 pub mod sub;
+pub mod sub_borrow;
 pub mod test;
 pub mod trailing_zeros;
 pub mod vector;
@@ -207,6 +262,7 @@ pub mod vector_or;
 pub mod vector_xor;
 pub mod xor;
 
+// void (unsigned char*)
 pub fn initialize(rt: &mut Runtime) {
     let mut table = [
         (VMOp::Jcc, FnDef::VmHandlerJcc),
@@ -221,6 +277,11 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::StoreVector, FnDef::VmHandlerStoreVector),
         (VMOp::Add, FnDef::VmHandlerAdd),
         (VMOp::Sub, FnDef::VmHandlerSub),
+        (VMOp::AddCarry, FnDef::VmHandlerAddCarry),
+        (VMOp::SubBorrow, FnDef::VmHandlerSubBorrow),
+        (VMOp::Exchange, FnDef::VmHandlerExchange),
+        (VMOp::ExchangeAdd, FnDef::VmHandlerExchangeAdd),
+        (VMOp::CompareExchange, FnDef::VmHandlerCompareExchange),
         (VMOp::And, FnDef::VmHandlerAnd),
         (VMOp::Or, FnDef::VmHandlerOr),
         (VMOp::Xor, FnDef::VmHandlerXor),
@@ -232,30 +293,28 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::Sar, FnDef::VmHandlerSar),
         (VMOp::Mul, FnDef::VmHandlerMul),
         (VMOp::TrailingZeros, FnDef::VmHandlerTrailingZeros),
+        (VMOp::BitScanReverse, FnDef::VmHandlerBitScanReverse),
+        (VMOp::ByteSwap, FnDef::VmHandlerByteSwap),
+        (VMOp::BitTest, FnDef::VmHandlerBitTest),
+        (VMOp::BitTestSet, FnDef::VmHandlerBitTestSet),
+        (VMOp::BitTestReset, FnDef::VmHandlerBitTestReset),
+        (VMOp::BitTestComplement, FnDef::VmHandlerBitTestComplement),
         (VMOp::Push, FnDef::VmHandlerPush),
         (VMOp::Pop, FnDef::VmHandlerPop),
         (VMOp::Discard, FnDef::VmHandlerDiscard),
-        (VMOp::PackedByteMask, FnDef::VmHandlerPackedByteMask),
-        (VMOp::PackedByteEqual, FnDef::VmHandlerPackedByteEqual),
         (VMOp::VectorAnd, FnDef::VmHandlerVectorAnd),
         (VMOp::VectorOr, FnDef::VmHandlerVectorOr),
         (VMOp::VectorXor, FnDef::VmHandlerVectorXor),
         (VMOp::VectorAndNot, FnDef::VmHandlerVectorAndNot),
+        (VMOp::Divide, FnDef::VmHandlerDivide),
     ];
 
     let mut rng = rand::thread_rng();
     table.shuffle(&mut rng);
 
-    // mov eax, [...]
-    rt.asm
-        .mov(eax, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
-        .unwrap();
-    // mov rax, [0x1480 + rcx*8]
-    rt.asm.mov(rax, ptr(0x1480 + rax * 8).gs()).unwrap();
-
     // lea rcx, [...]
     rt.asm
-        .lea(rcx, ptr(rt.data_labels[&DataDef::VmHandlers]))
+        .lea(rax, ptr(rt.data_labels[&DataDef::VmHandlers]))
         .unwrap();
 
     rt.with_chain(|rt| {
@@ -263,7 +322,7 @@ pub fn initialize(rt: &mut Runtime) {
         rt.asm.xor(rdx, rdx).unwrap();
 
         for (op, def) in table {
-            let key = rt.mark_as_encrypted(rt.func_labels[&def]);
+            let key = rt.mark_as_encrypted(rt.function_labels[&def]);
             // mov r8, ...
             rt.asm.mov(r8, 0x0u64).unwrap();
             // xor rdx, r8
@@ -275,17 +334,14 @@ pub fn initialize(rt: &mut Runtime) {
 
             // mov r8, rdx
             rt.asm.mov(r8, rdx).unwrap();
-
-            // add r8, [...]
-            utils::vreg::reg_add(rt, rax, VMReg::VImage, r8);
-
+            // add r8, rcx
+            rt.asm.add(r8, rcx).unwrap();
             // mov [rcx + ...], r8
             rt.asm
-                .mov(ptr(rcx + rt.mapper.index(op) as i32 * 8), r8)
+                .mov(ptr(rax + rt.mapper.index(op) as i32 * 8), r8)
                 .unwrap();
         }
     });
-
     // ret
     rt.asm.ret().unwrap();
 }
