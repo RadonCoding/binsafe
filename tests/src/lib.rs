@@ -43,7 +43,7 @@ use windows::Win32::{
 mod instructions;
 mod permutation;
 
-const NATIVE: [VMReg; 17] = [
+const REGISTERS: [VMReg; 17] = [
     VMReg::Rax,
     VMReg::Rcx,
     VMReg::Rdx,
@@ -62,9 +62,24 @@ const NATIVE: [VMReg; 17] = [
     VMReg::R15,
     VMReg::Flags,
 ];
-
-const XSTATE_AVX: u32 = 2;
-const XSTATE_MASK_AVX: u64 = 4;
+const VECTORS: [VMVec; 16] = [
+    VMVec::Ymm0,
+    VMVec::Ymm1,
+    VMVec::Ymm2,
+    VMVec::Ymm3,
+    VMVec::Ymm4,
+    VMVec::Ymm5,
+    VMVec::Ymm6,
+    VMVec::Ymm7,
+    VMVec::Ymm8,
+    VMVec::Ymm9,
+    VMVec::Ymm10,
+    VMVec::Ymm11,
+    VMVec::Ymm12,
+    VMVec::Ymm13,
+    VMVec::Ymm14,
+    VMVec::Ymm15,
+];
 
 const IMM8_A: u8 = 0x11;
 
@@ -89,6 +104,9 @@ static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
 static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static NATIVE_HANDLER: OnceLock<()> = OnceLock::new();
+
+const XSTATE_AVX: u32 = 2;
+const XSTATE_MASK_AVX: u64 = 4;
 
 unsafe extern "system" fn native_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
     if (*(*info).ExceptionRecord).ExceptionCode == EXCEPTION_SINGLE_STEP {
@@ -283,9 +301,9 @@ impl Executor {
             .mov(r8, ptr(r12 + self.rt.mapper.index(VMReg::VVector) * 8))
             .unwrap();
 
-        let mut vectors = vec![[0u128; 2]; VMVec::VARIANTS.len()];
+        let mut vectors = vec![[0u128; 2]; VECTORS.len()];
 
-        for &vector in VMVec::VARIANTS {
+        for vector in VECTORS {
             if let Some(v) = state.vectors.get(&vector) {
                 vectors[self.rt.mapper.index(vector) as usize] = *v;
             }
@@ -294,7 +312,7 @@ impl Executor {
         // mov r9, ...
         self.rt.asm.mov(r9, vectors.as_ptr() as u64).unwrap();
 
-        for &vector in VMVec::VARIANTS {
+        for vector in VECTORS {
             // vmovdqu ymm0, [r9 + ...]
             self.rt
                 .asm
@@ -324,7 +342,7 @@ impl Executor {
         // mov r8, ...
         self.rt.asm.mov(r8, registers.as_mut_ptr() as u64).unwrap();
 
-        for register in NATIVE {
+        for register in REGISTERS {
             // mov r9, [r12 + ...]
             self.rt
                 .asm
@@ -346,7 +364,7 @@ impl Executor {
         // mov r9, ...
         self.rt.asm.mov(r9, vectors.as_mut_ptr() as u64).unwrap();
 
-        for &vector in VMVec::VARIANTS {
+        for vector in VECTORS {
             // vmovdqu ymm0, [r8 + ...]
             self.rt
                 .asm
@@ -395,11 +413,11 @@ impl Executor {
         }
 
         State {
-            registers: NATIVE
+            registers: REGISTERS
                 .iter()
                 .map(|&r| (r, registers[self.rt.mapper.index(r) as usize]))
                 .collect(),
-            vectors: VMVec::VARIANTS
+            vectors: VECTORS
                 .iter()
                 .map(|&v| (v, vectors[self.rt.mapper.index(v) as usize]))
                 .collect(),
@@ -497,7 +515,7 @@ impl Executor {
 
         context.EFlags &= !(VMFlag::Interrupt.bit32() | VMFlag::Reserved1.bit32());
 
-        let registers = NATIVE
+        let registers = REGISTERS
             .iter()
             .map(|&register| (register, read_register(context, register)))
             .collect();
@@ -566,7 +584,7 @@ unsafe fn write_vectors(context: &mut CONTEXT, vectors: &HashMap<VMVec, [u128; 2
     let upper = LocateXStateFeature(context, XSTATE_AVX, None) as *mut M128A;
 
     for (&vector, &value) in vectors {
-        let index = VMVec::VARIANTS.iter().position(|&v| v == vector).unwrap();
+        let index = VECTORS.iter().position(|&v| v == vector).unwrap();
         context.Anonymous.FltSave.XmmRegisters[index] = M128A {
             Low: value[0] as u64,
             High: (value[0] >> 64) as i64,
@@ -581,7 +599,7 @@ unsafe fn write_vectors(context: &mut CONTEXT, vectors: &HashMap<VMVec, [u128; 2
 unsafe fn read_vectors(context: &mut CONTEXT) -> HashMap<VMVec, [u128; 2]> {
     let upper = LocateXStateFeature(context, XSTATE_AVX, None) as *const M128A;
 
-    VMVec::VARIANTS
+    VECTORS
         .iter()
         .enumerate()
         .map(|(index, &vector)| {
