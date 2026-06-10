@@ -68,6 +68,8 @@ pub mod load_register;
 pub mod load_vector;
 pub mod mul;
 pub mod or;
+pub mod packed_byte_equal;
+pub mod packed_byte_mask;
 pub mod pop;
 pub mod push;
 pub mod ret;
