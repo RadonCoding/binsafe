@@ -4,16 +4,10 @@ use rand::Rng;
 use runtime::mapper::Mappable;
 use runtime::vm::bytecode::{self, VMFlag, VMReg, VMVec};
 
-use crate::{decrypt, encrypt, instruction, Difference, Executor, State};
-
-const A: u64 = 0x1111_1111_1111_1111;
-const B: u64 = 0x2222_2222_2222_2222;
-const C: u64 = 0x3333_3333_3333_3333;
-const D: u64 = 0x4444_4444_4444_4444;
-
-const P0: u128 = 0x1111_1111_1111_1111_1111_1111_1111_1111;
-const P1: u128 = 0x2222_2222_2222_2222_2222_2222_2222_2222;
-const P2: u128 = 0x3333_3333_3333_3333_3333_3333_3333_3333;
+use crate::{
+    decrypt, encrypt, instruction, Difference, Executor, State, IMM128_A, IMM128_B, IMM128_C,
+    IMM64_A, IMM64_B, IMM64_C, IMM8_A,
+};
 
 #[test]
 fn test_crypt() {
@@ -74,17 +68,16 @@ fn bytes16(value: u128) -> [u128; 2] {
 
 fn gpr() -> State {
     baseline()
-        .with(VMReg::Rax, A)
-        .with(VMReg::Rcx, B)
-        .with(VMReg::Rdx, C)
-        .with(VMReg::Rbx, D)
+        .with(VMReg::Rax, IMM64_A)
+        .with(VMReg::Rcx, IMM64_B)
+        .with(VMReg::Rdx, IMM64_C)
 }
 
 fn simd() -> State {
     let state = baseline();
-    let state = vector(state, VMVec::Ymm0, bytes16(P0));
-    let state = vector(state, VMVec::Ymm1, bytes16(P1));
-    vector(state, VMVec::Ymm2, bytes16(P2))
+    let state = vector(state, VMVec::Ymm0, bytes16(IMM128_A));
+    let state = vector(state, VMVec::Ymm1, bytes16(IMM128_B));
+    vector(state, VMVec::Ymm2, bytes16(IMM128_C))
 }
 
 fn check(state: State, instruction: Instruction) {
@@ -165,12 +158,12 @@ testing!(test_add, gpr(), instruction!(Add_rm64_r64, RAX, RCX));
 testing!(test_sub, gpr(), instruction!(Sub_rm64_r64, RAX, RCX));
 testing!(
     test_adc,
-    gpr().with(VMReg::Flags, 0b0000000000000001),
+    gpr().with(VMReg::Flags, 0b0000000000000001u64),
     instruction!(Adc_rm64_r64, RAX, RCX)
 );
 testing!(
     test_sbb,
-    gpr().with(VMReg::Flags, 0b0000000000000001),
+    gpr().with(VMReg::Flags, 0b0000000000000001u64),
     instruction!(Sbb_rm64_r64, RAX, RCX)
 );
 testing!(test_cmp, gpr(), instruction!(Cmp_rm64_r64, RAX, RCX));
@@ -180,27 +173,27 @@ testing!(test_or, gpr(), instruction!(Or_rm64_r64, RAX, RCX));
 testing!(test_xor, gpr(), instruction!(Xor_rm64_r64, RAX, RCX));
 testing!(
     test_rol,
-    gpr().with(VMReg::Rcx, 3),
+    gpr().with(VMReg::Rcx, IMM8_A),
     instruction!(Rol_rm64_CL, RAX, CL)
 );
 testing!(
     test_ror,
-    gpr().with(VMReg::Rcx, 3),
+    gpr().with(VMReg::Rcx, IMM8_A),
     instruction!(Ror_rm64_CL, RAX, CL)
 );
 testing!(
     test_shl,
-    gpr().with(VMReg::Rcx, 3),
+    gpr().with(VMReg::Rcx, IMM8_A),
     instruction!(Shl_rm64_CL, RAX, CL)
 );
 testing!(
     test_shr,
-    gpr().with(VMReg::Rcx, 3),
+    gpr().with(VMReg::Rcx, IMM8_A),
     instruction!(Shr_rm64_CL, RAX, CL)
 );
 testing!(
     test_sar,
-    gpr().with(VMReg::Rcx, 3),
+    gpr().with(VMReg::Rcx, IMM8_A),
     instruction!(Sar_rm64_CL, RAX, CL)
 );
 testing!(test_inc, gpr(), instruction!(Inc_rm64, RAX));
@@ -212,12 +205,12 @@ testing!(test_imul, gpr(), instruction!(Imul_rm64, RCX));
 testing!(test_imul2, gpr(), instruction!(Imul_r64_rm64, RAX, RCX));
 testing!(
     test_div,
-    gpr().with(VMReg::Rdx, 0).with(VMReg::Rax, A),
+    gpr().zeroed(VMReg::Rdx).with(VMReg::Rax, IMM64_A),
     instruction!(Div_rm64, RCX)
 );
 testing!(
     test_idiv,
-    gpr().with(VMReg::Rdx, 0).with(VMReg::Rax, A),
+    gpr().zeroed(VMReg::Rdx).with(VMReg::Rax, IMM64_A),
     instruction!(Idiv_rm64, RCX)
 );
 testing!(test_tzcnt, gpr(), instruction!(Tzcnt_r64_rm64, RAX, RCX));

@@ -66,13 +66,25 @@ const NATIVE: [VMReg; 17] = [
 const XSTATE_AVX: u32 = 2;
 const XSTATE_MASK_AVX: u64 = 4;
 
-pub(crate) const FAKE_BRANCH_ADDRESS: u64 = 0x1234_ABCD;
+const IMM8_A: u8 = 0x11;
+
+const IMM32_A: u32 = 0x1111_1111;
+
+const IMM64_A: u64 = 0x1111_1111_1111_1111;
+const IMM64_B: u64 = 0x2222_2222_2222_2222;
+const IMM64_C: u64 = 0x3333_3333_3333_3333;
+
+const IMM128_A: u128 = 0x1111_1111_1111_1111_1111_1111_1111_1111;
+const IMM128_B: u128 = 0x2222_2222_2222_2222_2222_2222_2222_2222;
+const IMM128_C: u128 = 0x3333_3333_3333_3333_3333_3333_3333_3333;
+
+const FAKE_BRANCH_ADDRESS: u64 = 0x1234_ABCD;
+
+static FAKE_BRANCH_MAPPED: OnceLock<()> = OnceLock::new();
 
 static TLS_REGISTERS: OnceLock<u32> = OnceLock::new();
 static TLS_KEY: OnceLock<u32> = OnceLock::new();
 static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
-
-static FAKE_BRANCH_MAPPED: OnceLock<()> = OnceLock::new();
 
 static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -156,9 +168,13 @@ pub(crate) enum Difference {
 }
 
 impl State {
-    pub fn with(mut self, register: VMReg, value: u64) -> Self {
-        self.registers.insert(register, value);
+    pub fn with<T: Into<u64>>(mut self, register: VMReg, value: T) -> Self {
+        self.registers.insert(register, value.into());
         self
+    }
+
+    pub fn zeroed(self, register: VMReg) -> Self {
+        self.with(register, 0u64)
     }
 
     pub fn compare(&self, other: &Self) -> Vec<Difference> {
