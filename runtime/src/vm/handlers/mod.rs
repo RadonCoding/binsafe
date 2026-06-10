@@ -238,6 +238,8 @@ pub mod load_register;
 pub mod load_vector;
 pub mod mul;
 pub mod or;
+pub mod packed_byte_equal;
+pub mod packed_byte_mask;
 pub mod pop;
 pub mod push;
 pub mod ret;
@@ -300,6 +302,8 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::Push, FnDef::VmHandlerPush),
         (VMOp::Pop, FnDef::VmHandlerPop),
         (VMOp::Discard, FnDef::VmHandlerDiscard),
+        (VMOp::PackedByteMask, FnDef::VmHandlerPackedByteMask),
+        (VMOp::PackedByteEqual, FnDef::VmHandlerPackedByteEqual),
         (VMOp::VectorAnd, FnDef::VmHandlerVectorAnd),
         (VMOp::VectorOr, FnDef::VmHandlerVectorOr),
         (VMOp::VectorXor, FnDef::VmHandlerVectorXor),

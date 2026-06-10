@@ -70,6 +70,8 @@ mapped! {
         VmHandlerPush,
         VmHandlerPop,
         VmHandlerDiscard,
+        VmHandlerPackedByteMask,
+        VmHandlerPackedByteEqual,
         VmHandlerVectorAnd,
         VmHandlerVectorOr,
         VmHandlerVectorXor,
@@ -442,6 +444,14 @@ impl Runtime {
             (FnDef::VmHandlerPush, vm::handlers::push::build),
             (FnDef::VmHandlerPop, vm::handlers::pop::build),
             (FnDef::VmHandlerDiscard, vm::handlers::discard::build),
+            (
+                FnDef::VmHandlerPackedByteMask,
+                vm::handlers::packed_byte_mask::build,
+            ),
+            (
+                FnDef::VmHandlerPackedByteEqual,
+                vm::handlers::packed_byte_equal::build,
+            ),
             (FnDef::VmHandlerVectorAnd, vm::handlers::vector_and::build),
             (FnDef::VmHandlerVectorOr, vm::handlers::vector_or::build),
             (FnDef::VmHandlerVectorXor, vm::handlers::vector_xor::build),

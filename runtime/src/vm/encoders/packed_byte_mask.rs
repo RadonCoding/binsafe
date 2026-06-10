@@ -3,19 +3,16 @@ use crate::vm::bytecode::{VMOp, VMWidth};
 use crate::vm::encoders::Encode;
 
 #[derive(Debug)]
-pub struct PackedByteEqual {
+pub struct PackedByteMask {
     pub width: VMWidth,
 }
 
-impl Encode for PackedByteEqual {
+impl Encode for PackedByteMask {
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![
-            mapper.index(VMOp::PackedByteEqual),
-            mapper.index(self.width),
-        ]
+        vec![mapper.index(VMOp::PackedByteMask), mapper.index(self.width)]
     }
 
     fn depth(&self) -> i32 {
-        -self.width.slots()
+        1 - self.width.slots()
     }
 }
