@@ -15,6 +15,8 @@ pub mod extend;
 pub mod lea;
 pub mod movss;
 pub mod multiply;
+pub mod pcmpeqb;
+pub mod pmovskb;
 pub mod set;
 pub mod stack;
 pub mod transfer;

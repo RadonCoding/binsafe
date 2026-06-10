@@ -62,6 +62,8 @@ mapped! {
         ExchangeAdd,
         CompareExchange,
         // Vector
+        PackedByteMask,
+        PackedByteEqual,
         VectorAnd,
         VectorOr,
         VectorXor,
