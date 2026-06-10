@@ -11,6 +11,7 @@ pub mod bt;
 pub mod cmov;
 pub mod cmpxchg;
 pub mod divide;
+pub mod extend;
 pub mod lea;
 pub mod movss;
 pub mod multiply;
