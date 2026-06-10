@@ -1,92 +1,27 @@
-use iced_x86::{Instruction, MemoryOperand, Register};
+use iced_x86::Register::{AL, CL, RAX, RBX, RCX, XMM0, XMM1, XMM2};
+use iced_x86::{Instruction, RflagsBits};
 use rand::Rng;
-use runtime::vm::bytecode::{self, VMFlag, VMReg};
+use runtime::mapper::Mappable;
+use runtime::vm::bytecode::{self, VMFlag, VMReg, VMVec};
 
-use crate::{decrypt, encrypt, instruction, Executor, BRANCH};
+use crate::{decrypt, encrypt, instruction, Difference, Executor, State};
 
-fn template(instructions: &[Instruction], setup: &[(VMReg, u64)], target: VMReg, expected: u64) {
-    let mut executor = Executor::new();
+const A: u64 = 0x1111_1111_1111_1111;
+const B: u64 = 0x2222_2222_2222_2222;
+const C: u64 = 0x3333_3333_3333_3333;
+const D: u64 = 0x4444_4444_4444_4444;
 
-    let lifted = bytecode::lift(&mut executor.rt.mapper, instructions).unwrap();
+const IMM8: u32 = 0x11;
+const IMM32: u32 = 0x1111_1111;
 
-    let mut rng = rand::thread_rng();
-
-    let bytecode = bytecode::transform(&mut executor.rt.mapper, lifted, |ready| {
-        rng.gen_range(0..ready.len())
-    });
-    let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &bytecode.operations);
-
-    encrypt(&mut bytes);
-
-    let state = executor.run(setup, &bytes);
-
-    let received = state[(executor.rt.mapper.index(target)) as usize];
-
-    assert_eq!(
-        received,
-        expected,
-        "{:?} | {:?}: expected=0x{:X} received=0x{:X}",
-        instructions[0].code(),
-        target,
-        expected,
-        received,
-    );
-}
-
-fn flag(f: VMFlag) -> u64 {
-    1 << (f as u64)
-}
-
-macro_rules! case {
-    ([$($i:expr),* $(,)?], [$($r:ident = $v:expr),* $(,)?], $t:ident => $e:expr) => {
-        template(
-            &[$($i),*],
-            &[$((VMReg::$r, $v)),*],
-            VMReg::$t,
-            $e,
-        );
-    };
-}
-
-macro_rules! binary {
-    ($name:ident, $op:ident,
-        ($a64:expr, $b64:expr => $r64:expr),
-        ($a32:expr, $i32:expr => $r32:expr),
-        ($a16:expr, $i16:expr => $r16:expr),
-        ($a8:expr,  $i8:expr  => $r8:expr) $(,)?
-    ) => {
-        #[test]
-        fn $name() {
-            paste::paste! {
-                case!([instruction!([<$op _r64_rm64>], Register::RAX, Register::RBX)],
-                      [Rax = $a64, Rbx = $b64], Rax => $r64);
-                case!([instruction!([<$op _rm32_imm32>], Register::EAX, $i32)],
-                      [Rax = $a32], Rax => $r32);
-                case!([instruction!([<$op _rm16_imm16>], Register::AX, $i16)],
-                      [Rax = $a16], Rax => $r16);
-                case!([instruction!([<$op _rm8_imm8>], Register::AL, $i8)],
-                      [Rax = $a8], Rax => $r8);
-            }
-        }
-    };
-}
-
-macro_rules! cmov_case {
-    ($cmov:ident, $cmp:expr, $rax:expr, $expected:expr) => {
-        case!(
-            [
-                instruction!(Cmp_rm64_imm32, Register::RAX, $cmp),
-                instruction!($cmov, Register::RBX, Register::RCX),
-            ],
-            [Rax = $rax, Rbx = 0x2222_2222, Rcx = 0x1111_1111],
-            Rbx => $expected
-        );
-    };
-}
+const P0: u128 = 0x1111_1111_1111_1111_1111_1111_1111_1111;
+const P1: u128 = 0x2222_2222_2222_2222_2222_2222_2222_2222;
+const P2: u128 = 0x3333_3333_3333_3333_3333_3333_3333_3333;
 
 #[test]
 fn test_crypt() {
-    let mut buffer = vec![0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE];
+    let mut buffer = vec![0xDE, 0xAD, 0xC0, 0xDE];
+
     let before = buffer.clone();
 
     encrypt(&mut buffer);
@@ -98,488 +33,330 @@ fn test_crypt() {
     assert_eq!(before, after);
 }
 
-#[test]
-fn test_mov() {
-    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x1111_1111_1111_1111u64)],
-          [], Rax => 0x1111_1111_1111_1111);
-    case!([instruction!(Mov_r32_imm32, Register::EAX, 0x1111_1111)],
-          [], Rax => 0x1111_1111);
-    case!([instruction!(Mov_r16_imm16, Register::AX, 0x1111)],
-          [], Rax => 0x1111);
-    case!([instruction!(Mov_r8_imm8, Register::AL, 0x11)],
-          [], Rax => 0x11);
+fn baseline() -> State {
+    let mut state = State::default();
+
+    for register in [
+        VMReg::Rax,
+        VMReg::Rcx,
+        VMReg::Rdx,
+        VMReg::Rbx,
+        VMReg::Rbp,
+        VMReg::Rsi,
+        VMReg::Rdi,
+        VMReg::R8,
+        VMReg::R9,
+        VMReg::R10,
+        VMReg::R11,
+        VMReg::R12,
+        VMReg::R13,
+        VMReg::R14,
+        VMReg::R15,
+        VMReg::Flags,
+    ] {
+        state.registers.insert(register, 0);
+    }
+
+    for &vector in VMVec::VARIANTS {
+        state.vectors.insert(vector, [0u128; 2]);
+    }
+
+    state
 }
 
-#[test]
-fn test_jcc() {
-    case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(branch Je_rel8_64, BRANCH)],
-          [Rax = 0x1111_1111], NBranch => BRANCH);
-    case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(branch Jne_rel8_64, BRANCH)],
-          [Rax = 0x2222_2222], NBranch => BRANCH);
-    case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(branch Ja_rel8_64, BRANCH)],
-          [Rax = 0x2222_2222], NBranch => BRANCH);
-    case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(branch Jae_rel8_64, BRANCH)],
-          [Rax = 0x2222_2222], NBranch => BRANCH);
+fn vector(mut state: State, register: VMVec, bytes: [u128; 2]) -> State {
+    state.vectors.insert(register, bytes);
+    state
 }
 
-#[test]
-fn test_jmp() {
-    case!([instruction!(Jmp_rm64, Register::RAX)],
-          [Rax = BRANCH], NBranch => BRANCH);
-    case!([instruction!(branch Jmp_rel32_64, BRANCH)],
-          [], NBranch => BRANCH);
+fn bytes16(value: u128) -> [u128; 2] {
+    let mut vector = [0u128; 2];
+    vector[0] = value;
+    vector
 }
 
-#[test]
-fn test_lea() {
-    case!([instruction!(Lea_r64_m, Register::RAX,
-              MemoryOperand::with_base_displ_size(Register::RBX, 0x1111_1111, 8))],
-          [Rbx = 0x1111_1111], Rax => 0x2222_2222);
-    case!([instruction!(Lea_r32_m, Register::EAX,
-              MemoryOperand::with_base_displ_size(Register::RBX, 0x1111_1111, 4))],
-          [Rbx = 0x1111_1111], Rax => 0x2222_2222);
-    case!([instruction!(Lea_r16_m, Register::AX,
-              MemoryOperand::with_base_displ_size(Register::RBX, 0x1111, 2))],
-          [Rbx = 0x1111], Rax => 0x2222);
-    case!([instruction!(Lea_r16_m, Register::AX,
-              MemoryOperand::with_base_displ_size(Register::RBX, 0x11, 2))],
-          [Rbx = 0x11], Rax => 0x22);
+fn gpr() -> State {
+    baseline()
+        .with(VMReg::Rax, A)
+        .with(VMReg::Rcx, B)
+        .with(VMReg::Rdx, C)
+        .with(VMReg::Rbx, D)
 }
 
-#[test]
-fn test_memory() {
-    let mut buf = [0u64; 4];
-
-    let base = buf.as_mut_ptr() as u64;
-
-    let middle = unsafe { buf.as_mut_ptr().add(2) as u64 };
-
-    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x1111_1111_1111_1111u64),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base_displ_size(Register::RCX, 0, 8),
-               Register::RAX),
-           instruction!(Mov_r64_rm64, Register::RBX,
-               MemoryOperand::with_base_displ_size(Register::RCX, 0, 8))],
-          [Rcx = base], Rbx => 0x1111_1111_1111_1111);
-
-    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x2222_2222_2222_2222u64),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base_displ_size(Register::RCX, 16, 8),
-               Register::RAX),
-           instruction!(Mov_r64_rm64, Register::RBX,
-               MemoryOperand::with_base_displ_size(Register::RCX, 16, 8))],
-          [Rcx = base], Rbx => 0x2222_2222_2222_2222);
-
-    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x3333_3333_3333_3333u64),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base_displ_size(Register::RCX, -16, 8),
-               Register::RAX),
-           instruction!(Mov_r64_rm64, Register::RBX,
-               MemoryOperand::with_base_displ_size(Register::RCX, -16, 8))],
-          [Rcx = middle], Rbx => 0x3333_3333_3333_3333);
+fn simd() -> State {
+    let state = baseline();
+    let state = vector(state, VMVec::Ymm0, bytes16(P0));
+    let state = vector(state, VMVec::Ymm1, bytes16(P1));
+    vector(state, VMVec::Ymm2, bytes16(P2))
 }
 
-binary!(
-    test_add, Add,
-    (0x1111_1111, 0x1111_1111 => 0x2222_2222),
-    (0x1111_1111, 0x1111_1111 => 0x2222_2222),
-    (0x1111, 0x1111 => 0x2222),
-    (0x11, 0x11 => 0x22),
+fn check(state: State, instruction: Instruction) {
+    let mut executor = Executor::new();
+    let mut native = executor.run_native(state.clone(), &instruction);
+
+    let mut executor = Executor::new();
+    let lifted = bytecode::lift(&mut executor.rt.mapper, &[instruction])
+        .unwrap_or_else(|| panic!("{instruction} is not implemented"));
+    let mut rng = rand::thread_rng();
+    let bytecode = bytecode::transform(&mut executor.rt.mapper, lifted, |ready| {
+        rng.gen_range(0..ready.len())
+    });
+
+    let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &bytecode.operations);
+    encrypt(&mut bytes);
+    let mut emulated = executor.run_virtual(state, &bytes);
+
+    for state in [&mut native, &mut emulated] {
+        state.registers.remove(&VMReg::Rsp);
+
+        if let Some(flags) = state.registers.get_mut(&VMReg::Flags) {
+            let mask = instruction.rflags_written()
+                | instruction.rflags_cleared()
+                | instruction.rflags_set();
+            *flags &= ((mask & RflagsBits::CF != 0) as u64 * VMFlag::Carry.bit64())
+                | ((mask & RflagsBits::PF != 0) as u64 * VMFlag::Parity.bit64())
+                | ((mask & RflagsBits::AF != 0) as u64 * VMFlag::Auxiliary.bit64())
+                | ((mask & RflagsBits::ZF != 0) as u64 * VMFlag::Zero.bit64())
+                | ((mask & RflagsBits::SF != 0) as u64 * VMFlag::Sign.bit64())
+                | ((mask & RflagsBits::OF != 0) as u64 * VMFlag::Overflow.bit64());
+        }
+    }
+
+    let differences = native.compare(&emulated);
+
+    assert!(differences.is_empty(), "{}", dump(&differences));
+}
+
+fn dump(differences: &[Difference]) -> String {
+    let mut lines = Vec::new();
+
+    for difference in differences {
+        match difference {
+            Difference::Register(register, native, emulated) => {
+                lines.push(format!(
+                    "{register:?}: native={native:016X} virtual={emulated:016X}"
+                ));
+            }
+            Difference::Vector(register, native, emulated) => {
+                lines.push(format!(
+                    "{register:?}: native={native:02X?} virtual={emulated:02X?}"
+                ));
+            }
+        }
+    }
+
+    lines.join("\n")
+}
+
+macro_rules! test {
+    ($name:ident, $state:expr, $instruction:expr) => {
+        #[test]
+        fn $name() {
+            check($state, $instruction);
+        }
+    };
+}
+
+test!(test_mov, gpr(), instruction!(Mov_r64_rm64, RAX, RCX));
+test!(test_add, gpr(), instruction!(Add_rm64_r64, RAX, RCX));
+test!(test_sub, gpr(), instruction!(Sub_rm64_r64, RAX, RCX));
+test!(
+    test_adc,
+    gpr().with(VMReg::Flags, 0b0000000000000001),
+    instruction!(Adc_rm64_r64, RAX, RCX)
 );
-
-binary!(
-    test_sub, Sub,
-    (0x2222_2222, 0x1111_1111 => 0x1111_1111),
-    (0x2222_2222, 0x1111_1111 => 0x1111_1111),
-    (0x2222, 0x1111 => 0x1111),
-    (0x22, 0x11 => 0x11),
+test!(
+    test_sbb,
+    gpr().with(VMReg::Flags, 0b0000000000000001),
+    instruction!(Sbb_rm64_r64, RAX, RCX)
 );
-
-#[test]
-fn test_cmp() {
-    case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(branch Je_rel8_64, BRANCH)],
-          [Rax = 0x1111_1111], NBranch => BRANCH);
-    case!([instruction!(Cmp_rm32_imm32, Register::EAX, 0x1111_1111),
-           instruction!(branch Je_rel8_64, BRANCH)],
-          [Rax = 0x1111_1111], NBranch => BRANCH);
-    case!([instruction!(Cmp_rm16_imm16, Register::AX, 0x1111),
-           instruction!(branch Je_rel8_64, BRANCH)],
-          [Rax = 0x1111], NBranch => BRANCH);
-    case!([instruction!(Cmp_rm8_imm8, Register::AL, 0x11),
-           instruction!(branch Je_rel8_64, BRANCH)],
-          [Rax = 0x11], NBranch => BRANCH);
-}
-
-binary!(
-    test_and, And,
-    (0xFF00_FF00, 0x0FF0_0FF0 => 0x0F00_0F00),
-    (0xFF00_FF00, 0x0FF0_0FF0 => 0x0F00_0F00),
-    (0xFF00, 0x0FF0 => 0x0F00),
-    (0xFF, 0x0F => 0x0F),
+test!(test_cmp, gpr(), instruction!(Cmp_rm64_r64, RAX, RCX));
+test!(test_test, gpr(), instruction!(Test_rm64_r64, RAX, RCX));
+test!(test_and, gpr(), instruction!(And_rm64_r64, RAX, RCX));
+test!(test_or, gpr(), instruction!(Or_rm64_r64, RAX, RCX));
+test!(test_xor, gpr(), instruction!(Xor_rm64_r64, RAX, RCX));
+test!(test_rol, gpr(), instruction!(Rol_rm64_imm8, RAX, IMM8));
+test!(test_ror, gpr(), instruction!(Ror_rm64_imm8, RAX, IMM8));
+test!(test_shl, gpr(), instruction!(Shl_rm64_imm8, RAX, IMM8));
+test!(test_shr, gpr(), instruction!(Shr_rm64_imm8, RAX, IMM8));
+test!(test_sar, gpr(), instruction!(Sar_rm64_imm8, RAX, IMM8));
+test!(
+    test_shl_cl,
+    gpr().with(VMReg::Rcx, IMM32 as u64),
+    instruction!(Shl_rm64_CL, RAX, CL)
 );
-
-binary!(
-    test_or, Or,
-    (0xFF00_0000, 0x0000_00FF => 0xFF00_00FF),
-    (0xFF00_0000, 0x0000_00FF => 0xFF00_00FF),
-    (0xFF00, 0x00FF => 0xFFFF),
-    (0xF0, 0x0F => 0xFF),
+test!(test_inc, gpr(), instruction!(Inc_rm64, RAX));
+test!(test_dec, gpr(), instruction!(Dec_rm64, RAX));
+test!(test_neg, gpr(), instruction!(Neg_rm64, RAX));
+test!(test_not, gpr(), instruction!(Not_rm64, RAX));
+test!(test_mul, gpr(), instruction!(Mul_rm64, RCX));
+test!(test_imul, gpr(), instruction!(Imul_rm64, RCX));
+test!(test_imul2, gpr(), instruction!(Imul_r64_rm64, RAX, RCX));
+test!(
+    test_imul3,
+    gpr(),
+    instruction!(Imul_r64_rm64_imm32, RAX, RCX, IMM32 as i32)
 );
-
-binary!(
-    test_xor, Xor,
-    (0xFFFF_FFFF, 0x0F0F_0F0F => 0xF0F0_F0F0),
-    (0xFFFF_FFFF, 0x0F0F_0F0F => 0xF0F0_F0F0),
-    (0xFFFF, 0x0F0F => 0xF0F0),
-    (0xFF, 0x0F => 0xF0),
+test!(
+    test_div,
+    gpr().with(VMReg::Rdx, 0).with(VMReg::Rax, IMM32 as u64),
+    instruction!(Div_rm64, RCX)
 );
-
-#[test]
-fn test_test() {
-    case!([instruction!(Test_rm64_imm32, Register::RAX, 0x00FF),
-           instruction!(branch Je_rel8_64, BRANCH)],
-          [Rax = 0xFF00], NBranch => BRANCH);
-    case!([instruction!(Test_rm32_imm32, Register::EAX, 0x00FF),
-           instruction!(branch Je_rel8_64, BRANCH)],
-          [Rax = 0xFF00], NBranch => BRANCH);
-    case!([instruction!(Test_rm16_imm16, Register::AX, 0x00FF),
-           instruction!(branch Je_rel8_64, BRANCH)],
-          [Rax = 0xFF00], NBranch => BRANCH);
-    case!([instruction!(Test_rm8_imm8, Register::AL, 0x0F),
-           instruction!(branch Je_rel8_64, BRANCH)],
-          [Rax = 0xF0], NBranch => BRANCH);
-}
-
-#[test]
-fn test_rol() {
-    case!([instruction!(Rol_rm64_CL, Register::RAX, Register::CL)],
-          [Rax = 0x1111_1111_1111_1111, Rcx = 4], Rax => 0x1111_1111_1111_1111);
-    case!([instruction!(Rol_rm32_imm8, Register::EAX, 4)],
-          [Rax = 0x1111_1111], Rax => 0x1111_1111);
-    case!([instruction!(Rol_rm16_imm8, Register::AX, 4)],
-          [Rax = 0x1111], Rax => 0x1111);
-    case!([instruction!(Rol_rm8_imm8, Register::AL, 4)],
-          [Rax = 0x11], Rax => 0x11);
-}
-
-#[test]
-fn test_ror() {
-    case!([instruction!(Ror_rm64_CL, Register::RAX, Register::CL)],
-          [Rax = 0x1111_1111_1111_1111, Rcx = 4], Rax => 0x1111_1111_1111_1111);
-    case!([instruction!(Ror_rm32_imm8, Register::EAX, 4)],
-          [Rax = 0x1111_1111], Rax => 0x1111_1111);
-    case!([instruction!(Ror_rm16_imm8, Register::AX, 4)],
-          [Rax = 0x1111], Rax => 0x1111);
-    case!([instruction!(Ror_rm8_imm8, Register::AL, 4)],
-          [Rax = 0x11], Rax => 0x11);
-}
-
-#[test]
-fn test_shl() {
-    case!([instruction!(Shl_rm64_CL, Register::RAX, Register::CL)],
-          [Rax = 0x1111_1111_1111_1111, Rcx = 4], Rax => 0x1111_1111_1111_1110);
-    case!([instruction!(Shl_rm32_imm8, Register::EAX, 4)],
-          [Rax = 0x1111_1111], Rax => 0x1111_1110);
-    case!([instruction!(Shl_rm16_imm8, Register::AX, 4)],
-          [Rax = 0x1111], Rax => 0x1110);
-    case!([instruction!(Shl_rm8_imm8, Register::AL, 4)],
-          [Rax = 0x11], Rax => 0x10);
-}
-
-#[test]
-fn test_shr() {
-    case!([instruction!(Shr_rm64_CL, Register::RAX, Register::CL)],
-          [Rax = 0x1111_1111_1111_1111, Rcx = 4], Rax => 0x0111_1111_1111_1111);
-    case!([instruction!(Shr_rm32_imm8, Register::EAX, 4)],
-          [Rax = 0x1111_1111], Rax => 0x0111_1111);
-    case!([instruction!(Shr_rm16_imm8, Register::AX, 4)],
-          [Rax = 0x1111], Rax => 0x0111);
-    case!([instruction!(Shr_rm8_imm8, Register::AL, 4)],
-          [Rax = 0x11], Rax => 0x01);
-}
-
-#[test]
-fn test_sar() {
-    case!([instruction!(Sar_rm64_CL, Register::RAX, Register::CL)],
-          [Rax = 0xF111_1111_1111_1111, Rcx = 4], Rax => 0xFF11_1111_1111_1111);
-    case!([instruction!(Sar_rm32_imm8, Register::EAX, 4)],
-          [Rax = 0xF111_1111], Rax => 0xFF11_1111);
-    case!([instruction!(Sar_rm16_imm8, Register::AX, 4)],
-          [Rax = 0xF111], Rax => 0xFF11);
-    case!([instruction!(Sar_rm8_imm8, Register::AL, 4)],
-          [Rax = 0xF1], Rax => 0xFF);
-}
-
-#[test]
-fn test_inc() {
-    case!([instruction!(Inc_rm64, Register::RAX)],
-          [Rax = 0x1111_1111_1111_1111], Rax => 0x1111_1111_1111_1112);
-    case!([instruction!(Inc_rm32, Register::EAX)],
-          [Rax = 0x1111_1111], Rax => 0x1111_1112);
-    case!([instruction!(Inc_rm16, Register::AX)],
-          [Rax = 0x1111], Rax => 0x1112);
-    case!([instruction!(Inc_rm8, Register::AL)],
-          [Rax = 0x11], Rax => 0x12);
-}
-
-#[test]
-fn test_dec() {
-    case!([instruction!(Dec_rm64, Register::RAX)],
-          [Rax = 0x1111_1111_1111_1111], Rax => 0x1111_1111_1111_1110);
-    case!([instruction!(Dec_rm32, Register::EAX)],
-          [Rax = 0x1111_1111], Rax => 0x1111_1110);
-    case!([instruction!(Dec_rm16, Register::AX)],
-          [Rax = 0x1111], Rax => 0x1110);
-    case!([instruction!(Dec_rm8, Register::AL)],
-          [Rax = 0x11], Rax => 0x10);
-}
-
-#[test]
-fn test_neg() {
-    case!([instruction!(Neg_rm64, Register::RAX)],
-          [Rax = 0x1111_1111_1111_1111], Rax => 0xEEEE_EEEE_EEEE_EEEF);
-    case!([instruction!(Neg_rm32, Register::EAX)],
-          [Rax = 0x1111_1111], Rax => 0xEEEE_EEEF);
-    case!([instruction!(Neg_rm16, Register::AX)],
-          [Rax = 0x1111], Rax => 0xEEEF);
-    case!([instruction!(Neg_rm8, Register::AL)],
-          [Rax = 0x11], Rax => 0xEF);
-}
-
-#[test]
-fn test_not() {
-    case!([instruction!(Not_rm64, Register::RAX)],
-          [Rax = 0x1111_1111_1111_1111], Rax => 0xEEEE_EEEE_EEEE_EEEE);
-    case!([instruction!(Not_rm32, Register::EAX)],
-          [Rax = 0x1111_1111], Rax => 0xEEEE_EEEE);
-    case!([instruction!(Not_rm16, Register::AX)],
-          [Rax = 0x1111], Rax => 0xEEEE);
-    case!([instruction!(Not_rm8, Register::AL)],
-          [Rax = 0x11], Rax => 0xEE);
-}
-
-#[test]
-fn test_mul() {
-    case!([instruction!(Mul_rm64, Register::RBX)],
-          [Rax = 0x1111_1111_1111_1111, Rbx = 0x10], Rax => 0x1111_1111_1111_1110);
-    case!([instruction!(Mul_rm64, Register::RBX)],
-          [Rax = 0x1111_1111_1111_1111, Rbx = 0x10], Rdx => 0x1);
-    case!([instruction!(Mul_rm32, Register::EBX)],
-          [Rax = 0x1111_1111, Rbx = 0x10], Rax => 0x1111_1110);
-    case!([instruction!(Mul_rm32, Register::EBX)],
-          [Rax = 0x1111_1111, Rbx = 0x10], Rdx => 0x1);
-    case!([instruction!(Mul_rm8, Register::BL)],
-          [Rax = 0x11, Rbx = 0x10], Rax => 0x110);
-}
-
-#[test]
-fn test_imul() {
-    case!([instruction!(Imul_rm64, Register::RBX)],
-          [Rax = 0xFFFF_FFFF_FFFF_FFFF, Rbx = 0x10], Rax => 0xFFFF_FFFF_FFFF_FFF0);
-    case!([instruction!(Imul_rm64, Register::RBX)],
-          [Rax = 0xFFFF_FFFF_FFFF_FFFF, Rbx = 0x10], Rdx => 0xFFFF_FFFF_FFFF_FFFF);
-    case!([instruction!(Imul_r64_rm64, Register::RAX, Register::RBX)],
-          [Rax = 0x1111_1111_1111_1111, Rbx = 0x10], Rax => 0x1111_1111_1111_1110);
-    case!([instruction!(Imul_r32_rm32, Register::EAX, Register::EBX)],
-          [Rax = 0x1111_1111, Rbx = 0x10], Rax => 0x1111_1110);
-}
-
-#[test]
-fn test_cmov() {
-    cmov_case!(Cmove_r64_rm64, 0x1111_1111, 0x1111_1111, 0x1111_1111);
-    cmov_case!(Cmovne_r64_rm64, 0x1111_1111, 0x2222_2222, 0x1111_1111);
-    cmov_case!(Cmova_r64_rm64, 0x1111_1111, 0x2222_2222, 0x1111_1111);
-    cmov_case!(Cmovae_r64_rm64, 0x1111_1111, 0x2222_2222, 0x1111_1111);
-}
-
-#[test]
-fn test_push() {
-    let mut stack = [0u64; 8];
-    let top = unsafe { stack.as_mut_ptr().add(8) as u64 };
-
-    case!([instruction!(Push_r64, Register::RAX),
-           instruction!(Pop_r64, Register::RBX)],
-          [Rax = 0x1111_1111, Rsp = top], Rbx => 0x1111_1111);
-    case!([instruction!(Push_r64, Register::RCX),
-           instruction!(Pop_r64, Register::RBX)],
-          [Rcx = 0x1111_1111, Rsp = top], Rbx => 0x1111_1111);
-    case!([instruction!(Push_r64, Register::RDX),
-           instruction!(Pop_r64, Register::RBX)],
-          [Rdx = 0x1111_1111, Rsp = top], Rbx => 0x1111_1111);
-    case!([instruction!(Push_r64, Register::RSI),
-           instruction!(Pop_r64, Register::RBX)],
-          [Rsi = 0x1111_1111, Rsp = top], Rbx => 0x1111_1111);
-}
-
-#[test]
-fn test_pop() {
-    let mut stack = [0u64; 8];
-    let top = unsafe { stack.as_mut_ptr().add(8) as u64 };
-
-    case!([instruction!(Push_r64, Register::RAX),
-           instruction!(Pop_r64, Register::RBX)],
-          [Rax = 0x1111_1111, Rsp = top], Rbx => 0x1111_1111);
-    case!([instruction!(Push_r64, Register::RAX),
-           instruction!(Pop_r64, Register::RCX)],
-          [Rax = 0x1111_1111, Rsp = top], Rcx => 0x1111_1111);
-    case!([instruction!(Push_r64, Register::RAX),
-           instruction!(Pop_r64, Register::RDX)],
-          [Rax = 0x1111_1111, Rsp = top], Rdx => 0x1111_1111);
-    case!([instruction!(Push_r64, Register::RAX),
-           instruction!(Pop_r64, Register::RSI)],
-          [Rax = 0x1111_1111, Rsp = top], Rsi => 0x1111_1111);
-}
-
-#[test]
-fn test_set() {
-    case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(Sete_rm8, Register::BL)],
-          [Rax = 0x1111_1111], Rbx => 0x1);
-    case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(Setne_rm8, Register::BL)],
-          [Rax = 0x2222_2222], Rbx => 0x1);
-    case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(Seta_rm8, Register::BL)],
-          [Rax = 0x2222_2222], Rbx => 0x1);
-    case!([instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-           instruction!(Setae_rm8, Register::BL)],
-          [Rax = 0x2222_2222], Rbx => 0x1);
-}
-
-#[test]
-fn test_movzx() {
-    case!([instruction!(Movzx_r16_rm8, Register::BX, Register::AL)],
-          [Rax = 0xFF], Rbx => 0x00FF);
-    case!([instruction!(Movzx_r32_rm8, Register::EBX, Register::AL)],
-          [Rax = 0xFF], Rbx => 0x0000_00FF);
-    case!([instruction!(Movzx_r64_rm8, Register::RBX, Register::AL)],
-          [Rax = 0xFF], Rbx => 0x0000_0000_0000_00FF);
-    case!([instruction!(Movzx_r64_rm16, Register::RBX, Register::AX)],
-          [Rax = 0xFFFF], Rbx => 0x0000_0000_0000_FFFF);
-}
-
-#[test]
-fn test_movsx() {
-    case!([instruction!(Movsx_r16_rm8, Register::BX, Register::AL)],
-          [Rax = 0xFF], Rbx => 0xFFFF);
-    case!([instruction!(Movsx_r64_rm8, Register::RBX, Register::AL)],
-          [Rax = 0xFF], Rbx => 0xFFFF_FFFF_FFFF_FFFF);
-    case!([instruction!(Movsx_r64_rm16, Register::RBX, Register::AX)],
-          [Rax = 0xFFFF], Rbx => 0xFFFF_FFFF_FFFF_FFFF);
-    case!([instruction!(Movsxd_r64_rm32, Register::RBX, Register::EAX)],
-          [Rax = 0xFFFF_FFFF], Rbx => 0xFFFF_FFFF_FFFF_FFFF);
-}
-
-#[test]
-fn test_movups() {
-    let mut buf = [0u64; 4];
-
-    let base = buf.as_mut_ptr() as u64;
-
-    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x1111_1111_1111_1111u64),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base(Register::RCX),
-               Register::RAX),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base_displ(Register::RCX, 8),
-               Register::RAX),
-           instruction!(Movups_xmm_xmmm128, Register::XMM0,
-               MemoryOperand::with_base(Register::RCX)),
-           instruction!(Movups_xmm_xmmm128, Register::XMM1, Register::XMM0),
-           instruction!(Movups_xmmm128_xmm,
-               MemoryOperand::with_base_displ(Register::RCX, 16),
-               Register::XMM1),
-           instruction!(Mov_r64_rm64, Register::RBX,
-               MemoryOperand::with_base_displ(Register::RCX, 16))],
-          [Rcx = base], Rbx => 0x1111_1111_1111_1111);
-}
-
-#[test]
-fn test_pmovmskb() {
-    let mut buf = [0u64; 2];
-
-    let base = buf.as_mut_ptr() as u64;
-
-    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x0000_0000_0000_0000u64),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base(Register::RCX),
-               Register::RAX),
-           instruction!(Mov_r64_imm64, Register::RAX, 0xFFFF_FFFF_FFFF_FFFFu64),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base_displ(Register::RCX, 8),
-               Register::RAX),
-           instruction!(Movups_xmm_xmmm128, Register::XMM0,
-               MemoryOperand::with_base(Register::RCX)),
-           instruction!(Pmovmskb_r32_xmm, Register::EAX, Register::XMM0)],
-          [Rcx = base], Rax => 0xFF00);
-}
-
-#[test]
-fn test_pcmpeqb() {
-    let mut buf = [0u64; 6];
-
-    let base = buf.as_mut_ptr() as u64;
-
-    case!([instruction!(Mov_r64_imm64, Register::RAX, 0x1111_1111_1111_1111u64),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base(Register::RCX),
-               Register::RAX),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base_displ(Register::RCX, 8),
-               Register::RAX),
-           instruction!(Mov_r64_imm64, Register::RAX, 0x1111_1111_0000_0000u64),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base_displ(Register::RCX, 16),
-               Register::RAX),
-           instruction!(Mov_rm64_r64,
-               MemoryOperand::with_base_displ(Register::RCX, 24),
-               Register::RAX),
-           instruction!(Movups_xmm_xmmm128, Register::XMM0,
-               MemoryOperand::with_base(Register::RCX)),
-           instruction!(Movups_xmm_xmmm128, Register::XMM1,
-               MemoryOperand::with_base_displ(Register::RCX, 16)),
-           instruction!(Pcmpeqb_xmm_xmmm128, Register::XMM0, Register::XMM1),
-           instruction!(Movups_xmmm128_xmm,
-               MemoryOperand::with_base_displ(Register::RCX, 32),
-               Register::XMM0),
-           instruction!(Mov_r64_rm64, Register::RBX,
-               MemoryOperand::with_base_displ(Register::RCX, 32))],
-          [Rcx = base], Rbx => 0xFFFF_FFFF_0000_0000u64);
-}
-
-#[test]
-fn test_tzcnt() {
-    case!([instruction!(Tzcnt_r16_rm16, Register::BX, Register::AX)],
-          [Rax = 0x100], Rbx => 8);
-    case!([instruction!(Tzcnt_r32_rm32, Register::EBX, Register::EAX)],
-          [Rax = 0x100], Rbx => 8);
-    case!([instruction!(Tzcnt_r64_rm64, Register::RBX, Register::RAX)],
-          [Rax = 0x100], Rbx => 8);
-}
-
-#[test]
-fn test_flags() {
-    // PF
-    case!([instruction!(Add_rm64_imm8, Register::RAX, 0x1)],
-          [Rax = 0x2],
-          Flags => flag(VMFlag::Parity));
-    // SF & PF
-    case!([instruction!(Add_rm64_imm8, Register::RAX, -0x1)],
-          [Rax = 0x0],
-          Flags => flag(VMFlag::Sign) | flag(VMFlag::Parity));
-    // OF & SF & AF & PF
-    case!([instruction!(Add_rm64_imm8, Register::RAX, 0x1)],
-          [Rax = 0x7FFF_FFFF_FFFF_FFFF],
-          Flags => flag(VMFlag::Overflow) | flag(VMFlag::Sign)
-                 | flag(VMFlag::Auxiliary) | flag(VMFlag::Parity));
-    // ZF & CF & AF & PF
-    case!([instruction!(Add_rm64_imm8, Register::RAX, 0x1)],
-          [Rax = 0xFFFF_FFFF_FFFF_FFFF],
-          Flags => flag(VMFlag::Carry) | flag(VMFlag::Parity)
-                 | flag(VMFlag::Auxiliary) | flag(VMFlag::Zero));
-}
+test!(
+    test_idiv,
+    gpr().with(VMReg::Rdx, 0).with(VMReg::Rax, IMM32 as u64),
+    instruction!(Idiv_rm64, RCX)
+);
+test!(test_tzcnt, gpr(), instruction!(Tzcnt_r64_rm64, RAX, RCX));
+test!(test_bsr, gpr(), instruction!(Bsr_r64_rm64, RAX, RCX));
+test!(test_bswap, gpr(), instruction!(Bswap_r64, RAX));
+test!(test_bt, gpr(), instruction!(Bt_rm64_imm8, RAX, IMM8));
+test!(test_bts, gpr(), instruction!(Bts_rm64_imm8, RAX, IMM8));
+test!(test_btr, gpr(), instruction!(Btr_rm64_imm8, RAX, IMM8));
+test!(test_btc, gpr(), instruction!(Btc_rm64_imm8, RAX, IMM8));
+test!(test_bt_reg, gpr(), instruction!(Bt_rm64_r64, RAX, RCX));
+test!(test_xchg, gpr(), instruction!(Xchg_rm64_r64, RAX, RCX));
+test!(test_xadd, gpr(), instruction!(Xadd_rm64_r64, RAX, RCX));
+test!(
+    test_cmpxchg,
+    gpr(),
+    instruction!(Cmpxchg_rm64_r64, RBX, RCX)
+);
+test!(test_cmove, gpr(), instruction!(Cmove_r64_rm64, RAX, RCX));
+test!(test_cmovne, gpr(), instruction!(Cmovne_r64_rm64, RAX, RCX));
+test!(test_cmova, gpr(), instruction!(Cmova_r64_rm64, RAX, RCX));
+test!(test_cmovae, gpr(), instruction!(Cmovae_r64_rm64, RAX, RCX));
+test!(test_cmovb, gpr(), instruction!(Cmovb_r64_rm64, RAX, RCX));
+test!(test_cmovbe, gpr(), instruction!(Cmovbe_r64_rm64, RAX, RCX));
+test!(test_cmovg, gpr(), instruction!(Cmovg_r64_rm64, RAX, RCX));
+test!(test_cmovge, gpr(), instruction!(Cmovge_r64_rm64, RAX, RCX));
+test!(test_cmovl, gpr(), instruction!(Cmovl_r64_rm64, RAX, RCX));
+test!(test_cmovle, gpr(), instruction!(Cmovle_r64_rm64, RAX, RCX));
+test!(test_cmovo, gpr(), instruction!(Cmovo_r64_rm64, RAX, RCX));
+test!(test_cmovno, gpr(), instruction!(Cmovno_r64_rm64, RAX, RCX));
+test!(test_cmovp, gpr(), instruction!(Cmovp_r64_rm64, RAX, RCX));
+test!(test_cmovnp, gpr(), instruction!(Cmovnp_r64_rm64, RAX, RCX));
+test!(test_cmovs, gpr(), instruction!(Cmovs_r64_rm64, RAX, RCX));
+test!(test_cmovns, gpr(), instruction!(Cmovns_r64_rm64, RAX, RCX));
+test!(test_seta, gpr(), instruction!(Seta_rm8, AL));
+test!(test_setae, gpr(), instruction!(Setae_rm8, AL));
+test!(test_setb, gpr(), instruction!(Setb_rm8, AL));
+test!(test_setbe, gpr(), instruction!(Setbe_rm8, AL));
+test!(test_sete, gpr(), instruction!(Sete_rm8, AL));
+test!(test_setg, gpr(), instruction!(Setg_rm8, AL));
+test!(test_setge, gpr(), instruction!(Setge_rm8, AL));
+test!(test_setl, gpr(), instruction!(Setl_rm8, AL));
+test!(test_setle, gpr(), instruction!(Setle_rm8, AL));
+test!(test_setne, gpr(), instruction!(Setne_rm8, AL));
+test!(test_seto, gpr(), instruction!(Seto_rm8, AL));
+test!(test_setno, gpr(), instruction!(Setno_rm8, AL));
+test!(test_setp, gpr(), instruction!(Setp_rm8, AL));
+test!(test_setnp, gpr(), instruction!(Setnp_rm8, AL));
+test!(test_sets, gpr(), instruction!(Sets_rm8, AL));
+test!(test_setns, gpr(), instruction!(Setns_rm8, AL));
+test!(
+    test_movaps,
+    simd(),
+    instruction!(Movaps_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_movups,
+    simd(),
+    instruction!(Movups_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_movapd,
+    simd(),
+    instruction!(Movapd_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_movupd,
+    simd(),
+    instruction!(Movupd_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_movdqa,
+    simd(),
+    instruction!(Movdqa_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_movdqu,
+    simd(),
+    instruction!(Movdqu_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_movss,
+    simd(),
+    instruction!(Movss_xmm_xmmm32, XMM0, XMM1)
+);
+test!(
+    test_pand,
+    simd(),
+    instruction!(Pand_xmm_xmmm128, XMM0, XMM1)
+);
+test!(test_por, simd(), instruction!(Por_xmm_xmmm128, XMM0, XMM1));
+test!(
+    test_pxor,
+    simd(),
+    instruction!(Pxor_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_pandn,
+    simd(),
+    instruction!(Pandn_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_andps,
+    simd(),
+    instruction!(Andps_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_andpd,
+    simd(),
+    instruction!(Andpd_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_andnps,
+    simd(),
+    instruction!(Andnps_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_andnpd,
+    simd(),
+    instruction!(Andnpd_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_orps,
+    simd(),
+    instruction!(Orps_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_orpd,
+    simd(),
+    instruction!(Orpd_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_xorps,
+    simd(),
+    instruction!(Xorps_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_xorpd,
+    simd(),
+    instruction!(Xorpd_xmm_xmmm128, XMM0, XMM1)
+);
+test!(
+    test_vandps,
+    simd(),
+    instruction!(VEX_Vandps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
+);
+test!(
+    test_vpxor,
+    simd(),
+    instruction!(VEX_Vpxor_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
+);
+test!(
+    test_vxorps,
+    simd(),
+    instruction!(VEX_Vxorps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
+);

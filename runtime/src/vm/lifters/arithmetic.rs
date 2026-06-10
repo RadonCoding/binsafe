@@ -3,10 +3,10 @@ use std::rc::Rc;
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 use crate::vm::encoders::{
-    add::Add, discard::Discard, load_address::LoadAddress, load_immediate::LoadImmediate,
-    load_memory::LoadMemory, load_register::LoadRegister, rol::Rol, ror::Ror, sar::Sar, shl::Shl,
-    shr::Shr, store_memory::StoreMemory, store_register::StoreRegister, sub::Sub, test::Test,
-    xor::Xor, Encode,
+    add::Add, add_carry::AddCarry, discard::Discard, load_address::LoadAddress,
+    load_immediate::LoadImmediate, load_memory::LoadMemory, load_register::LoadRegister, rol::Rol,
+    ror::Ror, sar::Sar, shl::Shl, shr::Shr, store_memory::StoreMemory,
+    store_register::StoreRegister, sub::Sub, sub_borrow::SubBorrow, test::Test, xor::Xor, Encode,
 };
 use crate::vm::lifters::{is_immediate, operation_immediate, operation_width, unary};
 
@@ -19,6 +19,8 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     match instruction.mnemonic() {
         Mnemonic::Add => binary(instruction, |width| Add { width }, Tail::Writeback),
         Mnemonic::Sub => binary(instruction, |width| Sub { width }, Tail::Writeback),
+        Mnemonic::Adc => binary(instruction, |width| AddCarry { width }, Tail::Writeback),
+        Mnemonic::Sbb => binary(instruction, |width| SubBorrow { width }, Tail::Writeback),
         Mnemonic::Shl => binary(instruction, |width| Shl { width }, Tail::Writeback),
         Mnemonic::Shr => binary(instruction, |width| Shr { width }, Tail::Writeback),
         Mnemonic::Sar => binary(instruction, |width| Sar { width }, Tail::Writeback),
@@ -42,14 +44,11 @@ pub fn binary<O: Encode + 'static>(
     make: impl Fn(VMWidth) -> O,
     tail: Tail,
 ) -> Option<Vec<Rc<dyn Encode>>> {
-    let op0_kind = instruction.op0_kind();
-    let op1_kind = instruction.op1_kind();
-
-    let width = operation_width(instruction, op0_kind);
+    let width = operation_width(instruction, instruction.op0_kind());
 
     let mut operations = Vec::<Rc<dyn Encode>>::new();
 
-    match op0_kind {
+    match instruction.op0_kind() {
         OpKind::Register => {
             let destination_register = VMReg::from(instruction.op0_register());
             operations.push(Rc::new(LoadRegister {
@@ -66,7 +65,7 @@ pub fn binary<O: Encode + 'static>(
         _ => unreachable!(),
     }
 
-    match op1_kind {
+    match instruction.op1_kind() {
         OpKind::Register => {
             let source_width = VMWidth::from(instruction.op1_register());
             let source_register = VMReg::from(instruction.op1_register());
@@ -95,7 +94,7 @@ pub fn binary<O: Encode + 'static>(
     operations.push(Rc::new(make(width)));
 
     match tail {
-        Tail::Writeback => match op0_kind {
+        Tail::Writeback => match instruction.op0_kind() {
             OpKind::Register => {
                 let destination_register = VMReg::from(instruction.op0_register());
                 operations.push(Rc::new(StoreRegister {

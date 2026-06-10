@@ -47,7 +47,7 @@ pub fn build(rt: &mut Runtime) {
         // mov rcx, 0x1
         rt.asm.mov(rcx, 0x1u64).unwrap();
         // call ...
-        rt.asm.call(rt.func_labels[&FnDef::VmCrypt]).unwrap();
+        rt.asm.call(rt.function_labels[&FnDef::VmCrypt]).unwrap();
     }
 
     rt.asm.set_label(&mut start_block).unwrap();
@@ -114,7 +114,7 @@ pub fn build(rt: &mut Runtime) {
         // xor rcx, rcx
         rt.asm.xor(rcx, rcx).unwrap();
         // call ...
-        rt.asm.call(rt.func_labels[&FnDef::VmCrypt]).unwrap();
+        rt.asm.call(rt.function_labels[&FnDef::VmCrypt]).unwrap();
 
         // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NExit, rax);
@@ -157,7 +157,7 @@ pub fn build(rt: &mut Runtime) {
             // mov rdx, rax
             rt.asm.mov(rdx, rax).unwrap();
             // call ...
-            rt.asm.call(rt.func_labels[&FnDef::VmLookup]).unwrap();
+            rt.asm.call(rt.function_labels[&FnDef::VmLookup]).unwrap();
             // mov r13, rax
             rt.asm.mov(r13, rax).unwrap();
 

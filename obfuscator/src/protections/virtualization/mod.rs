@@ -226,7 +226,7 @@ impl Protection for Virtualization {
     }
 
     fn apply(&self, engine: &mut Engine) {
-        let ventry_rva = engine.rt.lookup(engine.rt.func_labels[&FnDef::VmEntry]);
+        let ventry_rva = engine.rt.lookup(engine.rt.function_labels[&FnDef::VmEntry]);
 
         let vtable_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmTable]) as u32;
         let vtable_offset = engine.pe.translate(RVA(vtable_rva).into()).unwrap();

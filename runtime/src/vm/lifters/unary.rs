@@ -15,8 +15,7 @@ pub fn encode<O: Encode + 'static>(
     preserve: bool,
     make: impl Fn(VMWidth) -> O,
 ) -> Option<Vec<Rc<dyn Encode>>> {
-    let op0_kind = instruction.op0_kind();
-    let width = operation_width(instruction, op0_kind);
+    let width = operation_width(instruction, instruction.op0_kind());
 
     let mut operations = Vec::<Rc<dyn Encode>>::new();
 
@@ -28,16 +27,22 @@ pub fn encode<O: Encode + 'static>(
     }
 
     if reverse {
-        operations.push(immediate_load(immediate, width));
-        load(&mut operations, instruction, op0_kind, width);
+        operations.push(Rc::new(LoadImmediate {
+            width,
+            source: immediate.to_le_bytes()[..width.size()].to_vec(),
+        }));
+        load(&mut operations, instruction, instruction.op0_kind(), width);
     } else {
-        load(&mut operations, instruction, op0_kind, width);
-        operations.push(immediate_load(immediate, width));
+        load(&mut operations, instruction, instruction.op0_kind(), width);
+        operations.push(Rc::new(LoadImmediate {
+            width,
+            source: immediate.to_le_bytes()[..width.size()].to_vec(),
+        }));
     }
 
     operations.push(Rc::new(make(width)));
 
-    match op0_kind {
+    match instruction.op0_kind() {
         OpKind::Register => {
             let destination_register = VMReg::from(instruction.op0_register());
             operations.push(Rc::new(StoreRegister {
@@ -86,11 +91,4 @@ fn load(
         }
         _ => unreachable!(),
     }
-}
-
-fn immediate_load(immediate: u64, width: VMWidth) -> Rc<dyn Encode> {
-    Rc::new(LoadImmediate {
-        width,
-        source: immediate.to_le_bytes()[..width.size()].to_vec(),
-    })
 }

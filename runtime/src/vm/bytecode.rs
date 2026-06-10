@@ -9,8 +9,8 @@ use strum_macros::EnumIter;
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    arithmetic, bitwise, branch, cmov, extend, lea, movss, multiply, pcmpeqb, pmovmskb, set, stack,
-    transfer, tzcnt,
+    arithmetic, bitwise, branch, bsr, bswap, bt, cmov, cmpxchg, divide, lea, movss, multiply, set,
+    stack, transfer, tzcnt, xadd, xchg,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -33,6 +33,8 @@ mapped! {
         // Arithmetic
         Add,
         Sub,
+        AddCarry,
+        SubBorrow,
         And,
         Or,
         Xor,
@@ -43,18 +45,23 @@ mapped! {
         Shr,
         Sar,
         Mul,
+        Divide,
         TrailingZeros,
+        BitScanReverse,
+        ByteSwap,
+        BitTest,
+        BitTestSet,
+        BitTestReset,
+        BitTestComplement,
         // Stack
         Push,
         Pop,
         Discard,
         // Atomic
-        Cmpxchg,
-        Xadd,
-        Xchg,
+        Exchange,
+        ExchangeAdd,
+        CompareExchange,
         // Vector
-        PackedByteMask,
-        PackedByteEqual,
         VectorAnd,
         VectorOr,
         VectorXor,
@@ -68,6 +75,7 @@ mapped! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
 pub enum VMFlag {
     Carry = 0,      // CF
+    Reserved1 = 1,  //
     Parity = 2,     // PF
     Auxiliary = 4,  // AF
     Zero = 6,       // ZF
@@ -76,6 +84,16 @@ pub enum VMFlag {
     Interrupt = 9,  // IF
     Direction = 10, // DF
     Overflow = 11,  // OF
+}
+
+impl VMFlag {
+    pub const fn bit32(self) -> u32 {
+        1 << self as u32
+    }
+
+    pub const fn bit64(self) -> u64 {
+        self.bit32() as u64
+    }
 }
 
 mapped! {
@@ -572,6 +590,8 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Cmovs => cmov::encode(mapper, instruction)?,
             Mnemonic::Add
             | Mnemonic::Sub
+            | Mnemonic::Adc
+            | Mnemonic::Sbb
             | Mnemonic::Cmp
             | Mnemonic::Test
             | Mnemonic::Rol
@@ -585,6 +605,15 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Not => arithmetic::encode(instruction)?,
             Mnemonic::Mul | Mnemonic::Imul => multiply::encode(instruction)?,
             Mnemonic::Tzcnt => tzcnt::encode(instruction)?,
+            Mnemonic::Bsr => bsr::encode(instruction)?,
+            Mnemonic::Bswap => bswap::encode(instruction)?,
+            Mnemonic::Bt | Mnemonic::Bts | Mnemonic::Btr | Mnemonic::Btc => {
+                bt::encode(instruction)?
+            }
+            Mnemonic::Xchg => xchg::encode(instruction)?,
+            Mnemonic::Xadd => xadd::encode(instruction)?,
+            Mnemonic::Cmpxchg => cmpxchg::encode(mapper, instruction)?,
+            Mnemonic::Div | Mnemonic::Idiv => divide::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
             Mnemonic::Mov
             | Mnemonic::Movaps
@@ -594,10 +623,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Movdqa
             | Mnemonic::Movdqu => transfer::encode(instruction)?,
             Mnemonic::Movss => movss::encode(instruction)?,
-            Mnemonic::Movzx | Mnemonic::Movsx | Mnemonic::Movsxd => extend::encode(instruction)?,
             Mnemonic::Push | Mnemonic::Pop => stack::encode(instruction)?,
-            Mnemonic::Pmovmskb => pmovmskb::encode(instruction)?,
-            Mnemonic::Pcmpeqb => pcmpeqb::encode(instruction)?,
             Mnemonic::And
             | Mnemonic::Or
             | Mnemonic::Xor
@@ -632,7 +658,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Seto
             | Mnemonic::Setp
             | Mnemonic::Sets => set::encode(mapper, instruction)?,
-            Mnemonic::Nop | Mnemonic::Int3 | Mnemonic::Ud2 => continue,
+            Mnemonic::Nop | Mnemonic::Int3 | Mnemonic::Ud2 | Mnemonic::Pause => continue,
             _ => return None,
         };
 

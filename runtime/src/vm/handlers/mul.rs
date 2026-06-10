@@ -2,7 +2,10 @@ use iced_x86::code_asm::*;
 
 use crate::{
     runtime::{FnDef, Runtime},
-    vm::utils::{self, scratch},
+    vm::{
+        bytecode::VMFlag,
+        utils::{self, scratch},
+    },
 };
 
 // unsigned char* (unsigned char*)
@@ -40,15 +43,28 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
+        // pushfq
+        rt.asm.pushfq().unwrap();
+
         // store r8
         scratch::store(rt, r12, r8);
         // store r9
         scratch::store(rt, r12, r9);
 
-        // pushfq
-        rt.asm.pushfq().unwrap();
+        // mov rcx, ...
+        rt.asm
+            .mov(
+                rcx,
+                VMFlag::Carry.bit64()
+                    | VMFlag::Parity.bit64()
+                    | VMFlag::Auxiliary.bit64()
+                    | VMFlag::Zero.bit64()
+                    | VMFlag::Sign.bit64()
+                    | VMFlag::Overflow.bit64(),
+            )
+            .unwrap();
         // call ...
-        rt.asm.call(rt.func_labels[&FnDef::VmFlags]).unwrap();
+        rt.asm.call(rt.function_labels[&FnDef::VmFlags]).unwrap();
 
         // mov rax, r13
         rt.asm.mov(rax, r13).unwrap();

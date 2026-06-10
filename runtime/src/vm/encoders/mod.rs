@@ -46,9 +46,20 @@ pub trait Encode: Debug + Any {
 }
 
 pub mod add;
+pub mod add_carry;
 pub mod and;
+pub mod bit_scan_reverse;
+pub mod bit_test;
+pub mod bit_test_complement;
+pub mod bit_test_reset;
+pub mod bit_test_set;
+pub mod byte_swap;
 pub mod chain;
+pub mod compare_exchange;
 pub mod discard;
+pub mod divide;
+pub mod exchange;
+pub mod exchange_add;
 pub mod jcc;
 pub mod load_address;
 pub mod load_immediate;
@@ -57,8 +68,6 @@ pub mod load_register;
 pub mod load_vector;
 pub mod mul;
 pub mod or;
-pub mod packed_byte_equal;
-pub mod packed_byte_mask;
 pub mod pop;
 pub mod push;
 pub mod ret;
@@ -72,6 +81,7 @@ pub mod store_memory;
 pub mod store_register;
 pub mod store_vector;
 pub mod sub;
+pub mod sub_borrow;
 pub mod test;
 pub mod trailing_zeros;
 pub mod vector_and;

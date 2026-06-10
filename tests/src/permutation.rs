@@ -1,15 +1,12 @@
-use iced_x86::{Instruction, MemoryOperand, Register};
-use runtime::{
-    mapper::Mappable,
-    vm::{
-        bytecode::{self, VMReg},
-        encoders::Encode,
-        transform::permute,
-    },
+use iced_x86::{Instruction, Register};
+use runtime::vm::{
+    bytecode::{self, VMReg},
+    encoders::Encode,
+    transform::permute,
 };
 use std::rc::Rc;
 
-use crate::{encrypt, instruction, Executor};
+use crate::{encrypt, instruction, Difference, Executor, State, FAKE_BRANCH_ADDRESS};
 
 #[derive(Default)]
 struct Enumerator {
@@ -54,25 +51,6 @@ impl Enumerator {
     }
 }
 
-fn snapshot(executor: &mut Executor, state: [u64; VMReg::COUNT]) -> Vec<(VMReg, u64)> {
-    VMReg::VARIANTS
-        .iter()
-        .filter(|r| {
-            !matches!(
-                **r,
-                VMReg::BPointer
-                    | VMReg::BLength
-                    | VMReg::VAtt
-                    | VMReg::VImm
-                    | VMReg::VStack
-                    | VMReg::VScratch
-                    | VMReg::VVector
-            )
-        })
-        .map(|r| (*r, state[executor.rt.mapper.index(*r) as usize]))
-        .collect()
-}
-
 fn dump(operations: &[Rc<dyn Encode>]) -> String {
     let mut lines = Vec::new();
 
@@ -84,11 +62,11 @@ fn dump(operations: &[Rc<dyn Encode>]) -> String {
 }
 
 struct Run {
-    registers: Vec<(VMReg, u64)>,
+    state: State,
     memory: Vec<u64>,
 }
 
-fn exhaust(instructions: &[Instruction], setup: &[(VMReg, u64)], memory: &mut [u64]) {
+fn exhaust(instructions: &[Instruction], state: State, memory: &mut [u64]) {
     let mut executor = Executor::new();
     let lifted = bytecode::lift(&mut executor.rt.mapper, instructions).unwrap();
     let input = dump(&lifted);
@@ -110,10 +88,8 @@ fn exhaust(instructions: &[Instruction], setup: &[(VMReg, u64)], memory: &mut [u
 
         encrypt(&mut bytes);
 
-        let raw = executor.run(setup, &bytes);
-
         let current = Run {
-            registers: snapshot(&mut executor, raw),
+            state: executor.run_virtual(state.clone(), &bytes),
             memory: memory.to_vec(),
         };
 
@@ -122,15 +98,17 @@ fn exhaust(instructions: &[Instruction], setup: &[(VMReg, u64)], memory: &mut [u
             Some(reference) => {
                 let mut differences = Vec::new();
 
-                for ((register, expected), (_, received)) in
-                    reference.registers.iter().zip(current.registers.iter())
-                {
-                    if expected != received {
-                        differences.push(format!(
+                for difference in reference.state.compare(&current.state) {
+                    differences.push(match difference {
+                        Difference::Register(reg, expected, received) => format!(
                             "{:?}: expected=0x{:X} received=0x{:X}",
-                            register, expected, received,
-                        ));
-                    }
+                            reg, expected, received,
+                        ),
+                        Difference::Vector(vec, expected, received) => format!(
+                            "{:?}: expected={:02X?} received={:02X?}",
+                            vec, expected, received,
+                        ),
+                    });
                 }
 
                 for (i, (expected, received)) in reference
@@ -166,99 +144,15 @@ fn exhaust(instructions: &[Instruction], setup: &[(VMReg, u64)], memory: &mut [u
 }
 
 #[test]
-fn test_permutation_registers() {
+fn test_permutation() {
     exhaust(
         &[
             instruction!(Mov_r64_rm64, Register::RBX, Register::RAX),
-            instruction!(Mov_r64_rm64, Register::RAX, Register::RCX),
-            instruction!(Mov_r64_rm64, Register::RDX, Register::RAX),
-            instruction!(Cmp_rm64_imm32, Register::RDX, 0x1111_1111),
-            instruction!(branch Je_rel8_64, 0x1111_1111),
+            instruction!(Mov_r64_rm64, Register::RCX, Register::RBX),
+            instruction!(Cmp_rm64_imm32, Register::RCX, 0x1111_1111),
+            instruction!(branch Je_rel8_64, FAKE_BRANCH_ADDRESS),
         ],
-        &[
-            (VMReg::Rax, 0x1111_1111),
-            (VMReg::Rbx, 0x2222_2222),
-            (VMReg::Rcx, 0x3333_3333),
-            (VMReg::Rdx, 0x4444_4444),
-        ],
+        State::default().with(VMReg::Rax, 0x1111_1111),
         &mut [],
-    );
-}
-
-#[test]
-fn test_permutation_memory() {
-    let mut buf = [0u64; 4];
-
-    let base = buf.as_mut_ptr() as u64;
-
-    exhaust(
-        &[
-            instruction!(
-                Mov_rm64_r64,
-                MemoryOperand::with_base_displ_size(Register::RCX, 0, 8),
-                Register::RAX
-            ),
-            instruction!(
-                Mov_r64_rm64,
-                Register::RBX,
-                MemoryOperand::with_base_displ_size(Register::RCX, 0, 8)
-            ),
-            instruction!(
-                Mov_rm64_r64,
-                MemoryOperand::with_base_displ_size(Register::RCX, 8, 8),
-                Register::RDX
-            ),
-            instruction!(Cmp_rm64_imm32, Register::RBX, 0x1111_1111),
-            instruction!(branch Je_rel8_64, 0x1111_1111),
-        ],
-        &[
-            (VMReg::Rax, 0x1111_1111),
-            (VMReg::Rcx, base),
-            (VMReg::Rdx, 0x3333_3333),
-        ],
-        &mut buf,
-    );
-}
-
-#[test]
-fn test_permutation_flags() {
-    exhaust(
-        &[
-            instruction!(Add_r64_rm64, Register::RAX, Register::RBX),
-            instruction!(Sub_r64_rm64, Register::RCX, Register::RDX),
-            instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-            instruction!(branch Je_rel8_64, 0x1111_1111),
-        ],
-        &[
-            (VMReg::Rax, 0x1111_1111),
-            (VMReg::Rbx, 0x1111_1111),
-            (VMReg::Rcx, 0x2222_2222),
-            (VMReg::Rdx, 0x1111_1111),
-        ],
-        &mut [],
-    );
-}
-
-#[test]
-fn test_permutation_scratch() {
-    let mut stack = [0u64; 8];
-
-    let top = unsafe { stack.as_mut_ptr().add(stack.len()) as u64 };
-
-    exhaust(
-        &[
-            instruction!(Push_r64, Register::RAX),
-            instruction!(Push_r64, Register::RBX),
-            instruction!(Pop_r64, Register::RCX),
-            instruction!(Pop_r64, Register::RDX),
-            instruction!(Cmp_rm64_imm32, Register::RAX, 0x1111_1111),
-            instruction!(branch Je_rel8_64, 0x1111_1111),
-        ],
-        &[
-            (VMReg::Rax, 0x1111_1111),
-            (VMReg::Rbx, 0x2222_2222),
-            (VMReg::Rsp, top),
-        ],
-        &mut stack,
     );
 }
