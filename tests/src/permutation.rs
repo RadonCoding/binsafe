@@ -68,7 +68,9 @@ struct Run {
 
 fn exhaust(instructions: &[Instruction], state: State, memory: &mut [u64]) {
     let mut executor = Executor::new();
+
     let lifted = bytecode::lift(&mut executor.rt.mapper, instructions).unwrap();
+
     let input = dump(&lifted);
 
     let baseline = memory.to_vec();
@@ -81,9 +83,13 @@ fn exhaust(instructions: &[Instruction], state: State, memory: &mut [u64]) {
         memory.copy_from_slice(&baseline);
 
         let mut executor = Executor::new();
+
         let lifted = bytecode::lift(&mut executor.rt.mapper, instructions).unwrap();
+
         let permuted = permute::permute(lifted, &mut |ready| enumerator.pick(ready));
+
         let output = dump(&permuted);
+
         let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &permuted);
 
         encrypt(&mut bytes);

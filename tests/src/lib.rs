@@ -25,9 +25,9 @@ use windows::Win32::{
     System::{
         Diagnostics::Debug::{
             AddVectoredExceptionHandler, GetThreadContext, InitializeContext, LocateXStateFeature,
-            RtlCaptureContext, SetThreadContext, SetXStateFeaturesMask, CONTEXT, CONTEXT_ALL_AMD64,
-            CONTEXT_FLAGS, CONTEXT_XSTATE_AMD64, EXCEPTION_CONTINUE_EXECUTION,
-            EXCEPTION_CONTINUE_SEARCH, EXCEPTION_POINTERS, M128A,
+            SetThreadContext, SetXStateFeaturesMask, CONTEXT, CONTEXT_ALL_AMD64, CONTEXT_FLAGS,
+            CONTEXT_XSTATE_AMD64, EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH,
+            EXCEPTION_POINTERS, M128A,
         },
         Memory::{
             VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE,
@@ -74,29 +74,9 @@ static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
 
 static FAKE_BRANCH_MAPPED: OnceLock<()> = OnceLock::new();
 
-static VIRTUAL_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize)>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
 static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
-
-static VIRTUAL_HANDLER: OnceLock<()> = OnceLock::new();
 static NATIVE_HANDLER: OnceLock<()> = OnceLock::new();
-
-unsafe extern "system" fn virtual_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
-    let entry = VIRTUAL_REGISTRY
-        .lock()
-        .unwrap()
-        .get(&GetCurrentThreadId())
-        .copied();
-
-    if let Some((context, ready)) = entry {
-        ptr::copy_nonoverlapping(context as *mut CONTEXT, (*info).ContextRecord, 1);
-        (*(ready as *const AtomicBool)).store(true, Ordering::SeqCst);
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-
-    EXCEPTION_CONTINUE_SEARCH
-}
 
 unsafe extern "system" fn native_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
     if (*(*info).ExceptionRecord).ExceptionCode == EXCEPTION_SINGLE_STEP {
@@ -378,54 +358,15 @@ impl Executor {
             ptr::copy_nonoverlapping(code.as_ptr(), self.mem as *mut u8, code.len());
         }
 
-        VIRTUAL_HANDLER.get_or_init(|| unsafe {
-            AddVectoredExceptionHandler(1, Some(virtual_handler));
-        });
-
-        struct Args {
-            entry: *mut c_void,
-            ready: *const AtomicBool,
-        }
-
-        unsafe impl Send for Args {}
-
-        let ready = AtomicBool::new(false);
-
-        let args = Box::into_raw(Box::new(Args {
-            entry: self.mem,
-            ready: &ready as *const AtomicBool,
-        }));
-
-        unsafe extern "system" fn execute(args: *mut c_void) -> u32 {
-            let args = Box::from_raw(args as *mut Args);
-
-            let (_buffer, recovery) = initialize_context(CONTEXT_ALL_AMD64);
-
-            VIRTUAL_REGISTRY.lock().unwrap().insert(
-                GetCurrentThreadId(),
-                (recovery as usize, args.ready as usize),
-            );
-
-            RtlCaptureContext(recovery);
-
-            if !(*args.ready).load(Ordering::SeqCst) {
-                mem::transmute::<*mut c_void, extern "C" fn()>(args.entry)();
-            }
-
-            VIRTUAL_REGISTRY
-                .lock()
-                .unwrap()
-                .remove(&GetCurrentThreadId());
-
-            0
-        }
-
         let thread = unsafe {
             CreateThread(
                 None,
                 0,
-                Some(execute),
-                Some(args as *mut c_void),
+                Some(mem::transmute::<
+                    *const (),
+                    unsafe extern "system" fn(*mut c_void) -> u32,
+                >(self.mem as *const ())),
+                Some(self.mem as *mut c_void),
                 THREAD_CREATE_RUN_IMMEDIATELY,
                 None,
             )

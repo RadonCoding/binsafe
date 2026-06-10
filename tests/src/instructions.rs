@@ -89,18 +89,24 @@ fn simd() -> State {
 
 fn check(state: State, instruction: Instruction) {
     let mut executor = Executor::new();
+
     let mut native = executor.run_native(state.clone(), &instruction);
 
     let mut executor = Executor::new();
+
     let lifted = bytecode::lift(&mut executor.rt.mapper, &[instruction])
         .unwrap_or_else(|| panic!("{instruction} is not implemented"));
+
     let mut rng = rand::thread_rng();
-    let bytecode = bytecode::transform(&mut executor.rt.mapper, lifted, |ready| {
+
+    let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |ready| {
         rng.gen_range(0..ready.len())
     });
 
-    let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &bytecode.operations);
+    let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed.operations);
+
     encrypt(&mut bytes);
+
     let mut emulated = executor.run_virtual(state, &bytes);
 
     for state in [&mut native, &mut emulated] {
@@ -145,7 +151,7 @@ fn dump(differences: &[Difference]) -> String {
     lines.join("\n")
 }
 
-macro_rules! test {
+macro_rules! testing {
     ($name:ident, $state:expr, $instruction:expr) => {
         #[test]
         fn $name() {
@@ -154,214 +160,214 @@ macro_rules! test {
     };
 }
 
-test!(test_mov, gpr(), instruction!(Mov_r64_rm64, RAX, RCX));
-test!(test_add, gpr(), instruction!(Add_rm64_r64, RAX, RCX));
-test!(test_sub, gpr(), instruction!(Sub_rm64_r64, RAX, RCX));
-test!(
+testing!(test_mov, gpr(), instruction!(Mov_r64_rm64, RAX, RCX));
+testing!(test_add, gpr(), instruction!(Add_rm64_r64, RAX, RCX));
+testing!(test_sub, gpr(), instruction!(Sub_rm64_r64, RAX, RCX));
+testing!(
     test_adc,
     gpr().with(VMReg::Flags, 0b0000000000000001),
     instruction!(Adc_rm64_r64, RAX, RCX)
 );
-test!(
+testing!(
     test_sbb,
     gpr().with(VMReg::Flags, 0b0000000000000001),
     instruction!(Sbb_rm64_r64, RAX, RCX)
 );
-test!(test_cmp, gpr(), instruction!(Cmp_rm64_r64, RAX, RCX));
-test!(test_test, gpr(), instruction!(Test_rm64_r64, RAX, RCX));
-test!(test_and, gpr(), instruction!(And_rm64_r64, RAX, RCX));
-test!(test_or, gpr(), instruction!(Or_rm64_r64, RAX, RCX));
-test!(test_xor, gpr(), instruction!(Xor_rm64_r64, RAX, RCX));
-test!(
+testing!(test_cmp, gpr(), instruction!(Cmp_rm64_r64, RAX, RCX));
+testing!(test_test, gpr(), instruction!(Test_rm64_r64, RAX, RCX));
+testing!(test_and, gpr(), instruction!(And_rm64_r64, RAX, RCX));
+testing!(test_or, gpr(), instruction!(Or_rm64_r64, RAX, RCX));
+testing!(test_xor, gpr(), instruction!(Xor_rm64_r64, RAX, RCX));
+testing!(
     test_rol,
     gpr().with(VMReg::Rcx, 3),
     instruction!(Rol_rm64_CL, RAX, CL)
 );
-test!(
+testing!(
     test_ror,
     gpr().with(VMReg::Rcx, 3),
     instruction!(Ror_rm64_CL, RAX, CL)
 );
-test!(
+testing!(
     test_shl,
     gpr().with(VMReg::Rcx, 3),
     instruction!(Shl_rm64_CL, RAX, CL)
 );
-test!(
+testing!(
     test_shr,
     gpr().with(VMReg::Rcx, 3),
     instruction!(Shr_rm64_CL, RAX, CL)
 );
-test!(
+testing!(
     test_sar,
     gpr().with(VMReg::Rcx, 3),
     instruction!(Sar_rm64_CL, RAX, CL)
 );
-test!(test_inc, gpr(), instruction!(Inc_rm64, RAX));
-test!(test_dec, gpr(), instruction!(Dec_rm64, RAX));
-test!(test_neg, gpr(), instruction!(Neg_rm64, RAX));
-test!(test_not, gpr(), instruction!(Not_rm64, RAX));
-test!(test_mul, gpr(), instruction!(Mul_rm64, RCX));
-test!(test_imul, gpr(), instruction!(Imul_rm64, RCX));
-test!(test_imul2, gpr(), instruction!(Imul_r64_rm64, RAX, RCX));
-test!(
+testing!(test_inc, gpr(), instruction!(Inc_rm64, RAX));
+testing!(test_dec, gpr(), instruction!(Dec_rm64, RAX));
+testing!(test_neg, gpr(), instruction!(Neg_rm64, RAX));
+testing!(test_not, gpr(), instruction!(Not_rm64, RAX));
+testing!(test_mul, gpr(), instruction!(Mul_rm64, RCX));
+testing!(test_imul, gpr(), instruction!(Imul_rm64, RCX));
+testing!(test_imul2, gpr(), instruction!(Imul_r64_rm64, RAX, RCX));
+testing!(
     test_div,
     gpr().with(VMReg::Rdx, 0).with(VMReg::Rax, A),
     instruction!(Div_rm64, RCX)
 );
-test!(
+testing!(
     test_idiv,
     gpr().with(VMReg::Rdx, 0).with(VMReg::Rax, A),
     instruction!(Idiv_rm64, RCX)
 );
-test!(test_tzcnt, gpr(), instruction!(Tzcnt_r64_rm64, RAX, RCX));
-test!(test_bsr, gpr(), instruction!(Bsr_r64_rm64, RAX, RCX));
-test!(test_bswap, gpr(), instruction!(Bswap_r64, RAX));
-test!(test_bt, gpr(), instruction!(Bt_rm64_r64, RAX, RCX));
-test!(test_bts, gpr(), instruction!(Bts_rm64_r64, RAX, RCX));
-test!(test_btr, gpr(), instruction!(Btr_rm64_r64, RAX, RCX));
-test!(test_btc, gpr(), instruction!(Btc_rm64_r64, RAX, RCX));
-test!(test_xchg, gpr(), instruction!(Xchg_rm64_r64, RAX, RCX));
-test!(test_xadd, gpr(), instruction!(Xadd_rm64_r64, RAX, RCX));
-test!(
+testing!(test_tzcnt, gpr(), instruction!(Tzcnt_r64_rm64, RAX, RCX));
+testing!(test_bsr, gpr(), instruction!(Bsr_r64_rm64, RAX, RCX));
+testing!(test_bswap, gpr(), instruction!(Bswap_r64, RAX));
+testing!(test_bt, gpr(), instruction!(Bt_rm64_r64, RAX, RCX));
+testing!(test_bts, gpr(), instruction!(Bts_rm64_r64, RAX, RCX));
+testing!(test_btr, gpr(), instruction!(Btr_rm64_r64, RAX, RCX));
+testing!(test_btc, gpr(), instruction!(Btc_rm64_r64, RAX, RCX));
+testing!(test_xchg, gpr(), instruction!(Xchg_rm64_r64, RAX, RCX));
+testing!(test_xadd, gpr(), instruction!(Xadd_rm64_r64, RAX, RCX));
+testing!(
     test_cmpxchg,
     gpr(),
     instruction!(Cmpxchg_rm64_r64, RBX, RCX)
 );
-test!(test_cmove, gpr(), instruction!(Cmove_r64_rm64, RAX, RCX));
-test!(test_cmovne, gpr(), instruction!(Cmovne_r64_rm64, RAX, RCX));
-test!(test_cmova, gpr(), instruction!(Cmova_r64_rm64, RAX, RCX));
-test!(test_cmovae, gpr(), instruction!(Cmovae_r64_rm64, RAX, RCX));
-test!(test_cmovb, gpr(), instruction!(Cmovb_r64_rm64, RAX, RCX));
-test!(test_cmovbe, gpr(), instruction!(Cmovbe_r64_rm64, RAX, RCX));
-test!(test_cmovg, gpr(), instruction!(Cmovg_r64_rm64, RAX, RCX));
-test!(test_cmovge, gpr(), instruction!(Cmovge_r64_rm64, RAX, RCX));
-test!(test_cmovl, gpr(), instruction!(Cmovl_r64_rm64, RAX, RCX));
-test!(test_cmovle, gpr(), instruction!(Cmovle_r64_rm64, RAX, RCX));
-test!(test_cmovo, gpr(), instruction!(Cmovo_r64_rm64, RAX, RCX));
-test!(test_cmovno, gpr(), instruction!(Cmovno_r64_rm64, RAX, RCX));
-test!(test_cmovp, gpr(), instruction!(Cmovp_r64_rm64, RAX, RCX));
-test!(test_cmovnp, gpr(), instruction!(Cmovnp_r64_rm64, RAX, RCX));
-test!(test_cmovs, gpr(), instruction!(Cmovs_r64_rm64, RAX, RCX));
-test!(test_cmovns, gpr(), instruction!(Cmovns_r64_rm64, RAX, RCX));
-test!(test_seta, gpr(), instruction!(Seta_rm8, AL));
-test!(test_setae, gpr(), instruction!(Setae_rm8, AL));
-test!(test_setb, gpr(), instruction!(Setb_rm8, AL));
-test!(test_setbe, gpr(), instruction!(Setbe_rm8, AL));
-test!(test_sete, gpr(), instruction!(Sete_rm8, AL));
-test!(test_setg, gpr(), instruction!(Setg_rm8, AL));
-test!(test_setge, gpr(), instruction!(Setge_rm8, AL));
-test!(test_setl, gpr(), instruction!(Setl_rm8, AL));
-test!(test_setle, gpr(), instruction!(Setle_rm8, AL));
-test!(test_setne, gpr(), instruction!(Setne_rm8, AL));
-test!(test_seto, gpr(), instruction!(Seto_rm8, AL));
-test!(test_setno, gpr(), instruction!(Setno_rm8, AL));
-test!(test_setp, gpr(), instruction!(Setp_rm8, AL));
-test!(test_setnp, gpr(), instruction!(Setnp_rm8, AL));
-test!(test_sets, gpr(), instruction!(Sets_rm8, AL));
-test!(test_setns, gpr(), instruction!(Setns_rm8, AL));
-test!(
+testing!(test_cmove, gpr(), instruction!(Cmove_r64_rm64, RAX, RCX));
+testing!(test_cmovne, gpr(), instruction!(Cmovne_r64_rm64, RAX, RCX));
+testing!(test_cmova, gpr(), instruction!(Cmova_r64_rm64, RAX, RCX));
+testing!(test_cmovae, gpr(), instruction!(Cmovae_r64_rm64, RAX, RCX));
+testing!(test_cmovb, gpr(), instruction!(Cmovb_r64_rm64, RAX, RCX));
+testing!(test_cmovbe, gpr(), instruction!(Cmovbe_r64_rm64, RAX, RCX));
+testing!(test_cmovg, gpr(), instruction!(Cmovg_r64_rm64, RAX, RCX));
+testing!(test_cmovge, gpr(), instruction!(Cmovge_r64_rm64, RAX, RCX));
+testing!(test_cmovl, gpr(), instruction!(Cmovl_r64_rm64, RAX, RCX));
+testing!(test_cmovle, gpr(), instruction!(Cmovle_r64_rm64, RAX, RCX));
+testing!(test_cmovo, gpr(), instruction!(Cmovo_r64_rm64, RAX, RCX));
+testing!(test_cmovno, gpr(), instruction!(Cmovno_r64_rm64, RAX, RCX));
+testing!(test_cmovp, gpr(), instruction!(Cmovp_r64_rm64, RAX, RCX));
+testing!(test_cmovnp, gpr(), instruction!(Cmovnp_r64_rm64, RAX, RCX));
+testing!(test_cmovs, gpr(), instruction!(Cmovs_r64_rm64, RAX, RCX));
+testing!(test_cmovns, gpr(), instruction!(Cmovns_r64_rm64, RAX, RCX));
+testing!(test_seta, gpr(), instruction!(Seta_rm8, AL));
+testing!(test_setae, gpr(), instruction!(Setae_rm8, AL));
+testing!(test_setb, gpr(), instruction!(Setb_rm8, AL));
+testing!(test_setbe, gpr(), instruction!(Setbe_rm8, AL));
+testing!(test_sete, gpr(), instruction!(Sete_rm8, AL));
+testing!(test_setg, gpr(), instruction!(Setg_rm8, AL));
+testing!(test_setge, gpr(), instruction!(Setge_rm8, AL));
+testing!(test_setl, gpr(), instruction!(Setl_rm8, AL));
+testing!(test_setle, gpr(), instruction!(Setle_rm8, AL));
+testing!(test_setne, gpr(), instruction!(Setne_rm8, AL));
+testing!(test_seto, gpr(), instruction!(Seto_rm8, AL));
+testing!(test_setno, gpr(), instruction!(Setno_rm8, AL));
+testing!(test_setp, gpr(), instruction!(Setp_rm8, AL));
+testing!(test_setnp, gpr(), instruction!(Setnp_rm8, AL));
+testing!(test_sets, gpr(), instruction!(Sets_rm8, AL));
+testing!(test_setns, gpr(), instruction!(Setns_rm8, AL));
+testing!(
     test_movaps,
     simd(),
     instruction!(Movaps_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_movups,
     simd(),
     instruction!(Movups_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_movapd,
     simd(),
     instruction!(Movapd_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_movupd,
     simd(),
     instruction!(Movupd_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_movdqa,
     simd(),
     instruction!(Movdqa_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_movdqu,
     simd(),
     instruction!(Movdqu_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_movss,
     simd(),
     instruction!(Movss_xmm_xmmm32, XMM0, XMM1)
 );
-test!(
+testing!(
     test_pand,
     simd(),
     instruction!(Pand_xmm_xmmm128, XMM0, XMM1)
 );
-test!(test_por, simd(), instruction!(Por_xmm_xmmm128, XMM0, XMM1));
-test!(
+testing!(test_por, simd(), instruction!(Por_xmm_xmmm128, XMM0, XMM1));
+testing!(
     test_pxor,
     simd(),
     instruction!(Pxor_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_pandn,
     simd(),
     instruction!(Pandn_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_andps,
     simd(),
     instruction!(Andps_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_andpd,
     simd(),
     instruction!(Andpd_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_andnps,
     simd(),
     instruction!(Andnps_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_andnpd,
     simd(),
     instruction!(Andnpd_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_orps,
     simd(),
     instruction!(Orps_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_orpd,
     simd(),
     instruction!(Orpd_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_xorps,
     simd(),
     instruction!(Xorps_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_xorpd,
     simd(),
     instruction!(Xorpd_xmm_xmmm128, XMM0, XMM1)
 );
-test!(
+testing!(
     test_vandps,
     simd(),
     instruction!(VEX_Vandps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
 );
-test!(
+testing!(
     test_vpxor,
     simd(),
     instruction!(VEX_Vpxor_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
 );
-test!(
+testing!(
     test_vxorps,
     simd(),
     instruction!(VEX_Vxorps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)

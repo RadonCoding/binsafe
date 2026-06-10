@@ -59,17 +59,17 @@ impl Virtualization {
         for (_index, operations) in blocks.into_iter().enumerate() {
             let mut rng = rand::thread_rng();
 
-            let bytecode = bytecode::transform(&mut engine.rt.mapper, operations, |ready| {
+            let transformed = bytecode::transform(&mut engine.rt.mapper, operations, |ready| {
                 rng.gen_range(0..ready.len())
             });
 
             #[cfg(debug_assertions)]
             {
                 let index = _index;
-                log.push(format!("  BLOCK {}:\n{}", index, bytecode));
+                log.push(format!("  BLOCK {}:\n{}", index, transformed));
             }
 
-            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &bytecode.operations);
+            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed.operations);
 
             let key = if vcode.is_empty() {
                 self.keys.seed
@@ -147,17 +147,17 @@ impl Protection for Virtualization {
             if lookup.get(&hash).is_none() {
                 let mut rng = rand::thread_rng();
 
-                let bytecode = bytecode::transform(&mut engine.rt.mapper, lifted, |ready| {
+                let transformed = bytecode::transform(&mut engine.rt.mapper, lifted, |ready| {
                     rng.gen_range(0..ready.len())
                 });
 
                 #[cfg(debug_assertions)]
                 if logs.len() < 10 {
-                    logs.push((block.rva, format!("{}", bytecode)));
+                    logs.push((block.rva, format!("{}", transformed)));
                 }
 
                 let index = programs.len();
-                programs.push(bytecode.operations);
+                programs.push(transformed.operations);
 
                 groups.push(vec![block]);
 
