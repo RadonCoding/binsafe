@@ -6,7 +6,7 @@ use crate::{
 };
 use iced_x86::code_asm::{ptr, qword_ptr, r10, r11, r8, r9, rax, rcx, rdx, rsp, AsmRegister64};
 
-pub fn print_s(rt: &mut Runtime, s: &str) {
+pub fn print_s(rt:  &mut Runtime, s: &str) {
     // push rax
     rt.asm.push(rax).unwrap();
     // push rcx
@@ -69,7 +69,7 @@ pub fn print_s(rt: &mut Runtime, s: &str) {
     rt.asm.pop(rax).unwrap();
 }
 
-pub fn print_q(rt: &mut Runtime, q: AsmRegister64) {
+pub fn print_q(rt:  &mut Runtime, q: AsmRegister64) {
     // push rax
     rt.asm.push(rax).unwrap();
     // push rcx
@@ -116,7 +116,7 @@ pub fn print_q(rt: &mut Runtime, q: AsmRegister64) {
     rt.asm.pop(rax).unwrap();
 }
 
-fn print_thread_prefix(rt: &mut Runtime) {
+fn print_thread_prefix(rt:  &mut Runtime) {
     // push rax
     rt.asm.push(rax).unwrap();
     // mov rax, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
@@ -130,7 +130,7 @@ fn print_thread_prefix(rt: &mut Runtime) {
     rt.asm.pop(rax).unwrap();
 }
 
-pub fn start_profiling(rt: &mut Runtime, message: &str) {
+pub fn start_profiling(rt:  &mut Runtime, message: &str) {
     use iced_x86::code_asm::al;
 
     // push rax
@@ -158,7 +158,7 @@ pub fn start_profiling(rt: &mut Runtime, message: &str) {
     rt.asm.pop(rax).unwrap();
 }
 
-pub fn stop_profiling(rt: &mut Runtime, message: &str) {
+pub fn stop_profiling(rt:  &mut Runtime, message: &str) {
     use iced_x86::code_asm::al;
 
     // push rdx

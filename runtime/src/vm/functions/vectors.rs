@@ -5,7 +5,7 @@ use crate::{
     vm::{bytecode::VMReg, utils, VECTORS_TO_NATIVE},
 };
 
-pub fn capture(rt: &mut Runtime) {
+pub fn capture(rt:  &mut Runtime) {
     let mut sse = rt.asm.create_label();
 
     detect(rt, sse);
@@ -32,7 +32,7 @@ pub fn capture(rt: &mut Runtime) {
     }
 }
 
-pub fn restore(rt: &mut Runtime) {
+pub fn restore(rt:  &mut Runtime) {
     let mut sse = rt.asm.create_label();
 
     detect(rt, sse);
@@ -59,7 +59,7 @@ pub fn restore(rt: &mut Runtime) {
     }
 }
 
-fn base(rt: &mut Runtime) {
+fn base(rt:  &mut Runtime) {
     // mov eax, [...]
     rt.asm
         .mov(eax, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
@@ -70,7 +70,7 @@ fn base(rt: &mut Runtime) {
     utils::vreg::load_reg(rt, rax, VMReg::VVector, rax);
 }
 
-fn detect(rt: &mut Runtime, sse: CodeLabel) {
+fn detect(rt:  &mut Runtime, sse: CodeLabel) {
     // mov eax, 0x1
     rt.asm.mov(eax, 0x1).unwrap();
     // cpuid

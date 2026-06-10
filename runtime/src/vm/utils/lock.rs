@@ -1,7 +1,7 @@
 use crate::runtime::{BoolDef, Runtime};
 use iced_x86::code_asm::{byte_ptr, ptr, AsmRegister8, CodeLabel};
 
-pub fn acquire_global(rt: &mut Runtime, scratch: AsmRegister8, label: Option<&mut CodeLabel>) {
+pub fn acquire_global(rt:  &mut Runtime, scratch: AsmRegister8, label: Option<&mut CodeLabel>) {
     let spin = if let Some(label) = label {
         label
     } else {
@@ -36,7 +36,7 @@ pub fn acquire_global(rt: &mut Runtime, scratch: AsmRegister8, label: Option<&mu
     }
 }
 
-pub fn release_global(rt: &mut Runtime) {
+pub fn release_global(rt:  &mut Runtime) {
     // mov [...], 0x0
     rt.asm
         .mov(byte_ptr(rt.bool_labels[&BoolDef::VmIsLocked]), 0x0)

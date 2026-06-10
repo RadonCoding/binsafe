@@ -2,7 +2,7 @@ use crate::vm::bytecode::{VMLogic, VMTest};
 use crate::vm::utils::{self};
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
 use iced_x86::code_asm::{
-    eax, r13, r13b, r13d, r14, r14d, r15, r15b, r8, r8b, r8d, r9b, r9d, rax, r12, rcx,
+    eax, r12, r13, r13b, r13d, r14, r14d, r15, r15b, r8, r8b, r8d, r9b, r9d, rax, rcx,
 };
 
 // unsigned char* (unsigned char*)

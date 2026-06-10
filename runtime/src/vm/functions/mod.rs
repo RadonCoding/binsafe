@@ -18,7 +18,7 @@ pub mod vectors;
 pub mod veh;
 
 // void (unsigned char*)
-pub fn initialize(rt: &mut Runtime) {
+pub fn initialize(rt:  &mut Runtime) {
     // lea rax, [...]
     rt.asm
         .lea(rax, ptr(rt.data_labels[&DataDef::Functions]))

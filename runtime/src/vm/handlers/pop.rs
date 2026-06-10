@@ -7,7 +7,7 @@ use crate::{
 };
 
 // unsigned char* (unsigned char*)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     // mov r8, [r12 + ...]; mov r9, [r8]
     utils::vreg::load_mem(rt, r12, VMReg::Rsp, r8, r9);
     // add [r12 + ...], 0x8

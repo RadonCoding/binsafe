@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, byte_ptr, dword_ptr, ptr, r8, r8d, r9, r9d, rax, r12, rcx, word_ptr};
+use iced_x86::code_asm::{al, byte_ptr, dword_ptr, ptr, r12, r8, r8d, r9, r9d, rax, rcx, word_ptr};
 
 use crate::{
     runtime::Runtime,
@@ -6,7 +6,7 @@ use crate::{
 };
 
 // unsigned char* (unsigned char*)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // al -> width

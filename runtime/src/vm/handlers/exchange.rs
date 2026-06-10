@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, ptr, r8, r9, r9b, r9d, r9w, r12, rax, rcx};
+use iced_x86::code_asm::{al, ptr, r12, r8, r9, r9b, r9d, r9w, rax, rcx};
 
 use crate::{
     runtime::Runtime,

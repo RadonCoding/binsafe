@@ -4,7 +4,7 @@ use iced_x86::code_asm::{
 };
 
 /// `mov {to}, [{base}]`; `inc {base}`
-pub fn read_byte(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister8) {
+pub fn read_byte(rt:  &mut Runtime, base: AsmRegister64, to: AsmRegister8) {
     // mov ..., [...]
     rt.asm.mov(to, ptr(base)).unwrap();
     // inc ...
@@ -12,7 +12,7 @@ pub fn read_byte(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister8) {
 }
 
 /// `movzx {to}, [{base}]`; `inc {base}`
-pub fn read_byte_zx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
+pub fn read_byte_zx(rt:  &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
     // movzx ..., [...]
     rt.asm.movzx(to, byte_ptr(base)).unwrap();
     // inc ...
@@ -20,7 +20,7 @@ pub fn read_byte_zx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
 }
 
 /// `mov {to}, [{base}]`; `add {base}, 0x2`
-pub fn read_word(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister16) {
+pub fn read_word(rt:  &mut Runtime, base: AsmRegister64, to: AsmRegister16) {
     // mov ..., [...]
     rt.asm.mov(to, ptr(base)).unwrap();
     // add ..., 0x2
@@ -28,7 +28,7 @@ pub fn read_word(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister16) {
 }
 
 /// `movzx {to}, [{base}]`; `add {base}, 0x2`
-pub fn read_word_zx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
+pub fn read_word_zx(rt:  &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
     // movzx ..., [...]
     rt.asm.movzx(to, word_ptr(base)).unwrap();
     // add ..., 0x2
@@ -36,7 +36,7 @@ pub fn read_word_zx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
 }
 
 /// `mov {to}, [{base}]`; `add {base}, 0x4`
-pub fn read_dword(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
+pub fn read_dword(rt:  &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
     // mov ..., [...]
     rt.asm.mov(to, ptr(base)).unwrap();
     // add ..., 0x4
@@ -44,7 +44,7 @@ pub fn read_dword(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister32) {
 }
 
 /// `movsxd {to}, [{base}]`; `add {base}, 0x4`
-pub fn read_dword_sx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister64) {
+pub fn read_dword_sx(rt:  &mut Runtime, base: AsmRegister64, to: AsmRegister64) {
     // movsxd ..., [...]
     rt.asm.movsxd(to, ptr(base)).unwrap();
     // add ..., 0x4
@@ -52,7 +52,7 @@ pub fn read_dword_sx(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister64) {
 }
 
 /// `mov {to}, [{base}]`; `add {base}, 0x8`
-pub fn read_qword(rt: &mut Runtime, base: AsmRegister64, to: AsmRegister64) {
+pub fn read_qword(rt:  &mut Runtime, base: AsmRegister64, to: AsmRegister64) {
     // mov ..., [...]
     rt.asm.mov(to, ptr(base)).unwrap();
     // add ..., 0x8

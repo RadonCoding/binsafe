@@ -1,9 +1,6 @@
-use iced_x86::code_asm::{r9, rax, r12, rcx};
+use iced_x86::code_asm::{r12, r9, rax, rcx};
 
-use crate::{
-    runtime::Runtime,
-    vm::utils::{scratch},
-};
+use crate::{runtime::Runtime, vm::utils::scratch};
 
 // unsigned char* (unsigned char*)
 pub fn build(rt: &mut Runtime) {

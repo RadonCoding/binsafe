@@ -8,7 +8,7 @@ use iced_x86::code_asm::{
 };
 
 // void* (ImportDef def)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut module_loop = rt.asm.create_label();
     let mut get_exports = rt.asm.create_label();
     let mut export_loop = rt.asm.create_label();

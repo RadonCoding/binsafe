@@ -5,7 +5,7 @@ use crate::{
     vm::{utils, REGISTERS_TO_NATIVE},
 };
 
-pub fn capture(rt: &mut Runtime) {
+pub fn capture(rt:  &mut Runtime) {
     for (dst, src) in REGISTERS_TO_NATIVE {
         // mov [r12 + ...], ...
         utils::vreg::store_reg(rt, r12, *src, *dst);
@@ -14,7 +14,7 @@ pub fn capture(rt: &mut Runtime) {
     rt.asm.ret().unwrap();
 }
 
-pub fn restore(rt: &mut Runtime) {
+pub fn restore(rt:  &mut Runtime) {
     for (src, dst) in REGISTERS_TO_NATIVE {
         // mov ..., [r12 + ...]
         utils::vreg::load_reg(rt, r12, *src, *dst);

@@ -3,7 +3,7 @@ use iced_x86::code_asm::{ptr, qword_ptr, r12, r13, r14, r8, r9, rax, rcx, rdx, r
 use crate::runtime::{FnDef, ImportDef, Runtime};
 
 // void (char*)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     // push r12
     rt.asm.push(r12).unwrap();
     // push r13
