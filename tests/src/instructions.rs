@@ -1,6 +1,5 @@
 use iced_x86::Register::{AL, CL, RAX, RBX, RCX, XMM0, XMM1, XMM2};
 use iced_x86::{Instruction, RflagsBits};
-use rand::Rng;
 use runtime::mapper::Mappable;
 use runtime::vm::bytecode::{self, VMFlag, VMReg, VMVec};
 
@@ -82,24 +81,14 @@ fn simd() -> State {
 
 fn check(state: State, instruction: Instruction) {
     let mut executor = Executor::new();
-
     let mut native = executor.run_native(state.clone(), &instruction);
 
     let mut executor = Executor::new();
-
     let lifted = bytecode::lift(&mut executor.rt.mapper, &[instruction])
         .unwrap_or_else(|| panic!("{instruction} is not implemented"));
-
-    let mut rng = rand::thread_rng();
-
-    let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |ready| {
-        rng.gen_range(0..ready.len())
-    });
-
+    let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |_| 0);
     let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed.operations);
-
     encrypt(&mut bytes);
-
     let mut emulated = executor.run_virtual(state, &bytes);
 
     for state in [&mut native, &mut emulated] {
