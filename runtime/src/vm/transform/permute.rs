@@ -29,7 +29,7 @@ struct Profile {
     accesses: Option<Vec<Access>>,
 }
 
-/// Shuffles operations into a semantically equivalent sequence, with `pick` choosing among the ready atoms at each scheduling step.
+/// Shuffles operations into a semantically equivalent sequence, with `picker` choosing among the ready atoms at each scheduling step.
 pub fn permute<F>(operations: Vec<Rc<dyn Encode>>, picker: &mut F) -> Vec<Rc<dyn Encode>>
 where
     F: FnMut(&[usize]) -> usize,
