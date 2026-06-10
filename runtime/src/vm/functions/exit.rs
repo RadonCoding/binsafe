@@ -5,7 +5,7 @@ use crate::{
     vm::{bytecode::VMReg, utils},
 };
 
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut no_branch = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 

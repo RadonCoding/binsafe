@@ -3,7 +3,7 @@ use iced_x86::code_asm::{ax, byte_ptr, r8w, rax, rcx, rdx, word_ptr};
 use crate::runtime::Runtime;
 
 // bool (unsigned short*, char*)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut compare_loop = rt.asm.create_label();
     let mut not_equal = rt.asm.create_label();
     let mut is_equal = rt.asm.create_label();

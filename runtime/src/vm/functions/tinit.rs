@@ -10,7 +10,7 @@ use crate::{
     VM_SCRATCH_SIZE, VM_STACK_SIZE,
 };
 
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     // push r13
     rt.asm.push(r13).unwrap();
     // push r14

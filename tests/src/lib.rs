@@ -212,7 +212,7 @@ impl Executor {
     pub fn new() -> Self {
         FAKE_BRANCH_MAPPED.get_or_init(|| unsafe {
             let _ = VirtualAlloc(
-                Some((FAKE_BRANCH_ADDRESS & !0xFFFF) as *const c_void),
+                Some(FAKE_BRANCH_ADDRESS as *const c_void),
                 Self::SIZE,
                 MEM_COMMIT | MEM_RESERVE,
                 PAGE_READWRITE,

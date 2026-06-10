@@ -7,7 +7,7 @@ use crate::{
 };
 
 // unsigned char* (unsigned char*)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     // load r9
     scratch::load(rt, r12, r9);
 

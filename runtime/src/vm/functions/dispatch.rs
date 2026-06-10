@@ -12,7 +12,7 @@ use crate::{
 };
 
 // void (unsigned char*)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut setup_block = rt.asm.create_label();
     let mut start_block = rt.asm.create_label();
     let mut execute_loop = rt.asm.create_label();

@@ -5,7 +5,7 @@ use crate::{
     vm::utils::{self, scratch},
 };
 
-pub fn bitwise(rt: &mut Runtime, sse: impl FnOnce(&mut Runtime), avx: impl FnOnce(&mut Runtime)) {
+pub fn bitwise(rt:  &mut Runtime, sse: impl FnOnce(&mut Runtime), avx: impl FnOnce(&mut Runtime)) {
     let mut epilogue = rt.asm.create_label();
 
     // al -> width

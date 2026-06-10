@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut acquire_global_lock = rt.asm.create_label();
 
     let mut invoke_ginit = rt.asm.create_label();

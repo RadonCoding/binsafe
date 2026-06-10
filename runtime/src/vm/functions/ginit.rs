@@ -2,7 +2,7 @@ use iced_x86::code_asm::{eax, ptr, r13, rax, rcx, rdx, rsp};
 
 use crate::runtime::{DataDef, FnDef, ImportDef, Runtime};
 
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     // push r13
     rt.asm.push(r13).unwrap();
 

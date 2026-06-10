@@ -9,7 +9,7 @@ use crate::{
 };
 
 // void (bool)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut decrypting = rt.asm.create_label();
     let mut spin_previous = rt.asm.create_label();
     let mut acquire_previous = rt.asm.create_label();

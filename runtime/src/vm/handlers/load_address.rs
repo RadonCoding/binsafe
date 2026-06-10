@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{ptr, r8, r8d, r9, r9d, rax, r12, rcx};
+use iced_x86::code_asm::{ptr, r12, r8, r8d, r9, r9d, rax, rcx};
 
 use crate::{
     runtime::Runtime,
@@ -9,7 +9,7 @@ use crate::{
 };
 
 // unsigned char* (unsigned char*)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut add_base = rt.asm.create_label();
     let mut check_index = rt.asm.create_label();
     let mut add_displacement = rt.asm.create_label();

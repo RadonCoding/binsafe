@@ -11,7 +11,7 @@ use crate::{
 };
 
 // unsigned char* (unsigned char*)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut vector = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 

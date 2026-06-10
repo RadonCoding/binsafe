@@ -9,7 +9,7 @@ use crate::{
 };
 
 // unsigned char* (unsigned char*)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // r8b -> width

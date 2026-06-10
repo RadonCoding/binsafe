@@ -3,7 +3,7 @@ use iced_x86::code_asm::{byte_ptr, rax, rcx};
 use crate::runtime::Runtime;
 
 // unsigned long (char*)
-pub fn build(rt: &mut Runtime) {
+pub fn build(rt:  &mut Runtime) {
     let mut counter_loop = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
