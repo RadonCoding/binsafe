@@ -11,9 +11,6 @@ const B: u64 = 0x2222_2222_2222_2222;
 const C: u64 = 0x3333_3333_3333_3333;
 const D: u64 = 0x4444_4444_4444_4444;
 
-const IMM8: u32 = 0x11;
-const IMM32: u32 = 0x1111_1111;
-
 const P0: u128 = 0x1111_1111_1111_1111_1111_1111_1111_1111;
 const P1: u128 = 0x2222_2222_2222_2222_2222_2222_2222_2222;
 const P2: u128 = 0x3333_3333_3333_3333_3333_3333_3333_3333;
@@ -175,15 +172,30 @@ test!(test_test, gpr(), instruction!(Test_rm64_r64, RAX, RCX));
 test!(test_and, gpr(), instruction!(And_rm64_r64, RAX, RCX));
 test!(test_or, gpr(), instruction!(Or_rm64_r64, RAX, RCX));
 test!(test_xor, gpr(), instruction!(Xor_rm64_r64, RAX, RCX));
-test!(test_rol, gpr(), instruction!(Rol_rm64_imm8, RAX, IMM8));
-test!(test_ror, gpr(), instruction!(Ror_rm64_imm8, RAX, IMM8));
-test!(test_shl, gpr(), instruction!(Shl_rm64_imm8, RAX, IMM8));
-test!(test_shr, gpr(), instruction!(Shr_rm64_imm8, RAX, IMM8));
-test!(test_sar, gpr(), instruction!(Sar_rm64_imm8, RAX, IMM8));
 test!(
-    test_shl_cl,
-    gpr().with(VMReg::Rcx, IMM32 as u64),
+    test_rol,
+    gpr().with(VMReg::Rcx, 3),
+    instruction!(Rol_rm64_CL, RAX, CL)
+);
+test!(
+    test_ror,
+    gpr().with(VMReg::Rcx, 3),
+    instruction!(Ror_rm64_CL, RAX, CL)
+);
+test!(
+    test_shl,
+    gpr().with(VMReg::Rcx, 3),
     instruction!(Shl_rm64_CL, RAX, CL)
+);
+test!(
+    test_shr,
+    gpr().with(VMReg::Rcx, 3),
+    instruction!(Shr_rm64_CL, RAX, CL)
+);
+test!(
+    test_sar,
+    gpr().with(VMReg::Rcx, 3),
+    instruction!(Sar_rm64_CL, RAX, CL)
 );
 test!(test_inc, gpr(), instruction!(Inc_rm64, RAX));
 test!(test_dec, gpr(), instruction!(Dec_rm64, RAX));
@@ -193,28 +205,22 @@ test!(test_mul, gpr(), instruction!(Mul_rm64, RCX));
 test!(test_imul, gpr(), instruction!(Imul_rm64, RCX));
 test!(test_imul2, gpr(), instruction!(Imul_r64_rm64, RAX, RCX));
 test!(
-    test_imul3,
-    gpr(),
-    instruction!(Imul_r64_rm64_imm32, RAX, RCX, IMM32 as i32)
-);
-test!(
     test_div,
-    gpr().with(VMReg::Rdx, 0).with(VMReg::Rax, IMM32 as u64),
+    gpr().with(VMReg::Rdx, 0).with(VMReg::Rax, A),
     instruction!(Div_rm64, RCX)
 );
 test!(
     test_idiv,
-    gpr().with(VMReg::Rdx, 0).with(VMReg::Rax, IMM32 as u64),
+    gpr().with(VMReg::Rdx, 0).with(VMReg::Rax, A),
     instruction!(Idiv_rm64, RCX)
 );
 test!(test_tzcnt, gpr(), instruction!(Tzcnt_r64_rm64, RAX, RCX));
 test!(test_bsr, gpr(), instruction!(Bsr_r64_rm64, RAX, RCX));
 test!(test_bswap, gpr(), instruction!(Bswap_r64, RAX));
-test!(test_bt, gpr(), instruction!(Bt_rm64_imm8, RAX, IMM8));
-test!(test_bts, gpr(), instruction!(Bts_rm64_imm8, RAX, IMM8));
-test!(test_btr, gpr(), instruction!(Btr_rm64_imm8, RAX, IMM8));
-test!(test_btc, gpr(), instruction!(Btc_rm64_imm8, RAX, IMM8));
-test!(test_bt_reg, gpr(), instruction!(Bt_rm64_r64, RAX, RCX));
+test!(test_bt, gpr(), instruction!(Bt_rm64_r64, RAX, RCX));
+test!(test_bts, gpr(), instruction!(Bts_rm64_r64, RAX, RCX));
+test!(test_btr, gpr(), instruction!(Btr_rm64_r64, RAX, RCX));
+test!(test_btc, gpr(), instruction!(Btc_rm64_r64, RAX, RCX));
 test!(test_xchg, gpr(), instruction!(Xchg_rm64_r64, RAX, RCX));
 test!(test_xadd, gpr(), instruction!(Xadd_rm64_r64, RAX, RCX));
 test!(
