@@ -9,8 +9,8 @@ use strum_macros::EnumIter;
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    arithmetic, bitwise, branch, bsr, bswap, bt, cmov, cmpxchg, divide, lea, movss, multiply, set,
-    stack, transfer, tzcnt, xadd, xchg,
+    arithmetic, bitwise, branch, bsr, bswap, bt, cmov, cmpxchg, divide, extend, lea, movss,
+    multiply, set, stack, transfer, tzcnt, xadd, xchg,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -623,6 +623,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Movdqa
             | Mnemonic::Movdqu => transfer::encode(instruction)?,
             Mnemonic::Movss => movss::encode(instruction)?,
+            Mnemonic::Movzx | Mnemonic::Movsx | Mnemonic::Movsxd => extend::encode(instruction)?,
             Mnemonic::Push | Mnemonic::Pop => stack::encode(instruction)?,
             Mnemonic::And
             | Mnemonic::Or
