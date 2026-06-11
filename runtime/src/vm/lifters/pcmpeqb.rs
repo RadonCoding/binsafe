@@ -8,9 +8,9 @@ use crate::vm::encoders::{
 };
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
-    let destination = VMVec::from(instruction.op0_register());
-
     let mut operations = Vec::<Rc<dyn Encode>>::new();
+
+    let destination_vector = VMVec::from(instruction.op0_register());
 
     match instruction.op1_kind() {
         OpKind::Register => {
@@ -33,7 +33,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
 
     operations.push(Rc::new(LoadVector {
         width: VMWidth::Lower128,
-        source: destination,
+        source: destination_vector,
     }));
 
     operations.push(Rc::new(PackedByteEqual {
@@ -42,7 +42,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
 
     operations.push(Rc::new(StoreVector {
         width: VMWidth::Lower128,
-        destination,
+        destination: destination_vector,
     }));
 
     Some(operations)

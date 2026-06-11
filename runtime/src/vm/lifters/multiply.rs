@@ -69,25 +69,21 @@ pub fn wide<O: Encode + 'static>(
 }
 
 pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
-    if instruction.op0_kind() != OpKind::Register {
-        unreachable!()
-    }
-
-    let destination = instruction.op0_register();
-    let width = VMWidth::from(destination);
-
     let mut operations = Vec::<Rc<dyn Encode>>::new();
+
+    let destination_width = VMWidth::from(instruction.op0_register());
+    let destination_register = VMReg::from(instruction.op0_register());
 
     match instruction.op_count() {
         2 => {
             operations.push(Rc::new(LoadRegister {
-                width,
-                source: VMReg::from(destination),
+                width: destination_width,
+                source: destination_register,
             }));
-            source(&mut operations, instruction, 1, width)?;
+            source(&mut operations, instruction, 1, destination_width)?;
         }
         3 => {
-            source(&mut operations, instruction, 1, width)?;
+            source(&mut operations, instruction, 1, destination_width)?;
 
             let immediate_source = operation_immediate(instruction, instruction.op_kind(2));
             let immediate_width = operation_width(instruction, instruction.op_kind(2));
@@ -100,11 +96,11 @@ pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     }
 
     operations.push(Rc::new(Mul {
-        width: width.signed(),
+        width: destination_width.signed(),
     }));
     operations.push(Rc::new(StoreRegister {
-        width,
-        destination: VMReg::from(destination),
+        width: destination_width,
+        destination: destination_register,
     }));
     operations.push(Rc::new(Discard));
 
