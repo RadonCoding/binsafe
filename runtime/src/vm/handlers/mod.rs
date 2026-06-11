@@ -210,9 +210,10 @@ pub mod ror;
 pub mod sar;
 pub mod shl;
 pub mod shr;
+pub mod store_extend;
 pub mod store_memory;
+pub mod store_merge;
 pub mod store_register;
-pub mod store_vector;
 pub mod sub;
 pub mod sub_borrow;
 pub mod test;
@@ -236,7 +237,8 @@ pub fn initialize(rt: &mut Runtime) {
         (VMOp::StoreRegister, FnDef::VmHandlerStoreRegister),
         (VMOp::StoreMemory, FnDef::VmHandlerStoreMemory),
         (VMOp::LoadVector, FnDef::VmHandlerLoadVector),
-        (VMOp::StoreVector, FnDef::VmHandlerStoreVector),
+        (VMOp::StoreMerge, FnDef::VmHandlerStoreMerge),
+        (VMOp::StoreExtend, FnDef::VmHandlerStoreExtend),
         (VMOp::Add, FnDef::VmHandlerAdd),
         (VMOp::Sub, FnDef::VmHandlerSub),
         (VMOp::AddCarry, FnDef::VmHandlerAddCarry),

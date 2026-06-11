@@ -28,13 +28,8 @@ pub fn wide<O: Encode + 'static>(
 
     let width = operation_width(instruction, 0);
 
-    let accumulator = match width {
-        VMWidth::Higher8 => VMWidth::Lower8,
-        other => other,
-    };
-
     operations.push(Rc::new(LoadRegister {
-        width: accumulator,
+        width,
         source: VMReg::Rax,
     }));
 

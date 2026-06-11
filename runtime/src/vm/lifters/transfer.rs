@@ -5,7 +5,7 @@ use crate::vm::bytecode::{VMMem, VMReg, VMVec, VMWidth};
 use crate::vm::encoders::{
     load_address::LoadAddress, load_immediate::LoadImmediate, load_memory::LoadMemory,
     load_register::LoadRegister, load_vector::LoadVector, store_memory::StoreMemory,
-    store_register::StoreRegister, store_vector::StoreVector, Encode,
+    store_merge::StoreMerge, store_register::StoreRegister, Encode,
 };
 use crate::vm::lifters::{is_immediate, operation_immediate, operation_width};
 
@@ -54,7 +54,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         OpKind::Register => {
             if instruction.op0_register().is_vector_register() {
                 let destination_vector = VMVec::from(instruction.op0_register());
-                operations.push(Rc::new(StoreVector {
+                operations.push(Rc::new(StoreMerge {
                     width: destination_width,
                     destination: destination_vector,
                 }));

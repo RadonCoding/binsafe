@@ -2,7 +2,7 @@ use iced_x86::{Instruction, OpKind};
 use std::rc::Rc;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMFlag, VMLogic, VMMem, VMReg, VMWidth};
+use crate::vm::bytecode::{VMFlag, VMLogic, VMMem, VMReg};
 use crate::vm::encoders::{
     compare_exchange::CompareExchange, discard::Discard, load_address::LoadAddress,
     load_register::LoadRegister, skip::Skip, store_register::StoreRegister, sub::Sub, Encode,
@@ -11,10 +11,6 @@ use crate::vm::lifters::{branch::cmp, operation_width};
 
 pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let destination_width = operation_width(instruction, 0);
-    let accumulator_width = match destination_width {
-        VMWidth::Higher8 => VMWidth::Lower8,
-        other => other,
-    };
     let source_register = VMReg::from(instruction.op1_register());
 
     let mut operations = Vec::<Rc<dyn Encode>>::new();
@@ -22,7 +18,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
     match instruction.op0_kind() {
         OpKind::Memory => {
             operations.push(Rc::new(LoadRegister {
-                width: accumulator_width,
+                width: destination_width,
                 source: VMReg::Rax,
             }));
             operations.push(Rc::new(LoadRegister {
@@ -36,7 +32,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
                 width: destination_width,
             }));
             operations.push(Rc::new(StoreRegister {
-                width: accumulator_width,
+                width: destination_width,
                 destination: VMReg::Rax,
             }));
         }
@@ -44,7 +40,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
             let destination_register = VMReg::from(instruction.op0_register());
 
             operations.push(Rc::new(LoadRegister {
-                width: accumulator_width,
+                width: destination_width,
                 source: VMReg::Rax,
             }));
             operations.push(Rc::new(LoadRegister {
@@ -61,7 +57,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
                 source: destination_register,
             }));
             operations.push(Rc::new(StoreRegister {
-                width: accumulator_width,
+                width: destination_width,
                 destination: VMReg::Rax,
             }));
 
