@@ -8,7 +8,7 @@ use runtime::vm::bytecode::{self, VMFlag, VMReg, VMVec};
 
 use crate::{
     decrypt, encrypt, instruction, Difference, Executor, State, IMM128_A, IMM128_B, IMM128_C,
-    IMM32_A, IMM64_A, IMM64_B, IMM64_C, IMM8_A,
+    IMM32_A, IMM64_A, IMM64_B, IMM64_C, IMM8_A, SIMM32_A, SIMM8_A,
 };
 
 #[test]
@@ -102,6 +102,28 @@ fn check_with_memory(state: State, instruction: Instruction, memory: &mut [u8]) 
     let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed.operations);
     encrypt(&mut bytes);
     let mut emulated = executor.run_virtual(state.clone(), &bytes);
+
+    println!(
+        "INSTRUCTIONS:\n{}\nNATIVE:\n{}\nEMULATED:\n{}",
+        transformed
+            .operations
+            .iter()
+            .map(|op| op.to_string())
+            .collect::<Vec<String>>()
+            .join("\n"),
+        native
+            .registers
+            .iter()
+            .map(|(r, v)| format!("    {r:?}={v:016X}"))
+            .collect::<Vec<String>>()
+            .join("\n"),
+        emulated
+            .registers
+            .iter()
+            .map(|(r, v)| format!("    {r:?}={v:016X}"))
+            .collect::<Vec<String>>()
+            .join("\n"),
+    );
 
     normalize_and_compare(&mut native, &mut emulated, instruction);
 }
@@ -249,13 +271,13 @@ testing!(
 testing!(
     test_mov_imm32,
     gpr(),
-    instruction!(Mov_rm64_imm32, RAX, IMM32_A as i32)
+    instruction!(Mov_rm64_imm32, RAX, SIMM32_A)
 );
 
 testing!(test_movzx, gpr(), instruction!(Movzx_r64_rm8, RAX, CL));
 testing_memory!(
     test_movzx_load,
-    buf = [IMM64_A],
+    buf = [IMM8_A],
     baseline()
         .with(VMReg::Rax, buf.as_ptr() as u64)
         .with(VMReg::Rcx, IMM64_B),
@@ -265,7 +287,7 @@ testing_memory!(
 testing!(test_movzsx, gpr(), instruction!(Movsx_r64_rm8, RAX, CL));
 testing_memory!(
     test_movsx_load,
-    buf = [IMM64_A],
+    buf = [IMM8_A],
     baseline()
         .with(VMReg::Rax, buf.as_ptr() as u64)
         .with(VMReg::Rcx, IMM64_B),
@@ -275,7 +297,7 @@ testing_memory!(
 testing!(test_movzsxd, gpr(), instruction!(Movsxd_r64_rm32, RAX, EAX));
 testing_memory!(
     test_movsxd_load,
-    buf = [IMM64_A],
+    buf = [IMM32_A],
     baseline()
         .with(VMReg::Rax, buf.as_ptr() as u64)
         .with(VMReg::Rcx, IMM64_B),
@@ -302,12 +324,12 @@ testing_memory!(
 testing!(
     test_add_imm32,
     gpr(),
-    instruction!(Add_rm64_imm32, RAX, IMM32_A as i32)
+    instruction!(Add_rm64_imm32, RAX, SIMM32_A)
 );
 testing!(
     test_add_imm8,
     gpr(),
-    instruction!(Add_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Add_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(test_sub, gpr(), instruction!(Sub_rm64_r64, RAX, RCX));
@@ -330,12 +352,12 @@ testing_memory!(
 testing!(
     test_sub_imm32,
     gpr(),
-    instruction!(Sub_rm64_imm32, RAX, IMM32_A as i32)
+    instruction!(Sub_rm64_imm32, RAX, SIMM32_A)
 );
 testing!(
     test_sub_imm8,
     gpr(),
-    instruction!(Sub_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Sub_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(
@@ -364,12 +386,12 @@ testing_memory!(
 testing!(
     test_adc_imm32,
     gpr().with(VMReg::Flags, 0b0000000000000001u64),
-    instruction!(Adc_rm64_imm32, RAX, IMM32_A as i32)
+    instruction!(Adc_rm64_imm32, RAX, SIMM32_A)
 );
 testing!(
     test_adc_imm8,
     gpr().with(VMReg::Flags, 0b0000000000000001u64),
-    instruction!(Adc_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Adc_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(
@@ -398,12 +420,12 @@ testing_memory!(
 testing!(
     test_sbb_imm32,
     gpr().with(VMReg::Flags, 0b0000000000000001u64),
-    instruction!(Sbb_rm64_imm32, RAX, IMM32_A as i32)
+    instruction!(Sbb_rm64_imm32, RAX, SIMM32_A)
 );
 testing!(
     test_sbb_imm8,
     gpr().with(VMReg::Flags, 0b0000000000000001u64),
-    instruction!(Sbb_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Sbb_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(test_cmp, gpr(), instruction!(Cmp_rm64_r64, RAX, RCX));
@@ -426,12 +448,12 @@ testing_memory!(
 testing!(
     test_cmp_imm32,
     gpr(),
-    instruction!(Cmp_rm64_imm32, RAX, IMM32_A as i32)
+    instruction!(Cmp_rm64_imm32, RAX, SIMM32_A)
 );
 testing!(
     test_cmp_imm8,
     gpr(),
-    instruction!(Cmp_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Cmp_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(test_test, gpr(), instruction!(Test_rm64_r64, RAX, RCX));
@@ -446,7 +468,7 @@ testing_memory!(
 testing!(
     test_test_imm32,
     gpr(),
-    instruction!(Test_rm64_imm32, RAX, IMM32_A as i32)
+    instruction!(Test_rm64_imm32, RAX, SIMM32_A)
 );
 
 testing!(test_and, gpr(), instruction!(And_rm64_r64, RAX, RCX));
@@ -469,12 +491,12 @@ testing_memory!(
 testing!(
     test_and_imm32,
     gpr(),
-    instruction!(And_rm64_imm32, RAX, IMM32_A as i32)
+    instruction!(And_rm64_imm32, RAX, SIMM32_A)
 );
 testing!(
     test_and_imm8,
     gpr(),
-    instruction!(And_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(And_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(test_or, gpr(), instruction!(Or_rm64_r64, RAX, RCX));
@@ -497,12 +519,12 @@ testing_memory!(
 testing!(
     test_or_imm32,
     gpr(),
-    instruction!(Or_rm64_imm32, RAX, IMM32_A as i32)
+    instruction!(Or_rm64_imm32, RAX, SIMM32_A)
 );
 testing!(
     test_or_imm8,
     gpr(),
-    instruction!(Or_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Or_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(test_xor, gpr(), instruction!(Xor_rm64_r64, RAX, RCX));
@@ -525,12 +547,12 @@ testing_memory!(
 testing!(
     test_xor_imm32,
     gpr(),
-    instruction!(Xor_rm64_imm32, RAX, IMM32_A as i32)
+    instruction!(Xor_rm64_imm32, RAX, SIMM32_A)
 );
 testing!(
     test_xor_imm8,
     gpr(),
-    instruction!(Xor_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Xor_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(
@@ -549,7 +571,7 @@ testing_memory!(
 testing!(
     test_rol_imm8,
     gpr(),
-    instruction!(Rol_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Rol_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(
@@ -568,7 +590,7 @@ testing_memory!(
 testing!(
     test_ror_imm8,
     gpr(),
-    instruction!(Ror_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Ror_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(
@@ -587,7 +609,7 @@ testing_memory!(
 testing!(
     test_shl_imm8,
     gpr(),
-    instruction!(Shl_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Shl_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(
@@ -606,7 +628,7 @@ testing_memory!(
 testing!(
     test_shr_imm8,
     gpr(),
-    instruction!(Shr_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Shr_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(
@@ -625,7 +647,7 @@ testing_memory!(
 testing!(
     test_sar_imm8,
     gpr(),
-    instruction!(Sar_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Sar_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(test_inc, gpr(), instruction!(Inc_rm64, RAX));
@@ -692,12 +714,12 @@ testing_memory!(
 testing!(
     test_imul3,
     gpr(),
-    instruction!(Imul_r64_rm64_imm32, RAX, RCX, IMM32_A as i32)
+    instruction!(Imul_r64_rm64_imm32, RAX, RCX, SIMM32_A)
 );
 testing!(
     test_imul3_imm8,
     gpr(),
-    instruction!(Imul_r64_rm64_imm8, RAX, RCX, IMM8_A as i32)
+    instruction!(Imul_r64_rm64_imm8, RAX, RCX, SIMM8_A)
 );
 
 testing!(
@@ -764,7 +786,7 @@ testing_memory!(
 testing!(
     test_bt_imm8,
     gpr(),
-    instruction!(Bt_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Bt_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(test_bts, gpr(), instruction!(Bts_rm64_r64, RAX, RCX));
@@ -779,7 +801,7 @@ testing_memory!(
 testing!(
     test_bts_imm8,
     gpr(),
-    instruction!(Bts_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Bts_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(test_btr, gpr(), instruction!(Btr_rm64_r64, RAX, RCX));
@@ -794,7 +816,7 @@ testing_memory!(
 testing!(
     test_btr_imm8,
     gpr(),
-    instruction!(Btr_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Btr_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(test_btc, gpr(), instruction!(Btc_rm64_r64, RAX, RCX));
@@ -809,7 +831,7 @@ testing_memory!(
 testing!(
     test_btc_imm8,
     gpr(),
-    instruction!(Btc_rm64_imm8, RAX, IMM8_A as i32)
+    instruction!(Btc_rm64_imm8, RAX, SIMM8_A)
 );
 
 testing!(test_xchg, gpr(), instruction!(Xchg_rm64_r64, RAX, RCX));

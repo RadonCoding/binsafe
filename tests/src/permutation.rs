@@ -6,7 +6,9 @@ use runtime::vm::{
 };
 use std::rc::Rc;
 
-use crate::{encrypt, instruction, Difference, Executor, State, FAKE_BRANCH_ADDRESS, IMM32_A};
+use crate::{
+    encrypt, instruction, Difference, Executor, State, FAKE_BRANCH_ADDRESS, IMM64_A, SIMM32_A,
+};
 
 #[derive(Default)]
 struct Enumerator {
@@ -155,10 +157,10 @@ fn test_permutation() {
         &[
             instruction!(Mov_r64_rm64, Register::RBX, Register::RAX),
             instruction!(Mov_r64_rm64, Register::RCX, Register::RBX),
-            instruction!(Cmp_rm64_imm32, Register::RCX, IMM32_A),
+            instruction!(Cmp_rm64_imm32, Register::RCX, SIMM32_A),
             instruction!(branch Je_rel8_64, FAKE_BRANCH_ADDRESS),
         ],
-        State::default().with(VMReg::Rax, IMM32_A),
+        State::default().with(VMReg::Rax, IMM64_A),
         &mut [],
     );
 }
