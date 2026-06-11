@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{r8, r9, rax, r12, rcx};
+use iced_x86::code_asm::{r12, r8, r9, rax, rcx};
 
 use crate::{
     runtime::Runtime,
@@ -7,7 +7,7 @@ use crate::{
 };
 
 // unsigned char* (unsigned char*)
-pub fn build(rt:  &mut Runtime) {
+pub fn build(rt: &mut Runtime) {
     // load r9
     scratch::load(rt, r12, r9);
 

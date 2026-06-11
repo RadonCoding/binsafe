@@ -24,14 +24,14 @@ pub fn wide<O: Encode + 'static>(
     instruction: &Instruction,
     make: impl Fn(VMWidth) -> O,
 ) -> Option<Vec<Rc<dyn Encode>>> {
+    let mut operations = Vec::<Rc<dyn Encode>>::new();
+
     let width = operation_width(instruction, instruction.op0_kind());
 
     let accumulator = match width {
         VMWidth::Higher8 => VMWidth::Lower8,
         other => other,
     };
-
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
 
     operations.push(Rc::new(LoadRegister {
         width: accumulator,
