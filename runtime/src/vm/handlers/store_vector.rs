@@ -23,7 +23,7 @@ pub fn build(rt: &mut Runtime) {
     // mov rax, [r12 + ...]
     utils::vreg::load_reg(rt, r12, VMReg::VVector, rax);
 
-    utils::width::dispatch_lane_or_vector(
+    utils::width::dispatch_scalar(
         rt,
         r8b,
         &mut epilogue,

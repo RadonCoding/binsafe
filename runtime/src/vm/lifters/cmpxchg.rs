@@ -10,7 +10,7 @@ use crate::vm::encoders::{
 use crate::vm::lifters::{branch::cmp, operation_width};
 
 pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
-    let destination_width = operation_width(instruction, instruction.op0_kind());
+    let destination_width = operation_width(instruction, 0);
     let accumulator_width = match destination_width {
         VMWidth::Higher8 => VMWidth::Lower8,
         other => other,

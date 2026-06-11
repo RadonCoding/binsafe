@@ -9,7 +9,7 @@ use crate::vm::encoders::{
 use crate::vm::lifters::operation_width;
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
-    let destination_width = operation_width(instruction, instruction.op0_kind());
+    let destination_width = operation_width(instruction, 0);
     let source_register = VMReg::from(instruction.op1_register());
 
     let mut operations = Vec::<Rc<dyn Encode>>::new();

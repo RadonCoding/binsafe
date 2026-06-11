@@ -12,6 +12,7 @@ pub mod cmov;
 pub mod cmpxchg;
 pub mod divide;
 pub mod extend;
+pub mod integer;
 pub mod lea;
 pub mod multiply;
 pub mod pcmpeqb;
@@ -25,9 +26,11 @@ pub mod unary;
 pub mod xadd;
 pub mod xchg;
 
-fn operation_width(instruction: &Instruction, kind: OpKind) -> VMWidth {
+fn operation_width(instruction: &Instruction, operand: u32) -> VMWidth {
+    let kind = instruction.op_kind(operand);
+
     match kind {
-        OpKind::Register => VMWidth::from(instruction.op0_register()),
+        OpKind::Register => VMWidth::from(instruction.op_register(operand)),
         OpKind::Memory => match instruction.memory_size().size() {
             1 => VMWidth::Lower8,
             2 => VMWidth::Lower16,

@@ -13,9 +13,9 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
 
     match (instruction.op0_kind(), instruction.op1_kind()) {
         (OpKind::Register, OpKind::Register) => {
-            let destination_width = operation_width(instruction, instruction.op0_kind());
+            let destination_width = operation_width(instruction, 0);
             let destination_register = VMReg::from(instruction.op0_register());
-            let source_width = operation_width(instruction, instruction.op1_kind());
+            let source_width = operation_width(instruction, 1);
             let source_register = VMReg::from(instruction.op1_register());
 
             operations.push(Rc::new(LoadRegister {

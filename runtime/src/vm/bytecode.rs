@@ -9,8 +9,8 @@ use strum_macros::EnumIter;
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    arithmetic, bitwise, branch, bsr, bswap, bt, cmov, cmpxchg, divide, extend, lea, multiply,
-    pcmpeqb, pmovskb, scalar, set, stack, transfer, tzcnt, xadd, xchg,
+    arithmetic, bitwise, branch, bsr, bswap, bt, cmov, cmpxchg, divide, extend, integer, lea,
+    multiply, pcmpeqb, pmovskb, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -554,7 +554,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
     let mut output: Vec<Rc<dyn Encode>> = Vec::new();
 
     for instruction in instructions {
-        let ops = match instruction.mnemonic() {
+        let operations = match instruction.mnemonic() {
             Mnemonic::Ja
             | Mnemonic::Jae
             | Mnemonic::Jb
@@ -624,6 +624,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Movupd
             | Mnemonic::Movdqa
             | Mnemonic::Movdqu => transfer::encode(instruction)?,
+            Mnemonic::Movd | Mnemonic::Movq => integer::encode(instruction)?,
             Mnemonic::Movss | Mnemonic::Movsd => scalar::encode(instruction)?,
             Mnemonic::Movzx | Mnemonic::Movsx | Mnemonic::Movsxd => extend::encode(instruction)?,
             Mnemonic::Push | Mnemonic::Pop => stack::encode(instruction)?,
@@ -667,7 +668,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             _ => return None,
         };
 
-        output.extend(ops);
+        output.extend(operations);
     }
 
     Some(output)

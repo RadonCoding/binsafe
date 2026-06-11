@@ -22,7 +22,7 @@ pub fn wide<O: Encode + 'static>(
     instruction: &Instruction,
     make: impl Fn(VMWidth) -> O,
 ) -> Option<Vec<Rc<dyn Encode>>> {
-    let width = operation_width(instruction, instruction.op0_kind());
+    let width = operation_width(instruction, 0);
 
     let mut operations = Vec::<Rc<dyn Encode>>::new();
 

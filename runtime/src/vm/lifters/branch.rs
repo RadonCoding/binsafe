@@ -73,7 +73,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
 
         Code::Retnq | Code::Retnq_imm16 => {
             let immediate_width = if instruction.op_count() > 0 {
-                operation_width(instruction, instruction.op0_kind())
+                operation_width(instruction, 0)
             } else {
                 VMWidth::Lower8
             };
