@@ -4,7 +4,7 @@ use std::rc::Rc;
 use crate::vm::bytecode::{VMMem, VMVec, VMWidth};
 use crate::vm::encoders::{
     load_address::LoadAddress, load_memory::LoadMemory, load_vector::LoadVector,
-    packed_byte_equal::PackedByteEqual, store_vector::StoreVector, Encode,
+    packed_byte_equal::PackedByteEqual, store_merge::StoreMerge, Encode,
 };
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
@@ -40,7 +40,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         width: VMWidth::Lower128,
     }));
 
-    operations.push(Rc::new(StoreVector {
+    operations.push(Rc::new(StoreMerge {
         width: VMWidth::Lower128,
         destination: destination_vector,
     }));

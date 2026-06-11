@@ -1,9 +1,9 @@
 use crate::vm::bytecode::{VMMem, VMReg, VMVec, VMWidth};
+use crate::vm::encoders::store_extend::StoreExtend;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::{
     load_address::LoadAddress, load_memory::LoadMemory, load_register::LoadRegister,
-    load_vector::LoadVector, store_register::StoreRegister, store_vector::StoreVector,
-    vector_xor::VectorXor, Encode,
+    load_vector::LoadVector, store_register::StoreRegister, Encode,
 };
 use iced_x86::{Instruction, Mnemonic, OpKind};
 use std::rc::Rc;
@@ -34,25 +34,6 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             }
         }
         OpKind::Memory => {
-            let destination_width = VMWidth::from(instruction.op0_register());
-            let destination_vector = VMVec::from(instruction.op0_register());
-
-            operations.push(Rc::new(LoadVector {
-                width: destination_width,
-                source: destination_vector,
-            }));
-            operations.push(Rc::new(LoadVector {
-                width: destination_width,
-                source: destination_vector,
-            }));
-            operations.push(Rc::new(VectorXor {
-                width: destination_width,
-            }));
-            operations.push(Rc::new(StoreVector {
-                width: destination_width,
-                destination: destination_vector,
-            }));
-
             operations.push(Rc::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
@@ -66,28 +47,9 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     match instruction.op0_kind() {
         OpKind::Register => {
             if instruction.op0_register().is_vector_register() {
-                let destination_width = VMWidth::from(instruction.op0_register());
                 let destination_vector = VMVec::from(instruction.op0_register());
 
-                if instruction.op1_kind() == OpKind::Register {
-                    operations.push(Rc::new(LoadVector {
-                        width: destination_width,
-                        source: destination_vector,
-                    }));
-                    operations.push(Rc::new(LoadVector {
-                        width: destination_width,
-                        source: destination_vector,
-                    }));
-                    operations.push(Rc::new(VectorXor {
-                        width: destination_width,
-                    }));
-                    operations.push(Rc::new(StoreVector {
-                        width: destination_width,
-                        destination: destination_vector,
-                    }));
-                }
-
-                operations.push(Rc::new(StoreVector {
+                operations.push(Rc::new(StoreExtend {
                     width: scalar_width,
                     destination: destination_vector,
                 }));

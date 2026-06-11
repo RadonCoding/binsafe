@@ -4,7 +4,7 @@ use std::rc::Rc;
 use crate::vm::bytecode::{VMMem, VMVec, VMWidth};
 use crate::vm::encoders::{
     and::And, load_address::LoadAddress, load_memory::LoadMemory, load_vector::LoadVector, or::Or,
-    store_vector::StoreVector, vector_and::VectorAnd, vector_and_not::VectorAndNot,
+    store_merge::StoreMerge, vector_and::VectorAnd, vector_and_not::VectorAndNot,
     vector_or::VectorOr, vector_xor::VectorXor, xor::Xor, Encode,
 };
 use crate::vm::lifters::arithmetic::{self, Tail};
@@ -52,7 +52,7 @@ fn vector<O: Encode + 'static>(
 
     operations.push(Rc::new(make(width)));
 
-    operations.push(Rc::new(StoreVector { width, destination }));
+    operations.push(Rc::new(StoreMerge { width, destination }));
 
     Some(operations)
 }

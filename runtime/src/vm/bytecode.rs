@@ -29,7 +29,8 @@ mapped! {
         // Store
         StoreRegister,
         StoreMemory,
-        StoreVector,
+        StoreMerge,
+        StoreExtend,
         // Arithmetic
         Add,
         Sub,
@@ -68,8 +69,6 @@ mapped! {
         VectorOr,
         VectorXor,
         VectorAndNot,
-        // Nop
-        Nop,
     }
 }
 
