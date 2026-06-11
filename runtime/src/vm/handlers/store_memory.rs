@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, ptr, r8, r9, r9b, r9d, r9w, rax, r12, rcx, xmm0, ymm0};
+use iced_x86::code_asm::{al, ptr, r12, r8, r9, r9b, r9d, r9w, rax, rcx, xmm0, ymm0};
 
 use crate::{
     runtime::Runtime,
@@ -6,7 +6,7 @@ use crate::{
 };
 
 // unsigned char* (unsigned char*)
-pub fn build(rt:  &mut Runtime) {
+pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // al -> width
@@ -15,22 +15,10 @@ pub fn build(rt:  &mut Runtime) {
     // load r8
     scratch::load(rt, r12, r8);
 
-    utils::width::dispatch_size(
+    utils::width::dispatch_register_or_vector(
         rt,
         al,
         &mut epilogue,
-        |rt| {
-            // load ymm0
-            scratch::load_256(rt, r12, ymm0);
-            // vmovups [r8], ymm0
-            rt.asm.vmovups(ptr(r8), ymm0).unwrap();
-        },
-        |rt| {
-            // load xmm0
-            scratch::load_128(rt, r12, xmm0);
-            // movups [r8], xmm0
-            rt.asm.movups(ptr(r8), xmm0).unwrap();
-        },
         |rt| {
             // load r9
             scratch::load(rt, r12, r9);
@@ -49,11 +37,28 @@ pub fn build(rt:  &mut Runtime) {
             // mov [r8], r9w
             rt.asm.mov(ptr(r8), r9w).unwrap();
         },
+        |_| {},
         |rt| {
             // load r9
             scratch::load(rt, r12, r9);
             // mov [r8], r9b
             rt.asm.mov(ptr(r8), r9b).unwrap();
+        },
+        |_| {},
+        |_| {},
+        |_| {},
+        |_| {},
+        |rt| {
+            // load xmm0
+            scratch::load_128(rt, r12, xmm0);
+            // movups [r8], xmm0
+            rt.asm.movups(ptr(r8), xmm0).unwrap();
+        },
+        |rt| {
+            // load ymm0
+            scratch::load_256(rt, r12, ymm0);
+            // vmovups [r8], ymm0
+            rt.asm.vmovups(ptr(r8), ymm0).unwrap();
         },
     );
 

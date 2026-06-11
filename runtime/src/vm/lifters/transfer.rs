@@ -12,21 +12,19 @@ use crate::vm::lifters::{is_immediate, operation_immediate, operation_width};
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let mut operations = Vec::<Rc<dyn Encode>>::new();
 
-    let destination_width = operation_width(instruction, instruction.op0_kind());
+    let destination_width = operation_width(instruction, 0);
 
     match instruction.op1_kind() {
         OpKind::Register => {
-            let register = instruction.op1_register();
-
-            if vector(destination_width) {
-                let source_register = VMVec::from(register);
+            if instruction.op1_register().is_vector_register() {
+                let source_vector = VMVec::from(instruction.op1_register());
                 operations.push(Rc::new(LoadVector {
                     width: destination_width,
-                    source: source_register,
+                    source: source_vector,
                 }));
             } else {
-                let source_register = VMReg::from(register);
-                let source_width = VMWidth::from(register);
+                let source_register = VMReg::from(instruction.op1_register());
+                let source_width = VMWidth::from(instruction.op1_register());
                 operations.push(Rc::new(LoadRegister {
                     width: source_width,
                     source: source_register,
@@ -43,7 +41,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         }
         kind if is_immediate(kind) => {
             let immediate_source = operation_immediate(instruction, kind);
-            let immediate_width = operation_width(instruction, kind);
+            let immediate_width = operation_width(instruction, 1);
             operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
                 source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),
@@ -54,16 +52,14 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
 
     match instruction.op0_kind() {
         OpKind::Register => {
-            let register = instruction.op0_register();
-
-            if vector(destination_width) {
-                let destination_register = VMVec::from(register);
+            if instruction.op0_register().is_vector_register() {
+                let destination_vector = VMVec::from(instruction.op0_register());
                 operations.push(Rc::new(StoreVector {
                     width: destination_width,
-                    destination: destination_register,
+                    destination: destination_vector,
                 }));
             } else {
-                let destination_register = VMReg::from(register);
+                let destination_register = VMReg::from(instruction.op0_register());
                 operations.push(Rc::new(StoreRegister {
                     width: destination_width,
                     destination: destination_register,
@@ -82,8 +78,4 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     }
 
     Some(operations)
-}
-
-fn vector(width: VMWidth) -> bool {
-    matches!(width, VMWidth::Lower128 | VMWidth::Lower256)
 }

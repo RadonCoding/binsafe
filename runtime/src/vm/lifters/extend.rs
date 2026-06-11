@@ -9,6 +9,8 @@ use crate::vm::encoders::{
 use crate::vm::lifters::operation_width;
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+    let mut operations = Vec::<Rc<dyn Encode>>::new();
+
     let signed = matches!(instruction.mnemonic(), Mnemonic::Movsx | Mnemonic::Movsxd);
 
     let destination_width = match VMWidth::from(instruction.op0_register()) {
@@ -17,29 +19,22 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     };
     let destination_register = VMReg::from(instruction.op0_register());
 
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+    let source_width = operation_width(instruction, 1);
+    let source_width = if signed {
+        source_width.signed()
+    } else {
+        source_width
+    };
 
     match instruction.op1_kind() {
         OpKind::Register => {
             let source_register = VMReg::from(instruction.op1_register());
-            let source_width = VMWidth::from(instruction.op1_register());
-            let source_width = if signed {
-                source_width.signed()
-            } else {
-                source_width
-            };
             operations.push(Rc::new(LoadRegister {
                 width: source_width,
                 source: source_register,
             }));
         }
         OpKind::Memory => {
-            let source_width = operation_width(instruction, OpKind::Memory);
-            let source_width = if signed {
-                source_width.signed()
-            } else {
-                source_width
-            };
             operations.push(Rc::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));

@@ -929,6 +929,28 @@ testing!(
     instruction!(Pmovmskb_r64_xmm, RAX, XMM1)
 );
 
+testing!(test_movd, simd(), instruction!(Movd_xmm_rm32, XMM0, EAX));
+testing_simd_load!(
+    test_movd_load,
+    [IMM128_B, 0u128],
+    instruction!(Movd_xmm_rm32, XMM0, MemoryOperand::with_base(RAX))
+);
+testing_simd_store!(
+    test_movd_store,
+    instruction!(Movd_rm32_xmm, MemoryOperand::with_base(RAX), XMM1)
+);
+
+testing!(test_movq, simd(), instruction!(Movq_xmm_rm64, XMM0, RAX));
+testing_simd_load!(
+    test_movq_load,
+    [IMM128_B, 0u128],
+    instruction!(Movq_xmm_rm64, XMM0, MemoryOperand::with_base(RAX))
+);
+testing_simd_store!(
+    test_movq_store,
+    instruction!(Movq_rm64_xmm, MemoryOperand::with_base(RAX), XMM1)
+);
+
 testing!(
     test_movaps,
     simd(),
