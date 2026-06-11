@@ -23,6 +23,7 @@ fn push(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     match instruction.op0_kind() {
         OpKind::Register => {
             let source_register = VMReg::from(instruction.op0_register());
+
             operations.push(Rc::new(LoadRegister {
                 width: VMWidth::Lower64,
                 source: source_register,
@@ -39,6 +40,7 @@ fn push(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         OpKind::Immediate8 | OpKind::Immediate16 | OpKind::Immediate32 | OpKind::Immediate8to64 => {
             let immediate_source = operation_immediate(instruction, instruction.op0_kind());
             let immediate_width = operation_width(instruction, instruction.op0_kind());
+
             operations.push(Rc::new(LoadImmediate {
                 width: immediate_width,
                 source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),
@@ -60,6 +62,7 @@ fn pop(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     match instruction.op0_kind() {
         OpKind::Register => {
             let destination_register = VMReg::from(instruction.op0_register());
+
             operations.push(Rc::new(StoreRegister {
                 width: VMWidth::Lower64,
                 destination: destination_register,

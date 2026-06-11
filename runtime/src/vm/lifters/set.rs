@@ -81,16 +81,18 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
 
     match instruction.op0_kind() {
         OpKind::Register => {
+            let destination_register = VMReg::from(instruction.op0_register());
+
             operations.push(zero());
             operations.push(Rc::new(StoreRegister {
                 width: VMWidth::Lower8,
-                destination: VMReg::from(instruction.op0_register()),
+                destination: destination_register,
             }));
             body = vec![
                 one(),
                 Rc::new(StoreRegister {
                     width: VMWidth::Lower8,
-                    destination: VMReg::from(instruction.op0_register()),
+                    destination: destination_register,
                 }),
             ];
         }

@@ -68,14 +68,14 @@ pub fn deadzones(operations: &mut [Rc<dyn Encode>], effect: impl Fn(&Effect) -> 
     let mut live = true;
 
     for (i, (reads, writes)) in events.iter().enumerate().rev() {
-        if *reads {
-            live = true;
+        if *writes {
+            live = false;
         }
         if !live {
             deadzones[i] = true;
         }
-        if *writes {
-            live = false;
+        if *reads {
+            live = true;
         }
     }
 

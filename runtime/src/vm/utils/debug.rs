@@ -6,7 +6,9 @@ use crate::{
 };
 use iced_x86::code_asm::{ptr, qword_ptr, r10, r11, r8, r9, rax, rcx, rdx, rsp, AsmRegister64};
 
-pub fn print_s(rt:  &mut Runtime, s: &str) {
+pub fn print_s(rt: &mut Runtime, s: &str) {
+    // pushfq
+    rt.asm.pushfq().unwrap();
     // push rax
     rt.asm.push(rax).unwrap();
     // push rcx
@@ -67,9 +69,13 @@ pub fn print_s(rt:  &mut Runtime, s: &str) {
     rt.asm.pop(rcx).unwrap();
     // pop rax
     rt.asm.pop(rax).unwrap();
+    // popfq
+    rt.asm.popfq().unwrap();
 }
 
-pub fn print_q(rt:  &mut Runtime, q: AsmRegister64) {
+pub fn print_q(rt: &mut Runtime, q: AsmRegister64) {
+    // pushfq
+    rt.asm.pushfq().unwrap();
     // push rax
     rt.asm.push(rax).unwrap();
     // push rcx
@@ -114,9 +120,13 @@ pub fn print_q(rt:  &mut Runtime, q: AsmRegister64) {
     rt.asm.pop(rcx).unwrap();
     // pop rax
     rt.asm.pop(rax).unwrap();
+    // popfq
+    rt.asm.popfq().unwrap();
 }
 
-fn print_thread_prefix(rt:  &mut Runtime) {
+fn print_thread_prefix(rt: &mut Runtime) {
+    // pushfq
+    rt.asm.pushfq().unwrap();
     // push rax
     rt.asm.push(rax).unwrap();
     // mov rax, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
@@ -128,11 +138,15 @@ fn print_thread_prefix(rt:  &mut Runtime) {
 
     // pop rax
     rt.asm.pop(rax).unwrap();
+    // popfq
+    rt.asm.popfq().unwrap();
 }
 
-pub fn start_profiling(rt:  &mut Runtime, message: &str) {
+pub fn start_profiling(rt: &mut Runtime, message: &str) {
     use iced_x86::code_asm::al;
 
+    // pushfq
+    rt.asm.pushfq().unwrap();
     // push rax
     rt.asm.push(rax).unwrap();
     // push rdx
@@ -156,11 +170,15 @@ pub fn start_profiling(rt:  &mut Runtime, message: &str) {
     rt.asm.pop(rdx).unwrap();
     // pop rax
     rt.asm.pop(rax).unwrap();
+    // popfq
+    rt.asm.popfq().unwrap();
 }
 
-pub fn stop_profiling(rt:  &mut Runtime, message: &str) {
+pub fn stop_profiling(rt: &mut Runtime, message: &str) {
     use iced_x86::code_asm::al;
 
+    // pushfq
+    rt.asm.pushfq().unwrap();
     // push rdx
     rt.asm.push(rdx).unwrap();
     // push rax
@@ -188,4 +206,6 @@ pub fn stop_profiling(rt:  &mut Runtime, message: &str) {
     rt.asm.pop(rax).unwrap();
     // pop rdx
     rt.asm.pop(rdx).unwrap();
+    // popfq
+    rt.asm.popfq().unwrap();
 }

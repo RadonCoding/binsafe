@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::c_void,
     hint, mem, ptr,
     sync::{
@@ -105,30 +105,61 @@ static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static NATIVE_HANDLER: OnceLock<()> = OnceLock::new();
 
+static VIRTUAL_REGISTRY: LazyLock<Mutex<HashSet<u32>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static VIRTUAL_HANDLER: OnceLock<()> = OnceLock::new();
+
 const XSTATE_AVX: u32 = 2;
 const XSTATE_MASK_AVX: u64 = 4;
 
+unsafe extern "system" fn virtual_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
+    if VIRTUAL_REGISTRY
+        .lock()
+        .unwrap()
+        .contains(&GetCurrentThreadId())
+    {
+        let ctx = (*info).ContextRecord;
+
+        (*ctx).Rsp = ((*ctx).Rsp & !0xF) - 8;
+        (*ctx).Rcx = 0;
+        (*ctx).Rip = ExitThread as *const () as u64;
+
+        eprintln!(
+            "EXCEPTION: 0x{:08X}",
+            (*(*info).ExceptionRecord).ExceptionCode.0
+        );
+
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    EXCEPTION_CONTINUE_SEARCH
+}
+
 unsafe extern "system" fn native_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
-    if (*(*info).ExceptionRecord).ExceptionCode == EXCEPTION_SINGLE_STEP {
-        let entry = NATIVE_REGISTRY
-            .lock()
-            .unwrap()
-            .get(&GetCurrentThreadId())
-            .copied();
+    let entry = NATIVE_REGISTRY
+        .lock()
+        .unwrap()
+        .get(&GetCurrentThreadId())
+        .copied();
 
-        if let Some((context, ready)) = entry {
+    if let Some((context, ready)) = entry {
+        (*(ready as *const AtomicBool)).store(true, Ordering::SeqCst);
+
+        if (*(*info).ExceptionRecord).ExceptionCode == EXCEPTION_SINGLE_STEP {
             ptr::copy_nonoverlapping((*info).ContextRecord, context as *mut CONTEXT, 1);
-
-            (*(ready as *const AtomicBool)).store(true, Ordering::SeqCst);
-
-            let record = (*info).ContextRecord;
-            (*record).EFlags &= !0x100;
-            (*record).Rsp = ((*record).Rsp & !0xF) - 8;
-            (*record).Rcx = 0;
-            (*record).Rip = ExitThread as *const () as u64;
-
-            return EXCEPTION_CONTINUE_EXECUTION;
+        } else {
+            eprintln!(
+                "EXCEPTION: 0x{:08X}",
+                (*(*info).ExceptionRecord).ExceptionCode.0
+            );
         }
+
+        let ctx = (*info).ContextRecord;
+        (*ctx).EFlags &= !VMFlag::Trap.bit32();
+        (*ctx).Rsp = ((*ctx).Rsp & !0xF) - 8;
+        (*ctx).Rcx = 0;
+        (*ctx).Rip = ExitThread as *const () as u64;
+
+        return EXCEPTION_CONTINUE_EXECUTION;
     }
 
     EXCEPTION_CONTINUE_SEARCH
@@ -392,6 +423,8 @@ impl Executor {
             ptr::copy_nonoverlapping(code.as_ptr(), self.mem as *mut u8, code.len());
         }
 
+        let mut thread_id = 0;
+
         let thread = unsafe {
             CreateThread(
                 None,
@@ -402,15 +435,23 @@ impl Executor {
                 >(self.mem as *const ())),
                 Some(self.mem as *mut c_void),
                 THREAD_CREATE_RUN_IMMEDIATELY,
-                None,
+                Some(&mut thread_id),
             )
             .unwrap()
         };
+
+        VIRTUAL_HANDLER.get_or_init(|| unsafe {
+            AddVectoredExceptionHandler(1, Some(virtual_handler));
+        });
+
+        VIRTUAL_REGISTRY.lock().unwrap().insert(thread_id);
 
         unsafe {
             WaitForSingleObject(thread, INFINITE);
             CloseHandle(thread).unwrap();
         }
+
+        VIRTUAL_REGISTRY.lock().unwrap().remove(&thread_id);
 
         State {
             registers: REGISTERS
