@@ -92,7 +92,7 @@ mapped! {
         #[cfg(debug_assertions)]
         Print,
         #[cfg(debug_assertions)]
-        Fmtdec,
+        Format,
     }
 }
 
@@ -478,7 +478,7 @@ impl Runtime {
             #[cfg(debug_assertions)]
             (FnDef::Print, functions::print::build),
             #[cfg(debug_assertions)]
-            (FnDef::Fmtdec, functions::fmtdec::build),
+            (FnDef::Format, functions::format::build),
         ];
 
         self.define_data_byte(DataDef::VehStart, 0x0);
