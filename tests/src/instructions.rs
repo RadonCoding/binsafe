@@ -1,3 +1,5 @@
+use std::slice;
+
 use iced_x86::MemoryOperand;
 use iced_x86::Register::{AL, CL, EAX, RAX, RBX, RCX, XMM0, XMM1, XMM2};
 use iced_x86::{Instruction, RflagsBits};
@@ -539,7 +541,7 @@ fn test_mov_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_A),
         instruction!(Mov_r64_rm64, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -551,7 +553,7 @@ fn test_mov_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_A),
         instruction!(Mov_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -563,7 +565,7 @@ fn test_movzx_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Movzx_r64_rm8, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -575,7 +577,7 @@ fn test_movsx_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Movsx_r64_rm8, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -587,7 +589,7 @@ fn test_movsxd_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Movsxd_r64_rm32, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -599,7 +601,7 @@ fn test_add_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_A),
         instruction!(Add_r64_rm64, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -611,7 +613,7 @@ fn test_add_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Add_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -623,7 +625,7 @@ fn test_sub_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_A),
         instruction!(Sub_r64_rm64, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -635,7 +637,7 @@ fn test_sub_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Sub_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -648,7 +650,7 @@ fn test_adc_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_A),
         instruction!(Adc_r64_rm64, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -661,7 +663,7 @@ fn test_adc_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Adc_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -674,7 +676,7 @@ fn test_sbb_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_A),
         instruction!(Sbb_r64_rm64, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -687,7 +689,7 @@ fn test_sbb_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Sbb_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -699,7 +701,7 @@ fn test_cmp_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_A),
         instruction!(Cmp_r64_rm64, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -711,7 +713,7 @@ fn test_cmp_store() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Cmp_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -723,7 +725,7 @@ fn test_test_store() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Test_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -735,7 +737,7 @@ fn test_and_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_A),
         instruction!(And_r64_rm64, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -747,7 +749,7 @@ fn test_and_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(And_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -759,7 +761,7 @@ fn test_or_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_A),
         instruction!(Or_r64_rm64, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -771,7 +773,7 @@ fn test_or_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Or_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -783,7 +785,7 @@ fn test_xor_load() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_A),
         instruction!(Xor_r64_rm64, RCX, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -795,7 +797,7 @@ fn test_xor_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Xor_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -805,7 +807,7 @@ fn test_inc_store() {
     check_with_memory(
         baseline().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Inc_rm64, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -815,7 +817,7 @@ fn test_dec_store() {
     check_with_memory(
         baseline().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Dec_rm64, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -825,7 +827,7 @@ fn test_neg_store() {
     check_with_memory(
         baseline().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Neg_rm64, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -835,7 +837,7 @@ fn test_not_store() {
     check_with_memory(
         baseline().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Not_rm64, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -847,7 +849,7 @@ fn test_mul_load() {
             .with(VMReg::Rax, IMM64_A)
             .with(VMReg::Rcx, buf.as_ptr() as u64),
         instruction!(Mul_rm64, MemoryOperand::with_base(RCX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -859,7 +861,7 @@ fn test_imul_load() {
             .with(VMReg::Rax, IMM64_A)
             .with(VMReg::Rcx, buf.as_ptr() as u64),
         instruction!(Imul_rm64, MemoryOperand::with_base(RCX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -871,7 +873,7 @@ fn test_imul2_load() {
             .with(VMReg::Rax, IMM64_A)
             .with(VMReg::Rcx, buf.as_ptr() as u64),
         instruction!(Imul_r64_rm64, RAX, MemoryOperand::with_base(RCX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -884,7 +886,7 @@ fn test_div_load() {
             .with(VMReg::Rdx, 0u64)
             .with(VMReg::Rcx, buf.as_ptr() as u64),
         instruction!(Div_rm64, MemoryOperand::with_base(RCX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -897,7 +899,7 @@ fn test_idiv_load() {
             .with(VMReg::Rdx, 0u64)
             .with(VMReg::Rcx, buf.as_ptr() as u64),
         instruction!(Idiv_rm64, MemoryOperand::with_base(RCX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -909,7 +911,7 @@ fn test_tzcnt_load() {
             .with(VMReg::Rax, IMM64_A)
             .with(VMReg::Rcx, buf.as_ptr() as u64),
         instruction!(Tzcnt_r64_rm64, RAX, MemoryOperand::with_base(RCX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -921,7 +923,7 @@ fn test_bsr_load() {
             .with(VMReg::Rax, IMM64_A)
             .with(VMReg::Rcx, buf.as_ptr() as u64),
         instruction!(Bsr_r64_rm64, RAX, MemoryOperand::with_base(RCX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -933,7 +935,7 @@ fn test_bt_store() {
             .with(VMReg::Rax, buf.as_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Bt_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 8) },
     );
 }
 
@@ -945,7 +947,7 @@ fn test_bts_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Bts_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -957,7 +959,7 @@ fn test_btr_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Btr_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -969,7 +971,7 @@ fn test_btc_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Btc_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -981,7 +983,7 @@ fn test_xchg_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Xchg_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -993,7 +995,7 @@ fn test_xadd_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Xadd_rm64_r64, MemoryOperand::with_base(RAX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -1006,7 +1008,7 @@ fn test_cmpxchg_store() {
             .with(VMReg::Rbx, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM64_B),
         instruction!(Cmpxchg_rm64_r64, MemoryOperand::with_base(RBX), RCX),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -1018,7 +1020,7 @@ fn test_rol_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM8_A),
         instruction!(Rol_rm64_CL, MemoryOperand::with_base(RAX), CL),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -1030,7 +1032,7 @@ fn test_ror_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM8_A),
         instruction!(Ror_rm64_CL, MemoryOperand::with_base(RAX), CL),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -1042,7 +1044,7 @@ fn test_shl_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM8_A),
         instruction!(Shl_rm64_CL, MemoryOperand::with_base(RAX), CL),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -1054,7 +1056,7 @@ fn test_shr_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM8_A),
         instruction!(Shr_rm64_CL, MemoryOperand::with_base(RAX), CL),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -1066,7 +1068,7 @@ fn test_sar_store() {
             .with(VMReg::Rax, buf.as_mut_ptr() as u64)
             .with(VMReg::Rcx, IMM8_A),
         instruction!(Sar_rm64_CL, MemoryOperand::with_base(RAX), CL),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 8) },
     );
 }
 
@@ -1236,7 +1238,7 @@ fn test_movaps_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Movaps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1246,7 +1248,7 @@ fn test_movaps_store() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Movaps_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1256,7 +1258,7 @@ fn test_movups_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Movups_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1266,7 +1268,7 @@ fn test_movups_store() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Movups_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1276,7 +1278,7 @@ fn test_movapd_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Movapd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1286,7 +1288,7 @@ fn test_movapd_store() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Movapd_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1296,7 +1298,7 @@ fn test_movupd_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Movupd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1306,7 +1308,7 @@ fn test_movupd_store() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Movupd_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1316,7 +1318,7 @@ fn test_movdqa_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Movdqa_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1326,7 +1328,7 @@ fn test_movdqa_store() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Movdqa_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1336,7 +1338,7 @@ fn test_movdqu_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Movdqu_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1346,7 +1348,7 @@ fn test_movdqu_store() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Movdqu_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1356,7 +1358,7 @@ fn test_movss_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Movss_xmm_xmmm32, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1366,7 +1368,7 @@ fn test_movss_store() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Movss_xmmm32_xmm, MemoryOperand::with_base(RAX), XMM1),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1376,7 +1378,7 @@ fn test_movsd_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Movsd_xmm_xmmm64, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1386,7 +1388,7 @@ fn test_movsd_store() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_mut_ptr() as u64),
         instruction!(Movsd_xmmm64_xmm, MemoryOperand::with_base(RAX), XMM1),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1396,7 +1398,7 @@ fn test_pand_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Pand_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1406,7 +1408,7 @@ fn test_por_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Por_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1416,7 +1418,7 @@ fn test_pxor_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Pxor_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1426,7 +1428,7 @@ fn test_pandn_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Pandn_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1436,7 +1438,7 @@ fn test_andps_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Andps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1446,7 +1448,7 @@ fn test_andpd_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Andpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1456,7 +1458,7 @@ fn test_andnps_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Andnps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1466,7 +1468,7 @@ fn test_andnpd_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Andnpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1476,7 +1478,7 @@ fn test_orps_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Orps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1486,7 +1488,7 @@ fn test_orpd_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Orpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1496,7 +1498,7 @@ fn test_xorps_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Xorps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1506,7 +1508,7 @@ fn test_xorpd_load() {
     check_with_memory(
         simd().with(VMReg::Rax, buf.as_ptr() as u64),
         instruction!(Xorpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX)),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1521,7 +1523,7 @@ fn test_vandps_load() {
             XMM1,
             MemoryOperand::with_base(RAX)
         ),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1536,7 +1538,7 @@ fn test_vpxor_load() {
             XMM1,
             MemoryOperand::with_base(RAX)
         ),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }
 
@@ -1551,6 +1553,6 @@ fn test_vxorps_load() {
             XMM1,
             MemoryOperand::with_base(RAX)
         ),
-        unsafe { std::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
+        unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
     );
 }

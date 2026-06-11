@@ -15,7 +15,7 @@ use crate::vm::transform::address;
 
 struct Access {
     memory: VMMem,
-    width: i64,
+    width: usize,
     write: bool,
 }
 
@@ -100,7 +100,7 @@ fn cleanup(operations: &mut Vec<Rc<dyn Encode>>, parked: &HashSet<usize>) {
     }
 }
 
-/// Groups operations into atoms where each atom leaves the scratch stack balanced. When the operation list does not end at depth 0 (a trailing unbalanced run), every atom built so far is merged with that run into a single atom so permute cannot reorder across it.
+/// Groups operations into atoms.
 fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
     let mut atoms = Vec::new();
     let mut current = Vec::<Rc<dyn Encode>>::new();
@@ -131,7 +131,7 @@ fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
     atoms
 }
 
-/// Splits each atom at every depth-1 cut by parking the single scratch value across the cut into a register that some later atom is about to kill.
+/// Splits each atom at every depth-1 cut.
 fn decouple(
     atoms: Vec<Vec<Rc<dyn Encode>>>,
     live: &HashSet<VMReg>,
@@ -177,7 +177,7 @@ fn cuts(atom: &Vec<Rc<dyn Encode>>) -> Vec<usize> {
     points
 }
 
-/// Finds `count` distinct registers, each fully overwritten by a 64- or 32-bit [`StoreRegister`] in some later atom and not read between the pair and that store.
+/// Finds `count` distinct registers for decoupling.
 fn vacant(
     atoms: &[Vec<Rc<dyn Encode>>],
     pair: usize,
@@ -220,7 +220,7 @@ fn vacant(
     None
 }
 
-/// Splits an atom at the given cut positions, prepending a load and appending a store of the corresponding parking register at each boundary, recording each synthetic op into `parked`.
+/// Splits an atom at the given cut positions.
 fn split(
     atom: Vec<Rc<dyn Encode>>,
     cuts: &[usize],
@@ -341,7 +341,7 @@ fn dependencies(atoms: &[Vec<Rc<dyn Encode>>]) -> (Vec<Vec<usize>>, Vec<usize>) 
     (successors, indegree)
 }
 
-/// Applies `order` to the schedulable head, appends the trailing branch atom, flattens to operations, and drops any adjacent [`VMReg::Flags`] save/restore pair.
+/// Flattens the scheduled atoms into a sequence of operations.
 fn schedule(mut atoms: Vec<Vec<Rc<dyn Encode>>>, order: &[usize]) -> Vec<Rc<dyn Encode>> {
     let tail = match atoms.iter().rposition(branches) {
         Some(i) => atoms.split_off(i),
@@ -443,9 +443,9 @@ fn accesses(atom: &Vec<Rc<dyn Encode>>) -> Option<Vec<Access>> {
         let any: &dyn Any = op;
 
         let here = if let Some(l) = any.downcast_ref::<LoadMemory>() {
-            Some((bytes(l.width), false))
+            Some((l.width.size(), false))
         } else if let Some(s) = any.downcast_ref::<StoreMemory>() {
-            Some((bytes(s.width), true))
+            Some((s.width.size(), true))
         } else {
             None
         };
@@ -486,9 +486,9 @@ fn aliases(a: &Access, b: &Access) -> bool {
         return true;
     }
 
-    let start_a = a.memory.displacement as i64;
+    let start_a = a.memory.displacement as usize;
     let end_a = start_a + a.width;
-    let start_b = b.memory.displacement as i64;
+    let start_b = b.memory.displacement as usize;
     let end_b = start_b + b.width;
 
     !(end_a <= start_b || end_b <= start_a)
@@ -497,21 +497,4 @@ fn aliases(a: &Access, b: &Access) -> bool {
 /// Whether the atom writes [`VMReg::NBranch`].
 fn branches(atom: &Vec<Rc<dyn Encode>>) -> bool {
     atom.iter().any(|op| op.branches())
-}
-
-/// Byte width of a [`VMWidth`].
-fn bytes(width: VMWidth) -> i64 {
-    if width == VMWidth::Lower256 {
-        32
-    } else if width == VMWidth::Lower128 {
-        16
-    } else if width == VMWidth::Lower64 {
-        8
-    } else if width == VMWidth::Lower32 || width == VMWidth::SLower32 {
-        4
-    } else if width == VMWidth::Lower16 || width == VMWidth::SLower16 {
-        2
-    } else {
-        1
-    }
 }
