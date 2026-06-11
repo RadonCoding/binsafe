@@ -480,10 +480,10 @@ fn aliases(a: &Access, b: &Access) -> bool {
         return true;
     }
 
-    let start_a = a.memory.displacement as usize;
-    let end_a = start_a + a.width;
-    let start_b = b.memory.displacement as usize;
-    let end_b = start_b + b.width;
+    let start_a = a.memory.displacement as isize;
+    let end_a = start_a + a.width as isize;
+    let start_b = b.memory.displacement as isize;
+    let end_b = start_b + b.width as isize;
 
     !(end_a <= start_b || end_b <= start_a)
 }

@@ -10,7 +10,7 @@ use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
     arithmetic, bitwise, branch, bsr, bswap, bt, cmov, cmpxchg, divide, extend, lea, multiply,
-    scalar, set, stack, transfer, tzcnt, xadd, xchg,
+    pcmpeqb, pmovskb, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -645,6 +645,8 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Pandn
             | Mnemonic::Andnps
             | Mnemonic::Andnpd => bitwise::encode(instruction)?,
+            Mnemonic::Pcmpeqb => pcmpeqb::encode(instruction)?,
+            Mnemonic::Pmovmskb => pmovskb::encode(instruction)?,
             Mnemonic::Seta
             | Mnemonic::Setae
             | Mnemonic::Setb
