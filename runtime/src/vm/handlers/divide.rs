@@ -27,19 +27,21 @@ pub fn build(rt: &mut Runtime) {
     // load r14
     scratch::load(rt, r12, r14);
 
-    utils::width::dispatch_register(
+    utils::width::dispatch(
         rt,
         al,
         &mut epilogue,
-        |rt| wide(rt, false),
-        |rt| dword(rt, false),
-        |rt| word(rt, false),
-        |rt| byte(rt, false),
-        |rt| byte(rt, false),
-        |rt| wide(rt, true),
-        |rt| dword(rt, true),
-        |rt| word(rt, true),
-        |rt| byte(rt, true),
+        Some(Box::new(|rt| wide(rt, false))),
+        Some(Box::new(|rt| dword(rt, false))),
+        Some(Box::new(|rt| word(rt, false))),
+        None,
+        Some(Box::new(|rt| byte(rt, false))),
+        Some(Box::new(|rt| wide(rt, true))),
+        Some(Box::new(|rt| dword(rt, true))),
+        Some(Box::new(|rt| word(rt, true))),
+        Some(Box::new(|rt| byte(rt, true))),
+        None,
+        None,
     );
 
     rt.asm.set_label(&mut epilogue).unwrap();

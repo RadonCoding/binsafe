@@ -12,26 +12,35 @@ pub fn build(rt: &mut Runtime) {
     // al -> width
     utils::bytecode::read_byte(rt, rcx, al);
 
-    utils::width::dispatch_vector(
+    utils::width::dispatch(
         rt,
         al,
         &mut epilogue,
-        |rt| {
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(Box::new(|rt| {
             // load xmm0
             scratch::load_128(rt, r12, xmm0);
             // pmovmskb r8d, xmm0
             rt.asm.pmovmskb(r8d, xmm0).unwrap();
             // store r8
             scratch::store(rt, r12, r8);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // load ymm0
             scratch::load_256(rt, r12, ymm0);
             // vpmovmskb r8d, ymm0
             rt.asm.vpmovmskb(r8d, ymm0).unwrap();
             // store r8
             scratch::store(rt, r12, r8);
-        },
+        })),
     );
 
     rt.asm.set_label(&mut epilogue).unwrap();

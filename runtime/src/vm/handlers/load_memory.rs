@@ -17,76 +17,76 @@ pub fn build(rt: &mut Runtime) {
     // load r8
     scratch::load(rt, r12, r8);
 
-    utils::width::dispatch_register_or_vector(
+    utils::width::dispatch(
         rt,
         al,
         &mut epilogue,
-        |rt| {
+        Some(Box::new(|rt| {
             // mov r9, [r8]
             rt.asm.mov(r9, ptr(r8)).unwrap();
             // store r9
             scratch::store(rt, r12, r9);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // mov r9d, [r8]
             rt.asm.mov(r9d, ptr(r8)).unwrap();
             // store r9
             scratch::store(rt, r12, r9);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // movzx r9, [r8]
             rt.asm.movzx(r9, word_ptr(r8)).unwrap();
             // store r9
             scratch::store(rt, r12, r9);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // movzx r9, [r8]
             rt.asm.movzx(r9, byte_ptr(r8)).unwrap();
             // store r9
             scratch::store(rt, r12, r9);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // movzx r9, [r8]
             rt.asm.movzx(r9, byte_ptr(r8)).unwrap();
             // store r9
             scratch::store(rt, r12, r9);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // mov r9, [r8]
             rt.asm.mov(r9, ptr(r8)).unwrap();
             // store r9
             scratch::store(rt, r12, r9);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // movsxd r9, [r8]
             rt.asm.movsxd(r9, dword_ptr(r8)).unwrap();
             // store r9
             scratch::store(rt, r12, r9);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // movsx r9, [r8]
             rt.asm.movsx(r9, word_ptr(r8)).unwrap();
             // store r9
             scratch::store(rt, r12, r9);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // movsx r9, [r8]
             rt.asm.movsx(r9, byte_ptr(r8)).unwrap();
             // store r9
             scratch::store(rt, r12, r9);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // movups xmm0, [r8]
             rt.asm.movups(xmm0, ptr(r8)).unwrap();
             // store xmm0
             scratch::store_128(rt, r12, xmm0);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // movups ymm0, [r8]
             rt.asm.vmovups(ymm0, ptr(r8)).unwrap();
             // store ymm0
             scratch::store_256(rt, r12, ymm0);
-        },
+        })),
     );
 
     rt.asm.set_label(&mut epilogue).unwrap();

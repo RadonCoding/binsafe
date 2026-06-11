@@ -2,387 +2,90 @@ use iced_x86::code_asm::{AsmRegister8, CodeLabel};
 
 use crate::{runtime::Runtime, vm::bytecode::VMWidth};
 
-pub fn dispatch_register(
+type Handler = Box<dyn FnOnce(&mut Runtime)>;
+
+pub fn dispatch(
     rt: &mut Runtime,
     width: AsmRegister8,
     epilogue: &mut CodeLabel,
-    lower64: impl FnOnce(&mut Runtime),
-    lower32: impl FnOnce(&mut Runtime),
-    lower16: impl FnOnce(&mut Runtime),
-    higher8: impl FnOnce(&mut Runtime),
-    lower8: impl FnOnce(&mut Runtime),
-    slower64: impl FnOnce(&mut Runtime),
-    slower32: impl FnOnce(&mut Runtime),
-    slower16: impl FnOnce(&mut Runtime),
-    slower8: impl FnOnce(&mut Runtime),
+
+    mut lower64: Option<Handler>,
+    mut lower32: Option<Handler>,
+    mut lower16: Option<Handler>,
+    mut higher8: Option<Handler>,
+    mut lower8: Option<Handler>,
+
+    mut slower64: Option<Handler>,
+    mut slower32: Option<Handler>,
+    mut slower16: Option<Handler>,
+    mut slower8: Option<Handler>,
+
+    mut lower128: Option<Handler>,
+    mut lower256: Option<Handler>,
 ) {
-    let mut l8 = rt.asm.create_label();
-    let mut h8 = rt.asm.create_label();
-    let mut l16 = rt.asm.create_label();
-    let mut l32 = rt.asm.create_label();
-    let mut l64 = rt.asm.create_label();
-    let mut s8 = rt.asm.create_label();
-    let mut s16 = rt.asm.create_label();
-    let mut s32 = rt.asm.create_label();
-    let mut s64 = rt.asm.create_label();
+    macro_rules! case {
+        ($opt:expr, $tag:expr) => {
+            if let Some(f) = $opt.take() {
+                let mut skip = rt.asm.create_label();
 
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower64) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l64).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower32) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l32).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower16) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l16).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Higher8) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(h8).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::SLower64) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(s64).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::SLower32) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(s32).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::SLower16) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(s16).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::SLower8) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(s8).unwrap();
+                // cmp ..., ...
+                rt.asm.cmp(width, rt.mapper.index($tag) as i32).unwrap();
+                // jne ...
+                rt.asm.jne(skip).unwrap();
 
-    rt.asm.set_label(&mut l8).unwrap();
-    {
-        lower8(rt);
+                f(rt);
+
+                // jmp ...
+                rt.asm.jmp(*epilogue).unwrap();
+
+                rt.asm.set_label(&mut skip).unwrap();
+
+                rt.asm.zero_bytes().unwrap();
+            }
+        };
+    }
+
+    if higher8.is_some() && lower8.is_some() {
+        case!(lower8, VMWidth::Lower8);
+        case!(higher8, VMWidth::Higher8);
+    } else if let Some(f) = higher8.take().or_else(|| lower8.take()) {
+        let mut handler = rt.asm.create_label();
+        let mut skip = rt.asm.create_label();
+
+        // cmp ..., ...
+        rt.asm
+            .cmp(width, rt.mapper.index(VMWidth::Lower8) as i32)
+            .unwrap();
+        // je ...
+        rt.asm.je(handler).unwrap();
+        // cmp ..., ...
+        rt.asm
+            .cmp(width, rt.mapper.index(VMWidth::Higher8) as i32)
+            .unwrap();
+        // jne ...
+        rt.asm.jne(skip).unwrap();
+
+        rt.asm.set_label(&mut handler).unwrap();
+
+        f(rt);
+
         // jmp ...
         rt.asm.jmp(*epilogue).unwrap();
+
+        rt.asm.set_label(&mut skip).unwrap();
+
+        rt.asm.zero_bytes().unwrap();
     }
 
-    rt.asm.set_label(&mut h8).unwrap();
-    {
-        higher8(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
+    case!(lower16, VMWidth::Lower16);
+    case!(lower32, VMWidth::Lower32);
+    case!(lower64, VMWidth::Lower64);
 
-    rt.asm.set_label(&mut l16).unwrap();
-    {
-        lower16(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
+    case!(slower64, VMWidth::SLower64);
+    case!(slower32, VMWidth::SLower32);
+    case!(slower16, VMWidth::SLower16);
+    case!(slower8, VMWidth::SLower8);
 
-    rt.asm.set_label(&mut l32).unwrap();
-    {
-        lower32(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut s8).unwrap();
-    {
-        slower8(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut s16).unwrap();
-    {
-        slower16(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut s32).unwrap();
-    {
-        slower32(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut s64).unwrap();
-    {
-        slower64(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut l64).unwrap();
-    {
-        lower64(rt);
-    }
-}
-
-pub fn dispatch_vector(
-    rt: &mut Runtime,
-    width: AsmRegister8,
-    epilogue: &mut CodeLabel,
-    lower128: impl FnOnce(&mut Runtime),
-    lower256: impl FnOnce(&mut Runtime),
-) {
-    let mut l256 = rt.asm.create_label();
-
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower256) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l256).unwrap();
-
-    {
-        lower128(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut l256).unwrap();
-    {
-        lower256(rt);
-    }
-}
-
-pub fn dispatch_register_or_vector(
-    rt: &mut Runtime,
-    width: AsmRegister8,
-    epilogue: &mut CodeLabel,
-    lower64: impl FnOnce(&mut Runtime),
-    lower32: impl FnOnce(&mut Runtime),
-    lower16: impl FnOnce(&mut Runtime),
-    higher8: impl FnOnce(&mut Runtime),
-    lower8: impl FnOnce(&mut Runtime),
-    slower64: impl FnOnce(&mut Runtime),
-    slower32: impl FnOnce(&mut Runtime),
-    slower16: impl FnOnce(&mut Runtime),
-    slower8: impl FnOnce(&mut Runtime),
-    lower128: impl FnOnce(&mut Runtime),
-    lower256: impl FnOnce(&mut Runtime),
-) {
-    let mut l8 = rt.asm.create_label();
-    let mut h8 = rt.asm.create_label();
-    let mut l16 = rt.asm.create_label();
-    let mut l32 = rt.asm.create_label();
-    let mut l64 = rt.asm.create_label();
-    let mut s8 = rt.asm.create_label();
-    let mut s16 = rt.asm.create_label();
-    let mut s32 = rt.asm.create_label();
-    let mut s64 = rt.asm.create_label();
-
-    let mut l128 = rt.asm.create_label();
-    let mut l256 = rt.asm.create_label();
-
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower64) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l64).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower32) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l32).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower16) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l16).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Higher8) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(h8).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::SLower64) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(s64).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::SLower32) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(s32).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::SLower16) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(s16).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::SLower8) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(s8).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower128) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l128).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower256) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l256).unwrap();
-
-    rt.asm.set_label(&mut l8).unwrap();
-    {
-        lower8(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut h8).unwrap();
-    {
-        higher8(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut l16).unwrap();
-    {
-        lower16(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut l32).unwrap();
-    {
-        lower32(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut s8).unwrap();
-    {
-        slower8(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut s16).unwrap();
-    {
-        slower16(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut s32).unwrap();
-    {
-        slower32(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut s64).unwrap();
-    {
-        slower64(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut l64).unwrap();
-    {
-        lower64(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut l128).unwrap();
-    {
-        lower128(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut l256).unwrap();
-    {
-        lower256(rt);
-    }
-}
-
-pub fn dispatch_scalar(
-    rt: &mut Runtime,
-    width: AsmRegister8,
-    epilogue: &mut CodeLabel,
-    lower32: impl FnOnce(&mut Runtime),
-    lower64: impl FnOnce(&mut Runtime),
-    lower128: impl FnOnce(&mut Runtime),
-    lower256: impl FnOnce(&mut Runtime),
-) {
-    let mut l64 = rt.asm.create_label();
-    let mut l128 = rt.asm.create_label();
-    let mut l256 = rt.asm.create_label();
-
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower256) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l256).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower128) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l128).unwrap();
-    // cmp ..., ...
-    rt.asm
-        .cmp(width, rt.mapper.index(VMWidth::Lower64) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(l64).unwrap();
-
-    lower32(rt);
-    // jmp ...
-    rt.asm.jmp(*epilogue).unwrap();
-
-    rt.asm.set_label(&mut l64).unwrap();
-    {
-        lower64(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut l128).unwrap();
-    {
-        lower128(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut l256).unwrap();
-    {
-        lower256(rt);
-    }
+    case!(lower128, VMWidth::Lower128);
+    case!(lower256, VMWidth::Lower256);
 }

@@ -23,34 +23,41 @@ pub fn build(rt: &mut Runtime) {
     // mov rax, [r12 + ...]
     utils::vreg::load_reg(rt, r12, VMReg::VVector, rax);
 
-    utils::width::dispatch_scalar(
+    utils::width::dispatch(
         rt,
         r8b,
         &mut epilogue,
-        |rt| {
-            // mov eax, [rax + r9]
-            rt.asm.mov(eax, ptr(rax + r9)).unwrap();
-            // store rax
-            scratch::store(rt, r12, rax);
-        },
-        |rt| {
+        Some(Box::new(|rt| {
             // mov rax, [rax + r9]
             rt.asm.mov(rax, ptr(rax + r9)).unwrap();
             // store rax
             scratch::store(rt, r12, rax);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
+            // mov eax, [rax + r9]
+            rt.asm.mov(eax, ptr(rax + r9)).unwrap();
+            // store rax
+            scratch::store(rt, r12, rax);
+        })),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(Box::new(|rt| {
             // movups xmm0, [rax + r9]
             rt.asm.movups(xmm0, ptr(rax + r9)).unwrap();
             // store xmm0
             scratch::store_128(rt, r12, xmm0);
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
             // vmovups ymm0, [rax + r9]
             rt.asm.vmovups(ymm0, ptr(rax + r9)).unwrap();
             // store ymm0
             scratch::store_256(rt, r12, ymm0);
-        },
+        })),
     );
 
     rt.asm.set_label(&mut epilogue).unwrap();

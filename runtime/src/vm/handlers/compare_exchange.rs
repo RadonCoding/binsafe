@@ -27,37 +27,33 @@ pub fn build(rt: &mut Runtime) {
     // load rax
     scratch::load(rt, r12, rax);
 
-    utils::width::dispatch_register(
+    utils::width::dispatch(
         rt,
         dl,
         &mut epilogue,
-        |rt| {
+        Some(Box::new(|rt| {
+            // lock cmpxchg [r8], r9
             rt.asm.lock().cmpxchg(ptr(r8), r9).unwrap();
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
+            // lock cmpxchg [r8], r9d
             rt.asm.lock().cmpxchg(ptr(r8), r9d).unwrap();
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
+            // lock cmpxchg [r8], r9w
             rt.asm.lock().cmpxchg(ptr(r8), r9w).unwrap();
-        },
-        |rt| {
+        })),
+        None,
+        Some(Box::new(|rt| {
+            // lock cmpxchg [r8], r9b
             rt.asm.lock().cmpxchg(ptr(r8), r9b).unwrap();
-        },
-        |rt| {
-            rt.asm.lock().cmpxchg(ptr(r8), r9b).unwrap();
-        },
-        |rt| {
-            rt.asm.lock().cmpxchg(ptr(r8), r9).unwrap();
-        },
-        |rt| {
-            rt.asm.lock().cmpxchg(ptr(r8), r9d).unwrap();
-        },
-        |rt| {
-            rt.asm.lock().cmpxchg(ptr(r8), r9w).unwrap();
-        },
-        |rt| {
-            rt.asm.lock().cmpxchg(ptr(r8), r9b).unwrap();
-        },
+        })),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     rt.asm.set_label(&mut epilogue).unwrap();
