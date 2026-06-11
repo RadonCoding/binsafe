@@ -41,8 +41,8 @@ Code virtualizer for compiled 64-bit portable executables.
 
 The `tests` crate executes assembled bytecode through the VM against allocated executable memory.
 
-- **Instructions**: each lifted instruction is run through the VM and the resulting register state is compared against the expected value.
-- **Permutation**: each test block is exhausted through every valid scheduler ordering and compared against a reference run, so any divergence surfaces deterministically.
+- **Instructions**: instruction is executed through the VM and the resulting context is compared against the CPU.
+- **Permutation**: instruction sequence's dependency graph is exhaustively executed through the VM and verified.
 
 ## Usage
 

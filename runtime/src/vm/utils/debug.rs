@@ -99,7 +99,7 @@ pub fn print_q(rt: &mut Runtime, q: AsmRegister64) {
     // mov rdx, ...
     rt.asm.mov(rdx, rax).unwrap();
     // call ...
-    rt.asm.call(rt.function_labels[&FnDef::Fmtdec]).unwrap();
+    rt.asm.call(rt.function_labels[&FnDef::Format]).unwrap();
 
     // mov rcx, rsp
     rt.asm.mov(rcx, rsp).unwrap();
