@@ -39,7 +39,7 @@ Code virtualizer for compiled 64-bit portable executables.
 
 ## Testing
 
-The `tests` crate executes assembled bytecode through the VM against allocated executable memory.
+The `tests` crate spins up a frankenstein version of the VM, minimally instrumented to allow it to run for testing.
 
 - **Instructions**: instruction is executed through the VM and the resulting context is compared against the CPU.
 - **Permutation**: instruction sequence's dependency graph is exhaustively executed through the VM and verified.
