@@ -9,151 +9,112 @@ use crate::{
 #[macro_export]
 macro_rules! __arithmetic {
     ($rt:expr, $operation:ident, r8, $epilogue:expr) => {
-        $crate::vm::utils::width::dispatch_register(
+        $crate::vm::utils::width::dispatch(
             $rt,
             al,
             $epilogue,
-            |rt| {
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14, r8).unwrap();
-            },
-            |rt| {
+            })),
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14d, r8d).unwrap();
-            },
-            |rt| {
+            })),
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14w, r8w).unwrap();
-            },
-            |rt| {
+            })),
+            None,
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14b, r8b).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14b, r8b).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14, r8).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14d, r8d).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14w, r8w).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14b, r8b).unwrap();
-            },
+            })),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
     };
     ($rt:expr, $operation:ident, shift, $epilogue:expr) => {
         $rt.asm.mov(cl, r8b).unwrap();
-        $crate::vm::utils::width::dispatch_register(
+        $crate::vm::utils::width::dispatch(
             $rt,
             al,
             $epilogue,
-            |rt| {
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14, cl).unwrap();
-            },
-            |rt| {
+            })),
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14d, cl).unwrap();
-            },
-            |rt| {
+            })),
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14w, cl).unwrap();
-            },
-            |rt| {
+            })),
+            None,
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14b, cl).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14b, cl).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14, cl).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14d, cl).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14w, cl).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14b, cl).unwrap();
-            },
+            })),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
     };
     ($rt:expr, $operation:ident, bitscan, $epilogue:expr) => {
-        $crate::vm::utils::width::dispatch_register(
+        $crate::vm::utils::width::dispatch(
             $rt,
             al,
             $epilogue,
-            |rt| {
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14, r8).unwrap();
-            },
-            |rt| {
+            })),
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14d, r8d).unwrap();
-            },
-            |rt| {
+            })),
+            Some(Box::new(|rt| {
                 rt.asm.$operation(r14w, r8w).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14w, r8w).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14w, r8w).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14, r8).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14d, r8d).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14w, r8w).unwrap();
-            },
-            |rt| {
-                rt.asm.$operation(r14w, r8w).unwrap();
-            },
+            })),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
     };
     ($rt:expr, $operation:ident, carry, $epilogue:expr) => {
         // r9d -> flags
         $crate::vm::utils::vreg::load_reg32($rt, r12, $crate::vm::bytecode::VMReg::Flags, r9d);
-        $crate::vm::utils::width::dispatch_register(
+        $crate::vm::utils::width::dispatch(
             $rt,
             al,
             $epilogue,
-            |rt| {
+            Some(Box::new(|rt| {
                 rt.asm.bt(r9d, 0i32).unwrap();
                 rt.asm.$operation(r14, r8).unwrap();
-            },
-            |rt| {
+            })),
+            Some(Box::new(|rt| {
                 rt.asm.bt(r9d, 0i32).unwrap();
                 rt.asm.$operation(r14d, r8d).unwrap();
-            },
-            |rt| {
+            })),
+            Some(Box::new(|rt| {
                 rt.asm.bt(r9d, 0i32).unwrap();
                 rt.asm.$operation(r14w, r8w).unwrap();
-            },
-            |rt| {
+            })),
+            None,
+            Some(Box::new(|rt| {
                 rt.asm.bt(r9d, 0i32).unwrap();
                 rt.asm.$operation(r14b, r8b).unwrap();
-            },
-            |rt| {
-                rt.asm.bt(r9d, 0i32).unwrap();
-                rt.asm.$operation(r14b, r8b).unwrap();
-            },
-            |rt| {
-                rt.asm.bt(r9d, 0i32).unwrap();
-                rt.asm.$operation(r14, r8).unwrap();
-            },
-            |rt| {
-                rt.asm.bt(r9d, 0i32).unwrap();
-                rt.asm.$operation(r14d, r8d).unwrap();
-            },
-            |rt| {
-                rt.asm.bt(r9d, 0i32).unwrap();
-                rt.asm.$operation(r14w, r8w).unwrap();
-            },
-            |rt| {
-                rt.asm.bt(r9d, 0i32).unwrap();
-                rt.asm.$operation(r14b, r8b).unwrap();
-            },
+            })),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
     };
 }

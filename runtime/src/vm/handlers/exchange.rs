@@ -17,37 +17,33 @@ pub fn build(rt: &mut Runtime) {
     // load r9
     scratch::load(rt, r12, r9);
 
-    utils::width::dispatch_register(
+    utils::width::dispatch(
         rt,
         al,
         &mut epilogue,
-        |rt| {
+        Some(Box::new(|rt| {
+            // xchg [r8], r9
             rt.asm.xchg(ptr(r8), r9).unwrap();
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
+            // xchg [r8], r9d
             rt.asm.xchg(ptr(r8), r9d).unwrap();
-        },
-        |rt| {
+        })),
+        Some(Box::new(|rt| {
+            // xchg [r8], r9w
             rt.asm.xchg(ptr(r8), r9w).unwrap();
-        },
-        |rt| {
+        })),
+        None,
+        Some(Box::new(|rt| {
+            // xchg [r8], r9b
             rt.asm.xchg(ptr(r8), r9b).unwrap();
-        },
-        |rt| {
-            rt.asm.xchg(ptr(r8), r9b).unwrap();
-        },
-        |rt| {
-            rt.asm.xchg(ptr(r8), r9).unwrap();
-        },
-        |rt| {
-            rt.asm.xchg(ptr(r8), r9d).unwrap();
-        },
-        |rt| {
-            rt.asm.xchg(ptr(r8), r9w).unwrap();
-        },
-        |rt| {
-            rt.asm.xchg(ptr(r8), r9b).unwrap();
-        },
+        })),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     rt.asm.set_label(&mut epilogue).unwrap();
