@@ -38,8 +38,6 @@ pub trait Obfuscate<Dst: Copy>: Copy {
     fn sub(self, dst: Dst, asm: &mut CodeAssembler) -> Result<(), IcedError>;
 }
 
-/* ========================= SCRATCH ========================= */
-
 fn scratch64(exclude: &[Register]) -> AsmRegister64 {
     const CANDIDATES: [AsmRegister64; 14] = [
         rax, rbx, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15,
@@ -214,8 +212,6 @@ passthrough!(AsmRegister64, i32);
 passthrough!(AsmMemoryOperand, AsmRegister64);
 passthrough!(AsmMemoryOperand, i32);
 passthrough!(AsmMemoryOperand, u32);
-
-/* ========================= IMPLEMENTATIONS ========================= */
 
 impl Obfuscate<AsmRegister64> for AsmRegister64 {
     fn add(self, dst: AsmRegister64, asm: &mut CodeAssembler) -> Result<(), IcedError> {
