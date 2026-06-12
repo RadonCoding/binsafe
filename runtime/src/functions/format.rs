@@ -11,8 +11,8 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(rax, rdx).unwrap();
     // mov r8, rcx
     rt.asm.mov(r8, rcx).unwrap();
-    // mov r9, 60
-    rt.asm.mov(r9, 60u64).unwrap();
+    // mov r9, 0x3C
+    rt.asm.mov(r9, 0x3Cu64).unwrap();
 
     rt.asm.set_label(&mut convert_loop).unwrap();
     {
