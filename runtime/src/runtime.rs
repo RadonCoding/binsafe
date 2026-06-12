@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use iced_x86::{
-    code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeAssembler, CodeLabel},
+    code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeLabel},
     BlockEncoderOptions,
 };
 use rand::seq::SliceRandom;
 
 use crate::{
+    assembler::Assembler,
     functions,
     mapper::{mapped, Mappable, Mapper},
     vm::{
@@ -206,7 +207,7 @@ impl Dispatch {
 }
 
 pub struct Runtime {
-    pub asm: CodeAssembler,
+    pub asm: Assembler,
 
     pub function_labels: HashMap<FnDef, CodeLabel>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
@@ -228,7 +229,7 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new(bitness: u32) -> Self {
-        let mut asm = CodeAssembler::new(bitness).unwrap();
+        let mut asm = Assembler::new(bitness).unwrap();
 
         let mut function_labels = HashMap::new();
 
