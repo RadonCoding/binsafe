@@ -39,46 +39,61 @@ pub trait Obfuscate<Dst: Copy>: Copy {
 }
 
 fn scratch64(exclude: &[Register]) -> AsmRegister64 {
-    const CANDIDATES: [AsmRegister64; 14] = [
-        rax, rbx, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15,
+    const CANDIDATES: [AsmRegister64; 15] = [
+        rax, rbx, rcx, rdx, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15,
     ];
     *CANDIDATES
         .iter()
-        .filter(|&&r| !exclude.contains(&r.into()))
+        .filter(|&&a| {
+            !exclude
+                .iter()
+                .any(|&b| b.full_register() == Register::from(a).full_register())
+        })
         .choose(&mut rand::thread_rng())
         .unwrap()
 }
 
 fn scratch32(exclude: &[Register]) -> AsmRegister32 {
-    const CANDIDATES: [AsmRegister32; 14] = [
-        eax, ebx, ecx, edx, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d,
+    const CANDIDATES: [AsmRegister32; 15] = [
+        eax, ecx, edx, ebx, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d,
     ];
     *CANDIDATES
         .iter()
-        .filter(|&&r| !exclude.contains(&r.into()))
+        .filter(|&&a| {
+            !exclude
+                .iter()
+                .any(|&b| b.full_register() == Register::from(a).full_register())
+        })
         .choose(&mut rand::thread_rng())
         .unwrap()
 }
 
 fn scratch16(exclude: &[Register]) -> AsmRegister16 {
-    const CANDIDATES: [AsmRegister16; 14] = [
-        ax, bx, cx, dx, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w,
+    const CANDIDATES: [AsmRegister16; 15] = [
+        ax, cx, dx, bx, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w,
     ];
     *CANDIDATES
         .iter()
-        .filter(|&&r| !exclude.contains(&r.into()))
+        .filter(|&&a| {
+            !exclude
+                .iter()
+                .any(|&b| b.full_register() == Register::from(a).full_register())
+        })
         .choose(&mut rand::thread_rng())
         .unwrap()
 }
 
 fn scratch8(exclude: &[Register]) -> AsmRegister8 {
-    const CANDIDATES: [AsmRegister8; 20] = [
-        al, cl, dl, bl, ah, ch, dh, bh, spl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b,
-        r15b,
+    const CANDIDATES: [AsmRegister8; 15] = [
+        al, cl, dl, bl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b,
     ];
     *CANDIDATES
         .iter()
-        .filter(|&&r| !exclude.contains(&r.into()))
+        .filter(|&&a| {
+            !exclude
+                .iter()
+                .any(|&b| b.full_register() == Register::from(a).full_register())
+        })
         .choose(&mut rand::thread_rng())
         .unwrap()
 }
@@ -89,15 +104,10 @@ fn imm() -> i32 {
 
 macro_rules! operation {
     ($asm:expr, $tmp:expr, $body:expr) => {{
-        use iced_x86::code_asm::ptr;
-
-        $asm.sub(rsp, 8)?;
-        $asm.mov(ptr(rsp), $tmp)?;
-
+        let tmp = get_gpr64(Register::from($tmp).full_register()).unwrap();
+        $asm.push(tmp)?;
         $body?;
-
-        $asm.mov($tmp, ptr(rsp))?;
-        $asm.add(rsp, 8)
+        $asm.pop(tmp)
     }};
 }
 
@@ -173,6 +183,7 @@ macro_rules! passthrough {
             fn add(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
                 asm.add(dst, self)
             }
+
             fn sub(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
                 asm.sub(dst, self)
             }
@@ -180,33 +191,54 @@ macro_rules! passthrough {
     };
 }
 
+passthrough!(AsmRegister8, AsmMemoryOperand);
+passthrough!(AsmRegister16, AsmMemoryOperand);
+passthrough!(AsmRegister32, AsmMemoryOperand);
+passthrough!(AsmRegister64, AsmMemoryOperand);
+
 passthrough!(AsmMemoryOperand, AsmRegister8);
 passthrough!(AsmMemoryOperand, AsmRegister16);
 passthrough!(AsmMemoryOperand, AsmRegister32);
 passthrough!(AsmMemoryOperand, AsmRegister64);
 
+passthrough!(AsmMemoryOperand, i32);
+passthrough!(AsmMemoryOperand, u32);
+
 trait Load<Dst> {
-    fn load(self, asm: &mut CodeAssembler, dst: Dst) -> Result<(), IcedError>;
+    fn signed(self, asm: &mut CodeAssembler, dst: Dst) -> Result<(), IcedError>;
+    fn unsigned(self, asm: &mut CodeAssembler, dst: Dst) -> Result<(), IcedError>;
 }
 
 impl Load<AsmRegister64> for i32 {
-    fn load(self, asm: &mut CodeAssembler, dst: AsmRegister64) -> Result<(), IcedError> {
-        asm.mov(dst, self as i64)
+    fn signed(self, asm: &mut CodeAssembler, dst: AsmRegister64) -> Result<(), IcedError> {
+        asm.mov(dst, self as u64)
+    }
+    fn unsigned(self, asm: &mut CodeAssembler, dst: AsmRegister64) -> Result<(), IcedError> {
+        asm.mov(dst, self as u64 as i64)
     }
 }
 impl Load<AsmRegister32> for i32 {
-    fn load(self, asm: &mut CodeAssembler, dst: AsmRegister32) -> Result<(), IcedError> {
+    fn signed(self, asm: &mut CodeAssembler, dst: AsmRegister32) -> Result<(), IcedError> {
         asm.mov(dst, self)
+    }
+    fn unsigned(self, asm: &mut CodeAssembler, dst: AsmRegister32) -> Result<(), IcedError> {
+        asm.mov(dst, self as u32 as i32)
     }
 }
 impl Load<AsmRegister16> for i32 {
-    fn load(self, asm: &mut CodeAssembler, dst: AsmRegister16) -> Result<(), IcedError> {
+    fn signed(self, asm: &mut CodeAssembler, dst: AsmRegister16) -> Result<(), IcedError> {
         asm.mov(dst, self)
+    }
+    fn unsigned(self, asm: &mut CodeAssembler, dst: AsmRegister16) -> Result<(), IcedError> {
+        asm.mov(dst, self as u32 as i32)
     }
 }
 impl Load<AsmRegister8> for i32 {
-    fn load(self, asm: &mut CodeAssembler, dst: AsmRegister8) -> Result<(), IcedError> {
+    fn signed(self, asm: &mut CodeAssembler, dst: AsmRegister8) -> Result<(), IcedError> {
         asm.mov(dst, self)
+    }
+    fn unsigned(self, asm: &mut CodeAssembler, dst: AsmRegister8) -> Result<(), IcedError> {
+        asm.mov(dst, self as u32 as i32)
     }
 }
 
@@ -224,17 +256,23 @@ macro_rules! implementation {
         }
         impl Obfuscate<$dst> for i32 {
             fn add(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
-                let tmp = $scratch(&[dst.into()]);
-                operation!(asm, tmp, {
-                    self.load(asm, tmp)?;
-                    mba_add!(asm, dst, tmp, tmp)
+                let src = $scratch(&[dst.into()]);
+                let tmp = $scratch(&[dst.into(), src.into()]);
+                operation!(asm, src, {
+                    operation!(asm, tmp, {
+                        self.unsigned(asm, src)?;
+                        mba_add!(asm, dst, src, tmp)
+                    })
                 })
             }
             fn sub(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
-                let tmp = $scratch(&[dst.into()]);
-                operation!(asm, tmp, {
-                    self.load(asm, tmp)?;
-                    mba_sub!(asm, dst, tmp, tmp)
+                let src = $scratch(&[dst.into()]);
+                let tmp = $scratch(&[dst.into(), src.into()]);
+                operation!(asm, src, {
+                    operation!(asm, tmp, {
+                        self.signed(asm, src)?;
+                        mba_sub!(asm, dst, src, tmp)
+                    })
                 })
             }
         }
@@ -245,3 +283,23 @@ implementation!(AsmRegister64, scratch64);
 implementation!(AsmRegister32, scratch32);
 implementation!(AsmRegister16, scratch16);
 implementation!(AsmRegister8, scratch8);
+
+impl Assembler {
+    #[inline(always)]
+    pub fn add<Dst, Src>(&mut self, dst: Dst, src: Src) -> Result<(), IcedError>
+    where
+        Src: Obfuscate<Dst>,
+        Dst: Copy,
+    {
+        src.add(dst, &mut self.inner)
+    }
+
+    #[inline(always)]
+    pub fn sub<Dst, Src>(&mut self, dst: Dst, src: Src) -> Result<(), IcedError>
+    where
+        Src: Obfuscate<Dst>,
+        Dst: Copy,
+    {
+        src.sub(dst, &mut self.inner)
+    }
+}
