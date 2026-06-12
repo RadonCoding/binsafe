@@ -39,7 +39,9 @@ pub trait Obfuscate<Dst: Copy>: Copy {
 }
 
 fn scratch(dst: Register, src: Register) -> AsmRegister64 {
-    const CANDIDATES: [AsmRegister64; 4] = [r10, r11, r12, r13];
+    const CANDIDATES: [AsmRegister64; 14] = [
+        rax, rbx, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15,
+    ];
 
     *CANDIDATES
         .iter()
