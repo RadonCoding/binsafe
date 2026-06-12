@@ -709,17 +709,17 @@ impl Runtime {
                 let displacement = stub - base;
                 code[slot..slot + 8].copy_from_slice(&displacement.to_le_bytes());
             }
+        }
 
-            let functions = (result
-                .label_ip(&self.data_labels[&DataDef::Functions])
-                .unwrap()
-                - ip) as usize;
+        let functions = (result
+            .label_ip(&self.data_labels[&DataDef::Functions])
+            .unwrap()
+            - ip) as usize;
 
-            for def in FnDef::VARIANTS {
-                if let Ok(address) = result.label_ip(&self.function_labels[def]) {
-                    let slot = functions + self.mapper.index(*def) as usize * 8;
-                    code[slot..slot + 8].copy_from_slice(&address.to_le_bytes());
-                }
+        for def in FnDef::VARIANTS {
+            if let Ok(address) = result.label_ip(&self.function_labels[def]) {
+                let slot = functions + self.mapper.index(*def) as usize * 8;
+                code[slot..slot + 8].copy_from_slice(&address.to_le_bytes());
             }
         }
 
