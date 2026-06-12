@@ -103,28 +103,6 @@ fn check_with_memory(state: State, instruction: Instruction, memory: &mut [u8]) 
     encrypt(&mut bytes);
     let mut emulated = executor.run_virtual(state.clone(), &bytes);
 
-    println!(
-        "INSTRUCTIONS:\n{}\nNATIVE:\n{}\nEMULATED:\n{}",
-        transformed
-            .operations
-            .iter()
-            .map(|op| op.to_string())
-            .collect::<Vec<String>>()
-            .join("\n"),
-        native
-            .registers
-            .iter()
-            .map(|(r, v)| format!("    {r:?}={v:016X}"))
-            .collect::<Vec<String>>()
-            .join("\n"),
-        emulated
-            .registers
-            .iter()
-            .map(|(r, v)| format!("    {r:?}={v:016X}"))
-            .collect::<Vec<String>>()
-            .join("\n"),
-    );
-
     normalize_and_compare(&mut native, &mut emulated, instruction);
 }
 

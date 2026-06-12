@@ -295,14 +295,6 @@ impl Executor {
     }
 
     pub fn run_virtual(&mut self, state: State, bytes: &[u8]) -> State {
-        // xor rcx, rcx
-        self.rt.asm.xor(rcx, rcx).unwrap();
-        // call ...
-        self.rt
-            .asm
-            .call(self.rt.function_labels[&FnDef::VmHandlersInitialize])
-            .unwrap();
-
         // call ...
         self.rt
             .asm
@@ -420,8 +412,6 @@ impl Executor {
         let ip = self.mem as u64;
 
         let code = self.rt.assemble(ip);
-
-        assert!(code.len() <= Self::SIZE);
 
         unsafe {
             ptr::copy_nonoverlapping(code.as_ptr(), self.mem as *mut u8, code.len());

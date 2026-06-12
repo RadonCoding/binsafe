@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{ptr, r12, r8, r8b, r8d, r9, r9d, rax, rcx, xmm0, ymm0};
+use iced_x86::code_asm::{ptr, r12, r8, r8d, r9, r9d, rax, rcx, xmm0, ymm0};
 
 use crate::{
     runtime::Runtime,
@@ -12,8 +12,8 @@ use crate::{
 pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
-    // r8b -> width
-    utils::bytecode::read_byte(rt, rcx, r8b);
+    // r8d -> width
+    utils::bytecode::read_byte_zx(rt, rcx, r8d);
     // r9d -> destination
     utils::bytecode::read_byte_zx(rt, rcx, r9d);
 
@@ -25,7 +25,7 @@ pub fn build(rt: &mut Runtime) {
 
     utils::width::dispatch(
         rt,
-        r8b,
+        r8,
         &mut epilogue,
         Some(Box::new(|rt| {
             // load r8

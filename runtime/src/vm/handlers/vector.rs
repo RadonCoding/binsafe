@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, r12, rax, rcx, xmm0, xmm1, ymm0, ymm1};
+use iced_x86::code_asm::{eax, r12, rax, rcx, xmm0, xmm1, ymm0, ymm1};
 
 use crate::{
     runtime::Runtime,
@@ -12,12 +12,12 @@ pub fn bitwise(
 ) {
     let mut epilogue = rt.asm.create_label();
 
-    // al -> width
-    utils::bytecode::read_byte(rt, rcx, al);
+    // eax -> width
+    utils::bytecode::read_byte_zx(rt, rcx, eax);
 
     utils::width::dispatch(
         rt,
-        al,
+        rax,
         &mut epilogue,
         None,
         None,

@@ -8,7 +8,7 @@ use crate::{
     },
 };
 
-pub fn initialize(rt:  &mut Runtime) {
+pub fn initialize(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // sub rsp, 0x28
@@ -71,7 +71,7 @@ const VM_TO_CONTEXT: &[(VMReg, i32)] = &[
 ];
 
 // long (*EXCEPTION_POINTERS)
-pub fn handler(rt:  &mut Runtime) {
+pub fn handler(rt: &mut Runtime) {
     let mut continue_search = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
