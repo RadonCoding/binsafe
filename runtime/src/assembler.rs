@@ -101,7 +101,7 @@ macro_rules! operation {
     }};
 }
 
-macro_rules! mba_add_reg {
+macro_rules! mba_add {
     ($asm:expr, $dst:expr, $src:expr, $tmp:expr) => {{
         match rand::random::<u8>() % 3 {
             0 => {
@@ -135,7 +135,7 @@ macro_rules! mba_add_reg {
     }};
 }
 
-macro_rules! mba_sub_reg {
+macro_rules! mba_sub {
     ($asm:expr, $dst:expr, $src:expr, $tmp:expr) => {{
         match rand::random::<u8>() % 3 {
             0 => {
@@ -210,16 +210,16 @@ impl Load<AsmRegister8> for i32 {
     }
 }
 
-macro_rules! impl_obfuscate {
-    ($dst:ty, $scratch:expr, $add:ident, $sub:ident) => {
+macro_rules! implementation {
+    ($dst:ty, $scratch:expr) => {
         impl Obfuscate<$dst> for $dst {
             fn add(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
                 let tmp = $scratch(&[dst.into(), self.into()]);
-                operation!(asm, tmp, { $add!(asm, dst, self, tmp) })
+                operation!(asm, tmp, { mba_add!(asm, dst, self, tmp) })
             }
             fn sub(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
                 let tmp = $scratch(&[dst.into(), self.into()]);
-                operation!(asm, tmp, { $sub!(asm, dst, self, tmp) })
+                operation!(asm, tmp, { mba_sub!(asm, dst, self, tmp) })
             }
         }
         impl Obfuscate<$dst> for i32 {
@@ -227,21 +227,21 @@ macro_rules! impl_obfuscate {
                 let tmp = $scratch(&[dst.into()]);
                 operation!(asm, tmp, {
                     self.load(asm, tmp)?;
-                    $add!(asm, dst, tmp, tmp)
+                    mba_add!(asm, dst, tmp, tmp)
                 })
             }
             fn sub(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
                 let tmp = $scratch(&[dst.into()]);
                 operation!(asm, tmp, {
                     self.load(asm, tmp)?;
-                    $sub!(asm, dst, tmp, tmp)
+                    mba_sub!(asm, dst, tmp, tmp)
                 })
             }
         }
     };
 }
 
-impl_obfuscate!(AsmRegister64, scratch64, mba_add_reg, mba_sub_reg);
-impl_obfuscate!(AsmRegister32, scratch32, mba_add_reg, mba_sub_reg);
-impl_obfuscate!(AsmRegister16, scratch16, mba_add_reg, mba_sub_reg);
-impl_obfuscate!(AsmRegister8, scratch8, mba_add_reg, mba_sub_reg);
+implementation!(AsmRegister64, scratch64);
+implementation!(AsmRegister32, scratch32);
+implementation!(AsmRegister16, scratch16);
+implementation!(AsmRegister8, scratch8);
