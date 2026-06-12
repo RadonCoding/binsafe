@@ -17,7 +17,7 @@ pub fn build(rt: &mut Runtime) {
     // mov r13, rcx
     rt.asm.mov(r13, rcx).unwrap();
 
-    // rdx -> width
+    // edx -> width
     utils::bytecode::read_byte_zx(rt, r13, edx);
 
     // load r8

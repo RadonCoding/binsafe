@@ -1,3 +1,4 @@
+pub mod assembler;
 pub mod functions;
 pub mod mapper;
 pub mod runtime;

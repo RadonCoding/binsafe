@@ -11,6 +11,54 @@ use crate::{
     VM_DISPATCH_SIZE, VM_TRAMPOLINE_SIZE,
 };
 
+const HANDLERS: [(VMOp, FnDef); 45] = [
+    (VMOp::Jcc, FnDef::VmHandlerJcc),
+    (VMOp::Ret, FnDef::VmHandlerRet),
+    (VMOp::LoadImmediate, FnDef::VmHandlerLoadImmediate),
+    (VMOp::LoadRegister, FnDef::VmHandlerLoadRegister),
+    (VMOp::LoadMemory, FnDef::VmHandlerLoadMemory),
+    (VMOp::LoadAddress, FnDef::VmHandlerLoadAddress),
+    (VMOp::StoreRegister, FnDef::VmHandlerStoreRegister),
+    (VMOp::StoreMemory, FnDef::VmHandlerStoreMemory),
+    (VMOp::LoadVector, FnDef::VmHandlerLoadVector),
+    (VMOp::StoreMerge, FnDef::VmHandlerStoreMerge),
+    (VMOp::StoreExtend, FnDef::VmHandlerStoreExtend),
+    (VMOp::Add, FnDef::VmHandlerAdd),
+    (VMOp::Sub, FnDef::VmHandlerSub),
+    (VMOp::AddCarry, FnDef::VmHandlerAddCarry),
+    (VMOp::SubBorrow, FnDef::VmHandlerSubBorrow),
+    (VMOp::Exchange, FnDef::VmHandlerExchange),
+    (VMOp::ExchangeAdd, FnDef::VmHandlerExchangeAdd),
+    (VMOp::CompareExchange, FnDef::VmHandlerCompareExchange),
+    (VMOp::And, FnDef::VmHandlerAnd),
+    (VMOp::Or, FnDef::VmHandlerOr),
+    (VMOp::Xor, FnDef::VmHandlerXor),
+    (VMOp::Test, FnDef::VmHandlerTest),
+    (VMOp::Rol, FnDef::VmHandlerRol),
+    (VMOp::Ror, FnDef::VmHandlerRor),
+    (VMOp::Shl, FnDef::VmHandlerShl),
+    (VMOp::Shr, FnDef::VmHandlerShr),
+    (VMOp::Sar, FnDef::VmHandlerSar),
+    (VMOp::Mul, FnDef::VmHandlerMul),
+    (VMOp::TrailingZeros, FnDef::VmHandlerTrailingZeros),
+    (VMOp::BitScanReverse, FnDef::VmHandlerBitScanReverse),
+    (VMOp::ByteSwap, FnDef::VmHandlerByteSwap),
+    (VMOp::BitTest, FnDef::VmHandlerBitTest),
+    (VMOp::BitTestSet, FnDef::VmHandlerBitTestSet),
+    (VMOp::BitTestReset, FnDef::VmHandlerBitTestReset),
+    (VMOp::BitTestComplement, FnDef::VmHandlerBitTestComplement),
+    (VMOp::Push, FnDef::VmHandlerPush),
+    (VMOp::Pop, FnDef::VmHandlerPop),
+    (VMOp::Discard, FnDef::VmHandlerDiscard),
+    (VMOp::PackedByteMask, FnDef::VmHandlerPackedByteMask),
+    (VMOp::PackedByteEqual, FnDef::VmHandlerPackedByteEqual),
+    (VMOp::VectorAnd, FnDef::VmHandlerVectorAnd),
+    (VMOp::VectorOr, FnDef::VmHandlerVectorOr),
+    (VMOp::VectorXor, FnDef::VmHandlerVectorXor),
+    (VMOp::VectorAndNot, FnDef::VmHandlerVectorAndNot),
+    (VMOp::Divide, FnDef::VmHandlerDivide),
+];
+
 // void (unsigned char*)
 pub fn build(rt: &mut Runtime) {
     let mut setup_block = rt.asm.create_label();
@@ -58,54 +106,6 @@ pub fn build(rt: &mut Runtime) {
         utils::vreg::store_imm(rt, r12, 0x0, VMReg::VImm);
     }
 
-    let table = [
-        (VMOp::Jcc, FnDef::VmHandlerJcc),
-        (VMOp::Ret, FnDef::VmHandlerRet),
-        (VMOp::LoadImmediate, FnDef::VmHandlerLoadImmediate),
-        (VMOp::LoadRegister, FnDef::VmHandlerLoadRegister),
-        (VMOp::LoadMemory, FnDef::VmHandlerLoadMemory),
-        (VMOp::LoadAddress, FnDef::VmHandlerLoadAddress),
-        (VMOp::StoreRegister, FnDef::VmHandlerStoreRegister),
-        (VMOp::StoreMemory, FnDef::VmHandlerStoreMemory),
-        (VMOp::LoadVector, FnDef::VmHandlerLoadVector),
-        (VMOp::StoreMerge, FnDef::VmHandlerStoreMerge),
-        (VMOp::StoreExtend, FnDef::VmHandlerStoreExtend),
-        (VMOp::Add, FnDef::VmHandlerAdd),
-        (VMOp::Sub, FnDef::VmHandlerSub),
-        (VMOp::AddCarry, FnDef::VmHandlerAddCarry),
-        (VMOp::SubBorrow, FnDef::VmHandlerSubBorrow),
-        (VMOp::Exchange, FnDef::VmHandlerExchange),
-        (VMOp::ExchangeAdd, FnDef::VmHandlerExchangeAdd),
-        (VMOp::CompareExchange, FnDef::VmHandlerCompareExchange),
-        (VMOp::And, FnDef::VmHandlerAnd),
-        (VMOp::Or, FnDef::VmHandlerOr),
-        (VMOp::Xor, FnDef::VmHandlerXor),
-        (VMOp::Test, FnDef::VmHandlerTest),
-        (VMOp::Rol, FnDef::VmHandlerRol),
-        (VMOp::Ror, FnDef::VmHandlerRor),
-        (VMOp::Shl, FnDef::VmHandlerShl),
-        (VMOp::Shr, FnDef::VmHandlerShr),
-        (VMOp::Sar, FnDef::VmHandlerSar),
-        (VMOp::Mul, FnDef::VmHandlerMul),
-        (VMOp::TrailingZeros, FnDef::VmHandlerTrailingZeros),
-        (VMOp::BitScanReverse, FnDef::VmHandlerBitScanReverse),
-        (VMOp::ByteSwap, FnDef::VmHandlerByteSwap),
-        (VMOp::BitTest, FnDef::VmHandlerBitTest),
-        (VMOp::BitTestSet, FnDef::VmHandlerBitTestSet),
-        (VMOp::BitTestReset, FnDef::VmHandlerBitTestReset),
-        (VMOp::BitTestComplement, FnDef::VmHandlerBitTestComplement),
-        (VMOp::Push, FnDef::VmHandlerPush),
-        (VMOp::Pop, FnDef::VmHandlerPop),
-        (VMOp::Discard, FnDef::VmHandlerDiscard),
-        (VMOp::PackedByteMask, FnDef::VmHandlerPackedByteMask),
-        (VMOp::PackedByteEqual, FnDef::VmHandlerPackedByteEqual),
-        (VMOp::VectorAnd, FnDef::VmHandlerVectorAnd),
-        (VMOp::VectorOr, FnDef::VmHandlerVectorOr),
-        (VMOp::VectorXor, FnDef::VmHandlerVectorXor),
-        (VMOp::VectorAndNot, FnDef::VmHandlerVectorAndNot),
-        (VMOp::Divide, FnDef::VmHandlerDivide),
-    ];
-
     rt.asm.set_label(&mut execute_loop).unwrap();
     {
         // cmp r13, r14
@@ -126,7 +126,7 @@ pub fn build(rt: &mut Runtime) {
         // mov rcx, r13
         rt.asm.mov(rcx, r13).unwrap();
 
-        let cases = table
+        let cases = HANDLERS
             .iter()
             .map(|&(op, def)| (rt.mapper.index(op), rt.function_labels[&def]))
             .collect::<Vec<(u8, CodeLabel)>>();
