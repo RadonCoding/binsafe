@@ -182,11 +182,13 @@ impl ImportDef {
     }
 }
 
+#[derive(Clone, Copy)]
 enum EmissionTask {
     Function(FnDef, fn(&mut Runtime)),
     Data(DataDef),
     Bool(BoolDef),
     String(StringDef),
+    Dispatch(usize),
 }
 
 struct Dispatch {
@@ -410,9 +412,44 @@ impl Runtime {
         });
     }
 
-    pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
-        let mut shuffled = Vec::new();
+    fn emit(&mut self, tasks: &[EmissionTask]) {
+        for &task in tasks {
+            match task {
+                EmissionTask::Function(def, builder) => {
+                    self.set_function_label(def);
+                    builder(self);
+                }
+                EmissionTask::Data(def) => {
+                    self.set_data_label(def);
 
+                    if self.data[&def].is_empty() {
+                        self.asm.zero_bytes().unwrap();
+                    } else {
+                        self.asm.db(&self.data[&def]).unwrap();
+                    }
+                }
+                EmissionTask::Bool(def) => {
+                    self.set_bool_label(def);
+                    self.asm.db(&[self.bools[&def] as u8]).unwrap();
+                }
+                EmissionTask::String(def) => {
+                    self.set_string_label(def);
+                    self.asm.db(&self.strings[&def]).unwrap();
+                }
+                EmissionTask::Dispatch(index) => {
+                    let dispatch = &mut self.dispatches[index];
+
+                    self.asm.set_label(&mut dispatch.table).unwrap();
+
+                    for _ in 0..dispatch.slots() {
+                        self.asm.dq(&[0u64]).unwrap();
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
         let functions: Vec<(FnDef, fn(&mut Runtime))> = vec![
             (FnDef::VmGInit, vm::functions::ginit::build),
             (FnDef::VmTInit, vm::functions::tinit::build),
@@ -576,9 +613,9 @@ impl Runtime {
         #[cfg(debug_assertions)]
         self.define_string(StringDef::NtWriteFile, "NtWriteFile");
 
-        for (def, builder) in functions {
-            shuffled.push(EmissionTask::Function(def, builder));
-        }
+        let mut rng = rand::thread_rng();
+
+        let mut data_tasks = Vec::new();
 
         for def in DataDef::VARIANTS {
             if *def == DataDef::Functions || *def == DataDef::VehStart || *def == DataDef::VehEnd {
@@ -586,68 +623,55 @@ impl Runtime {
             }
 
             if self.data.contains_key(def) {
-                shuffled.push(EmissionTask::Data(*def));
+                data_tasks.push(EmissionTask::Data(*def));
             }
         }
 
         for def in BoolDef::VARIANTS {
             if self.bools.contains_key(def) {
-                shuffled.push(EmissionTask::Bool(*def));
+                data_tasks.push(EmissionTask::Bool(*def));
             }
         }
 
         for def in StringDef::VARIANTS {
             if self.strings.contains_key(def) {
-                shuffled.push(EmissionTask::String(*def));
+                data_tasks.push(EmissionTask::String(*def));
             }
         }
 
-        let mut rng = rand::thread_rng();
-        shuffled.shuffle(&mut rng);
+        data_tasks.shuffle(&mut rng);
 
-        let mut tasks = Vec::new();
-        tasks.push(EmissionTask::Data(DataDef::Functions));
-        tasks.push(EmissionTask::Function(
-            FnDef::VmVehHandler,
-            vm::functions::veh::handler,
-        ));
-        tasks.push(EmissionTask::Data(DataDef::VehStart));
-        tasks.extend(shuffled);
-        tasks.push(EmissionTask::Data(DataDef::VehEnd));
+        self.emit(&[
+            EmissionTask::Data(DataDef::Functions),
+            EmissionTask::Function(FnDef::VmVehHandler, vm::functions::veh::handler),
+            EmissionTask::Data(DataDef::VehStart),
+        ]);
 
-        for task in tasks {
-            match task {
-                EmissionTask::Function(def, builder) => {
-                    self.set_function_label(def);
-                    builder(self);
-                }
-                EmissionTask::Data(def) => {
-                    self.set_data_label(def);
+        let (data_phase_one, data_phase_two) = data_tasks.split_at(data_tasks.len() / 2);
 
-                    if self.data[&def].is_empty() {
-                        self.asm.zero_bytes().unwrap();
-                    } else {
-                        self.asm.db(&self.data[&def]).unwrap();
-                    }
-                }
-                EmissionTask::Bool(def) => {
-                    self.set_bool_label(def);
-                    self.asm.db(&[self.bools[&def] as u8]).unwrap();
-                }
-                EmissionTask::String(def) => {
-                    self.set_string_label(def);
-                    self.asm.db(&self.strings[&def]).unwrap();
-                }
-            }
+        let mut phase_one = Vec::new();
+
+        for (def, builder) in functions {
+            phase_one.push(EmissionTask::Function(def, builder));
         }
 
-        for dispatch in &mut self.dispatches {
-            self.asm.set_label(&mut dispatch.table).unwrap();
+        phase_one.extend(data_phase_one.iter().cloned());
+        phase_one.shuffle(&mut rng);
 
-            for _ in 0..dispatch.slots() {
-                self.asm.dq(&[0u64]).unwrap();
-            }
+        self.emit(&phase_one);
+
+        let mut phase_two = Vec::new();
+
+        for i in 0..self.dispatches.len() {
+            phase_two.push(EmissionTask::Dispatch(i));
         }
+
+        phase_two.extend(data_phase_two.iter().cloned());
+        phase_two.shuffle(&mut rng);
+
+        self.emit(&phase_two);
+
+        self.emit(&[EmissionTask::Data(DataDef::VehEnd)]);
 
         let result = self
             .asm
@@ -698,6 +722,7 @@ impl Runtime {
                 }
             }
         }
+
         code
     }
 }

@@ -38,99 +38,110 @@ pub trait Obfuscate<Dst: Copy>: Copy {
     fn sub(self, dst: Dst, asm: &mut CodeAssembler) -> Result<(), IcedError>;
 }
 
-macro_rules! mbaadd {
-    ($asm:expr, $dst:expr, $src:expr, $tmp:expr) => {{
-        $asm.push($tmp)?;
-        let result = match rand::random::<u8>() % 3 {
-            // a + b = (a | b) + (a & b)
-            0 => {
-                $asm.mov($tmp, $dst)?;
-                $asm.and($dst, $src)?;
-                $asm.or($tmp, $src)?;
-                $asm.add($dst, $tmp)?;
-                Ok(())
-            }
-            // a + b = (a ^ b) + 2*(a & b)
-            1 => {
-                $asm.mov($tmp, $dst)?;
-                $asm.and($tmp, $src)?;
-                $asm.add($tmp, $tmp)?;
-                $asm.xor($dst, $src)?;
-                $asm.add($dst, $tmp)?;
-                Ok(())
-            }
-            // a + b = 2*(a | b) - (a ^ b)
-            _ => {
-                $asm.mov($tmp, $dst)?;
-                $asm.xor($tmp, $src)?;
-                $asm.or($dst, $src)?;
-                $asm.add($dst, $dst)?;
-                $asm.sub($dst, $tmp)?;
-                Ok(())
-            }
-        };
-        $asm.pop($tmp)?;
-        result
-    }};
-}
+fn scratch(dst: Register, src: Register) -> AsmRegister64 {
+    const CANDIDATES: [AsmRegister64; 4] = [r10, r11, r12, r13];
 
-macro_rules! mbasub {
-    ($asm:expr, $dst:expr, $src:expr, $tmp:expr) => {{
-        $asm.push($tmp)?;
-        let result = match rand::random::<u8>() % 3 {
-            // a - b = a + (~b + 1)
-            0 => {
-                $asm.mov($tmp, $src)?;
-                $asm.not($tmp)?;
-                $asm.add($tmp, 1)?;
-                $asm.add($dst, $tmp)?;
-                Ok(())
-            }
-            // a - b = (a ^ b) - 2 * (b & ~a)
-            1 => {
-                $asm.mov($tmp, $dst)?;
-                $asm.not($tmp)?;
-                $asm.and($tmp, $src)?;
-                $asm.add($tmp, $tmp)?;
-                $asm.xor($dst, $src)?;
-                $asm.sub($dst, $tmp)?;
-                Ok(())
-            }
-            // a - b = ~(~a + b)
-            _ => {
-                $asm.mov($tmp, $dst)?;
-                $asm.not($tmp)?;
-                $asm.add($tmp, $src)?;
-                $asm.not($tmp)?;
-                $asm.mov($dst, $tmp)?;
-                Ok(())
-            }
-        };
-        $asm.pop($tmp)?;
-        result
-    }};
-}
-
-fn scratch(exclude: &[Register]) -> AsmRegister64 {
-    const CANDIDATES: [AsmRegister64; 14] = [
-        rax, rbx, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15,
-    ];
     *CANDIDATES
         .iter()
-        .filter(|&&r| !exclude.contains(&r.into()))
+        .filter(|&&r| {
+            let rr: Register = r.into();
+            rr != dst && rr != src
+        })
         .choose(&mut rand::thread_rng())
         .unwrap()
 }
 
+fn imm() -> i32 {
+    rand::random::<i32>() & 0xF
+}
+
+fn mba_add(
+    asm: &mut CodeAssembler,
+    dst: AsmRegister64,
+    src: AsmRegister64,
+    tmp: AsmRegister64,
+) -> Result<(), IcedError> {
+    asm.push(tmp)?;
+
+    match rand::random::<u8>() % 3 {
+        0 => {
+            // a + b = (a & b) + (a | b)
+            asm.mov(tmp, dst)?;
+            asm.and(dst, src)?;
+            asm.or(tmp, src)?;
+            asm.add(dst, tmp)?;
+        }
+        1 => {
+            // a + b = (a ^ b) + 2*(a & b)
+            asm.mov(tmp, dst)?;
+            asm.and(tmp, src)?;
+            asm.add(tmp, tmp)?;
+            asm.xor(dst, src)?;
+            asm.add(dst, tmp)?;
+        }
+        _ => {
+            // a + b = (a + b + k) - k
+            let k = imm();
+            asm.mov(tmp, dst)?;
+            asm.xor(tmp, src)?;
+            asm.or(dst, src)?;
+            asm.add(dst, dst)?;
+            asm.sub(dst, tmp)?;
+            asm.add(dst, k)?;
+            asm.sub(dst, k)?;
+        }
+    }
+
+    asm.pop(tmp)
+}
+
+fn mba_sub(
+    asm: &mut CodeAssembler,
+    dst: AsmRegister64,
+    src: AsmRegister64,
+    tmp: AsmRegister64,
+) -> Result<(), IcedError> {
+    asm.push(tmp)?;
+
+    match rand::random::<u8>() % 3 {
+        0 => {
+            // a - b = a + (~b + 1)
+            asm.mov(tmp, src)?;
+            asm.not(tmp)?;
+            asm.add(tmp, 1)?;
+            asm.add(dst, tmp)?;
+        }
+        1 => {
+            // a - b = (a ^ b) - 2*(b & ~a)
+            asm.mov(tmp, dst)?;
+            asm.not(tmp)?;
+            asm.and(tmp, src)?;
+            asm.add(tmp, tmp)?;
+            asm.xor(dst, src)?;
+            asm.sub(dst, tmp)?;
+        }
+        _ => {
+            // a - b = ~(~a + b)
+            asm.mov(tmp, dst)?;
+            asm.not(tmp)?;
+            asm.add(tmp, src)?;
+            asm.not(tmp)?;
+            asm.mov(dst, tmp)?;
+        }
+    }
+
+    asm.pop(tmp)
+}
+
 impl Obfuscate<AsmRegister64> for AsmRegister64 {
     fn add(self, dst: AsmRegister64, asm: &mut CodeAssembler) -> Result<(), IcedError> {
-        let scratch = scratch(&[dst.into(), self.into()]);
-        mbaadd!(asm, dst, self, scratch)
+        let tmp = scratch(dst.into(), self.into());
+        mba_add(asm, dst, self, tmp)
     }
 
     fn sub(self, dst: AsmRegister64, asm: &mut CodeAssembler) -> Result<(), IcedError> {
-        let scratch = scratch(&[dst.into(), self.into()]);
-        mbasub!(asm, dst, self, scratch)
+        let tmp = scratch(dst.into(), self.into());
+        mba_sub(asm, dst, self, tmp)
     }
 }
 
