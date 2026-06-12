@@ -38,11 +38,11 @@ pub trait Obfuscate<Dst: Copy>: Copy {
     fn sub(self, dst: Dst, asm: &mut CodeAssembler) -> Result<(), IcedError>;
 }
 
-fn scratch64(exclude: &[Register]) -> AsmRegister64 {
-    const CANDIDATES: [AsmRegister64; 15] = [
-        rax, rbx, rcx, rdx, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15,
-    ];
-    *CANDIDATES
+fn scratch<T: Copy + Into<Register>>(candidates: &[T], exclude: &[Register]) -> T
+where
+    Register: From<T>,
+{
+    *candidates
         .iter()
         .filter(|&&a| {
             !exclude
@@ -51,51 +51,34 @@ fn scratch64(exclude: &[Register]) -> AsmRegister64 {
         })
         .choose(&mut rand::thread_rng())
         .unwrap()
+}
+
+fn scratch64(exclude: &[Register]) -> AsmRegister64 {
+    const CANDIDATES: [AsmRegister64; 15] = [
+        rax, rbx, rcx, rdx, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15,
+    ];
+    scratch(&CANDIDATES, exclude)
 }
 
 fn scratch32(exclude: &[Register]) -> AsmRegister32 {
     const CANDIDATES: [AsmRegister32; 15] = [
         eax, ecx, edx, ebx, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d,
     ];
-    *CANDIDATES
-        .iter()
-        .filter(|&&a| {
-            !exclude
-                .iter()
-                .any(|&b| b.full_register() == Register::from(a).full_register())
-        })
-        .choose(&mut rand::thread_rng())
-        .unwrap()
+    scratch(&CANDIDATES, exclude)
 }
 
 fn scratch16(exclude: &[Register]) -> AsmRegister16 {
     const CANDIDATES: [AsmRegister16; 15] = [
         ax, cx, dx, bx, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w,
     ];
-    *CANDIDATES
-        .iter()
-        .filter(|&&a| {
-            !exclude
-                .iter()
-                .any(|&b| b.full_register() == Register::from(a).full_register())
-        })
-        .choose(&mut rand::thread_rng())
-        .unwrap()
+    scratch(&CANDIDATES, exclude)
 }
 
 fn scratch8(exclude: &[Register]) -> AsmRegister8 {
     const CANDIDATES: [AsmRegister8; 15] = [
         al, cl, dl, bl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b,
     ];
-    *CANDIDATES
-        .iter()
-        .filter(|&&a| {
-            !exclude
-                .iter()
-                .any(|&b| b.full_register() == Register::from(a).full_register())
-        })
-        .choose(&mut rand::thread_rng())
-        .unwrap()
+    scratch(&CANDIDATES, exclude)
 }
 
 fn imm() -> i32 {
