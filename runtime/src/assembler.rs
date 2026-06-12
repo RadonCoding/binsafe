@@ -33,6 +33,26 @@ impl DerefMut for Assembler {
     }
 }
 
+trait FullRegister {
+    fn full_register(self) -> Register;
+}
+
+impl<T: Into<Register>> FullRegister for T {
+    fn full_register(self) -> Register {
+        self.into().full_register()
+    }
+}
+
+trait ToGpr64 {
+    fn gpr64(self) -> AsmRegister64;
+}
+
+impl<T: Into<Register>> ToGpr64 for T {
+    fn gpr64(self) -> AsmRegister64 {
+        get_gpr64(self.into().full_register()).unwrap()
+    }
+}
+
 pub trait Obfuscate<Dst: Copy>: Copy {
     fn add(self, dst: Dst, asm: &mut CodeAssembler) -> Result<(), IcedError>;
     fn sub(self, dst: Dst, asm: &mut CodeAssembler) -> Result<(), IcedError>;
@@ -47,7 +67,7 @@ where
         .filter(|&&a| {
             !exclude
                 .iter()
-                .any(|&b| b.full_register() == Register::from(a).full_register())
+                .any(|&b| b.full_register() == a.full_register())
         })
         .choose(&mut rand::thread_rng())
         .unwrap()
@@ -87,10 +107,9 @@ fn imm() -> i32 {
 
 macro_rules! operation {
     ($asm:expr, $tmp:expr, $body:expr) => {{
-        let tmp = get_gpr64(Register::from($tmp).full_register()).unwrap();
-        $asm.push(tmp)?;
+        $asm.push($tmp.gpr64())?;
         $body?;
-        $asm.pop(tmp)
+        $asm.pop($tmp.gpr64())
     }};
 }
 
@@ -229,31 +248,45 @@ macro_rules! implementation {
     ($dst:ty, $scratch:expr) => {
         impl Obfuscate<$dst> for $dst {
             fn add(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
+                if dst.full_register() == Register::RSP {
+                    return asm.add(dst, self);
+                }
                 let tmp = $scratch(&[dst.into(), self.into()]);
                 operation!(asm, tmp, { mba_add!(asm, dst, self, tmp) })
             }
             fn sub(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
+                if dst.full_register() == Register::RSP {
+                    return asm.sub(dst, self);
+                }
                 let tmp = $scratch(&[dst.into(), self.into()]);
                 operation!(asm, tmp, { mba_sub!(asm, dst, self, tmp) })
             }
         }
         impl Obfuscate<$dst> for i32 {
             fn add(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
+                if dst.full_register() == Register::RSP {
+                    return asm.add(dst, self);
+                }
                 let src = $scratch(&[dst.into()]);
                 let tmp = $scratch(&[dst.into(), src.into()]);
                 operation!(asm, src, {
                     operation!(asm, tmp, {
                         self.unsigned(asm, src)?;
+
                         mba_add!(asm, dst, src, tmp)
                     })
                 })
             }
             fn sub(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
+                if dst.full_register() == Register::RSP {
+                    return asm.sub(dst, self);
+                }
                 let src = $scratch(&[dst.into()]);
                 let tmp = $scratch(&[dst.into(), src.into()]);
                 operation!(asm, src, {
                     operation!(asm, tmp, {
                         self.signed(asm, src)?;
+
                         mba_sub!(asm, dst, src, tmp)
                     })
                 })
