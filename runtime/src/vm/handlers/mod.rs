@@ -1,17 +1,9 @@
-use iced_x86::code_asm::{ptr, r8, rax, rcx, rdx};
-use rand::seq::SliceRandom;
-
-use crate::{
-    runtime::{DataDef, FnDef, Runtime},
-    vm::bytecode::VMOp,
-};
-
 #[macro_export]
 macro_rules! __arithmetic {
     ($rt:expr, $operation:ident, r8, $epilogue:expr) => {
         $crate::vm::utils::width::dispatch(
             $rt,
-            al,
+            rax,
             $epilogue,
             Some(Box::new(|rt| {
                 rt.asm.$operation(r14, r8).unwrap();
@@ -38,7 +30,7 @@ macro_rules! __arithmetic {
         $rt.asm.mov(cl, r8b).unwrap();
         $crate::vm::utils::width::dispatch(
             $rt,
-            al,
+            rax,
             $epilogue,
             Some(Box::new(|rt| {
                 rt.asm.$operation(r14, cl).unwrap();
@@ -64,7 +56,7 @@ macro_rules! __arithmetic {
     ($rt:expr, $operation:ident, bitscan, $epilogue:expr) => {
         $crate::vm::utils::width::dispatch(
             $rt,
-            al,
+            rax,
             $epilogue,
             Some(Box::new(|rt| {
                 rt.asm.$operation(r14, r8).unwrap();
@@ -90,7 +82,7 @@ macro_rules! __arithmetic {
         $crate::vm::utils::vreg::load_reg32($rt, r12, $crate::vm::bytecode::VMReg::Flags, r9d);
         $crate::vm::utils::width::dispatch(
             $rt,
-            al,
+            rax,
             $epilogue,
             Some(Box::new(|rt| {
                 rt.asm.bt(r9d, 0i32).unwrap();
@@ -140,8 +132,8 @@ macro_rules! arithmetic {
             // mov r13, rcx
             rt.asm.mov(r13, rcx).unwrap();
 
-            // al -> width
-            utils::bytecode::read_byte(rt, r13, al);
+            // eax -> width
+            utils::bytecode::read_byte_zx(rt, r13, eax);
 
             // load r8
             scratch::load(rt, r12, r8);
@@ -224,90 +216,3 @@ pub mod vector_and_not;
 pub mod vector_or;
 pub mod vector_xor;
 pub mod xor;
-
-// void (unsigned char*)
-pub fn initialize(rt: &mut Runtime) {
-    let mut table = [
-        (VMOp::Jcc, FnDef::VmHandlerJcc),
-        (VMOp::Ret, FnDef::VmHandlerRet),
-        (VMOp::LoadImmediate, FnDef::VmHandlerLoadImmediate),
-        (VMOp::LoadRegister, FnDef::VmHandlerLoadRegister),
-        (VMOp::LoadMemory, FnDef::VmHandlerLoadMemory),
-        (VMOp::LoadAddress, FnDef::VmHandlerLoadAddress),
-        (VMOp::StoreRegister, FnDef::VmHandlerStoreRegister),
-        (VMOp::StoreMemory, FnDef::VmHandlerStoreMemory),
-        (VMOp::LoadVector, FnDef::VmHandlerLoadVector),
-        (VMOp::StoreMerge, FnDef::VmHandlerStoreMerge),
-        (VMOp::StoreExtend, FnDef::VmHandlerStoreExtend),
-        (VMOp::Add, FnDef::VmHandlerAdd),
-        (VMOp::Sub, FnDef::VmHandlerSub),
-        (VMOp::AddCarry, FnDef::VmHandlerAddCarry),
-        (VMOp::SubBorrow, FnDef::VmHandlerSubBorrow),
-        (VMOp::Exchange, FnDef::VmHandlerExchange),
-        (VMOp::ExchangeAdd, FnDef::VmHandlerExchangeAdd),
-        (VMOp::CompareExchange, FnDef::VmHandlerCompareExchange),
-        (VMOp::And, FnDef::VmHandlerAnd),
-        (VMOp::Or, FnDef::VmHandlerOr),
-        (VMOp::Xor, FnDef::VmHandlerXor),
-        (VMOp::Test, FnDef::VmHandlerTest),
-        (VMOp::Rol, FnDef::VmHandlerRol),
-        (VMOp::Ror, FnDef::VmHandlerRor),
-        (VMOp::Shl, FnDef::VmHandlerShl),
-        (VMOp::Shr, FnDef::VmHandlerShr),
-        (VMOp::Sar, FnDef::VmHandlerSar),
-        (VMOp::Mul, FnDef::VmHandlerMul),
-        (VMOp::TrailingZeros, FnDef::VmHandlerTrailingZeros),
-        (VMOp::BitScanReverse, FnDef::VmHandlerBitScanReverse),
-        (VMOp::ByteSwap, FnDef::VmHandlerByteSwap),
-        (VMOp::BitTest, FnDef::VmHandlerBitTest),
-        (VMOp::BitTestSet, FnDef::VmHandlerBitTestSet),
-        (VMOp::BitTestReset, FnDef::VmHandlerBitTestReset),
-        (VMOp::BitTestComplement, FnDef::VmHandlerBitTestComplement),
-        (VMOp::Push, FnDef::VmHandlerPush),
-        (VMOp::Pop, FnDef::VmHandlerPop),
-        (VMOp::Discard, FnDef::VmHandlerDiscard),
-        (VMOp::PackedByteMask, FnDef::VmHandlerPackedByteMask),
-        (VMOp::PackedByteEqual, FnDef::VmHandlerPackedByteEqual),
-        (VMOp::VectorAnd, FnDef::VmHandlerVectorAnd),
-        (VMOp::VectorOr, FnDef::VmHandlerVectorOr),
-        (VMOp::VectorXor, FnDef::VmHandlerVectorXor),
-        (VMOp::VectorAndNot, FnDef::VmHandlerVectorAndNot),
-        (VMOp::Divide, FnDef::VmHandlerDivide),
-    ];
-
-    let mut rng = rand::thread_rng();
-    table.shuffle(&mut rng);
-
-    // lea rcx, [...]
-    rt.asm
-        .lea(rax, ptr(rt.data_labels[&DataDef::VmHandlers]))
-        .unwrap();
-
-    rt.with_chain(|rt| {
-        // xor rdx, rdx
-        rt.asm.xor(rdx, rdx).unwrap();
-
-        for (op, def) in table {
-            let key = rt.mark_as_encrypted(rt.function_labels[&def]);
-            // mov r8, ...
-            rt.asm.mov(r8, 0x0u64).unwrap();
-            // xor rdx, r8
-            rt.asm.xor(rdx, r8).unwrap();
-            // mov r8, ...
-            rt.asm.mov(r8, key).unwrap();
-            // xor rdx, r8
-            rt.asm.xor(rdx, r8).unwrap();
-
-            // mov r8, rdx
-            rt.asm.mov(r8, rdx).unwrap();
-            // add r8, rcx
-            rt.asm.add(r8, rcx).unwrap();
-            // mov [rcx + ...], r8
-            rt.asm
-                .mov(ptr(rax + rt.mapper.index(op) as i32 * 8), r8)
-                .unwrap();
-        }
-    });
-    // ret
-    rt.asm.ret().unwrap();
-}

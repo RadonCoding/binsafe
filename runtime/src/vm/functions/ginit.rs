@@ -2,7 +2,7 @@ use iced_x86::code_asm::{eax, ptr, r13, rax, rcx, rdx, rsp};
 
 use crate::runtime::{DataDef, FnDef, ImportDef, Runtime};
 
-pub fn build(rt:  &mut Runtime) {
+pub fn build(rt: &mut Runtime) {
     // push r13
     rt.asm.push(r13).unwrap();
 
@@ -44,25 +44,6 @@ pub fn build(rt:  &mut Runtime) {
     // call ...
     rt.asm
         .call(rt.function_labels[&FnDef::VmVehInitialize])
-        .unwrap();
-
-    // mov r13, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
-    rt.asm.mov(r13, ptr(0x60).gs()).unwrap();
-    // mov r13, [r13 + 0x10] -> PVOID PEB->ImageBaseAddress
-    rt.asm.mov(r13, ptr(r13 + 0x10)).unwrap();
-
-    // mov rcx, r13
-    rt.asm.mov(rcx, r13).unwrap();
-    // call ...
-    rt.asm
-        .call(rt.function_labels[&FnDef::VmFunctionsInitialize])
-        .unwrap();
-
-    // mov rcx, r13
-    rt.asm.mov(rcx, r13).unwrap();
-    // call ...
-    rt.asm
-        .call(rt.function_labels[&FnDef::VmHandlersInitialize])
         .unwrap();
 
     // add rsp, 0x28

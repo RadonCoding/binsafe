@@ -438,6 +438,13 @@ fn call(engine: &mut Engine, def: FnDef) -> Vec<Rc<dyn Encode>> {
         Rc::new(LoadMemory {
             width: VMWidth::Lower64,
         }),
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: VMReg::VImage,
+        }),
+        Rc::new(Add {
+            width: VMWidth::Lower64,
+        }),
         Rc::new(Jcc::call()),
     ]
 }

@@ -1,8 +1,8 @@
-use std::{collections::HashMap, mem};
+use std::collections::HashMap;
 
 use iced_x86::{
-    code_asm::{rcx, CodeAssembler, CodeLabel},
-    BlockEncoderOptions, Decoder, DecoderOptions, Encoder,
+    code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeAssembler, CodeLabel},
+    BlockEncoderOptions,
 };
 use rand::seq::SliceRandom;
 
@@ -31,8 +31,6 @@ mapped! {
         VmVectorsCapture,
         VmVectorsRestore,
         /* VM HANDLERS */
-        VmFunctionsInitialize,
-        VmHandlersInitialize,
         VmHandlerJcc,
         VmHandlerRet,
         VmHandlerLoadImmediate,
@@ -190,6 +188,23 @@ enum EmissionTask {
     String(StringDef),
 }
 
+struct Dispatch {
+    table: CodeLabel,
+    fallback: CodeLabel,
+    stubs: Vec<(u8, CodeLabel)>,
+}
+
+impl Dispatch {
+    fn slots(&self) -> usize {
+        self.stubs
+            .iter()
+            .map(|(i, _)| *i as usize)
+            .max()
+            .map(|m| m + 1)
+            .unwrap_or(0)
+    }
+}
+
 pub struct Runtime {
     pub asm: CodeAssembler,
 
@@ -204,10 +219,9 @@ pub struct Runtime {
 
     imports: HashMap<ImportDef, usize>,
 
-    addresses: HashMap<CodeLabel, u64>,
+    dispatches: Vec<Dispatch>,
 
-    fixups: HashMap<CodeLabel, (CodeLabel, u64, Option<usize>)>,
-    chains: Vec<usize>,
+    addresses: HashMap<CodeLabel, u64>,
 
     pub mapper: Mapper,
 }
@@ -260,38 +274,15 @@ impl Runtime {
 
             imports,
 
-            addresses: HashMap::new(),
+            dispatches: Vec::new(),
 
-            fixups: HashMap::new(),
-            chains: Vec::new(),
+            addresses: HashMap::new(),
 
             mapper: Mapper::new(),
         }
     }
 
-    pub fn with_chain<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut Self),
-    {
-        let id = self.fixups.len();
-
-        self.chains.push(id);
-
-        f(self);
-
-        self.chains.pop();
-    }
-
-    pub fn mark_as_encrypted(&mut self, target: CodeLabel) -> u64 {
-        let mut label = self.asm.create_label();
-        self.asm.set_label(&mut label).unwrap();
-        let key = rand::random::<u64>();
-        let chain = self.chains.last().copied();
-        self.fixups.insert(label, (target, key, chain));
-        key
-    }
-
-    fn set_func_label(&mut self, def: FnDef) {
+    fn set_function_label(&mut self, def: FnDef) {
         let label = self.function_labels.get_mut(&def).unwrap();
         self.asm.set_label(label).unwrap();
     }
@@ -351,6 +342,73 @@ impl Runtime {
             .unwrap();
     }
 
+    pub fn jumps(&mut self, key: AsmRegister64, cases: Vec<(u8, CodeLabel)>) {
+        self.dispatch(key, cases);
+    }
+
+    pub fn calls(&mut self, key: AsmRegister64, cases: Vec<(u8, CodeLabel)>) {
+        let mut fallback = self.asm.create_label();
+
+        // lea r10, [....]
+        self.asm.lea(r10, ptr(fallback)).unwrap();
+        // push r10
+        self.asm.push(r10).unwrap();
+
+        self.dispatch(key, cases);
+
+        self.asm.set_label(&mut fallback).unwrap();
+        self.asm.zero_bytes().unwrap();
+    }
+
+    fn dispatch(&mut self, key: AsmRegister64, cases: Vec<(u8, CodeLabel)>) {
+        let table = self.asm.create_label();
+
+        let mut fallback = self.asm.create_label();
+
+        let mut stubs = Vec::new();
+
+        // mov r10, ...
+        self.asm.mov(r10, key).unwrap();
+        // lea r11, [...]
+        self.asm.lea(r11, ptr(table)).unwrap();
+        // mov r10, [r11 + r10*8]
+        self.asm.mov(r10, ptr(r11 + r10 * 8)).unwrap();
+        // add r10, r11
+        self.asm.add(r10, r11).unwrap();
+        // jmp r10
+        self.asm.jmp(r10).unwrap();
+
+        for (index, target) in cases {
+            let mut stub = self.asm.create_label();
+
+            self.asm.set_label(&mut stub).unwrap();
+            {
+                // lea r10, [...]
+                self.asm.lea(r10, ptr(target)).unwrap();
+                // sub r10, r11
+                self.asm.sub(r10, r11).unwrap();
+                // mov [r11 + ...], r10
+                self.asm.mov(ptr(r11 + index as i32 * 8), r10).unwrap();
+                // add r10, r11
+                self.asm.add(r10, r11).unwrap();
+
+                // jmp r10
+                self.asm.jmp(r10).unwrap();
+            }
+
+            stubs.push((index, stub));
+        }
+
+        self.asm.set_label(&mut fallback).unwrap();
+        self.asm.zero_bytes().unwrap();
+
+        self.dispatches.push(Dispatch {
+            table,
+            fallback,
+            stubs,
+        });
+    }
+
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
         let mut shuffled = Vec::new();
 
@@ -367,8 +425,6 @@ impl Runtime {
             (FnDef::VmRegistersRestore, vm::functions::registers::restore),
             (FnDef::VmVectorsCapture, vm::functions::vectors::capture),
             (FnDef::VmVectorsRestore, vm::functions::vectors::restore),
-            (FnDef::VmFunctionsInitialize, vm::functions::initialize),
-            (FnDef::VmHandlersInitialize, vm::handlers::initialize),
             (FnDef::VmHandlerJcc, vm::handlers::jcc::build),
             (FnDef::VmHandlerRet, vm::handlers::ret::build),
             (
@@ -561,7 +617,7 @@ impl Runtime {
         for task in tasks {
             match task {
                 EmissionTask::Function(def, builder) => {
-                    self.set_func_label(def);
+                    self.set_function_label(def);
                     builder(self);
                 }
                 EmissionTask::Data(def) => {
@@ -581,6 +637,14 @@ impl Runtime {
                     self.set_string_label(def);
                     self.asm.db(&self.strings[&def]).unwrap();
                 }
+            }
+        }
+
+        for dispatch in &mut self.dispatches {
+            self.asm.set_label(&mut dispatch.table).unwrap();
+
+            for _ in 0..dispatch.slots() {
+                self.asm.dq(&[0u64]).unwrap();
             }
         }
 
@@ -604,52 +668,35 @@ impl Runtime {
 
         let mut code = result.inner.code_buffer.clone();
 
-        let mut states = HashMap::new();
+        for dispatch in &self.dispatches {
+            let table = (result.label_ip(&dispatch.table).unwrap() - ip) as usize;
+            let fallback = result.label_ip(&dispatch.fallback).unwrap() as i64;
+            let base = result.label_ip(&dispatch.table).unwrap() as i64;
 
-        let mut fixups = mem::take(&mut self.fixups)
-            .into_iter()
-            .collect::<Vec<(CodeLabel, (CodeLabel, u64, Option<usize>))>>();
-        fixups.sort_by_key(|(src, _)| result.label_ip(src).unwrap());
+            for i in 0..dispatch.slots() {
+                let displacement = fallback - base;
+                code[table + i * 8..table + i * 8 + 8].copy_from_slice(&displacement.to_le_bytes());
+            }
 
-        for (src, (target, key, chain)) in fixups {
-            let rva = result.label_ip(&src).unwrap();
-            let offset = (rva - ip) as usize;
+            for (index, stub) in &dispatch.stubs {
+                let stub = result.label_ip(stub).unwrap() as i64;
+                let slot = table + *index as usize * 8;
+                let displacement = stub - base;
+                code[slot..slot + 8].copy_from_slice(&displacement.to_le_bytes());
+            }
 
-            let mut decoder = Decoder::with_ip(
-                self.asm.bitness(),
-                &code[offset..],
-                rva,
-                DecoderOptions::NONE,
-            );
-            let instruction = decoder.decode();
+            let functions = (result
+                .label_ip(&self.data_labels[&DataDef::Functions])
+                .unwrap()
+                - ip) as usize;
 
-            let dst = self.addresses[&target];
-
-            let encrypted = if let Some(id) = chain {
-                let previous = *states.get(&id).unwrap_or(&0);
-                states.insert(id, dst);
-                dst ^ key ^ previous
-            } else {
-                dst ^ key
-            };
-
-            let mut encoder = Encoder::new(self.asm.bitness());
-            encoder.encode(&instruction, rva).unwrap();
-
-            let mut encoded = encoder.take_buffer();
-            let constants = encoder.get_constant_offsets();
-
-            assert!(constants.has_immediate());
-
-            let imm_offset = constants.immediate_offset();
-            let imm_size = constants.immediate_size();
-
-            encoded[imm_offset..imm_offset + imm_size]
-                .copy_from_slice(&encrypted.to_le_bytes()[..imm_size]);
-
-            code[offset..offset + instruction.len()].copy_from_slice(&encoded);
+            for def in FnDef::VARIANTS {
+                if let Ok(address) = result.label_ip(&self.function_labels[def]) {
+                    let slot = functions + self.mapper.index(*def) as usize * 8;
+                    code[slot..slot + 8].copy_from_slice(&address.to_le_bytes());
+                }
+            }
         }
-
         code
     }
 }

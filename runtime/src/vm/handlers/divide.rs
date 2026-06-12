@@ -17,8 +17,8 @@ pub fn build(rt: &mut Runtime) {
     // mov r13, rcx
     rt.asm.mov(r13, rcx).unwrap();
 
-    // al -> width
-    utils::bytecode::read_byte(rt, r13, al);
+    // rax -> width
+    utils::bytecode::read_byte_zx(rt, r13, eax);
 
     // load r8
     scratch::load(rt, r12, r8);
@@ -29,7 +29,7 @@ pub fn build(rt: &mut Runtime) {
 
     utils::width::dispatch(
         rt,
-        al,
+        rax,
         &mut epilogue,
         Some(Box::new(|rt| wide(rt, false))),
         Some(Box::new(|rt| dword(rt, false))),

@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{dl, ptr, r12, r13, r8, r9, r9b, r9d, r9w, rax, rcx};
+use iced_x86::code_asm::{edx, ptr, r12, r13, r8, r9, r9b, r9d, r9w, rax, rcx, rdx};
 
 use crate::{
     runtime::{FnDef, Runtime},
@@ -17,8 +17,8 @@ pub fn build(rt: &mut Runtime) {
     // mov r13, rcx
     rt.asm.mov(r13, rcx).unwrap();
 
-    // dl -> width
-    utils::bytecode::read_byte(rt, r13, dl);
+    // rdx -> width
+    utils::bytecode::read_byte_zx(rt, r13, edx);
 
     // load r8
     scratch::load(rt, r12, r8);
@@ -29,7 +29,7 @@ pub fn build(rt: &mut Runtime) {
 
     utils::width::dispatch(
         rt,
-        dl,
+        rdx,
         &mut epilogue,
         Some(Box::new(|rt| {
             // lock cmpxchg [r8], r9

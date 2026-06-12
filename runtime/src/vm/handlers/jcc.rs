@@ -7,27 +7,32 @@ use iced_x86::code_asm::{
 
 // unsigned char* (unsigned char*)
 pub fn build(rt: &mut Runtime) {
+    let mut or_entry = rt.asm.create_label();
     let mut or_loop = rt.asm.create_label();
     let mut or_cmp = rt.asm.create_label();
     let mut or_eq = rt.asm.create_label();
     let mut or_neq = rt.asm.create_label();
     let mut or_fold = rt.asm.create_label();
 
+    let mut and_entry = rt.asm.create_label();
     let mut and_loop = rt.asm.create_label();
     let mut and_cmp = rt.asm.create_label();
     let mut and_eq = rt.asm.create_label();
     let mut and_neq = rt.asm.create_label();
     let mut and_fold = rt.asm.create_label();
 
+    let mut xor_entry = rt.asm.create_label();
     let mut xor_loop = rt.asm.create_label();
     let mut xor_cmp = rt.asm.create_label();
     let mut xor_eq = rt.asm.create_label();
     let mut xor_neq = rt.asm.create_label();
     let mut xor_fold = rt.asm.create_label();
 
-    let mut check_result = rt.asm.create_label();
+    let mut validate = rt.asm.create_label();
+
     let mut handle_call = rt.asm.create_label();
     let mut handle_skip = rt.asm.create_label();
+
     let mut epilogue = rt.asm.create_label();
 
     // push r13
@@ -46,53 +51,37 @@ pub fn build(rt: &mut Runtime) {
     // r14d -> conditions
     utils::bytecode::read_byte_zx(rt, rcx, r14d);
 
+    let cases = vec![
+        (rt.mapper.index(VMLogic::JAND) as u8, and_entry),
+        (rt.mapper.index(VMLogic::CAND) as u8, and_entry),
+        (rt.mapper.index(VMLogic::SAND) as u8, and_entry),
+        (rt.mapper.index(VMLogic::JXOR) as u8, xor_entry),
+        (rt.mapper.index(VMLogic::CXOR) as u8, xor_entry),
+        (rt.mapper.index(VMLogic::SXOR) as u8, xor_entry),
+        (rt.mapper.index(VMLogic::JOR) as u8, or_entry),
+        (rt.mapper.index(VMLogic::COR) as u8, or_entry),
+        (rt.mapper.index(VMLogic::SOR) as u8, or_entry),
+    ];
+
+    rt.jumps(r13, cases);
+
+    rt.asm.set_label(&mut and_entry).unwrap();
     // mov r15b, 0x1
     rt.asm.mov(r15b, 1i32).unwrap();
+    // jmp ...
+    rt.asm.jmp(and_loop).unwrap();
 
-    // cmp r13b, ...
-    rt.asm
-        .cmp(r13b, rt.mapper.index(VMLogic::JAND) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(and_loop).unwrap();
-
-    // cmp r13b, ...
-    rt.asm
-        .cmp(r13b, rt.mapper.index(VMLogic::CAND) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(and_loop).unwrap();
-
-    // cmp r13b, ...
-    rt.asm
-        .cmp(r13b, rt.mapper.index(VMLogic::SAND) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(and_loop).unwrap();
-
+    rt.asm.set_label(&mut or_entry).unwrap();
     // xor r15b, r15b
     rt.asm.xor(r15b, r15b).unwrap();
+    // jmp ...
+    rt.asm.jmp(or_loop).unwrap();
 
-    // cmp r13b, ...
-    rt.asm
-        .cmp(r13b, rt.mapper.index(VMLogic::JXOR) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(xor_loop).unwrap();
-
-    // cmp r13b, ...
-    rt.asm
-        .cmp(r13b, rt.mapper.index(VMLogic::CXOR) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(xor_loop).unwrap();
-
-    // cmp r13b, ...
-    rt.asm
-        .cmp(r13b, rt.mapper.index(VMLogic::SXOR) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(xor_loop).unwrap();
+    rt.asm.set_label(&mut xor_entry).unwrap();
+    // xor r15b, r15b
+    rt.asm.xor(r15b, r15b).unwrap();
+    // jmp ...
+    rt.asm.jmp(xor_loop).unwrap();
 
     // Iterates through conditions accumulating their results into the accumulator via OR
     rt.asm.set_label(&mut or_loop).unwrap();
@@ -100,7 +89,7 @@ pub fn build(rt: &mut Runtime) {
         // test r14d, r14d
         rt.asm.test(r14d, r14d).unwrap();
         // jz ...
-        rt.asm.jz(check_result).unwrap();
+        rt.asm.jz(validate).unwrap();
 
         // r8b -> test
         utils::bytecode::read_byte(rt, rcx, r8b);
@@ -183,6 +172,8 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.cmp(r8b, r9b).unwrap();
         // setne r8b
         rt.asm.setne(r8b).unwrap();
+
+        rt.asm.jmp(or_fold).unwrap();
     }
 
     // Folds the current condition's result into the accumulator via OR and loops back
@@ -202,7 +193,7 @@ pub fn build(rt: &mut Runtime) {
         // test r14d, r14d
         rt.asm.test(r14d, r14d).unwrap();
         // jz ...
-        rt.asm.jz(check_result).unwrap();
+        rt.asm.jz(validate).unwrap();
 
         // r8b -> test
         utils::bytecode::read_byte(rt, rcx, r8b);
@@ -304,7 +295,7 @@ pub fn build(rt: &mut Runtime) {
         // test r14d, r14d
         rt.asm.test(r14d, r14d).unwrap();
         // jz ...
-        rt.asm.jz(check_result).unwrap();
+        rt.asm.jz(validate).unwrap();
 
         // r8b -> test
         utils::bytecode::read_byte(rt, rcx, r8b);
@@ -400,7 +391,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jmp(xor_loop).unwrap();
     }
 
-    rt.asm.set_label(&mut check_result).unwrap();
+    rt.asm.set_label(&mut validate).unwrap();
     {
         // load rax
         utils::scratch::load(rt, r12, rax);
