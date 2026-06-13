@@ -708,6 +708,7 @@ impl Runtime {
         for dispatch in &self.dispatches {
             let table = (result.label_ip(&dispatch.table).unwrap() - ip) as usize;
             let fallback = result.label_ip(&dispatch.fallback).unwrap() as i64;
+
             let base = result.label_ip(&dispatch.table).unwrap() as i64;
 
             for i in 0..dispatch.slots() {
