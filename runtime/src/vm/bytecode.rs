@@ -661,7 +661,9 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Seto
             | Mnemonic::Setp
             | Mnemonic::Sets => set::encode(mapper, instruction)?,
-            Mnemonic::Nop | Mnemonic::Int3 | Mnemonic::Ud2 | Mnemonic::Pause => continue,
+            Mnemonic::Nop | Mnemonic::Int | Mnemonic::Int3 | Mnemonic::Ud2 | Mnemonic::Pause => {
+                continue
+            }
             _ => return None,
         };
 
