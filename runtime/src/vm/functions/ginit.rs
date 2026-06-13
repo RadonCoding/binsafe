@@ -9,7 +9,7 @@ pub fn build(rt: &mut Runtime) {
     // sub rsp, 0x28
     rt.asm.sub(rsp, 0x28).unwrap();
 
-    // lea rcx, [...]; lea rdx, [...]; call ...
+    // mov rcx, [...]; call ...
     rt.resolve(ImportDef::TlsAlloc);
     // mov r13, rax
     rt.asm.mov(r13, rax).unwrap();
@@ -28,7 +28,6 @@ pub fn build(rt: &mut Runtime) {
         .mov(ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]), eax)
         .unwrap();
 
-    // lea rcx, [...]; lea rdx, [...]; call ...
     rt.resolve(ImportDef::RtlFlsAlloc);
     // lea rcx, [...]
     rt.asm

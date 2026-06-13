@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::rc::Rc;
 use std::{i32, mem, slice};
 
 use crate::engine::Engine;
@@ -11,7 +12,10 @@ use iced_x86::Mnemonic;
 use logger::info;
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
-use runtime::vm::bytecode;
+use runtime::vm::bytecode::{self, VMReg, VMWidth};
+use runtime::vm::encoders::load_immediate::LoadImmediate;
+use runtime::vm::encoders::store_register::StoreRegister;
+use runtime::vm::encoders::Encode;
 use runtime::{VM_DISPATCH_SIZE, VM_TRAMPOLINE_SIZE};
 
 mod attestation;
@@ -59,6 +63,13 @@ impl Virtualization {
         for (_index, operations) in blocks.into_iter().enumerate() {
             let mut rng = rand::thread_rng();
 
+            #[cfg(debug_assertions)]
+            let (transformed, snapshots) =
+                bytecode::transform_with_snapshots(&mut engine.rt.mapper, operations, |ready| {
+                    rng.gen_range(0..ready.len())
+                });
+
+            #[cfg(not(debug_assertions))]
             let transformed = bytecode::transform(&mut engine.rt.mapper, operations, |ready| {
                 rng.gen_range(0..ready.len())
             });
@@ -66,10 +77,10 @@ impl Virtualization {
             #[cfg(debug_assertions)]
             {
                 let index = _index;
-                log.push(format!("  BLOCK {}:\n{}", index, transformed));
+                log.push(format!("  BLOCK {}:\n{}", index, snapshots));
             }
 
-            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed.operations);
+            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
 
             let key = if vcode.is_empty() {
                 self.keys.seed
@@ -99,13 +110,35 @@ impl Virtualization {
 
 impl Protection for Virtualization {
     fn initialize(&mut self, engine: &mut Engine) {
+        #[cfg(debug_assertions)]
+        const MAX_LOGGING: usize = 16;
+
         let mut vtable = Vec::new();
         let mut vcode = Vec::new();
 
         #[cfg(debug_assertions)]
         let mut logs = Vec::new();
 
-        vcode.extend_from_slice(&self.attestation(engine));
+        if engine.args.attestation {
+            vcode.extend_from_slice(&self.attestation(engine));
+        } else {
+            let mut operations = Vec::<Rc<dyn Encode>>::new();
+            operations.push(Rc::new(LoadImmediate {
+                width: VMWidth::Lower64,
+                source: self.keys.att.to_le_bytes().to_vec(),
+            }));
+            operations.push(Rc::new(StoreRegister {
+                width: VMWidth::Lower64,
+                destination: VMReg::VAtt,
+            }));
+            let mut rng = rand::thread_rng();
+            let transformed = bytecode::transform(&mut engine.rt.mapper, operations, |ready| {
+                rng.gen_range(0..ready.len())
+            });
+            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
+            crypt::encrypt(&mut bytes, self.keys.seed, self.keys.mul, self.keys.add, 0);
+            vcode.extend_from_slice(&bytes);
+        }
 
         let mut lookup = HashMap::new();
         let mut programs = Vec::new();
@@ -147,17 +180,28 @@ impl Protection for Virtualization {
             if lookup.get(&hash).is_none() {
                 let mut rng = rand::thread_rng();
 
+                #[cfg(debug_assertions)]
+                let transformed = if logs.len() < MAX_LOGGING {
+                    let (transformed, snapshots) = bytecode::transform_with_snapshots(
+                        &mut engine.rt.mapper,
+                        lifted,
+                        |ready| rng.gen_range(0..ready.len()),
+                    );
+                    logs.push((block.rva, format!("{}", snapshots)));
+                    transformed
+                } else {
+                    bytecode::transform(&mut engine.rt.mapper, lifted, |ready| {
+                        rng.gen_range(0..ready.len())
+                    })
+                };
+
+                #[cfg(not(debug_assertions))]
                 let transformed = bytecode::transform(&mut engine.rt.mapper, lifted, |ready| {
                     rng.gen_range(0..ready.len())
                 });
 
-                #[cfg(debug_assertions)]
-                if logs.len() < 10 {
-                    logs.push((block.rva, format!("{}", transformed)));
-                }
-
                 let index = programs.len();
-                programs.push(transformed.operations);
+                programs.push(transformed);
 
                 groups.push(vec![block]);
 

@@ -46,7 +46,7 @@ The `tests` crate spins up a frankenstein version of the VM, minimally instrumen
 
 ## Usage
 
-`cargo run --release --bin obfuscator -- <filename> --virtualize --mutate`
+`cargo run --release --bin obfuscator -- <filename> --virtualization --attestation --mutation`
 
 ## Contributing
 

@@ -3,7 +3,7 @@ use iced_x86::code_asm::{
 };
 
 use crate::{
-    runtime::{DataDef, FnDef, Runtime},
+    runtime::{FnDef, Runtime},
     vm::{
         bytecode::{VMOp, VMReg},
         utils::{self},
@@ -116,13 +116,6 @@ pub fn build(rt: &mut Runtime) {
         // r8d -> operation
         utils::bytecode::read_byte_zx(rt, r13, r8d);
 
-        // lea rax, [...]
-        rt.asm
-            .lea(rax, ptr(rt.data_labels[&DataDef::VmHandlers]))
-            .unwrap();
-        // mov rax, [rax + r8*8]
-        rt.asm.mov(rax, ptr(rax + r8 * 8)).unwrap();
-
         // mov rcx, r13
         rt.asm.mov(rcx, r13).unwrap();
 
@@ -157,6 +150,10 @@ pub fn build(rt: &mut Runtime) {
         // If the branch points to the native entry then re-execute the block:
         // mov r13, [...]
         utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
+        // eax = length
+        utils::bytecode::read_word_zx(rt, r13, eax);
+        // mov [r12 + ...], rax
+        utils::vreg::store_reg(rt, r12, rax, VMReg::BLength);
         // jmp ...
         rt.asm.jmp(start_block).unwrap();
     }

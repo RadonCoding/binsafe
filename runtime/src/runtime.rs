@@ -12,7 +12,7 @@ use crate::{
     mapper::{mapped, Mappable, Mapper},
     vm::{
         self,
-        bytecode::{VMOp, VMReg},
+        bytecode::{VMReg, VMVec},
     },
 };
 
@@ -29,8 +29,10 @@ mapped! {
         VmCleanup,
         VmRegistersCapture,
         VmRegistersRestore,
+        VmRegistersCopy,
         VmVectorsCapture,
         VmVectorsRestore,
+        VmVectorsCopy,
         /* VM HANDLERS */
         VmHandlerJcc,
         VmHandlerRet,
@@ -99,8 +101,8 @@ mapped! {
     DataDef {
         Functions,
         VehStart,
-        VmHandlers,
         VmGlobalRegisters,
+        VmGlobalVectors,
         VmRegistersTlsIndex,
         VmKeyTlsIndex,
         VmCleanupFlsIndex,
@@ -138,6 +140,8 @@ mapped! {
         NtSetInformationThread,
         NtQueryInformationThread,
         #[cfg(debug_assertions)]
+        AllocConsole,
+        #[cfg(debug_assertions)]
         NtWriteFile,
     }
 }
@@ -153,6 +157,8 @@ mapped! {
         RtlFreeHeap,
         NtSetInformationThread,
         NtQueryInformationThread,
+        #[cfg(debug_assertions)]
+        AllocConsole,
         #[cfg(debug_assertions)]
         NtWriteFile,
     }
@@ -176,6 +182,8 @@ impl ImportDef {
             ImportDef::NtQueryInformationThread { .. } => {
                 (StringDef::Ntdll, StringDef::NtQueryInformationThread)
             }
+            #[cfg(debug_assertions)]
+            ImportDef::AllocConsole { .. } => (StringDef::KERNELBASE, StringDef::AllocConsole),
             #[cfg(debug_assertions)]
             ImportDef::NtWriteFile { .. } => (StringDef::Ntdll, StringDef::NtWriteFile),
         }
@@ -461,8 +469,10 @@ impl Runtime {
             (FnDef::VmCleanup, vm::functions::cleanup::build),
             (FnDef::VmRegistersCapture, vm::functions::registers::capture),
             (FnDef::VmRegistersRestore, vm::functions::registers::restore),
+            (FnDef::VmRegistersCopy, vm::functions::registers::copy),
             (FnDef::VmVectorsCapture, vm::functions::vectors::capture),
             (FnDef::VmVectorsRestore, vm::functions::vectors::restore),
+            (FnDef::VmVectorsCopy, vm::functions::vectors::copy),
             (FnDef::VmHandlerJcc, vm::handlers::jcc::build),
             (FnDef::VmHandlerRet, vm::handlers::ret::build),
             (
@@ -579,8 +589,8 @@ impl Runtime {
         self.define_data_byte(DataDef::VehEnd, 0x0);
 
         self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
-        self.define_data_bytes(DataDef::VmHandlers, &[0u8; VMOp::COUNT * 8]);
         self.define_data_bytes(DataDef::VmGlobalRegisters, &[0u8; VMReg::COUNT * 8]);
+        self.define_data_bytes(DataDef::VmGlobalVectors, &[0u8; VMVec::COUNT * 32]);
 
         self.define_data_dword(DataDef::VmRegistersTlsIndex, 0);
         self.define_data_dword(DataDef::VmKeyTlsIndex, 0);
@@ -594,7 +604,7 @@ impl Runtime {
 
         self.define_string(StringDef::Ntdll, "ntdll.dll");
         self.define_string(StringDef::KERNEL32, "KERNEL32.DLL");
-        self.define_string(StringDef::KERNELBASE, "KERNELBASE.DLL");
+        self.define_string(StringDef::KERNELBASE, "KERNELBASE.dll");
         self.define_string(
             StringDef::RtlAddVectoredExceptionHandler,
             "RtlAddVectoredExceptionHandler",
@@ -610,6 +620,8 @@ impl Runtime {
             StringDef::NtQueryInformationThread,
             "NtQueryInformationThread",
         );
+        #[cfg(debug_assertions)]
+        self.define_string(StringDef::AllocConsole, "AllocConsole");
         #[cfg(debug_assertions)]
         self.define_string(StringDef::NtWriteFile, "NtWriteFile");
 

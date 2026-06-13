@@ -3,24 +3,21 @@ use exe::{
     PETranslation, RelocationDirectory, RelocationValue, SectionCharacteristics, ThunkData,
     ThunkFunctions, VecPE, HDR32_MAGIC, HDR64_MAGIC, PE, RVA,
 };
-use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};
+use iced_x86::{
+    Code, Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter,
+};
 use logger::info;
 use rand::Rng;
 use runtime::runtime::{FnDef, Runtime};
-use std::{collections::HashMap, fmt, mem, path::Path};
+use std::{collections::HashSet, fmt, mem};
 
-use crate::{exceptions, protections::Protection};
+use crate::{args::Args, exceptions, protections::Protection};
 
 pub struct Block {
     pub rva: u32,
     pub offset: usize,
     pub size: usize,
     pub instructions: Vec<Instruction>,
-}
-
-pub enum Reference {
-    Hard,
-    Soft(Vec<u32>),
 }
 
 impl fmt::Display for Block {
@@ -46,21 +43,22 @@ impl fmt::Display for Block {
     }
 }
 
-pub struct Engine {
+pub struct Engine<'a> {
     pub pe: VecPE,
     pub bitness: u32,
 
+    pub args: &'a Args,
+
     pub blocks: Vec<Block>,
-    pub references: HashMap<u32, Reference>,
 
     pub rt: Runtime,
 
     protections: Vec<Box<dyn Protection>>,
 }
 
-impl Engine {
-    pub fn new(filename: &Path) -> Self {
-        let pe = VecPE::from_disk_file(&filename).unwrap();
+impl<'a> Engine<'a> {
+    pub fn new(args: &'a Args) -> Self {
+        let pe = VecPE::from_disk_file(&args.input).unwrap();
 
         let bitness = match pe.get_arch().unwrap() {
             Arch::X64 => 64,
@@ -76,8 +74,8 @@ impl Engine {
         Self {
             pe,
             bitness,
+            args,
             blocks: Vec::new(),
-            references: HashMap::new(),
             rt: Runtime::new(bitness),
             protections: Vec::new(),
         }
@@ -142,15 +140,15 @@ impl Engine {
         let ip = code_section.virtual_address.0 as u64;
         let code = code_section.read(&self.pe).unwrap();
 
-        let mut references = HashMap::new();
+        let mut references = HashSet::new();
 
-        references.insert(entry_point.0, Reference::Hard);
+        references.insert(entry_point.0);
 
         let handlers = exceptions::get_exception_handlers(&self.pe);
 
         for handler in handlers {
             if code_section.has_rva(RVA(handler)) {
-                references.insert(handler, Reference::Hard);
+                references.insert(handler);
             }
         }
 
@@ -163,7 +161,7 @@ impl Engine {
                     for function in functions {
                         if let ThunkData::Function(rva) = function.parse_export(start, end) {
                             if code_section.has_rva(rva) {
-                                references.insert(rva.0, Reference::Hard);
+                                references.insert(rva.0);
                             }
                         }
                     }
@@ -183,7 +181,7 @@ impl Engine {
                     let target_rva = (target_va - image_base) as u32;
 
                     if code_section.has_rva(RVA(target_rva)) {
-                        references.insert(target_rva, Reference::Hard);
+                        references.insert(target_rva);
                     }
                 }
             }
@@ -201,31 +199,27 @@ impl Engine {
             }
 
             match instruction.flow_control() {
-                FlowControl::ConditionalBranch | FlowControl::UnconditionalBranch => {
+                FlowControl::ConditionalBranch
+                | FlowControl::UnconditionalBranch
+                | FlowControl::Call => {
                     let target = instruction.near_branch_target() as u32;
 
                     if code_section.has_rva(RVA(target)) {
-                        match references
-                            .entry(target)
-                            .or_insert_with(|| Reference::Soft(Vec::new()))
-                        {
-                            Reference::Soft(sources) => sources.push(instruction.ip() as u32),
-                            Reference::Hard => {}
-                        }
-                    }
-                }
-                FlowControl::Call => {
-                    let target = instruction.near_branch_target() as u32;
-
-                    if code_section.has_rva(RVA(target)) {
-                        references.insert(target, Reference::Hard);
+                        references.insert(target);
                     }
                 }
                 _ => {}
             }
+
+            if matches!(
+                instruction.flow_control(),
+                FlowControl::ConditionalBranch | FlowControl::Call | FlowControl::IndirectCall
+            ) {
+                references.insert(instruction.next_ip() as u32);
+            }
         }
 
-        let mut sorted = references.keys().copied().collect::<Vec<u32>>();
+        let mut sorted = references.iter().cloned().collect::<Vec<u32>>();
         sorted.sort();
 
         let mut capture = |block: &mut Vec<Instruction>, end: u32| {
@@ -272,6 +266,10 @@ impl Engine {
                 continue;
             }
 
+            if instruction.code() == Code::Int3 && block.is_empty() {
+                continue;
+            }
+
             let start = instruction.ip() as u32;
             let end = instruction.next_ip() as u32;
 
@@ -291,16 +289,33 @@ impl Engine {
 
             block.push(instruction);
 
-            if instruction.flow_control() != FlowControl::Next {
+            let flow = instruction.flow_control();
+
+            if !matches!(flow, FlowControl::Next) {
                 let next = instruction.next_ip() as u32;
                 capture(&mut block, next);
                 inblock = false;
             }
         }
 
-        self.references = references;
-
         info!("Found {} blocks", self.blocks.len());
+
+        // let start = 90969;
+        // let end = 90971;
+        // let middle = start + (end - start) / 2;
+
+        // self.blocks.drain(end..);
+        // self.blocks.drain(..start);
+
+        // info!("{} to {} (middle: {})", start, end, middle);
+
+        // self.blocks.truncate(90971);
+        // self.blocks.drain(..90970);
+        // println!(
+        //     "0x{:016X} {}",
+        //     image_base + self.blocks[0].rva as u64,
+        //     self.blocks[0]
+        // );
     }
 
     pub fn get_end_of_sections(&self) -> u32 {

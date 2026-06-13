@@ -4,8 +4,6 @@ use std::collections::HashSet;
 use crate::engine::Engine;
 use crate::protections::Protection;
 use iced_x86::code_asm::*;
-#[cfg(debug_assertions)]
-use iced_x86::Code;
 use iced_x86::{Instruction, Mnemonic, OpKind, Register};
 use logger::info;
 use rand::Rng;
@@ -90,7 +88,7 @@ impl Protection for Mutation {
         let mut mutated = 0usize;
 
         #[cfg(debug_assertions)]
-        let mut logged: HashSet<Code> = HashSet::new();
+        let mut logged = HashSet::new();
 
         for i in 0..engine.blocks.len() {
             let block = &engine.blocks[i];

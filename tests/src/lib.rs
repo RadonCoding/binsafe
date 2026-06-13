@@ -375,7 +375,6 @@ impl Executor {
                 .asm
                 .mov(r9, ptr(r12 + self.rt.mapper.index(register) * 8))
                 .unwrap();
-
             // mov [r8 + ...], r9
             self.rt
                 .asm

@@ -365,13 +365,6 @@ impl Encode for VMCondition {
     }
 }
 
-pub struct Bytecode {
-    #[cfg(debug_assertions)]
-    snapshots: Vec<Snapshot>,
-
-    pub operations: Vec<Rc<dyn Encode>>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     Lift,
@@ -401,7 +394,7 @@ struct Snapshot {
 
 #[cfg(debug_assertions)]
 impl Snapshot {
-    fn take(phase: Phase, operations: &[Rc<dyn Encode>]) -> Self {
+    fn new(phase: Phase, operations: &[Rc<dyn Encode>]) -> Self {
         Self {
             phase,
             operations: operations
@@ -418,7 +411,25 @@ fn address(operation: &Rc<dyn Encode>) -> usize {
 }
 
 #[cfg(debug_assertions)]
-impl Bytecode {
+pub struct Snapshots {
+    snapshots: Vec<Snapshot>,
+}
+
+#[cfg(debug_assertions)]
+impl Snapshots {
+    pub fn new() -> Self {
+        Self {
+            snapshots: Vec::new(),
+        }
+    }
+
+    pub fn record(&mut self, phase: Phase, operations: &[Rc<dyn Encode>]) {
+        self.snapshots.push(Snapshot::new(phase, operations));
+    }
+}
+
+#[cfg(debug_assertions)]
+impl Snapshots {
     fn trace(&self, target: usize) -> (Option<usize>, String) {
         let mut original: Option<usize> = None;
         let mut markers = String::new();
@@ -478,7 +489,7 @@ fn letter(phase: Phase) -> char {
 }
 
 #[cfg(debug_assertions)]
-impl fmt::Display for Bytecode {
+impl fmt::Display for Snapshots {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use std::collections::{HashMap, HashSet};
 
@@ -533,19 +544,6 @@ impl fmt::Display for Bytecode {
         }
 
         write!(f, "{}", lines.join("\n"))
-    }
-}
-
-impl Bytecode {
-    fn new(
-        #[cfg(debug_assertions)] snapshots: Vec<Snapshot>,
-        operations: Vec<Rc<dyn Encode>>,
-    ) -> Self {
-        Self {
-            #[cfg(debug_assertions)]
-            snapshots,
-            operations,
-        }
     }
 }
 
@@ -682,38 +680,48 @@ pub fn assemble(mapper: &mut Mapper, operations: &[Rc<dyn Encode>]) -> Vec<u8> {
     bytes
 }
 
-pub fn transform<F>(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>, mut picker: F) -> Bytecode
+pub fn transform<F>(
+    mapper: &mut Mapper,
+    operations: Vec<Rc<dyn Encode>>,
+    mut picker: F,
+) -> Vec<Rc<dyn Encode>>
 where
     F: FnMut(&[usize]) -> usize,
 {
     let mut operations = operations;
 
-    #[cfg(debug_assertions)]
-    let mut snapshots = vec![Snapshot::take(Phase::Lift, &operations)];
-
     operations = permute::permute(operations, &mut picker);
-    #[cfg(debug_assertions)]
-    snapshots.push(Snapshot::take(Phase::Permute, &operations));
-
     operations = scramble::scramble(mapper, operations);
-    #[cfg(debug_assertions)]
-    snapshots.push(Snapshot::take(Phase::Scramble, &operations));
-
     operations = Mutation.run(mapper, operations);
-    #[cfg(debug_assertions)]
-    snapshots.push(Snapshot::take(Mutation.phase(), &operations));
-
     operations = Encrypt.run(mapper, operations);
-    #[cfg(debug_assertions)]
-    snapshots.push(Snapshot::take(Encrypt.phase(), &operations));
-
     operations = permute::permute(operations, &mut picker);
-    #[cfg(debug_assertions)]
-    snapshots.push(Snapshot::take(Phase::Permute, &operations));
 
-    Bytecode::new(
-        #[cfg(debug_assertions)]
-        snapshots,
-        operations,
-    )
+    operations
+}
+
+#[cfg(debug_assertions)]
+pub fn transform_with_snapshots<F>(
+    mapper: &mut Mapper,
+    operations: Vec<Rc<dyn Encode>>,
+    mut picker: F,
+) -> (Vec<Rc<dyn Encode>>, Snapshots)
+where
+    F: FnMut(&[usize]) -> usize,
+{
+    let mut operations = operations;
+
+    let mut snapshots = Snapshots::new();
+    snapshots.record(Phase::Lift, &operations);
+    operations = permute::permute(operations, &mut picker);
+    snapshots.record(Phase::Permute, &operations);
+    operations = scramble::scramble(mapper, operations);
+    snapshots.record(Phase::Scramble, &operations);
+    operations = Mutation.run(mapper, operations);
+    snapshots.record(Mutation.phase(), &operations);
+    operations = Encrypt.run(mapper, operations);
+    snapshots.record(Encrypt.phase(), &operations);
+    operations = permute::permute(operations, &mut picker);
+    snapshots.record(Phase::Permute, &operations);
+
+    (operations, snapshots)
 }
