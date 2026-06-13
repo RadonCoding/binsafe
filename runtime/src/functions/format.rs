@@ -5,21 +5,22 @@ use crate::runtime::Runtime;
 // void (char*, unsigned long)
 pub fn build(rt: &mut Runtime) {
     let mut convert_loop = rt.asm.create_label();
+
     let mut is_alpha = rt.asm.create_label();
 
-    // mov rax, rdx
-    rt.asm.mov(rax, rdx).unwrap();
-    // mov r8, rcx
-    rt.asm.mov(r8, rcx).unwrap();
-    // mov r9, 0x3C
-    rt.asm.mov(r9, 0x3Cu64).unwrap();
+    // mov rax, rcx
+    rt.asm.mov(rax, rcx).unwrap();
+    // mov r8, rdx
+    rt.asm.mov(r8, rdx).unwrap();
+    // mov r9, 0x3c
+    rt.asm.mov(r9, 0x3cu64).unwrap();
 
     rt.asm.set_label(&mut convert_loop).unwrap();
     {
         // mov rcx, r9
         rt.asm.mov(rcx, r9).unwrap();
-        // mov rdx, rax
-        rt.asm.mov(rdx, rax).unwrap();
+        // mov rdx, r8
+        rt.asm.mov(rdx, r8).unwrap();
         // shr rdx, cl
         rt.asm.shr(rdx, cl).unwrap();
         // and rdx, 0xf
@@ -35,18 +36,18 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut is_alpha).unwrap();
         {
-            // mov [r8], dl
-            rt.asm.mov(ptr(r8), dl).unwrap();
-            // inc r8
-            rt.asm.inc(r8).unwrap();
-            // sub r9, 4
-            rt.asm.sub(r9, 4).unwrap();
+            // mov [rax], dl
+            rt.asm.mov(ptr(rax), dl).unwrap();
+            // inc rax
+            rt.asm.inc(rax).unwrap();
+            // sub r9, 0x4
+            rt.asm.sub(r9, 0x4).unwrap();
             // jge ...
             rt.asm.jge(convert_loop).unwrap();
         }
     }
-    // mov [r8], 0x0
-    rt.asm.mov(byte_ptr(r8), 0x0).unwrap();
+    // mov [rax], 0x0
+    rt.asm.mov(byte_ptr(rax), 0x0).unwrap();
     // ret
     rt.asm.ret().unwrap();
 }

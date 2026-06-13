@@ -9,7 +9,7 @@ use crate::{
 };
 
 // unsigned char* (unsigned char*, unsigned int)
-pub fn build(rt:  &mut Runtime) {
+pub fn build(rt: &mut Runtime) {
     // Subtract the image base from the return address:
     // mov r9, rdx
     rt.asm.mov(r9, rdx).unwrap();

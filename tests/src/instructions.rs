@@ -99,7 +99,7 @@ fn check_with_memory(state: State, instruction: Instruction, memory: &mut [u8]) 
         .unwrap_or_else(|| panic!("{instruction} is not implemented"));
     let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |_| 0);
 
-    let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed.operations);
+    let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed);
     encrypt(&mut bytes);
     let mut emulated = executor.run_virtual(state.clone(), &bytes);
 

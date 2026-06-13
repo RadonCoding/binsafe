@@ -1,57 +1,44 @@
 use clap::Parser;
 use logger::info;
-use std::{fs, path::PathBuf};
+use std::fs;
 
 use obfuscator::{
+    args::Args,
     engine::Engine,
     protections::{mutation::Mutation, virtualization::Virtualization},
 };
 
-#[derive(Parser)]
-#[command(author, version)]
-struct Args {
-    input: PathBuf,
-
-    #[arg(short = 'v', long = "virtualize")]
-    virtualize: bool,
-
-    #[arg(short = 'm', long = "mutate")]
-    mutate: bool,
-}
-
 fn main() {
     let args = Args::parse();
 
-    let input = &args.input;
-
-    let mut engine = Engine::new(input);
+    let mut engine = Engine::new(&args);
 
     engine.scan();
 
-    if args.virtualize {
-        if args.mutate {
+    if args.virtualization {
+        if args.mutation {
             engine.apply::<Mutation>();
         }
         engine.apply::<Virtualization>();
     }
 
-    if args.mutate {
+    if args.mutation {
         engine.apply::<Mutation>();
     }
 
     let protected = engine.execute();
 
-    let output = if let Some(extension) = input.extension() {
-        input.with_extension("").with_file_name(format!(
+    let output = if let Some(extension) = args.input.extension() {
+        args.input.with_extension("").with_file_name(format!(
             "{}.protected.{}",
-            input.file_stem().unwrap().to_str().unwrap(),
+            args.input.file_stem().unwrap().to_str().unwrap(),
             extension.to_str().unwrap()
         ))
     } else {
-        let mut output = input.to_path_buf();
+        let mut output = args.input.to_path_buf();
         output.set_file_name(format!(
             "{}.protected",
-            input.file_name().unwrap().to_str().unwrap()
+            args.input.file_name().unwrap().to_str().unwrap()
         ));
         output
     };

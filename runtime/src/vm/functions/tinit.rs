@@ -10,7 +10,7 @@ use crate::{
     VM_SCRATCH_SIZE, VM_STACK_SIZE,
 };
 
-pub fn build(rt:  &mut Runtime) {
+pub fn build(rt: &mut Runtime) {
     // push r13
     rt.asm.push(r13).unwrap();
     // push r14
@@ -19,14 +19,14 @@ pub fn build(rt:  &mut Runtime) {
     // sub rsp, 0x28
     rt.asm.sub(rsp, 0x28).unwrap();
 
-    // lea rcx, [...]; lea rdx, [...]; call ...
+    // mov rcx, [...]; call ...
     rt.resolve(ImportDef::GetProcessHeap);
     // call rax
     rt.asm.call(rax).unwrap();
     // mov r13, rax
     rt.asm.mov(r13, rax).unwrap();
 
-    // lea rcx, [...]; lea rdx, [...]; call ...
+    // mov rcx, [...]; call ...
     rt.resolve(ImportDef::RtlAllocateHeap);
     // mov r14, rax
     rt.asm.mov(r14, rax).unwrap();
@@ -107,7 +107,6 @@ pub fn build(rt:  &mut Runtime) {
     // mov [rcx + ...], rax
     utils::vreg::store_reg(rt, rcx, rax, VMReg::VScratch);
 
-    // lea rcx, [...]; lea rdx, [...]; call ...
     rt.resolve(ImportDef::RtlFlsSetValue);
     // mov ecx, [...]
     rt.asm

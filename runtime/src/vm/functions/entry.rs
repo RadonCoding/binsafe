@@ -5,11 +5,10 @@ use crate::{
     vm::{
         bytecode::VMReg,
         utils::{self, lock},
-        REGISTERS_TO_NATIVE,
     },
 };
 
-pub fn build(rt:  &mut Runtime) {
+pub fn build(rt: &mut Runtime) {
     let mut acquire_global_lock = rt.asm.create_label();
 
     let mut invoke_ginit = rt.asm.create_label();
@@ -20,8 +19,6 @@ pub fn build(rt:  &mut Runtime) {
 
     let mut initialize_state = rt.asm.create_label();
     let mut initialize_execution = rt.asm.create_label();
-
-    let mut copy_native_registers = rt.asm.create_label();
 
     // pushfq
     rt.asm.pushfq().unwrap();
@@ -67,6 +64,14 @@ pub fn build(rt:  &mut Runtime) {
     rt.asm
         .call(rt.function_labels[&FnDef::VmRegistersCapture])
         .unwrap();
+    // lea rcx, [...]
+    rt.asm
+        .lea(rcx, ptr(rt.data_labels[&DataDef::VmGlobalVectors]))
+        .unwrap();
+    // call ...
+    rt.asm
+        .call(rt.function_labels[&FnDef::VmVectorsCapture])
+        .unwrap();
 
     // mov r12d, [...]
     rt.asm
@@ -81,11 +86,13 @@ pub fn build(rt:  &mut Runtime) {
 
     rt.asm.set_label(&mut invoke_ginit).unwrap();
     {
+        // call ...
         rt.asm.call(rt.function_labels[&FnDef::VmGInit]).unwrap();
     }
 
     rt.asm.set_label(&mut invoke_tinit).unwrap();
     {
+        // call ...
         rt.asm.call(rt.function_labels[&FnDef::VmTInit]).unwrap();
     }
 
@@ -103,7 +110,20 @@ pub fn build(rt:  &mut Runtime) {
     // mov rdx, r12
     rt.asm.mov(rdx, r12).unwrap();
     // call ...
-    rt.asm.call(copy_native_registers).unwrap();
+    rt.asm
+        .call(rt.function_labels[&FnDef::VmRegistersCopy])
+        .unwrap();
+
+    // lea rcx, [...]
+    rt.asm
+        .lea(rcx, ptr(rt.data_labels[&DataDef::VmGlobalVectors]))
+        .unwrap();
+    // mov rdx, [r12 + ...]
+    utils::vreg::load_reg(rt, r12, VMReg::VVector, rdx);
+    // call ...
+    rt.asm
+        .call(rt.function_labels[&FnDef::VmVectorsCopy])
+        .unwrap();
 
     // mov rax, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
     rt.asm.mov(rax, ptr(0x60).gs()).unwrap();
@@ -145,10 +165,14 @@ pub fn build(rt:  &mut Runtime) {
         rt.asm
             .call(rt.function_labels[&FnDef::VmRegistersCapture])
             .unwrap();
+
+        // mov rcx, [...]
+        utils::vreg::load_reg(rt, r12, VMReg::VVector, rcx);
         // call ...
         rt.asm
             .call(rt.function_labels[&FnDef::VmVectorsCapture])
             .unwrap();
+
         // Skip the pushes from prologue:
         // add rsp, 0x10
         rt.asm.add(rsp, 0x10i32).unwrap();
@@ -201,6 +225,9 @@ pub fn build(rt:  &mut Runtime) {
         rt.asm
             .call(rt.function_labels[&FnDef::VmRegistersCapture])
             .unwrap();
+
+        // mov rcx, [...]
+        utils::vreg::load_reg(rt, r12, VMReg::VVector, rcx);
         // call ...
         rt.asm
             .call(rt.function_labels[&FnDef::VmVectorsCapture])
@@ -246,16 +273,4 @@ pub fn build(rt:  &mut Runtime) {
 
     // jmp ...
     rt.asm.jmp(rt.function_labels[&FnDef::VmExit]).unwrap();
-
-    rt.asm.set_label(&mut copy_native_registers).unwrap();
-    {
-        for &(reg, _) in REGISTERS_TO_NATIVE {
-            // mov rax, [rcx + ...]
-            utils::vreg::load_reg(rt, rcx, reg, rax);
-            // mov [rdx + ...], rax
-            utils::vreg::store_reg(rt, rdx, rax, reg);
-        }
-        // ret
-        rt.asm.ret().unwrap();
-    }
 }
