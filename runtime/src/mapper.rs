@@ -91,6 +91,23 @@ impl Mapper {
 }
 
 macro_rules! mapped {
+    ($ty:ident { }) => {
+        #[derive(Clone, Copy, Eq, PartialEq, Hash)]
+        pub enum $ty {}
+
+        #[allow(non_upper_case_globals)]
+        impl $ty {}
+
+        impl ::std::fmt::Debug for $ty {
+            fn fmt(&self, _f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                match *self {}
+            }
+        }
+
+        impl crate::mapper::Mappable for $ty {
+            const VARIANTS: &'static [Self] = &[];
+        }
+    };
     ($ty:ident { $($(#[$meta:meta])* $v:ident),+ $(,)? }) => {
         #[derive(Clone, Copy, Eq, PartialEq, Hash)]
         pub enum $ty {

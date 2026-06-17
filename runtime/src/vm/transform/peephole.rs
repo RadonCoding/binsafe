@@ -23,7 +23,7 @@ impl Transform for Peephole {
     }
 }
 
-/// Optimizes load and store sequences by eliminating redundant register round-trips.
+/// Optimizes [`LoadRegister`] and [`StoreRegister`] sequences by eliminating redundant register round-trips.
 fn optimize(operations: &mut Vec<Rc<dyn Encode>>) {
     let mut index = 0;
 
