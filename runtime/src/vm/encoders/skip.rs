@@ -8,7 +8,7 @@ use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
 pub struct Skip {
-    expansion: Vec<Rc<dyn Encode>>,
+    pub expansion: Vec<Rc<dyn Encode>>,
     width: VMWidth,
     source: Vec<u8>,
 }

@@ -737,12 +737,13 @@ where
 {
     let mut operations = operations;
 
+    operations = Peephole.run(mapper, operations);
     operations = permute::permute(operations, &mut picker);
     operations = scramble::scramble(mapper, operations);
     operations = Mutation.run(mapper, operations);
-    operations = Peephole.run(mapper, operations);
     operations = Encrypt.run(mapper, operations);
     operations = permute::permute(operations, &mut picker);
+    operations = Peephole.run(mapper, operations);
 
     operations
 }
@@ -760,18 +761,20 @@ where
 
     let mut snapshots = Snapshots::new();
     snapshots.record(Phase::Lift, &operations);
+    operations = Peephole.run(mapper, operations);
+    snapshots.record(Phase::Peephole, &operations);
     operations = permute::permute(operations, &mut picker);
     snapshots.record(Phase::Permute, &operations);
     operations = scramble::scramble(mapper, operations);
     snapshots.record(Phase::Scramble, &operations);
     operations = Mutation.run(mapper, operations);
     snapshots.record(Mutation.phase(), &operations);
-    operations = Peephole.run(mapper, operations);
-    snapshots.record(Phase::Peephole, &operations);
     operations = Encrypt.run(mapper, operations);
     snapshots.record(Encrypt.phase(), &operations);
     operations = permute::permute(operations, &mut picker);
     snapshots.record(Phase::Permute, &operations);
+    operations = Peephole.run(mapper, operations);
+    snapshots.record(Phase::Peephole, &operations);
 
     (operations, snapshots)
 }

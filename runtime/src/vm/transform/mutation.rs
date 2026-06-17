@@ -9,7 +9,7 @@ use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMTest};
 use crate::vm::encoders::jcc::{is_canonical, Jcc};
 use crate::vm::encoders::Encode;
-use crate::vm::transform::{descend, Phase, Transform};
+use crate::vm::transform::{descend, downcast, Phase, Transform};
 
 pub struct Mutation;
 
@@ -65,11 +65,6 @@ fn walk<R: Rng>(operations: &mut Vec<Rc<dyn Encode>>, rng: &mut R) {
             jcc.conditions = conditions;
         }
     });
-}
-
-/// Downcasts an operation to a concrete encoder type.
-fn downcast<T: 'static>(operation: &Rc<dyn Encode>) -> Option<&T> {
-    (&**operation as &dyn Any).downcast_ref::<T>()
 }
 
 /// Expands each AND-family sub-condition through [`rewritten`] and appends a [`neutral_pair`] to XOR-family [`Jcc`]s, then shuffles.
