@@ -396,7 +396,7 @@ pub fn with_precision(
     }
 }
 
-pub fn with_stride_extended(
+pub fn with_extension(
     rt: &mut Runtime,
     sse_float_64: impl FnOnce(&mut Runtime) + 'static,
     sse_int_32: impl FnOnce(&mut Runtime) + 'static,

@@ -4,7 +4,7 @@ use crate::{runtime::Runtime, vm::handlers::vector};
 
 // unsigned char* (unsigned char*)
 pub fn build(rt: &mut Runtime) {
-    vector::with_stride_extended(
+    vector::with_extension(
         rt,
         |rt| {
             // mulpd xmm0, xmm1

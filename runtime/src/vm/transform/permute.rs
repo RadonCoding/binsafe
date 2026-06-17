@@ -248,6 +248,7 @@ fn split(
             }) as Rc<dyn Encode>;
 
             parked.insert(address(&load));
+
             piece.push(load);
         }
 
