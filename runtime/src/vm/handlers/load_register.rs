@@ -29,6 +29,7 @@ pub fn build(rt: &mut Runtime) {
             // mov r9d, [r12 + r8*8]
             rt.asm.mov(r9d, ptr(r12 + r8 * 8)).unwrap();
         })),
+        None,
         Some(Box::new(|rt| {
             // movzx r9, [r12 + r8*8]
             rt.asm.movzx(r9, word_ptr(r12 + r8 * 8)).unwrap();

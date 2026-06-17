@@ -33,6 +33,7 @@ pub fn build(rt: &mut Runtime) {
             // store r9
             scratch::store(rt, r12, r9);
         })),
+        None,
         Some(Box::new(|rt| {
             // movzx r9, [r8]
             rt.asm.movzx(r9, word_ptr(r8)).unwrap();

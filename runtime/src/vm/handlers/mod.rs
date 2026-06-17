@@ -11,6 +11,7 @@ macro_rules! __arithmetic {
             Some(Box::new(|rt| {
                 rt.asm.$operation(r14d, r8d).unwrap();
             })),
+            None,
             Some(Box::new(|rt| {
                 rt.asm.$operation(r14w, r8w).unwrap();
             })),
@@ -38,6 +39,7 @@ macro_rules! __arithmetic {
             Some(Box::new(|rt| {
                 rt.asm.$operation(r14d, cl).unwrap();
             })),
+            None,
             Some(Box::new(|rt| {
                 rt.asm.$operation(r14w, cl).unwrap();
             })),
@@ -64,6 +66,7 @@ macro_rules! __arithmetic {
             Some(Box::new(|rt| {
                 rt.asm.$operation(r14d, r8d).unwrap();
             })),
+            None,
             Some(Box::new(|rt| {
                 rt.asm.$operation(r14w, r8w).unwrap();
             })),
@@ -92,6 +95,7 @@ macro_rules! __arithmetic {
                 rt.asm.bt(r9d, 0i32).unwrap();
                 rt.asm.$operation(r14d, r8d).unwrap();
             })),
+            None,
             Some(Box::new(|rt| {
                 rt.asm.bt(r9d, 0i32).unwrap();
                 rt.asm.$operation(r14w, r8w).unwrap();
@@ -214,6 +218,8 @@ pub mod vector;
 pub mod vector_add;
 pub mod vector_and;
 pub mod vector_and_not;
+pub mod vector_div;
+pub mod vector_mul;
 pub mod vector_or;
 pub mod vector_sub;
 pub mod vector_xor;

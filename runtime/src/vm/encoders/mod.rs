@@ -90,6 +90,8 @@ pub mod trailing_zeros;
 pub mod vector_add;
 pub mod vector_and;
 pub mod vector_and_not;
+pub mod vector_div;
+pub mod vector_mul;
 pub mod vector_or;
 pub mod vector_sub;
 pub mod vector_xor;

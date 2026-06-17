@@ -6,8 +6,8 @@ use crate::{
     vm::utils::lock,
 };
 use iced_x86::code_asm::{
-    al, byte_ptr, ptr, r10, r10d, r11, r8, r9, rax, rbp, rcx, rdx, rsp, AsmMemoryOperand,
-    AsmRegister64,
+    al, byte_ptr, ptr, r10, r10d, r11, r8, r9, rax, rbp, rcx, rdx, rsp, ymm0, ymm1, ymm2, ymm3,
+    ymm4, ymm5, AsmMemoryOperand, AsmRegister64,
 };
 
 fn preserve(rt: &mut Runtime) {
@@ -29,9 +29,37 @@ fn preserve(rt: &mut Runtime) {
     rt.asm.push(r11).unwrap();
     // push rbp
     rt.asm.push(rbp).unwrap();
+    // sub rsp, 0xC0
+    rt.asm.sub(rsp, 0xC0).unwrap();
+    // vmovups [rsp], ymm0
+    rt.asm.vmovups(ptr(rsp), ymm0).unwrap();
+    // vmovups [rsp + 0x20], ymm1
+    rt.asm.vmovups(ptr(rsp + 0x20), ymm1).unwrap();
+    // vmovups [rsp + 0x40], ymm2
+    rt.asm.vmovups(ptr(rsp + 0x40), ymm2).unwrap();
+    // vmovups [rsp + 0x60], ymm3
+    rt.asm.vmovups(ptr(rsp + 0x60), ymm3).unwrap();
+    // vmovups [rsp + 0x80], ymm4
+    rt.asm.vmovups(ptr(rsp + 0x80), ymm4).unwrap();
+    // vmovups [rsp + 0xA0], ymm5
+    rt.asm.vmovups(ptr(rsp + 0xA0), ymm5).unwrap();
 }
 
 fn restore(rt: &mut Runtime) {
+    // vmovups ymm5, [rsp + 0xA0]
+    rt.asm.vmovups(ymm5, ptr(rsp + 0xA0)).unwrap();
+    // vmovups ymm4, [rsp + 0x80]
+    rt.asm.vmovups(ymm4, ptr(rsp + 0x80)).unwrap();
+    // vmovups ymm3, [rsp + 0x60]
+    rt.asm.vmovups(ymm3, ptr(rsp + 0x60)).unwrap();
+    // vmovups ymm2, [rsp + 0x40]
+    rt.asm.vmovups(ymm2, ptr(rsp + 0x40)).unwrap();
+    // vmovups ymm1, [rsp + 0x20]
+    rt.asm.vmovups(ymm1, ptr(rsp + 0x20)).unwrap();
+    // vmovups ymm0, [rsp]
+    rt.asm.vmovups(ymm0, ptr(rsp)).unwrap();
+    // add rsp, 0xC0
+    rt.asm.add(rsp, 0xC0).unwrap();
     // pop rbp
     rt.asm.pop(rbp).unwrap();
     // pop r11
@@ -88,8 +116,6 @@ pub fn print(rt: &mut Runtime, message: &str, register: Option<AsmRegister64>) {
 
     preserve(rt);
 
-    lock::acquire_debug(rt, al, None);
-
     // push rbp
     rt.asm.push(rbp).unwrap();
     // mov rbp, rsp
@@ -127,6 +153,8 @@ pub fn print(rt: &mut Runtime, message: &str, register: Option<AsmRegister64>) {
         write_register(rt, register_value, register_string);
     }
 
+    lock::acquire_debug(rt, al, None);
+
     // lea rcx, [rsp + ...]
     rt.asm.lea(rcx, ptr(rsp + message_string)).unwrap();
     // call ...
@@ -144,12 +172,12 @@ pub fn print(rt: &mut Runtime, message: &str, register: Option<AsmRegister64>) {
     // call ...
     rt.asm.call(rt.function_labels[&FnDef::Print]).unwrap();
 
+    lock::release_debug(rt);
+
     // mov rsp, rbp
     rt.asm.mov(rsp, rbp).unwrap();
     // pop rbp
     rt.asm.pop(rbp).unwrap();
-
-    lock::release_debug(rt);
 
     restore(rt);
 }
@@ -165,8 +193,6 @@ pub fn print_thread_message(
     const NEWLINE: &str = "\n";
 
     preserve(rt);
-
-    lock::acquire_debug(rt, al, None);
 
     // push rbp
     rt.asm.push(rbp).unwrap();
@@ -224,6 +250,8 @@ pub fn print_thread_message(
 
     write_string(rt, NEWLINE, newline_string);
 
+    lock::acquire_debug(rt, al, None);
+
     // lea rcx, [rsp + ...]
     rt.asm.lea(rcx, ptr(rsp + thread_string)).unwrap();
     // call ...
@@ -255,6 +283,8 @@ pub fn print_thread_message(
     rt.asm.lea(rcx, ptr(rsp + newline_string)).unwrap();
     // call ...
     rt.asm.call(rt.function_labels[&FnDef::Print]).unwrap();
+
+    lock::release_debug(rt);
 
     // mov rsp, rbp
     rt.asm.mov(rsp, rbp).unwrap();

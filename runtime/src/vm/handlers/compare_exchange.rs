@@ -39,6 +39,7 @@ pub fn build(rt: &mut Runtime) {
             // lock cmpxchg [r8], r9d
             rt.asm.lock().cmpxchg(ptr(r8), r9d).unwrap();
         })),
+        None,
         Some(Box::new(|rt| {
             // lock cmpxchg [r8], r9w
             rt.asm.lock().cmpxchg(ptr(r8), r9w).unwrap();

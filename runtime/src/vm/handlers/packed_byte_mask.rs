@@ -25,6 +25,7 @@ pub fn build(rt: &mut Runtime) {
         None,
         None,
         None,
+        None,
         Some(Box::new(|rt| {
             // load xmm0
             scratch::load_128(rt, r12, xmm0);

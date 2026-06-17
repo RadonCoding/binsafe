@@ -31,6 +31,7 @@ pub fn build(rt: &mut Runtime) {
             // mov [r8], r9d
             rt.asm.mov(ptr(r8), r9d).unwrap();
         })),
+        None,
         Some(Box::new(|rt| {
             // load r9
             scratch::load(rt, r12, r9);

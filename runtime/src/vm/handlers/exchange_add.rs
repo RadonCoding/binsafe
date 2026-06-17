@@ -37,6 +37,7 @@ pub fn build(rt: &mut Runtime) {
             // lock xadd [r8], r9d
             rt.asm.lock().xadd(ptr(r8), r9d).unwrap();
         })),
+        None,
         Some(Box::new(|rt| {
             // lock xadd [r8], r9w
             rt.asm.lock().xadd(ptr(r8), r9w).unwrap();

@@ -82,6 +82,8 @@ mapped! {
         VmHandlerVectorXor,
         VmHandlerVectorAdd,
         VmHandlerVectorSub,
+        VmHandlerVectorMul,
+        VmHandlerVectorDiv,
         /* VM VEH */
         VmVehInitialize,
         VmVehHandler,
@@ -573,6 +575,8 @@ impl Runtime {
             (FnDef::VmHandlerVectorXor, vm::handlers::vector_xor::build),
             (FnDef::VmHandlerVectorAdd, vm::handlers::vector_add::build),
             (FnDef::VmHandlerVectorSub, vm::handlers::vector_sub::build),
+            (FnDef::VmHandlerVectorMul, vm::handlers::vector_mul::build),
+            (FnDef::VmHandlerVectorDiv, vm::handlers::vector_div::build),
             (FnDef::VmFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (

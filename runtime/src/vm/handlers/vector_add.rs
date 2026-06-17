@@ -1,8 +1,9 @@
 use crate::{runtime::Runtime, vm::handlers::vector};
 use iced_x86::code_asm::{xmm0, xmm1, ymm0, ymm1};
 
+// unsigned char* (unsigned char*)
 pub fn build(rt: &mut Runtime) {
-    vector::arithmetic(
+    vector::with_precision(
         rt,
         |rt| {
             // paddb xmm0, xmm1

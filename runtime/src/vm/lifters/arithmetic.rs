@@ -2,6 +2,8 @@ use iced_x86::{Instruction, Mnemonic, OpKind};
 use std::rc::Rc;
 
 use crate::vm::bytecode::{VMMem, VMPrecision, VMReg, VMVec, VMWidth};
+use crate::vm::encoders::vector_div::VectorDiv;
+use crate::vm::encoders::vector_mul::VectorMul;
 use crate::vm::encoders::{
     add::Add, add_carry::AddCarry, and::And, discard::Discard, load_address::LoadAddress,
     load_immediate::LoadImmediate, load_memory::LoadMemory, load_register::LoadRegister,
@@ -114,6 +116,42 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             stride: VMWidth::Lower64,
             precision: VMPrecision::Float,
         }),
+
+        Mnemonic::Pmulld | Mnemonic::Vpmulld => vector(instruction, |width| VectorMul {
+            width,
+            stride: VMWidth::Lower32,
+            precision: VMPrecision::Integer,
+        }),
+        Mnemonic::Pmullw | Mnemonic::Vpmullw => vector(instruction, |width| VectorMul {
+            width,
+            stride: VMWidth::Lower16,
+            precision: VMPrecision::Integer,
+        }),
+        Mnemonic::Pmulhw | Mnemonic::Vpmulhw => vector(instruction, |width| VectorMul {
+            width,
+            stride: VMWidth::Higher16,
+            precision: VMPrecision::Integer,
+        }),
+        Mnemonic::Mulps | Mnemonic::Vmulps => vector(instruction, |width| VectorMul {
+            width,
+            stride: VMWidth::Lower32,
+            precision: VMPrecision::Float,
+        }),
+        Mnemonic::Mulpd | Mnemonic::Vmulpd => vector(instruction, |width| VectorMul {
+            width,
+            stride: VMWidth::Lower64,
+            precision: VMPrecision::Float,
+        }),
+
+        Mnemonic::Divps | Mnemonic::Vdivps => vector(instruction, |width| VectorDiv {
+            width,
+            stride: VMWidth::Lower32,
+        }),
+        Mnemonic::Divpd | Mnemonic::Vdivpd => vector(instruction, |width| VectorDiv {
+            width,
+            stride: VMWidth::Lower64,
+        }),
+
         mnemonic => panic!("unsupported mnemonic: {mnemonic:?}"),
     }
 }

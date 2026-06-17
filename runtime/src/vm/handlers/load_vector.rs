@@ -46,6 +46,7 @@ pub fn build(rt: &mut Runtime) {
         None,
         None,
         None,
+        None,
         Some(Box::new(|rt| {
             // movups xmm0, [rax + r9]
             rt.asm.movups(xmm0, ptr(rax + r9)).unwrap();

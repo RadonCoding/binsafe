@@ -83,6 +83,7 @@ pub fn build(rt: &mut Runtime) {
             // call ...
             rt.asm.call(compute_flags).unwrap();
         })),
+        None,
         Some(Box::new(move |rt| {
             // mov r14w, r9w
             rt.asm.mov(r14w, r9w).unwrap();

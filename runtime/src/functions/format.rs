@@ -8,6 +8,13 @@ pub fn build(rt: &mut Runtime) {
 
     let mut is_alpha = rt.asm.create_label();
 
+    let mut label = rt.asm.create_label();
+    rt.asm.mov(rax, 0xFFFF_FFFF_FFFF_FF00u64).unwrap();
+    rt.asm.cmp(rdx, rax).unwrap();
+    rt.asm.jne(label).unwrap();
+    rt.asm.int3().unwrap();
+    rt.asm.set_label(&mut label).unwrap();
+
     // mov rax, rcx
     rt.asm.mov(rax, rcx).unwrap();
     // mov r8, rdx
