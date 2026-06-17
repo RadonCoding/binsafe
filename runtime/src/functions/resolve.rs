@@ -4,22 +4,29 @@ use crate::{
     stack,
 };
 use iced_x86::code_asm::{
-    eax, ecx, ptr, r12, r13, r14, r15, r15d, rax, rbp, rbx, rcx, rdx, rsp, word_ptr,
+    eax, ecx, edx, ptr, r12, r13, r14, r15, r15d, rax, rbp, rbx, rcx, rdx, rsp, word_ptr,
 };
 
 // void* (unsigned long)
 pub fn build(rt: &mut Runtime) {
-    let mut module_loop = rt.asm.create_label();
-    let mut get_exports = rt.asm.create_label();
-    let mut export_loop = rt.asm.create_label();
-    let mut found = rt.asm.create_label();
-    let mut not_found = rt.asm.create_label();
+    let mut resolve_module = rt.asm.create_label();
+    let mut resolve_module_loop = rt.asm.create_label();
+
+    let mut resolve_export = rt.asm.create_label();
+    let mut resolve_export_loop = rt.asm.create_label();
+
+    let mut resolve_export_success = rt.asm.create_label();
+    let mut resolve_export_failure = rt.asm.create_label();
+
     let mut epilogue = rt.asm.create_label();
-    let mut names_initialized = rt.asm.create_label();
 
     let mut offset = 0;
 
     stack!(slot, offset, 8);
+
+    stack!(export_directory, offset, 8);
+    stack!(export_directory_rva, offset, 4);
+    stack!(export_directory_size, offset, 4);
 
     stack!(number_of_names, offset, 4);
     stack!(address_of_names, offset, 8);
@@ -71,71 +78,72 @@ pub fn build(rt: &mut Runtime) {
     // test rdx, rdx
     rt.asm.test(rdx, rdx).unwrap();
     // jnz ...
-    rt.asm.jnz(names_initialized).unwrap();
+    rt.asm.jnz(resolve_module).unwrap();
 
     for def in ImportDef::VARIANTS {
         let (module_def, export_def) = def.get();
+
         let slot = rt.mapper.index(*def) as i32 * 16;
+
         // lea rdx, [...]
-        rt.asm.lea(rdx, ptr(rt.string_labels[&module_def])).unwrap();
+        rt.asm.mov(rdx, ptr(rt.hash_labels[&module_def])).unwrap();
         // mov [rax + ...], rdx
         rt.asm.mov(ptr(rax + slot), rdx).unwrap();
-        // lea rdx, [...]
-        rt.asm.lea(rdx, ptr(rt.string_labels[&export_def])).unwrap();
+        // mov rdx, [...]
+        rt.asm.mov(rdx, ptr(rt.hash_labels[&export_def])).unwrap();
         // mov [rax + ...], rdx
-        rt.asm.mov(ptr(rax + slot + 8), rdx).unwrap();
+        rt.asm.mov(ptr(rax + slot + 0x8), rdx).unwrap();
     }
 
-    rt.asm.set_label(&mut names_initialized).unwrap();
-
-    // shl rcx, 4
-    rt.asm.shl(rcx, 4i32).unwrap();
-    // mov r12, [rax + rcx]
-    rt.asm.mov(r12, ptr(rax + rcx)).unwrap();
-    // mov r13, [rax + rcx + 0x8]
-    rt.asm.mov(r13, ptr(rax + rcx + 0x8i32)).unwrap();
-
-    // mov rbx, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
-    rt.asm.mov(rbx, ptr(0x60).gs()).unwrap();
-    // mov rbx, [rbx + 0x18] -> PEB_LDR_DATA *PEB->Ldr
-    rt.asm.mov(rbx, ptr(rbx + 0x18)).unwrap();
-
-    // mov rbx, [rbx + 0x20] -> LDR_DATA_TABLE_ENTRY *PEB->Ldr->InMemoryOrderModuleList.Flink
-    rt.asm.mov(rbx, ptr(rbx + 0x20)).unwrap();
-    // mov r14, rbx
-    rt.asm.mov(r14, rbx).unwrap();
-
-    // module_loop:
-    rt.asm.set_label(&mut module_loop).unwrap();
+    rt.asm.set_label(&mut resolve_module).unwrap();
     {
-        // lea rcx, [rbx + 0x48] -> UNICODE_STRING *LDR_DATA_TABLE_ENTRY->BaseDllName
-        rt.asm.lea(rcx, ptr(rbx + 0x48)).unwrap();
-        // mov rcx, [rcx + 0x8] -> PWSTR *UNICODE_STRING->Buffer
-        rt.asm.mov(rcx, ptr(rcx + 0x8)).unwrap();
-        // mov rdx, r12
-        rt.asm.mov(rdx, r12).unwrap();
-        // call ...
-        rt.asm
-            .call(rt.function_labels[&FnDef::CompareUnicodeToAnsi])
-            .unwrap();
+        // shl rcx, 0x4
+        rt.asm.shl(rcx, 0x4).unwrap();
+        // mov r12, [rax + rcx]
+        rt.asm.mov(r12, ptr(rax + rcx)).unwrap();
+        // mov r13, [rax + rcx + 0x8]
+        rt.asm.mov(r13, ptr(rax + rcx + 0x8)).unwrap();
 
-        // test rax, rax
-        rt.asm.test(rax, rax).unwrap();
-        // jnz ...
-        rt.asm.jnz(get_exports).unwrap();
+        // mov rbx, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
+        rt.asm.mov(rbx, ptr(0x60).gs()).unwrap();
+        // mov rbx, [rbx + 0x18] -> PEB_LDR_DATA *PEB->Ldr
+        rt.asm.mov(rbx, ptr(rbx + 0x18)).unwrap();
 
-        // mov rbx, [rbx] -> LIST_ENTRY *LDR_DATA_TABLE_ENTRY->InMemoryOrderLinks.Flink
-        rt.asm.mov(rbx, ptr(rbx)).unwrap();
-        // cmp rbx, r14
-        rt.asm.cmp(rbx, r14).unwrap();
-        // je ...
-        rt.asm.je(not_found).unwrap();
+        // mov rbx, [rbx + 0x20] -> LDR_DATA_TABLE_ENTRY *PEB->Ldr->InMemoryOrderModuleList.Flink
+        rt.asm.mov(rbx, ptr(rbx + 0x20)).unwrap();
+        // mov r14, rbx
+        rt.asm.mov(r14, rbx).unwrap();
 
-        // jmp ...
-        rt.asm.jmp(module_loop).unwrap();
+        // module_loop:
+        rt.asm.set_label(&mut resolve_module_loop).unwrap();
+        {
+            // lea rcx, [rbx + 0x48] -> UNICODE_STRING *LDR_DATA_TABLE_ENTRY->BaseDllName
+            rt.asm.lea(rcx, ptr(rbx + 0x48)).unwrap();
+            // mov rcx, [rcx + 0x8] -> PWSTR *UNICODE_STRING->Buffer
+            rt.asm.mov(rcx, ptr(rcx + 0x8)).unwrap();
+            // mov rdx, 0x1
+            rt.asm.mov(rdx, 0x1u64).unwrap();
+            // call ...
+            rt.asm.call(rt.function_labels[&FnDef::Hash]).unwrap();
+
+            // cmp rax, r12
+            rt.asm.cmp(rax, r12).unwrap();
+            // je ...
+            rt.asm.je(resolve_export).unwrap();
+
+            // mov rbx, [rbx] -> LIST_ENTRY *LDR_DATA_TABLE_ENTRY->InMemoryOrderLinks.Flink
+            rt.asm.mov(rbx, ptr(rbx)).unwrap();
+            // cmp rbx, r14
+            rt.asm.cmp(rbx, r14).unwrap();
+            // je ...
+            rt.asm.je(resolve_export_failure).unwrap();
+
+            // jmp ...
+            rt.asm.jmp(resolve_module_loop).unwrap();
+        }
     }
 
-    rt.asm.set_label(&mut get_exports).unwrap();
+    rt.asm.set_label(&mut resolve_export).unwrap();
     {
         // mov rax, [rbx + 0x20] -> VOID *LDR_DATA_TABLE_ENTRY->DllBase
         rt.asm.mov(rax, ptr(rbx + 0x20)).unwrap();
@@ -150,10 +158,23 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.add(rax, 0x18).unwrap();
         // add rax, 0x60 -> IMAGE_DATA_DIRECTORY IMAGE_OPTIONAL_HEADER->DataDirectory[0]
         rt.asm.add(rax, 0x70).unwrap();
+
         // mov ecx, [rax] -> DWORD IMAGE_DATA_DIRECTORY->VirtualAddress
         rt.asm.mov(ecx, ptr(rax)).unwrap();
+        // mov [rsp + ...], ecx
+        rt.asm.mov(ptr(rsp + export_directory_rva), ecx).unwrap();
+
+        // mov ecx, [rax + 0x4] -> DWORD IMAGE_DATA_DIRECTORY->Size
+        rt.asm.mov(ecx, ptr(rax + 0x4)).unwrap();
+        // mov [rsp + ...], ecx
+        rt.asm.mov(ptr(rsp + export_directory_size), ecx).unwrap();
+
+        // mov ecx, [rsp + ...]
+        rt.asm.mov(ecx, ptr(rsp + export_directory_rva)).unwrap();
         // add rcx, rbx -> IMAGE_EXPORT_DIRECTORY
         rt.asm.add(rcx, rbx).unwrap();
+        // mov [rsp + ...], rcx
+        rt.asm.mov(ptr(rsp + export_directory), rcx).unwrap();
 
         // mov rax, rcx
         rt.asm.mov(rax, rcx).unwrap();
@@ -189,12 +210,12 @@ pub fn build(rt: &mut Runtime) {
         // xor r15, r15
         rt.asm.xor(r15, r15).unwrap();
 
-        rt.asm.set_label(&mut export_loop).unwrap();
+        rt.asm.set_label(&mut resolve_export_loop).unwrap();
         {
             // cmp r15d, [rsp + ...]
             rt.asm.cmp(r15d, ptr(rsp + number_of_names)).unwrap();
             // je not_found
-            rt.asm.je(not_found).unwrap();
+            rt.asm.je(resolve_export_failure).unwrap();
 
             // mov rax, [rsp + ...]
             rt.asm.mov(rax, ptr(rsp + address_of_names)).unwrap();
@@ -205,46 +226,64 @@ pub fn build(rt: &mut Runtime) {
 
             // mov rcx, rax
             rt.asm.mov(rcx, rax).unwrap();
-            // mov rdx, r13
-            rt.asm.mov(rdx, r13).unwrap();
+            // xor rdx, rdx
+            rt.asm.xor(rdx, rdx).unwrap();
             // call ...
-            rt.asm
-                .call(rt.function_labels[&FnDef::CompareAnsiToAnsi])
-                .unwrap();
+            rt.asm.call(rt.function_labels[&FnDef::Hash]).unwrap();
 
-            // test rax, rax
-            rt.asm.test(rax, rax).unwrap();
-            // jnz ...
-            rt.asm.jnz(found).unwrap();
+            // cmp rax, r13
+            rt.asm.cmp(rax, r13).unwrap();
+            // je ...
+            rt.asm.je(resolve_export_success).unwrap();
 
             // inc r15
             rt.asm.inc(r15).unwrap();
             // jmp ...
-            rt.asm.jmp(export_loop).unwrap();
+            rt.asm.jmp(resolve_export_loop).unwrap();
         }
     }
 
-    rt.asm.set_label(&mut found).unwrap();
+    rt.asm.set_label(&mut resolve_export_success).unwrap();
     {
         // mov rax, [rsp + ...]
         rt.asm
             .mov(rax, ptr(rsp + address_of_name_ordinals))
             .unwrap();
-        // movzx rdx, word ptr [rax + r15*2]
-        rt.asm.movzx(rdx, word_ptr(rax + r15 * 2)).unwrap();
+        // movzx rcx, [rax + r15*2]
+        rt.asm.movzx(rcx, word_ptr(rax + r15 * 2)).unwrap();
 
         // mov rax, [rsp + ...]
         rt.asm.mov(rax, ptr(rsp + address_of_functions)).unwrap();
-        // mov eax, [rax + rdx*4]
-        rt.asm.mov(eax, ptr(rax + rdx * 4)).unwrap();
+        // mov eax, [rax + rcx*4]
+        rt.asm.mov(eax, ptr(rax + rcx * 4)).unwrap();
         // add rax, rbx
         rt.asm.add(rax, rbx).unwrap();
 
-        // jmp ...
-        rt.asm.jmp(epilogue).unwrap();
+        // mov rcx, [rax - rbx]
+        rt.asm.mov(rcx, rax).unwrap();
+        // sub rcx, rbx
+        rt.asm.sub(rcx, rbx).unwrap();
+
+        // mov edx, [...]
+        rt.asm.mov(edx, ptr(rsp + export_directory_rva)).unwrap();
+
+        // cmp ecx, edx
+        rt.asm.cmp(ecx, edx).unwrap();
+        // jb ...
+        rt.asm.jb(epilogue).unwrap();
+
+        // add edx, [rsp + ...]
+        rt.asm.add(edx, ptr(rsp + export_directory_size)).unwrap();
+
+        // cmp edx, edx
+        rt.asm.cmp(edx, edx).unwrap();
+        // jae ...
+        rt.asm.jae(epilogue).unwrap();
+
+        // TODO: Resolve forwarder strings
     }
 
-    rt.asm.set_label(&mut not_found).unwrap();
+    rt.asm.set_label(&mut resolve_export_failure).unwrap();
     {
         // xor rax, rax
         rt.asm.xor(rax, rax).unwrap();

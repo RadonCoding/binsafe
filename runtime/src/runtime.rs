@@ -4,7 +4,7 @@ use iced_x86::{
     code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeLabel},
     BlockEncoderOptions,
 };
-use rand::seq::SliceRandom;
+use rand::{seq::SliceRandom, Rng};
 
 use crate::{
     assembler::Assembler,
@@ -88,8 +88,7 @@ mapped! {
         VmVehInitialize,
         VmVehHandler,
         /* CORE */
-        CompareUnicodeToAnsi,
-        CompareAnsiToAnsi,
+        Hash,
         Resolve,
         #[cfg(debug_assertions)]
         Strlen,
@@ -134,6 +133,12 @@ mapped! {
 
 mapped! {
     StringDef {
+
+    }
+}
+
+mapped! {
+    HashDef {
         Ntdll,
         KERNEL32,
         KERNELBASE,
@@ -172,27 +177,27 @@ mapped! {
 }
 
 impl ImportDef {
-    pub fn get(&self) -> (StringDef, StringDef) {
+    pub fn get(&self) -> (HashDef, HashDef) {
         match self {
             ImportDef::RtlAddVectoredExceptionHandler { .. } => {
-                (StringDef::Ntdll, StringDef::RtlAddVectoredExceptionHandler)
+                (HashDef::Ntdll, HashDef::RtlAddVectoredExceptionHandler)
             }
-            ImportDef::TlsAlloc { .. } => (StringDef::KERNEL32, StringDef::TlsAlloc),
-            ImportDef::RtlFlsAlloc { .. } => (StringDef::Ntdll, StringDef::RtlFlsAlloc),
-            ImportDef::RtlFlsSetValue { .. } => (StringDef::Ntdll, StringDef::RtlFlsSetValue),
-            ImportDef::GetProcessHeap { .. } => (StringDef::KERNEL32, StringDef::GetProcessHeap),
-            ImportDef::RtlAllocateHeap { .. } => (StringDef::Ntdll, StringDef::RtlAllocateHeap),
-            ImportDef::RtlFreeHeap { .. } => (StringDef::Ntdll, StringDef::RtlFreeHeap),
+            ImportDef::TlsAlloc { .. } => (HashDef::KERNEL32, HashDef::TlsAlloc),
+            ImportDef::RtlFlsAlloc { .. } => (HashDef::Ntdll, HashDef::RtlFlsAlloc),
+            ImportDef::RtlFlsSetValue { .. } => (HashDef::Ntdll, HashDef::RtlFlsSetValue),
+            ImportDef::GetProcessHeap { .. } => (HashDef::KERNEL32, HashDef::GetProcessHeap),
+            ImportDef::RtlAllocateHeap { .. } => (HashDef::Ntdll, HashDef::RtlAllocateHeap),
+            ImportDef::RtlFreeHeap { .. } => (HashDef::Ntdll, HashDef::RtlFreeHeap),
             ImportDef::NtSetInformationThread { .. } => {
-                (StringDef::Ntdll, StringDef::NtSetInformationThread)
+                (HashDef::Ntdll, HashDef::NtSetInformationThread)
             }
             ImportDef::NtQueryInformationThread { .. } => {
-                (StringDef::Ntdll, StringDef::NtQueryInformationThread)
+                (HashDef::Ntdll, HashDef::NtQueryInformationThread)
             }
             #[cfg(debug_assertions)]
-            ImportDef::AllocConsole { .. } => (StringDef::KERNELBASE, StringDef::AllocConsole),
+            ImportDef::AllocConsole { .. } => (HashDef::KERNELBASE, HashDef::AllocConsole),
             #[cfg(debug_assertions)]
-            ImportDef::NtWriteFile { .. } => (StringDef::Ntdll, StringDef::NtWriteFile),
+            ImportDef::NtWriteFile { .. } => (HashDef::Ntdll, HashDef::NtWriteFile),
         }
     }
 }
@@ -203,6 +208,7 @@ enum EmissionTask {
     Data(DataDef),
     Bool(BoolDef),
     String(StringDef),
+    Hash(HashDef),
     Dispatch(usize),
 }
 
@@ -226,14 +232,18 @@ impl Dispatch {
 pub struct Runtime {
     pub asm: Assembler,
 
+    pub nonce: u64,
+
     pub function_labels: HashMap<FnDef, CodeLabel>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
     pub bool_labels: HashMap<BoolDef, CodeLabel>,
     pub string_labels: HashMap<StringDef, CodeLabel>,
+    pub hash_labels: HashMap<HashDef, CodeLabel>,
 
     data: HashMap<DataDef, Vec<u8>>,
     bools: HashMap<BoolDef, bool>,
     strings: HashMap<StringDef, Vec<u8>>,
+    hashes: HashMap<HashDef, Vec<u8>>,
 
     imports: HashMap<ImportDef, usize>,
 
@@ -247,6 +257,8 @@ pub struct Runtime {
 impl Runtime {
     pub fn new(bitness: u32) -> Self {
         let mut asm = Assembler::new(bitness).unwrap();
+
+        let nonce = rand::thread_rng().gen::<u64>();
 
         let mut function_labels = HashMap::new();
 
@@ -272,6 +284,12 @@ impl Runtime {
             string_labels.insert(*def, asm.create_label());
         }
 
+        let mut hash_labels = HashMap::new();
+
+        for def in HashDef::VARIANTS {
+            hash_labels.insert(*def, asm.create_label());
+        }
+
         let mut imports = HashMap::new();
 
         for (i, def) in ImportDef::VARIANTS.iter().enumerate() {
@@ -281,14 +299,18 @@ impl Runtime {
         Self {
             asm,
 
+            nonce,
+
             function_labels,
             data_labels,
             bool_labels,
             string_labels,
+            hash_labels,
 
             data: HashMap::new(),
             bools: HashMap::new(),
             strings: HashMap::new(),
+            hashes: HashMap::new(),
 
             imports,
 
@@ -315,6 +337,11 @@ impl Runtime {
         self.asm.set_label(label).unwrap();
     }
 
+    fn set_hash_label(&mut self, def: HashDef) {
+        let label = self.hash_labels.get_mut(&def).unwrap();
+        self.asm.set_label(label).unwrap();
+    }
+
     fn set_string_label(&mut self, def: StringDef) {
         let label = self.string_labels.get_mut(&def).unwrap();
         self.asm.set_label(label).unwrap();
@@ -324,31 +351,60 @@ impl Runtime {
         self.addresses[&label]
     }
 
+    fn hash(&self, value: &str) -> u64 {
+        let mut hash = 14695981039346656037u64 ^ self.nonce;
+
+        for byte in value.bytes() {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+
+        hash ^= hash >> 0x21;
+        hash = hash.wrapping_mul(0xff51afd7ed558ccd);
+        hash ^= hash >> 0x21;
+        hash = hash.wrapping_mul(0xc4ceb9fe1a85ec53);
+        hash ^= hash >> 0x21;
+
+        hash
+    }
+
     pub fn define_data_byte(&mut self, def: DataDef, data: u8) {
         self.data.entry(def).or_insert_with(|| vec![data]);
     }
+
     pub fn define_data_bytes(&mut self, def: DataDef, data: &[u8]) {
         self.data.entry(def).or_insert_with(|| data.to_vec());
     }
+
     pub fn define_data_dword(&mut self, def: DataDef, data: u32) {
         self.data
             .entry(def)
             .or_insert_with(|| data.to_le_bytes().to_vec());
     }
+
     pub fn define_data_qword(&mut self, def: DataDef, data: u64) {
         self.data
             .entry(def)
             .or_insert_with(|| data.to_le_bytes().to_vec());
     }
+
     pub fn define_bool(&mut self, def: BoolDef, value: bool) {
         self.bools.entry(def).or_insert(value);
     }
-    fn define_string(&mut self, def: StringDef, string: &str) {
+
+    fn _define_string(&mut self, def: StringDef, string: &str) {
         self.strings.entry(def).or_insert_with(|| {
             let mut bytes = string.as_bytes().to_vec();
             bytes.push(0);
             bytes
         });
+    }
+
+    fn define_hash(&mut self, def: HashDef, string: &str) {
+        let hash = self.hash(string);
+        self.hashes
+            .entry(def)
+            .or_insert(hash.to_le_bytes().to_vec());
     }
 
     pub fn resolve(&mut self, def: ImportDef) {
@@ -450,6 +506,10 @@ impl Runtime {
                 EmissionTask::String(def) => {
                     self.set_string_label(def);
                     self.asm.db(&self.strings[&def]).unwrap();
+                }
+                EmissionTask::Hash(def) => {
+                    self.set_hash_label(def);
+                    self.asm.db(&self.hashes[&def]).unwrap();
                 }
                 EmissionTask::Dispatch(index) => {
                     let dispatch = &mut self.dispatches[index];
@@ -579,14 +639,7 @@ impl Runtime {
             (FnDef::VmHandlerVectorDiv, vm::handlers::vector_div::build),
             (FnDef::VmFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
-            (
-                FnDef::CompareUnicodeToAnsi,
-                functions::compare_unicode_to_ansi::build,
-            ),
-            (
-                FnDef::CompareAnsiToAnsi,
-                functions::compare_ansi_to_ansi::build,
-            ),
+            (FnDef::Hash, functions::hash::build),
             (FnDef::Resolve, functions::resolve::build),
             #[cfg(debug_assertions)]
             (FnDef::Strlen, functions::strlen::build),
@@ -617,28 +670,28 @@ impl Runtime {
         #[cfg(debug_assertions)]
         self.define_bool(BoolDef::VmDebug, false);
 
-        self.define_string(StringDef::Ntdll, "ntdll.dll");
-        self.define_string(StringDef::KERNEL32, "KERNEL32.DLL");
-        self.define_string(StringDef::KERNELBASE, "KERNELBASE.dll");
-        self.define_string(
-            StringDef::RtlAddVectoredExceptionHandler,
+        self.define_hash(HashDef::Ntdll, "ntdll.dll");
+        self.define_hash(HashDef::KERNEL32, "KERNEL32.DLL");
+        self.define_hash(HashDef::KERNELBASE, "KERNELBASE.dll");
+        self.define_hash(
+            HashDef::RtlAddVectoredExceptionHandler,
             "RtlAddVectoredExceptionHandler",
         );
-        self.define_string(StringDef::TlsAlloc, "TlsAlloc");
-        self.define_string(StringDef::RtlFlsAlloc, "RtlFlsAlloc");
-        self.define_string(StringDef::RtlFlsSetValue, "RtlFlsSetValue");
-        self.define_string(StringDef::GetProcessHeap, "GetProcessHeap");
-        self.define_string(StringDef::RtlAllocateHeap, "RtlAllocateHeap");
-        self.define_string(StringDef::RtlFreeHeap, "RtlFreeHeap");
-        self.define_string(StringDef::NtSetInformationThread, "NtSetInformationThread");
-        self.define_string(
-            StringDef::NtQueryInformationThread,
+        self.define_hash(HashDef::TlsAlloc, "TlsAlloc");
+        self.define_hash(HashDef::RtlFlsAlloc, "RtlFlsAlloc");
+        self.define_hash(HashDef::RtlFlsSetValue, "RtlFlsSetValue");
+        self.define_hash(HashDef::GetProcessHeap, "GetProcessHeap");
+        self.define_hash(HashDef::RtlAllocateHeap, "RtlAllocateHeap");
+        self.define_hash(HashDef::RtlFreeHeap, "RtlFreeHeap");
+        self.define_hash(HashDef::NtSetInformationThread, "NtSetInformationThread");
+        self.define_hash(
+            HashDef::NtQueryInformationThread,
             "NtQueryInformationThread",
         );
         #[cfg(debug_assertions)]
-        self.define_string(StringDef::AllocConsole, "AllocConsole");
+        self.define_hash(HashDef::AllocConsole, "AllocConsole");
         #[cfg(debug_assertions)]
-        self.define_string(StringDef::NtWriteFile, "NtWriteFile");
+        self.define_hash(HashDef::NtWriteFile, "NtWriteFile");
 
         let mut rng = rand::thread_rng();
 
@@ -663,6 +716,12 @@ impl Runtime {
         for def in StringDef::VARIANTS {
             if self.strings.contains_key(def) {
                 data_tasks.push(EmissionTask::String(*def));
+            }
+        }
+
+        for def in HashDef::VARIANTS {
+            if self.hashes.contains_key(def) {
+                data_tasks.push(EmissionTask::Hash(*def));
             }
         }
 
