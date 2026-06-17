@@ -29,6 +29,7 @@ pub fn build(rt: &mut Runtime) {
             // xchg [r8], r9d
             rt.asm.xchg(ptr(r8), r9d).unwrap();
         })),
+        None,
         Some(Box::new(|rt| {
             // xchg [r8], r9w
             rt.asm.xchg(ptr(r8), r9w).unwrap();

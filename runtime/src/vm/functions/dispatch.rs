@@ -63,6 +63,8 @@ const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::VectorXor, FnDef::VmHandlerVectorXor),
     (VMOp::VectorAdd, FnDef::VmHandlerVectorAdd),
     (VMOp::VectorSub, FnDef::VmHandlerVectorSub),
+    (VMOp::VectorMul, FnDef::VmHandlerVectorMul),
+    (VMOp::VectorDiv, FnDef::VmHandlerVectorDiv),
 ];
 
 // void (unsigned char*)

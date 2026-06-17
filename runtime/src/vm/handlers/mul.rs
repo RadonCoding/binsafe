@@ -32,6 +32,7 @@ pub fn build(rt: &mut Runtime) {
         &mut epilogue,
         Some(Box::new(|rt| wide(rt, false))),
         Some(Box::new(|rt| dword(rt, false))),
+        None,
         Some(Box::new(|rt| word(rt, false))),
         None,
         Some(Box::new(|rt| byte(rt, false))),

@@ -1,0 +1,23 @@
+use crate::mapper::Mapper;
+use crate::vm::bytecode::{VMOp, VMWidth};
+use crate::vm::encoders::Encode;
+
+#[derive(Debug)]
+pub struct VectorDiv {
+    pub width: VMWidth,
+    pub stride: VMWidth,
+}
+
+impl Encode for VectorDiv {
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+        vec![
+            mapper.index(VMOp::VectorDiv),
+            mapper.index(self.width),
+            mapper.index(self.stride),
+        ]
+    }
+
+    fn depth(&self) -> i32 {
+        -self.width.slots()
+    }
+}

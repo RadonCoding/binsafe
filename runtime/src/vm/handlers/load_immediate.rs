@@ -34,6 +34,7 @@ pub fn build(rt: &mut Runtime) {
             // xor r8d, r9d
             rt.asm.xor(r8d, r9d).unwrap();
         })),
+        None,
         Some(Box::new(|rt| {
             // r8d  -> source
             utils::bytecode::read_word_zx(rt, rcx, r8d);

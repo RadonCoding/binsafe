@@ -30,6 +30,7 @@ pub fn build(rt: &mut Runtime) {
             // mov [r12 + r8*8], r9
             rt.asm.mov(ptr(r12 + r8 * 8), r9).unwrap();
         })),
+        None,
         Some(Box::new(|rt| {
             // mov [r12 + r8*8], r9w
             rt.asm.mov(ptr(r12 + r8 * 8), r9w).unwrap();

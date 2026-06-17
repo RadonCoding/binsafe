@@ -10,6 +10,7 @@ pub fn dispatch(
     epilogue: &CodeLabel,
     mut lower64: Option<Handler>,
     mut lower32: Option<Handler>,
+    mut higher16: Option<Handler>,
     mut lower16: Option<Handler>,
     mut higher8: Option<Handler>,
     mut lower8: Option<Handler>,
@@ -47,6 +48,7 @@ pub fn dispatch(
     }
 
     case!(lower16, VMWidth::Lower16);
+    case!(higher16, VMWidth::Higher16);
     case!(lower32, VMWidth::Lower32);
     case!(lower64, VMWidth::Lower64);
     case!(slower64, VMWidth::SLower64);

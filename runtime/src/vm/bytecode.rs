@@ -71,6 +71,8 @@ mapped! {
         VectorXor,
         VectorAdd,
         VectorSub,
+        VectorMul,
+        VectorDiv
     }
 }
 
@@ -218,6 +220,7 @@ mapped! {
         Lower8,
         Higher8,
         Lower16,
+        Higher16,
         Lower32,
         Lower64,
         Lower128,
@@ -233,7 +236,7 @@ impl VMWidth {
     pub fn size(self) -> usize {
         match self {
             VMWidth::Lower8 | VMWidth::Higher8 | VMWidth::SLower8 => 1,
-            VMWidth::Lower16 | VMWidth::SLower16 => 2,
+            VMWidth::Lower16 | VMWidth::Higher16 | VMWidth::SLower16 => 2,
             VMWidth::Lower32 | VMWidth::SLower32 => 4,
             VMWidth::Lower64 | VMWidth::SLower64 => 8,
             VMWidth::Lower128 => 16,
@@ -614,6 +617,21 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Dec
             | Mnemonic::Neg
             | Mnemonic::Not
+            | Mnemonic::Pand
+            | Mnemonic::Andps
+            | Mnemonic::Andpd
+            | Mnemonic::Vandps
+            | Mnemonic::Por
+            | Mnemonic::Orps
+            | Mnemonic::Orpd
+            | Mnemonic::Pxor
+            | Mnemonic::Xorps
+            | Mnemonic::Xorpd
+            | Mnemonic::Vpxor
+            | Mnemonic::Vxorps
+            | Mnemonic::Pandn
+            | Mnemonic::Andnps
+            | Mnemonic::Andnpd
             | Mnemonic::Paddb
             | Mnemonic::Paddw
             | Mnemonic::Paddd
@@ -630,27 +648,20 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Subpd
             | Mnemonic::Vsubps
             | Mnemonic::Vsubpd
-            | Mnemonic::Pmullw
             | Mnemonic::Pmulld
+            | Mnemonic::Vpmulld
+            | Mnemonic::Pmullw
+            | Mnemonic::Vpmullw
+            | Mnemonic::Pmulhw
+            | Mnemonic::Vpmulhw
             | Mnemonic::Mulps
-            | Mnemonic::Mulpd
             | Mnemonic::Vmulps
+            | Mnemonic::Mulpd
             | Mnemonic::Vmulpd
-            | Mnemonic::Pand
-            | Mnemonic::Andps
-            | Mnemonic::Andpd
-            | Mnemonic::Vandps
-            | Mnemonic::Por
-            | Mnemonic::Orps
-            | Mnemonic::Orpd
-            | Mnemonic::Pxor
-            | Mnemonic::Xorps
-            | Mnemonic::Xorpd
-            | Mnemonic::Vpxor
-            | Mnemonic::Vxorps
-            | Mnemonic::Pandn
-            | Mnemonic::Andnps
-            | Mnemonic::Andnpd => arithmetic::encode(instruction)?,
+            | Mnemonic::Divps
+            | Mnemonic::Vdivps
+            | Mnemonic::Divpd
+            | Mnemonic::Vdivpd => arithmetic::encode(instruction)?,
             Mnemonic::Mul | Mnemonic::Imul => multiply::encode(instruction)?,
             Mnemonic::Div | Mnemonic::Idiv => divide::encode(instruction)?,
             Mnemonic::Tzcnt => tzcnt::encode(instruction)?,
