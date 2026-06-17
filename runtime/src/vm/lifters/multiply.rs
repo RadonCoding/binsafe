@@ -1,13 +1,12 @@
-use iced_x86::{Instruction, Mnemonic, OpKind};
+use iced_x86::{Instruction, Mnemonic};
 use std::rc::Rc;
 
-use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
+use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::{
-    discard::Discard, load_address::LoadAddress, load_immediate::LoadImmediate,
-    load_memory::LoadMemory, load_register::LoadRegister, mul::Mul, store_register::StoreRegister,
-    Encode,
+    discard::Discard, load_immediate::LoadImmediate, load_register::LoadRegister, mul::Mul,
+    store_register::StoreRegister, Encode,
 };
-use crate::vm::lifters::{operation_immediate, operation_width};
+use crate::vm::lifters::{operation_immediate, operation_width, source};
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     match instruction.mnemonic() {
@@ -100,29 +99,4 @@ pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     operations.push(Rc::new(Discard));
 
     Some(operations)
-}
-
-fn source(
-    operations: &mut Vec<Rc<dyn Encode>>,
-    instruction: &Instruction,
-    index: u32,
-    width: VMWidth,
-) -> Option<()> {
-    match instruction.op_kind(index) {
-        OpKind::Register => {
-            operations.push(Rc::new(LoadRegister {
-                width,
-                source: VMReg::from(instruction.op_register(index)),
-            }));
-        }
-        OpKind::Memory => {
-            operations.push(Rc::new(LoadAddress {
-                source: VMMem::from(instruction),
-            }));
-            operations.push(Rc::new(LoadMemory { width }));
-        }
-        _ => unreachable!(),
-    }
-
-    Some(())
 }

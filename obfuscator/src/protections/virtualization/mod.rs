@@ -85,7 +85,7 @@ impl Virtualization {
             let key = if vcode.is_empty() {
                 self.keys.seed
             } else {
-                u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap())
+                crypt::key(&vcode)
             };
 
             crypt::encrypt(&mut bytes, key, self.keys.mul, self.keys.add, 0);
@@ -216,7 +216,7 @@ impl Protection for Virtualization {
         for (program, group) in programs.iter().zip(groups) {
             let mut bytes = bytecode::assemble(&mut engine.rt.mapper, program);
 
-            let key = u64::from_le_bytes(vcode[vcode.len() - 8..].try_into().unwrap());
+            let key = crypt::key(&vcode);
 
             crypt::encrypt(&mut bytes, key, self.keys.mul, self.keys.add, self.keys.att);
 

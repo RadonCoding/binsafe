@@ -102,12 +102,9 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut derive_key).unwrap();
     {
-        // mov r9, [r13 - 0x8]
-        rt.asm.mov(r9, ptr(r13 - 0x8)).unwrap();
-        // mov rax, 0x00FFFFFFFFFFFFFF
-        rt.asm.mov(rax, 0x00FFFFFFFFFFFFFFu64).unwrap();
-        // and r9, rax
-        rt.asm.and(r9, rax).unwrap();
+        // mov r9, [r13 - 0x9]
+        rt.asm.mov(r9, ptr(r13 - 0x9)).unwrap();
+
         // xor r9, r15
         rt.asm.xor(r9, r15).unwrap();
 
@@ -171,7 +168,6 @@ pub fn build(rt: &mut Runtime) {
         // xor [r8], r9
         rt.asm.xor(ptr(r8), r9).unwrap();
 
-        // Skip reading the ciphertext if decrypting since the block was already ciphertext:
         // test rcx, rcx
         rt.asm.test(rcx, rcx).unwrap();
         // jnz ...
@@ -212,7 +208,7 @@ pub fn build(rt: &mut Runtime) {
         // jnz ...
         rt.asm.jnz(epilogue).unwrap();
 
-        // If encrypting release lock on the current block:
+        // Release lock on the current block:
         // mov [r14], 0x0
         rt.asm.mov(byte_ptr(r14), 0x0).unwrap();
     }

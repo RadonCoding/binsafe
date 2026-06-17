@@ -9,7 +9,7 @@ pub struct Divide {
 
 impl Encode for Divide {
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::Divide), mapper.index(self.width)]
+        vec![mapper.index(VMOp::Div), mapper.index(self.width)]
     }
 
     fn depth(&self) -> i32 {

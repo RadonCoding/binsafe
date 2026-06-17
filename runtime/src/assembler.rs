@@ -101,10 +101,6 @@ fn scratch8(exclude: &[Register]) -> AsmRegister8 {
     scratch(&CANDIDATES, exclude)
 }
 
-fn imm() -> i32 {
-    rand::random::<i32>() & 0xF
-}
-
 macro_rules! operation {
     ($asm:expr, $tmp:expr, $body:expr) => {{
         $asm.push($tmp.gpr64())?;
@@ -115,7 +111,7 @@ macro_rules! operation {
 
 macro_rules! mba_add {
     ($asm:expr, $dst:expr, $src:expr, $tmp:expr) => {{
-        match rand::random::<u8>() % 3 {
+        match rand::random::<u8>() % 2 {
             0 => {
                 // a + b = (a & b) + (a | b)
                 $asm.mov($tmp, $dst)?;
@@ -123,24 +119,13 @@ macro_rules! mba_add {
                 $asm.or($tmp, $src)?;
                 $asm.add($dst, $tmp)?;
             }
-            1 => {
+            _ => {
                 // a + b = (a ^ b) + 2*(a & b)
                 $asm.mov($tmp, $dst)?;
                 $asm.and($tmp, $src)?;
                 $asm.add($tmp, $tmp)?;
                 $asm.xor($dst, $src)?;
                 $asm.add($dst, $tmp)?;
-            }
-            _ => {
-                // a + b = (a + b + k) - k
-                let k = imm();
-                $asm.mov($tmp, $dst)?;
-                $asm.xor($tmp, $src)?;
-                $asm.or($dst, $src)?;
-                $asm.add($dst, $dst)?;
-                $asm.sub($dst, $tmp)?;
-                $asm.add($dst, k)?;
-                $asm.sub($dst, k)?;
             }
         }
         Ok::<(), IcedError>(())
@@ -149,7 +134,7 @@ macro_rules! mba_add {
 
 macro_rules! mba_sub {
     ($asm:expr, $dst:expr, $src:expr, $tmp:expr) => {{
-        match rand::random::<u8>() % 3 {
+        match rand::random::<u8>() % 2 {
             0 => {
                 // a - b = a + (~b + 1)
                 $asm.mov($tmp, $src)?;
@@ -157,7 +142,7 @@ macro_rules! mba_sub {
                 $asm.add($tmp, 1)?;
                 $asm.add($dst, $tmp)?;
             }
-            1 => {
+            _ => {
                 // a - b = (a ^ b) - 2*(b & ~a)
                 $asm.mov($tmp, $dst)?;
                 $asm.not($tmp)?;
@@ -165,14 +150,6 @@ macro_rules! mba_sub {
                 $asm.add($tmp, $tmp)?;
                 $asm.xor($dst, $src)?;
                 $asm.sub($dst, $tmp)?;
-            }
-            _ => {
-                // a - b = ~(~a + b)
-                $asm.mov($tmp, $dst)?;
-                $asm.not($tmp)?;
-                $asm.add($tmp, $src)?;
-                $asm.not($tmp)?;
-                $asm.mov($dst, $tmp)?;
             }
         }
         Ok::<(), IcedError>(())

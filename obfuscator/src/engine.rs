@@ -458,6 +458,21 @@ impl<'a> Engine<'a> {
         }
 
         info!("Found {} blocks", self.blocks.len());
+
+        // let start = 14482;
+        // let end = 14483;
+        // let middle = start + (end - start) / 2;
+
+        // self.blocks.drain(end..);
+        // self.blocks.drain(..start);
+
+        // info!("{} to {} (middle: {})", start, end, middle);
+
+        // println!(
+        //     "0x{:016X} {}",
+        //     self.pe.get_image_base().unwrap() + self.blocks[0].rva as u64,
+        //     self.blocks[0]
+        // );
     }
 
     pub fn get_end_of_sections(&self) -> u32 {

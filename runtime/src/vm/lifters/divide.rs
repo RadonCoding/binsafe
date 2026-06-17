@@ -1,12 +1,11 @@
-use iced_x86::{Instruction, Mnemonic, OpKind};
+use iced_x86::{Instruction, Mnemonic};
 use std::rc::Rc;
 
-use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
+use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::{
-    divide::Divide, load_address::LoadAddress, load_memory::LoadMemory,
-    load_register::LoadRegister, store_register::StoreRegister, Encode,
+    divide::Divide, load_register::LoadRegister, store_register::StoreRegister, Encode,
 };
-use crate::vm::lifters::operation_width;
+use crate::vm::lifters::{operation_width, source};
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     match instruction.mnemonic() {
@@ -77,29 +76,4 @@ pub fn wide<O: Encode + 'static>(
     }
 
     Some(operations)
-}
-
-fn source(
-    operations: &mut Vec<Rc<dyn Encode>>,
-    instruction: &Instruction,
-    index: u32,
-    width: VMWidth,
-) -> Option<()> {
-    match instruction.op_kind(index) {
-        OpKind::Register => {
-            operations.push(Rc::new(LoadRegister {
-                width,
-                source: VMReg::from(instruction.op_register(index)),
-            }));
-        }
-        OpKind::Memory => {
-            operations.push(Rc::new(LoadAddress {
-                source: VMMem::from(instruction),
-            }));
-            operations.push(Rc::new(LoadMemory { width }));
-        }
-        _ => unreachable!(),
-    }
-
-    Some(())
 }

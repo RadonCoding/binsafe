@@ -3,6 +3,9 @@ name = "runtime"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+profile = []
+
 [dependencies]
 iced-x86 = { version = "1.21.0", features = ["code_asm"] }
 rand = "0.8.5"

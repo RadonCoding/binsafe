@@ -7,7 +7,7 @@ type Handler = Box<dyn FnOnce(&mut Runtime)>;
 pub fn dispatch(
     rt: &mut Runtime,
     width: AsmRegister64,
-    epilogue: &mut CodeLabel,
+    epilogue: &CodeLabel,
     mut lower64: Option<Handler>,
     mut lower32: Option<Handler>,
     mut lower16: Option<Handler>,

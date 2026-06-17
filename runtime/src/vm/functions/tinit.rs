@@ -16,8 +16,8 @@ pub fn build(rt: &mut Runtime) {
     // push r14
     rt.asm.push(r14).unwrap();
 
-    // sub rsp, 0x28
-    rt.asm.sub(rsp, 0x28).unwrap();
+    // sub rsp, 0x20
+    rt.asm.sub(rsp, 0x20).unwrap();
 
     // mov rcx, [...]; call ...
     rt.resolve(ImportDef::GetProcessHeap);
@@ -107,6 +107,30 @@ pub fn build(rt: &mut Runtime) {
     // mov [rcx + ...], rax
     utils::vreg::store_reg(rt, rcx, rax, VMReg::VScratch);
 
+    #[cfg(debug_assertions)]
+    {
+        use crate::VM_DEBUG_SIZE;
+
+        // mov rcx, r13
+        rt.asm.mov(rcx, r13).unwrap();
+        // mov rdx, 0x00000008 -> HEAP_ZERO_MEMORY
+        rt.asm.mov(rdx, 0x00000008u64).unwrap();
+        // mov r8, ...
+        rt.asm.mov(r8, VM_DEBUG_SIZE).unwrap();
+        // call r14
+        rt.asm.call(r14).unwrap();
+
+        // add rax, ...
+        rt.asm.add(rax, VM_DEBUG_SIZE as i32).unwrap();
+
+        // mov ecx, [...]
+        rt.asm
+            .mov(ecx, ptr(rt.data_labels[&DataDef::VmDebugTlsIndex]))
+            .unwrap();
+        // mov rcx, gs:[0x1480 + rcx*8]
+        rt.asm.mov(ptr(0x1480 + rcx * 8).gs(), rax).unwrap();
+    }
+
     rt.resolve(ImportDef::RtlFlsSetValue);
     // mov ecx, [...]
     rt.asm
@@ -117,8 +141,8 @@ pub fn build(rt: &mut Runtime) {
     // call rax
     rt.asm.call(rax).unwrap();
 
-    // add rsp, 0x28
-    rt.asm.add(rsp, 0x28).unwrap();
+    // add rsp, 0x20
+    rt.asm.add(rsp, 0x20).unwrap();
 
     // pop r14
     rt.asm.pop(r14).unwrap();

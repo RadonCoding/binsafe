@@ -17,7 +17,7 @@ use iced_x86::{
 use obfuscator::protections::virtualization::crypt;
 use runtime::{
     mapper::Mappable,
-    runtime::{DataDef, FnDef, Runtime},
+    runtime::{BoolDef, DataDef, FnDef, Runtime},
     vm::bytecode::{VMFlag, VMReg, VMVec},
 };
 use windows::Win32::{
@@ -192,7 +192,7 @@ fn initialize_context(flags: CONTEXT_FLAGS) -> (Vec<u8>, *mut CONTEXT) {
     (buffer, context)
 }
 
-fn initialize_threads() -> [(DataDef, u32); 3] {
+fn initialize_threads() -> [(DataDef, u32); 4] {
     [
         (
             DataDef::VmRegistersTlsIndex,
@@ -200,6 +200,10 @@ fn initialize_threads() -> [(DataDef, u32); 3] {
         ),
         (
             DataDef::VmKeyTlsIndex,
+            *TLS_KEY.get_or_init(|| unsafe { TlsAlloc() }),
+        ),
+        (
+            DataDef::VmDebugTlsIndex,
             *TLS_KEY.get_or_init(|| unsafe { TlsAlloc() }),
         ),
         (
@@ -277,6 +281,8 @@ impl Executor {
         rt.define_data_qword(DataDef::VmKeySeed, Self::TEST_KEY_SEED);
         rt.define_data_qword(DataDef::VmKeyMul, Self::TEST_KEY_MUL);
         rt.define_data_qword(DataDef::VmKeyAdd, Self::TEST_KEY_ADD);
+
+        rt.define_bool(BoolDef::VmHasVeh, true);
 
         for (def, value) in initialize_threads() {
             rt.define_data_dword(def, value);

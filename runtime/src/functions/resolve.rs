@@ -1,14 +1,14 @@
 use crate::{
-    define_offset,
     mapper::Mappable,
     runtime::{DataDef, FnDef, ImportDef, Runtime},
+    stack,
 };
 use iced_x86::code_asm::{
     eax, ecx, ptr, r12, r13, r14, r15, r15d, rax, rbp, rbx, rcx, rdx, rsp, word_ptr,
 };
 
-// void* (ImportDef def)
-pub fn build(rt:  &mut Runtime) {
+// void* (unsigned long)
+pub fn build(rt: &mut Runtime) {
     let mut module_loop = rt.asm.create_label();
     let mut get_exports = rt.asm.create_label();
     let mut export_loop = rt.asm.create_label();
@@ -19,13 +19,25 @@ pub fn build(rt:  &mut Runtime) {
 
     let mut offset = 0;
 
-    define_offset!(slot, offset, 8);
-    define_offset!(number_of_names, offset, 4);
-    define_offset!(address_of_names, offset, 8);
-    define_offset!(address_of_name_ordinals, offset, 8);
-    define_offset!(address_of_functions, offset, 8);
+    stack!(slot, offset, 8);
+
+    stack!(number_of_names, offset, 4);
+    stack!(address_of_names, offset, 8);
+    stack!(address_of_name_ordinals, offset, 8);
+    stack!(address_of_functions, offset, 8);
 
     let stack_size = (offset + 0xF) & !0xF;
+
+    // push r12
+    rt.asm.push(r12).unwrap();
+    // push r13
+    rt.asm.push(r13).unwrap();
+    // push r14
+    rt.asm.push(r14).unwrap();
+    // push r15
+    rt.asm.push(r15).unwrap();
+    // push rbx
+    rt.asm.push(rbx).unwrap();
 
     // push rbp
     rt.asm.push(rbp).unwrap();
@@ -40,19 +52,8 @@ pub fn build(rt:  &mut Runtime) {
         .unwrap();
     // lea rax, [rax + rcx*8]
     rt.asm.lea(rax, ptr(rax + rcx * 8)).unwrap();
-    // mov [rbp - ...], rax
-    rt.asm.mov(ptr(rbp - slot), rax).unwrap();
-
-    // push r12
-    rt.asm.push(r12).unwrap();
-    // push r13
-    rt.asm.push(r13).unwrap();
-    // push r14
-    rt.asm.push(r14).unwrap();
-    // push r15
-    rt.asm.push(r15).unwrap();
-    // push rbx
-    rt.asm.push(rbx).unwrap();
+    // mov [rsp + ...], rax
+    rt.asm.mov(ptr(rsp + slot), rax).unwrap();
 
     // mov rax, [rax]
     rt.asm.mov(rax, ptr(rax)).unwrap();
@@ -76,15 +77,11 @@ pub fn build(rt:  &mut Runtime) {
         let (module_def, export_def) = def.get();
         let slot = rt.mapper.index(*def) as i32 * 16;
         // lea rdx, [...]
-        rt.asm
-            .lea(rdx, ptr(rt.string_labels[&module_def]))
-            .unwrap();
+        rt.asm.lea(rdx, ptr(rt.string_labels[&module_def])).unwrap();
         // mov [rax + ...], rdx
         rt.asm.mov(ptr(rax + slot), rdx).unwrap();
         // lea rdx, [...]
-        rt.asm
-            .lea(rdx, ptr(rt.string_labels[&export_def]))
-            .unwrap();
+        rt.asm.lea(rdx, ptr(rt.string_labels[&export_def])).unwrap();
         // mov [rax + ...], rdx
         rt.asm.mov(ptr(rax + slot + 8), rdx).unwrap();
     }
@@ -163,44 +160,44 @@ pub fn build(rt:  &mut Runtime) {
 
         // mov ecx, [rax + 0x18] -> DWORD IMAGE_EXPORT_DIRECTORY->NumberOfNames
         rt.asm.mov(ecx, ptr(rax + 0x18)).unwrap();
-        // mov [rbp - ...], ecx
-        rt.asm.mov(ptr(rbp - number_of_names), ecx).unwrap();
+        // mov [rsp + ...], ecx
+        rt.asm.mov(ptr(rsp + number_of_names), ecx).unwrap();
 
         // mov ecx, [rax + 0x20] -> DWORD IMAGE_EXPORT_DIRECTORY->AddressOfNames
         rt.asm.mov(ecx, ptr(rax + 0x20)).unwrap();
         // add rcx, rbx -> IMAGE_EXPORT_DIRECTORY
         rt.asm.add(rcx, rbx).unwrap();
-        // mov [rbp - ...], ecx
-        rt.asm.mov(ptr(rbp - address_of_names), rcx).unwrap();
+        // mov [rsp + ...], ecx
+        rt.asm.mov(ptr(rsp + address_of_names), rcx).unwrap();
 
         // mov ecx, [rax + 0x24] -> DWORD IMAGE_EXPORT_DIRECTORY->AddressOfNameOrdinals
         rt.asm.mov(ecx, ptr(rax + 0x24)).unwrap();
         // add rcx, rbx
         rt.asm.add(rcx, rbx).unwrap();
-        // mov [rbp - ...], rcx
+        // mov [rsp + ...], rcx
         rt.asm
-            .mov(ptr(rbp - address_of_name_ordinals), rcx)
+            .mov(ptr(rsp + address_of_name_ordinals), rcx)
             .unwrap();
 
         // mov ecx, [rax + 0x1C] -> DWORD IMAGE_EXPORT_DIRECTORY->AddressOfFunctions
         rt.asm.mov(ecx, ptr(rax + 0x1C)).unwrap();
         // add rcx, rbx -> PDWORD AddressOfFunctions VA
         rt.asm.add(rcx, rbx).unwrap();
-        // mov [rbp - ...], rcx
-        rt.asm.mov(ptr(rbp - address_of_functions), rcx).unwrap();
+        // mov [rsp + ...], rcx
+        rt.asm.mov(ptr(rsp + address_of_functions), rcx).unwrap();
 
         // xor r15, r15
         rt.asm.xor(r15, r15).unwrap();
 
         rt.asm.set_label(&mut export_loop).unwrap();
         {
-            // cmp r15d, [rbp - ...]
-            rt.asm.cmp(r15d, ptr(rbp - number_of_names)).unwrap();
+            // cmp r15d, [rsp + ...]
+            rt.asm.cmp(r15d, ptr(rsp + number_of_names)).unwrap();
             // je not_found
             rt.asm.je(not_found).unwrap();
 
-            // mov rax, [rbp - ...]
-            rt.asm.mov(rax, ptr(rbp - address_of_names)).unwrap();
+            // mov rax, [rsp + ...]
+            rt.asm.mov(rax, ptr(rsp + address_of_names)).unwrap();
             // mov eax, [rax + r15*4]
             rt.asm.mov(eax, ptr(rax + r15 * 4)).unwrap();
             // add rax, rbx
@@ -229,15 +226,15 @@ pub fn build(rt:  &mut Runtime) {
 
     rt.asm.set_label(&mut found).unwrap();
     {
-        // mov rax, [rbp - ...]
+        // mov rax, [rsp + ...]
         rt.asm
-            .mov(rax, ptr(rbp - address_of_name_ordinals))
+            .mov(rax, ptr(rsp + address_of_name_ordinals))
             .unwrap();
         // movzx rdx, word ptr [rax + r15*2]
         rt.asm.movzx(rdx, word_ptr(rax + r15 * 2)).unwrap();
 
-        // mov rax, [rbp - ...]
-        rt.asm.mov(rax, ptr(rbp - address_of_functions)).unwrap();
+        // mov rax, [rsp + ...]
+        rt.asm.mov(rax, ptr(rsp + address_of_functions)).unwrap();
         // mov eax, [rax + rdx*4]
         rt.asm.mov(eax, ptr(rax + rdx * 4)).unwrap();
         // add rax, rbx
@@ -257,6 +254,16 @@ pub fn build(rt:  &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
+        // mov rcx, [rsp + ...]
+        rt.asm.mov(rcx, ptr(rsp + slot)).unwrap();
+        // mov [rcx], rax
+        rt.asm.mov(ptr(rcx), rax).unwrap();
+
+        // mov rsp, rbp
+        rt.asm.mov(rsp, rbp).unwrap();
+        // pop rbp
+        rt.asm.pop(rbp).unwrap();
+
         // pop rbx
         rt.asm.pop(rbx).unwrap();
         // pop r15
@@ -268,15 +275,6 @@ pub fn build(rt:  &mut Runtime) {
         // pop r12
         rt.asm.pop(r12).unwrap();
 
-        // mov rcx, [rbp - ...]
-        rt.asm.mov(rcx, ptr(rbp - slot)).unwrap();
-        // mov [rcx], rax
-        rt.asm.mov(ptr(rcx), rax).unwrap();
-
-        // mov rsp, rbp
-        rt.asm.mov(rsp, rbp).unwrap();
-        // pop rbp
-        rt.asm.pop(rbp).unwrap();
         // ret
         rt.asm.ret().unwrap();
     }

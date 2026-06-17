@@ -6,17 +6,19 @@ pub mod mapper;
 pub mod runtime;
 pub mod vm;
 
-macro_rules! define_offset {
+macro_rules! stack {
     ($name:ident, $offset:expr, $size:expr) => {
-        $offset += $size;
         let $name = $offset;
+        $offset += $size;
     };
 }
 
-pub(crate) use define_offset;
+pub(crate) use stack;
 
 pub const VM_STACK_SIZE: u64 = 0x1000;
 pub const VM_SCRATCH_SIZE: u64 = 0x1000;
+#[cfg(debug_assertions)]
+pub const VM_DEBUG_SIZE: u64 = 0x100;
 
 // PUSH imm32 + CALL rel32
 pub const VM_DISPATCH_SIZE: usize = 10;

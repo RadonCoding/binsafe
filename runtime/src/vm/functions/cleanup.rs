@@ -76,6 +76,26 @@ pub fn build(rt: &mut Runtime) {
     // call r14
     rt.asm.call(r14).unwrap();
 
+    #[cfg(debug_assertions)]
+    {
+        use crate::VM_DEBUG_SIZE;
+
+        // mov rcx, r13
+        rt.asm.mov(rcx, r13).unwrap();
+        // xor rdx, rdx
+        rt.asm.xor(rdx, rdx).unwrap();
+        // mov r8d, [...]
+        rt.asm
+            .mov(r8d, ptr(rt.data_labels[&DataDef::VmDebugTlsIndex]))
+            .unwrap();
+        // mov r8, gs:[0x1480 + r8*8]
+        rt.asm.mov(r8, ptr(0x1480 + r8 * 8).gs()).unwrap();
+        // sub r8, ...
+        rt.asm.sub(r8, VM_DEBUG_SIZE as i32).unwrap();
+        // call r14
+        rt.asm.call(r14).unwrap();
+    }
+
     // mov rcx, r13
     rt.asm.mov(rcx, r13).unwrap();
     // xor rdx, rdx
