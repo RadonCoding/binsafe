@@ -123,7 +123,7 @@ macro_rules! initialize_temporary {
 macro_rules! scale_by_two {
     ($assembler:expr, $temporary:expr, $mode_shift_left:expr) => {
         if $mode_shift_left {
-            $assembler.shl($temporary, 1)?;
+            $assembler.shl($temporary, 0x1)?;
         } else {
             $assembler.add($temporary, $temporary)?;
         }
@@ -133,11 +133,11 @@ macro_rules! scale_by_two {
 macro_rules! lightweight_identity {
     ($assembler:expr, $register:expr, $mode_identity:expr) => {
         match $mode_identity {
-            1 => $assembler.or($register, 0)?,
-            2 => $assembler.xor($register, 0)?,
-            3 => $assembler.add($register, 0)?,
-            4 => $assembler.sub($register, 0)?,
-            5 => $assembler.and($register, -1)?,
+            1 => $assembler.or($register, 0x0)?,
+            2 => $assembler.xor($register, 0x0)?,
+            3 => $assembler.add($register, 0x0)?,
+            4 => $assembler.sub($register, 0x0)?,
+            5 => $assembler.and($register, 0xff)?,
             6 => $assembler.test($register, $register)?,
             _ => {}
         }
