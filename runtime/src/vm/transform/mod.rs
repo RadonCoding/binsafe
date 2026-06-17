@@ -1,6 +1,8 @@
+use std::any::Any;
 use std::rc::Rc;
 
 use crate::mapper::Mapper;
+use crate::vm::bytecode::VMReg;
 use crate::vm::{
     bytecode::Phase,
     encoders::{Effect, Encode},
@@ -66,6 +68,7 @@ pub fn deadzones(operations: &mut [Rc<dyn Encode>], effect: impl Fn(&Effect) -> 
     scan(operations, &mut events, &effect);
 
     let mut deadzones = vec![false; events.len()];
+
     let mut live = true;
 
     for (i, (reads, writes)) in events.iter().enumerate().rev() {
@@ -92,7 +95,6 @@ fn scan(
     for op in operations.iter_mut() {
         if let Some(children) = Rc::get_mut(op).unwrap().children() {
             scan(children, events, effect);
-
             continue;
         }
 
@@ -101,4 +103,43 @@ fn scan(
 
         events.push((reads, writes));
     }
+}
+
+/// Downcasts an operation to a concrete encoder type.
+fn downcast<T: 'static>(operation: &Rc<dyn Encode>) -> Option<&T> {
+    (&**operation as &dyn Any).downcast_ref::<T>()
+}
+
+/// Whether `register` is written before it is read in the slice.
+fn overwritten(operations: &[Rc<dyn Encode>], register: VMReg) -> bool {
+    for operation in operations {
+        // Check if conditional since writes inside are not guaranteed
+        if operation.branches() {
+            if operation
+                .reads()
+                .iter()
+                .any(|effect| matches!(effect, Effect::Register(r) if *r == register))
+            {
+                return false;
+            }
+            continue;
+        }
+
+        if operation
+            .writes()
+            .iter()
+            .any(|effect| matches!(effect, Effect::Register(r) if *r == register))
+        {
+            return true;
+        }
+
+        if operation
+            .reads()
+            .iter()
+            .any(|effect| matches!(effect, Effect::Register(r) if *r == register))
+        {
+            return false;
+        }
+    }
+    false
 }
