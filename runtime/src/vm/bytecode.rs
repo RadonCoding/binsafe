@@ -9,8 +9,8 @@ use strum_macros::EnumIter;
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    arithmetic, bitwise, branch, bsr, bswap, bt, cmov, cmpxchg, divide, extend, integer, lea,
-    multiply, pcmpeqb, pmovskb, scalar, set, stack, transfer, tzcnt, xadd, xchg,
+    arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, divide, extend, integer, lea, multiply,
+    pcmpeqb, pmovskb, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -46,7 +46,7 @@ mapped! {
         Shr,
         Sar,
         Mul,
-        Divide,
+        Div,
         TrailingZeros,
         BitScanReverse,
         ByteSwap,
@@ -66,9 +66,11 @@ mapped! {
         PackedByteMask,
         PackedByteEqual,
         VectorAnd,
+        VectorAndNot,
         VectorOr,
         VectorXor,
-        VectorAndNot,
+        VectorAdd,
+        VectorSub,
     }
 }
 
@@ -133,6 +135,32 @@ mapped! {
     }
 }
 
+impl From<Register> for VMReg {
+    fn from(reg: Register) -> Self {
+        match reg {
+            Register::None => Self::None,
+            Register::RAX | Register::EAX | Register::AX | Register::AL | Register::AH => Self::Rax,
+            Register::RCX | Register::ECX | Register::CX | Register::CL | Register::CH => Self::Rcx,
+            Register::RDX | Register::EDX | Register::DX | Register::DL | Register::DH => Self::Rdx,
+            Register::RBX | Register::EBX | Register::BX | Register::BL | Register::BH => Self::Rbx,
+            Register::RSP | Register::ESP | Register::SP | Register::SPL => Self::Rsp,
+            Register::RBP | Register::EBP | Register::BP | Register::BPL => Self::Rbp,
+            Register::RSI | Register::ESI | Register::SI | Register::SIL => Self::Rsi,
+            Register::RDI | Register::EDI | Register::DI | Register::DIL => Self::Rdi,
+            Register::R8 | Register::R8D | Register::R8W | Register::R8L => Self::R8,
+            Register::R9 | Register::R9D | Register::R9W | Register::R9L => Self::R9,
+            Register::R10 | Register::R10D | Register::R10W | Register::R10L => Self::R10,
+            Register::R11 | Register::R11D | Register::R11W | Register::R11L => Self::R11,
+            Register::R12 | Register::R12D | Register::R12W | Register::R12L => Self::R12,
+            Register::R13 | Register::R13D | Register::R13W | Register::R13L => Self::R13,
+            Register::R14 | Register::R14D | Register::R14W | Register::R14L => Self::R14,
+            Register::R15 | Register::R15D | Register::R15W | Register::R15L => Self::R15,
+            Register::RIP => Self::VImage,
+            _ => panic!("unsupported register: {reg:?}"),
+        }
+    }
+}
+
 mapped! {
     VMVec {
         Ymm0,
@@ -178,29 +206,10 @@ impl From<Register> for VMVec {
     }
 }
 
-impl From<Register> for VMReg {
-    fn from(reg: Register) -> Self {
-        match reg {
-            Register::None => Self::None,
-            Register::RAX | Register::EAX | Register::AX | Register::AL | Register::AH => Self::Rax,
-            Register::RCX | Register::ECX | Register::CX | Register::CL | Register::CH => Self::Rcx,
-            Register::RDX | Register::EDX | Register::DX | Register::DL | Register::DH => Self::Rdx,
-            Register::RBX | Register::EBX | Register::BX | Register::BL | Register::BH => Self::Rbx,
-            Register::RSP | Register::ESP | Register::SP | Register::SPL => Self::Rsp,
-            Register::RBP | Register::EBP | Register::BP | Register::BPL => Self::Rbp,
-            Register::RSI | Register::ESI | Register::SI | Register::SIL => Self::Rsi,
-            Register::RDI | Register::EDI | Register::DI | Register::DIL => Self::Rdi,
-            Register::R8 | Register::R8D | Register::R8W | Register::R8L => Self::R8,
-            Register::R9 | Register::R9D | Register::R9W | Register::R9L => Self::R9,
-            Register::R10 | Register::R10D | Register::R10W | Register::R10L => Self::R10,
-            Register::R11 | Register::R11D | Register::R11W | Register::R11L => Self::R11,
-            Register::R12 | Register::R12D | Register::R12W | Register::R12L => Self::R12,
-            Register::R13 | Register::R13D | Register::R13W | Register::R13L => Self::R13,
-            Register::R14 | Register::R14D | Register::R14W | Register::R14L => Self::R14,
-            Register::R15 | Register::R15D | Register::R15W | Register::R15L => Self::R15,
-            Register::RIP => Self::VImage,
-            _ => panic!("unsupported register: {reg:?}"),
-        }
+mapped! {
+    VMPrecision {
+        Integer,
+        Float,
     }
 }
 
@@ -591,43 +600,42 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Sub
             | Mnemonic::Adc
             | Mnemonic::Sbb
-            | Mnemonic::Cmp
-            | Mnemonic::Test
-            | Mnemonic::Rol
-            | Mnemonic::Ror
             | Mnemonic::Shl
             | Mnemonic::Shr
             | Mnemonic::Sar
+            | Mnemonic::Rol
+            | Mnemonic::Ror
+            | Mnemonic::Cmp
+            | Mnemonic::Test
+            | Mnemonic::And
+            | Mnemonic::Or
+            | Mnemonic::Xor
             | Mnemonic::Inc
             | Mnemonic::Dec
             | Mnemonic::Neg
-            | Mnemonic::Not => arithmetic::encode(instruction)?,
-            Mnemonic::Mul | Mnemonic::Imul => multiply::encode(instruction)?,
-            Mnemonic::Tzcnt => tzcnt::encode(instruction)?,
-            Mnemonic::Bsr => bsr::encode(instruction)?,
-            Mnemonic::Bswap => bswap::encode(instruction)?,
-            Mnemonic::Bt | Mnemonic::Bts | Mnemonic::Btr | Mnemonic::Btc => {
-                bt::encode(instruction)?
-            }
-            Mnemonic::Xchg => xchg::encode(instruction)?,
-            Mnemonic::Xadd => xadd::encode(instruction)?,
-            Mnemonic::Cmpxchg => cmpxchg::encode(mapper, instruction)?,
-            Mnemonic::Div | Mnemonic::Idiv => divide::encode(instruction)?,
-            Mnemonic::Lea => lea::encode(instruction)?,
-            Mnemonic::Mov
-            | Mnemonic::Movaps
-            | Mnemonic::Movups
-            | Mnemonic::Movapd
-            | Mnemonic::Movupd
-            | Mnemonic::Movdqa
-            | Mnemonic::Movdqu => transfer::encode(instruction)?,
-            Mnemonic::Movd | Mnemonic::Movq => integer::encode(instruction)?,
-            Mnemonic::Movss | Mnemonic::Movsd => scalar::encode(instruction)?,
-            Mnemonic::Movzx | Mnemonic::Movsx | Mnemonic::Movsxd => extend::encode(instruction)?,
-            Mnemonic::Push | Mnemonic::Pop => stack::encode(instruction)?,
-            Mnemonic::And
-            | Mnemonic::Or
-            | Mnemonic::Xor
+            | Mnemonic::Not
+            | Mnemonic::Paddb
+            | Mnemonic::Paddw
+            | Mnemonic::Paddd
+            | Mnemonic::Paddq
+            | Mnemonic::Addps
+            | Mnemonic::Addpd
+            | Mnemonic::Vaddps
+            | Mnemonic::Vaddpd
+            | Mnemonic::Psubb
+            | Mnemonic::Psubw
+            | Mnemonic::Psubd
+            | Mnemonic::Psubq
+            | Mnemonic::Subps
+            | Mnemonic::Subpd
+            | Mnemonic::Vsubps
+            | Mnemonic::Vsubpd
+            | Mnemonic::Pmullw
+            | Mnemonic::Pmulld
+            | Mnemonic::Mulps
+            | Mnemonic::Mulpd
+            | Mnemonic::Vmulps
+            | Mnemonic::Vmulpd
             | Mnemonic::Pand
             | Mnemonic::Andps
             | Mnemonic::Andpd
@@ -642,7 +650,30 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Vxorps
             | Mnemonic::Pandn
             | Mnemonic::Andnps
-            | Mnemonic::Andnpd => bitwise::encode(instruction)?,
+            | Mnemonic::Andnpd => arithmetic::encode(instruction)?,
+            Mnemonic::Mul | Mnemonic::Imul => multiply::encode(instruction)?,
+            Mnemonic::Div | Mnemonic::Idiv => divide::encode(instruction)?,
+            Mnemonic::Tzcnt => tzcnt::encode(instruction)?,
+            Mnemonic::Bsr => bsr::encode(instruction)?,
+            Mnemonic::Bswap => bswap::encode(instruction)?,
+            Mnemonic::Bt | Mnemonic::Bts | Mnemonic::Btr | Mnemonic::Btc => {
+                bt::encode(instruction)?
+            }
+            Mnemonic::Xchg => xchg::encode(instruction)?,
+            Mnemonic::Xadd => xadd::encode(instruction)?,
+            Mnemonic::Cmpxchg => cmpxchg::encode(mapper, instruction)?,
+            Mnemonic::Lea => lea::encode(instruction)?,
+            Mnemonic::Mov
+            | Mnemonic::Movaps
+            | Mnemonic::Movups
+            | Mnemonic::Movapd
+            | Mnemonic::Movupd
+            | Mnemonic::Movdqa
+            | Mnemonic::Movdqu => transfer::encode(instruction)?,
+            Mnemonic::Movd | Mnemonic::Movq => integer::encode(instruction)?,
+            Mnemonic::Movss | Mnemonic::Movsd => scalar::encode(instruction)?,
+            Mnemonic::Movzx | Mnemonic::Movsx | Mnemonic::Movsxd => extend::encode(instruction)?,
+            Mnemonic::Push | Mnemonic::Pop => stack::encode(instruction)?,
             Mnemonic::Pcmpeqb => pcmpeqb::encode(instruction)?,
             Mnemonic::Pmovmskb => pmovskb::encode(instruction)?,
             Mnemonic::Seta

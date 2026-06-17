@@ -8,6 +8,9 @@ use crate::{
     },
 };
 
+#[cfg(feature = "profile")]
+use crate::debug::{start_profiling, stop_profiling};
+
 pub fn build(rt: &mut Runtime) {
     let mut acquire_global_lock = rt.asm.create_label();
 
@@ -145,12 +148,18 @@ pub fn build(rt: &mut Runtime) {
     // mov [r12 + ...], rax
     utils::vreg::store_reg(rt, r12, rax, VMReg::NExit);
 
+    #[cfg(feature = "profile")]
+    start_profiling(rt, "vm_dispatch_attestation");
+
     // lea rcx, [...]
     rt.asm
         .lea(rcx, ptr(rt.data_labels[&DataDef::VmCode]))
         .unwrap();
     // call ...
     rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
+
+    #[cfg(feature = "profile")]
+    stop_profiling(rt, "vm_dispatch_attestation");
 
     // cmp [r12 + ...], 0x0
     utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
@@ -196,8 +205,14 @@ pub fn build(rt: &mut Runtime) {
         // add rcx, 0x3
         rt.asm.add(rcx, 0x3i32).unwrap();
 
+        #[cfg(feature = "profile")]
+        start_profiling(rt, "vm_dispatch_attestation");
+
         // call ...
         rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
+
+        #[cfg(feature = "profile")]
+        stop_profiling(rt, "vm_dispatch_attestation");
 
         // cmp [r12 + ...], 0x0
         utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
@@ -268,8 +283,14 @@ pub fn build(rt: &mut Runtime) {
         utils::vreg::load_reg(rt, r12, VMReg::VStack, rsp);
     }
 
+    #[cfg(feature = "profile")]
+    start_profiling(rt, "vm_dispatch_native");
+
     // call ...
     rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
+
+    #[cfg(feature = "profile")]
+    stop_profiling(rt, "vm_dispatch_native");
 
     // jmp ...
     rt.asm.jmp(rt.function_labels[&FnDef::VmExit]).unwrap();

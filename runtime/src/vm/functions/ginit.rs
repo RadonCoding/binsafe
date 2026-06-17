@@ -6,8 +6,8 @@ pub fn build(rt: &mut Runtime) {
     // push r13
     rt.asm.push(r13).unwrap();
 
-    // sub rsp, 0x28
-    rt.asm.sub(rsp, 0x28).unwrap();
+    // sub rsp, 0x20
+    rt.asm.sub(rsp, 0x20).unwrap();
 
     // mov rcx, [...]; call ...
     rt.resolve(ImportDef::TlsAlloc);
@@ -28,6 +28,16 @@ pub fn build(rt: &mut Runtime) {
         .mov(ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]), eax)
         .unwrap();
 
+    #[cfg(debug_assertions)]
+    {
+        // call r13
+        rt.asm.call(r13).unwrap();
+        // mov [...], eax
+        rt.asm
+            .mov(ptr(rt.data_labels[&DataDef::VmDebugTlsIndex]), eax)
+            .unwrap();
+    }
+
     rt.resolve(ImportDef::RtlFlsAlloc);
     // lea rcx, [...]
     rt.asm
@@ -45,8 +55,8 @@ pub fn build(rt: &mut Runtime) {
         .call(rt.function_labels[&FnDef::VmVehInitialize])
         .unwrap();
 
-    // add rsp, 0x28
-    rt.asm.add(rsp, 0x28).unwrap();
+    // add rsp, 0x20
+    rt.asm.add(rsp, 0x20).unwrap();
 
     // pop r13
     rt.asm.pop(r13).unwrap();

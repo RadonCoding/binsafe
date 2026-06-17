@@ -33,6 +33,7 @@ mapped! {
         VmVectorsCapture,
         VmVectorsRestore,
         VmVectorsCopy,
+        VmFlags,
         /* VM HANDLERS */
         VmHandlerJcc,
         VmHandlerRet,
@@ -57,6 +58,7 @@ mapped! {
         VmHandlerShr,
         VmHandlerSar,
         VmHandlerMul,
+        VmHandlerDiv,
         VmHandlerTrailingZeros,
         VmHandlerBitScanReverse,
         VmHandlerByteSwap,
@@ -75,12 +77,11 @@ mapped! {
         VmHandlerPackedByteMask,
         VmHandlerPackedByteEqual,
         VmHandlerVectorAnd,
+        VmHandlerVectorAndNot,
         VmHandlerVectorOr,
         VmHandlerVectorXor,
-        VmHandlerVectorAndNot,
-        VmHandlerDivide,
-        /* VM ARITHMETIC */
-        VmFlags,
+        VmHandlerVectorAdd,
+        VmHandlerVectorSub,
         /* VM VEH */
         VmVehInitialize,
         VmVehHandler,
@@ -105,6 +106,8 @@ mapped! {
         VmGlobalVectors,
         VmRegistersTlsIndex,
         VmKeyTlsIndex,
+        #[cfg(debug_assertions)]
+        VmDebugTlsIndex,
         VmCleanupFlsIndex,
         VmTable,
         VmCode,
@@ -122,6 +125,8 @@ mapped! {
     BoolDef {
         VmIsLocked,
         VmHasVeh,
+        #[cfg(debug_assertions)]
+        VmDebug
     }
 }
 
@@ -318,35 +323,35 @@ impl Runtime {
     }
 
     pub fn define_data_byte(&mut self, def: DataDef, data: u8) {
-        self.data.insert(def, vec![data]);
+        self.data.entry(def).or_insert_with(|| vec![data]);
     }
-
     pub fn define_data_bytes(&mut self, def: DataDef, data: &[u8]) {
-        self.data.insert(def, data.to_vec());
+        self.data.entry(def).or_insert_with(|| data.to_vec());
     }
-
     pub fn define_data_dword(&mut self, def: DataDef, data: u32) {
-        self.data.insert(def, data.to_le_bytes().to_vec());
+        self.data
+            .entry(def)
+            .or_insert_with(|| data.to_le_bytes().to_vec());
     }
-
     pub fn define_data_qword(&mut self, def: DataDef, data: u64) {
-        self.data.insert(def, data.to_le_bytes().to_vec());
+        self.data
+            .entry(def)
+            .or_insert_with(|| data.to_le_bytes().to_vec());
     }
-
     pub fn define_bool(&mut self, def: BoolDef, value: bool) {
-        self.bools.insert(def, value);
+        self.bools.entry(def).or_insert(value);
     }
-
     fn define_string(&mut self, def: StringDef, string: &str) {
-        let mut bytes = string.as_bytes().to_vec();
-        bytes.push(0);
-        self.strings.insert(def, bytes);
+        self.strings.entry(def).or_insert_with(|| {
+            let mut bytes = string.as_bytes().to_vec();
+            bytes.push(0);
+            bytes
+        });
     }
 
     pub fn resolve(&mut self, def: ImportDef) {
         // mov rcx, ...
         self.asm.mov(rcx, self.mapper.index(def) as u64).unwrap();
-
         // call ...
         self.asm
             .call(self.function_labels[&FnDef::Resolve])
@@ -458,7 +463,7 @@ impl Runtime {
     }
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
-        let functions: Vec<(FnDef, fn(&mut Runtime))> = vec![
+        let functions: [(FnDef, fn(&mut Runtime)); FnDef::COUNT - 1] = [
             (FnDef::VmGInit, vm::functions::ginit::build),
             (FnDef::VmTInit, vm::functions::tinit::build),
             (FnDef::VmEntry, vm::functions::entry::build),
@@ -514,6 +519,7 @@ impl Runtime {
             (FnDef::VmHandlerShr, vm::handlers::shr::build),
             (FnDef::VmHandlerSar, vm::handlers::sar::build),
             (FnDef::VmHandlerMul, vm::handlers::mul::build),
+            (FnDef::VmHandlerDiv, vm::handlers::div::build),
             (
                 FnDef::VmHandlerTrailingZeros,
                 vm::handlers::trailing_zeros::build,
@@ -559,13 +565,14 @@ impl Runtime {
                 vm::handlers::packed_byte_equal::build,
             ),
             (FnDef::VmHandlerVectorAnd, vm::handlers::vector_and::build),
-            (FnDef::VmHandlerVectorOr, vm::handlers::vector_or::build),
-            (FnDef::VmHandlerVectorXor, vm::handlers::vector_xor::build),
             (
                 FnDef::VmHandlerVectorAndNot,
                 vm::handlers::vector_and_not::build,
             ),
-            (FnDef::VmHandlerDivide, vm::handlers::divide::build),
+            (FnDef::VmHandlerVectorOr, vm::handlers::vector_or::build),
+            (FnDef::VmHandlerVectorXor, vm::handlers::vector_xor::build),
+            (FnDef::VmHandlerVectorAdd, vm::handlers::vector_add::build),
+            (FnDef::VmHandlerVectorSub, vm::handlers::vector_sub::build),
             (FnDef::VmFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (
@@ -594,6 +601,8 @@ impl Runtime {
 
         self.define_data_dword(DataDef::VmRegistersTlsIndex, 0);
         self.define_data_dword(DataDef::VmKeyTlsIndex, 0);
+        #[cfg(debug_assertions)]
+        self.define_data_dword(DataDef::VmDebugTlsIndex, 0);
         self.define_data_dword(DataDef::VmCleanupFlsIndex, 0);
 
         self.define_data_bytes(DataDef::ImportAddresses, &vec![0u8; self.imports.len() * 8]);
@@ -601,6 +610,8 @@ impl Runtime {
 
         self.define_bool(BoolDef::VmIsLocked, false);
         self.define_bool(BoolDef::VmHasVeh, false);
+        #[cfg(debug_assertions)]
+        self.define_bool(BoolDef::VmDebug, false);
 
         self.define_string(StringDef::Ntdll, "ntdll.dll");
         self.define_string(StringDef::KERNEL32, "KERNEL32.DLL");

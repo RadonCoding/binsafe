@@ -3,6 +3,7 @@ use iced_x86::code_asm::{
 };
 
 use crate::{
+    mapper::Mappable,
     runtime::{FnDef, Runtime},
     vm::{
         bytecode::{VMOp, VMReg},
@@ -11,7 +12,10 @@ use crate::{
     VM_DISPATCH_SIZE, VM_TRAMPOLINE_SIZE,
 };
 
-const HANDLERS: [(VMOp, FnDef); 45] = [
+#[cfg(feature = "profile")]
+use crate::debug::{start_profiling, stop_profiling};
+
+const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::Jcc, FnDef::VmHandlerJcc),
     (VMOp::Ret, FnDef::VmHandlerRet),
     (VMOp::LoadImmediate, FnDef::VmHandlerLoadImmediate),
@@ -40,6 +44,7 @@ const HANDLERS: [(VMOp, FnDef); 45] = [
     (VMOp::Shr, FnDef::VmHandlerShr),
     (VMOp::Sar, FnDef::VmHandlerSar),
     (VMOp::Mul, FnDef::VmHandlerMul),
+    (VMOp::Div, FnDef::VmHandlerDiv),
     (VMOp::TrailingZeros, FnDef::VmHandlerTrailingZeros),
     (VMOp::BitScanReverse, FnDef::VmHandlerBitScanReverse),
     (VMOp::ByteSwap, FnDef::VmHandlerByteSwap),
@@ -53,10 +58,11 @@ const HANDLERS: [(VMOp, FnDef); 45] = [
     (VMOp::PackedByteMask, FnDef::VmHandlerPackedByteMask),
     (VMOp::PackedByteEqual, FnDef::VmHandlerPackedByteEqual),
     (VMOp::VectorAnd, FnDef::VmHandlerVectorAnd),
+    (VMOp::VectorAndNot, FnDef::VmHandlerVectorAndNot),
     (VMOp::VectorOr, FnDef::VmHandlerVectorOr),
     (VMOp::VectorXor, FnDef::VmHandlerVectorXor),
-    (VMOp::VectorAndNot, FnDef::VmHandlerVectorAndNot),
-    (VMOp::Divide, FnDef::VmHandlerDivide),
+    (VMOp::VectorAdd, FnDef::VmHandlerVectorAdd),
+    (VMOp::VectorSub, FnDef::VmHandlerVectorSub),
 ];
 
 // void (unsigned char*)
@@ -91,11 +97,17 @@ pub fn build(rt: &mut Runtime) {
         // lea r14, [r13 + rax]
         rt.asm.lea(r14, ptr(r13 + rax)).unwrap();
 
+        #[cfg(feature = "profile")]
+        start_profiling(rt, "vm_crypt_decrypt");
+
         // Decrypt the block:
         // mov rcx, 0x1
         rt.asm.mov(rcx, 0x1u64).unwrap();
         // call ...
         rt.asm.call(rt.function_labels[&FnDef::VmCrypt]).unwrap();
+
+        #[cfg(feature = "profile")]
+        stop_profiling(rt, "vm_crypt_decrypt");
     }
 
     rt.asm.set_label(&mut start_block).unwrap();
@@ -160,11 +172,17 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut check_exit).unwrap();
     {
+        #[cfg(feature = "profile")]
+        start_profiling(rt, "vm_crypt_encrypt");
+
         // Re-encrypt the current block:
         // xor rcx, rcx
         rt.asm.xor(rcx, rcx).unwrap();
         // call ...
         rt.asm.call(rt.function_labels[&FnDef::VmCrypt]).unwrap();
+
+        #[cfg(feature = "profile")]
+        stop_profiling(rt, "vm_crypt_encrypt");
 
         // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NExit, rax);

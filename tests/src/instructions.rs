@@ -1081,36 +1081,6 @@ testing_simd_load!(
     [IMM128_B, 0u128],
     instruction!(Pand_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
 );
-
-testing!(test_por, simd(), instruction!(Por_xmm_xmmm128, XMM0, XMM1));
-testing_simd_load!(
-    test_por_load,
-    [IMM128_B, 0u128],
-    instruction!(Por_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
-testing!(
-    test_pxor,
-    simd(),
-    instruction!(Pxor_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_pxor_load,
-    [IMM128_B, 0u128],
-    instruction!(Pxor_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
-testing!(
-    test_pandn,
-    simd(),
-    instruction!(Pandn_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_pandn_load,
-    [IMM128_B, 0u128],
-    instruction!(Pandn_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
 testing!(
     test_andps,
     simd(),
@@ -1121,7 +1091,6 @@ testing_simd_load!(
     [IMM128_B, 0u128],
     instruction!(Andps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
 );
-
 testing!(
     test_andpd,
     simd(),
@@ -1132,73 +1101,6 @@ testing_simd_load!(
     [IMM128_B, 0u128],
     instruction!(Andpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
 );
-
-testing!(
-    test_andnps,
-    simd(),
-    instruction!(Andnps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_andnps_load,
-    [IMM128_B, 0u128],
-    instruction!(Andnps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
-testing!(
-    test_andnpd,
-    simd(),
-    instruction!(Andnpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_andnpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Andnpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
-testing!(
-    test_orps,
-    simd(),
-    instruction!(Orps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_orps_load,
-    [IMM128_B, 0u128],
-    instruction!(Orps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
-testing!(
-    test_orpd,
-    simd(),
-    instruction!(Orpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_orpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Orpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
-testing!(
-    test_xorps,
-    simd(),
-    instruction!(Xorps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_xorps_load,
-    [IMM128_B, 0u128],
-    instruction!(Xorps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
-testing!(
-    test_xorpd,
-    simd(),
-    instruction!(Xorpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_xorpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Xorpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
 testing!(
     test_vandps,
     simd(),
@@ -1216,6 +1118,94 @@ testing_simd_load!(
 );
 
 testing!(
+    test_pandn,
+    simd(),
+    instruction!(Pandn_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_pandn_load,
+    [IMM128_B, 0u128],
+    instruction!(Pandn_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_andnps,
+    simd(),
+    instruction!(Andnps_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_andnps_load,
+    [IMM128_B, 0u128],
+    instruction!(Andnps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_andnpd,
+    simd(),
+    instruction!(Andnpd_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_andnpd_load,
+    [IMM128_B, 0u128],
+    instruction!(Andnpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+
+testing!(test_por, simd(), instruction!(Por_xmm_xmmm128, XMM0, XMM1));
+testing_simd_load!(
+    test_por_load,
+    [IMM128_B, 0u128],
+    instruction!(Por_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_orps,
+    simd(),
+    instruction!(Orps_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_orps_load,
+    [IMM128_B, 0u128],
+    instruction!(Orps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_orpd,
+    simd(),
+    instruction!(Orpd_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_orpd_load,
+    [IMM128_B, 0u128],
+    instruction!(Orpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+
+testing!(
+    test_pxor,
+    simd(),
+    instruction!(Pxor_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_pxor_load,
+    [IMM128_B, 0u128],
+    instruction!(Pxor_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_xorps,
+    simd(),
+    instruction!(Xorps_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_xorps_load,
+    [IMM128_B, 0u128],
+    instruction!(Xorps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_xorpd,
+    simd(),
+    instruction!(Xorpd_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_xorpd_load,
+    [IMM128_B, 0u128],
+    instruction!(Xorpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
     test_vpxor,
     simd(),
     instruction!(VEX_Vpxor_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
@@ -1230,7 +1220,6 @@ testing_simd_load!(
         MemoryOperand::with_base(RAX)
     )
 );
-
 testing!(
     test_vxorps,
     simd(),
@@ -1241,6 +1230,188 @@ testing_simd_load!(
     [IMM128_C, 0u128],
     instruction!(
         VEX_Vxorps_xmm_xmm_xmmm128,
+        XMM0,
+        XMM1,
+        MemoryOperand::with_base(RAX)
+    )
+);
+
+testing!(
+    test_paddb,
+    simd(),
+    instruction!(Paddb_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_paddb_load,
+    [IMM128_B, 0u128],
+    instruction!(Paddb_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_paddw,
+    simd(),
+    instruction!(Paddw_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_paddw_load,
+    [IMM128_B, 0u128],
+    instruction!(Paddw_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_paddd,
+    simd(),
+    instruction!(Paddd_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_paddd_load,
+    [IMM128_B, 0u128],
+    instruction!(Paddd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_paddq,
+    simd(),
+    instruction!(Paddq_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_paddq_load,
+    [IMM128_B, 0u128],
+    instruction!(Paddq_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_addps,
+    simd(),
+    instruction!(Addps_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_addps_load,
+    [IMM128_B, 0u128],
+    instruction!(Addps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_addpd,
+    simd(),
+    instruction!(Addpd_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_addpd_load,
+    [IMM128_B, 0u128],
+    instruction!(Addpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_vaddps,
+    simd(),
+    instruction!(VEX_Vaddps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
+);
+testing_simd_load!(
+    test_vaddps_load,
+    [IMM128_C, 0u128],
+    instruction!(
+        VEX_Vaddps_xmm_xmm_xmmm128,
+        XMM0,
+        XMM1,
+        MemoryOperand::with_base(RAX)
+    )
+);
+testing!(
+    test_vaddpd,
+    simd(),
+    instruction!(VEX_Vaddpd_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
+);
+testing_simd_load!(
+    test_vaddpd_load,
+    [IMM128_C, 0u128],
+    instruction!(
+        VEX_Vaddpd_xmm_xmm_xmmm128,
+        XMM0,
+        XMM1,
+        MemoryOperand::with_base(RAX)
+    )
+);
+
+testing!(
+    test_psubb,
+    simd(),
+    instruction!(Psubb_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_psubb_load,
+    [IMM128_B, 0u128],
+    instruction!(Psubb_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_psubw,
+    simd(),
+    instruction!(Psubw_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_psubw_load,
+    [IMM128_B, 0u128],
+    instruction!(Psubw_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_psubd,
+    simd(),
+    instruction!(Psubd_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_psubd_load,
+    [IMM128_B, 0u128],
+    instruction!(Psubd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_psubq,
+    simd(),
+    instruction!(Psubq_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_psubq_load,
+    [IMM128_B, 0u128],
+    instruction!(Psubq_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_subps,
+    simd(),
+    instruction!(Subps_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_subps_load,
+    [IMM128_B, 0u128],
+    instruction!(Subps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_subpd,
+    simd(),
+    instruction!(Subpd_xmm_xmmm128, XMM0, XMM1)
+);
+testing_simd_load!(
+    test_subpd_load,
+    [IMM128_B, 0u128],
+    instruction!(Subpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
+);
+testing!(
+    test_vsubps,
+    simd(),
+    instruction!(VEX_Vsubps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
+);
+testing_simd_load!(
+    test_vsubps_load,
+    [IMM128_C, 0u128],
+    instruction!(
+        VEX_Vsubps_xmm_xmm_xmmm128,
+        XMM0,
+        XMM1,
+        MemoryOperand::with_base(RAX)
+    )
+);
+testing!(
+    test_vsubpd,
+    simd(),
+    instruction!(VEX_Vsubpd_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
+);
+testing_simd_load!(
+    test_vsubpd_load,
+    [IMM128_C, 0u128],
+    instruction!(
+        VEX_Vsubpd_xmm_xmm_xmmm128,
         XMM0,
         XMM1,
         MemoryOperand::with_base(RAX)

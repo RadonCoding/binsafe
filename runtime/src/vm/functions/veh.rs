@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{al, byte_ptr, eax, ptr, r12, r12d, r13, r14, r15, rax, rcx, rdx, rsp};
+use iced_x86::code_asm::{byte_ptr, eax, ecx, ptr, r12, r12d, r13, r14, r15, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{BoolDef, DataDef, FnDef, ImportDef, Runtime},
@@ -11,17 +11,15 @@ use crate::{
 pub fn initialize(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
-    // sub rsp, 0x28
-    rt.asm.sub(rsp, 0x28).unwrap();
+    // sub rsp, 0x20
+    rt.asm.sub(rsp, 0x20).unwrap();
 
-    // mov al, [...]
+    // cmp [...], 0x1
     rt.asm
-        .mov(al, ptr(rt.bool_labels[&BoolDef::VmHasVeh]))
+        .cmp(byte_ptr(rt.bool_labels[&BoolDef::VmHasVeh]), 0x1)
         .unwrap();
-    // test al, al
-    rt.asm.test(al, al).unwrap();
-    // jnz ...
-    rt.asm.jnz(epilogue).unwrap();
+    // je ...
+    rt.asm.je(epilogue).unwrap();
 
     // mov rcx, [...]; call ...
     rt.resolve(ImportDef::RtlAddVectoredExceptionHandler);
@@ -42,8 +40,8 @@ pub fn initialize(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
-        // add rsp, 0x28
-        rt.asm.add(rsp, 0x28).unwrap();
+        // add rsp, 0x20
+        rt.asm.add(rsp, 0x20).unwrap();
         // ret
         rt.asm.ret().unwrap();
     }
@@ -84,8 +82,8 @@ pub fn handler(rt: &mut Runtime) {
     // push r15
     rt.asm.push(r15).unwrap();
 
-    // sub rsp, 0x28
-    rt.asm.sub(rsp, 0x28).unwrap();
+    // sub rsp, 0x20
+    rt.asm.sub(rsp, 0x20).unwrap();
 
     // mov r13, rcx
     rt.asm.mov(r13, rcx).unwrap();
@@ -94,24 +92,47 @@ pub fn handler(rt: &mut Runtime) {
     // mov r15, [r13 + 0x8] -> CONTEXT *EXCEPTION_POINTERS->ContextRecord
     rt.asm.mov(r15, ptr(r13 + 0x8)).unwrap();
 
-    // mov rax, [r14 + 0x10] -> PVOID EXCEPTION_RECORD->ExceptionAddress
-    rt.asm.mov(rax, ptr(r14 + 0x10)).unwrap();
+    // mov ecx, [r14] -> DWORD EXCEPTION_RECORD->ExceptionCode
+    rt.asm.mov(ecx, ptr(r14)).unwrap();
+    // mov rdx, [r14 + 0x10] -> PVOID EXCEPTION_RECORD->ExceptionAddress
+    rt.asm.mov(rdx, ptr(r14 + 0x10)).unwrap();
 
-    // lea rcx, [...]
+    #[cfg(debug_assertions)]
+    {
+        use crate::debug;
+
+        let mut software_exception = rt.asm.create_label();
+
+        // mov eax, ecx
+        rt.asm.mov(eax, ecx).unwrap();
+        // shr eax, 0x1c
+        rt.asm.shr(eax, 0x1c).unwrap();
+        // cmp eax, 0xc
+        rt.asm.cmp(eax, 0xc).unwrap();
+        // jne ...
+        rt.asm.jne(software_exception).unwrap();
+
+        debug::print_thread_message(rt, "ExceptionCode: ", Some(rcx), None);
+        debug::print_thread_message(rt, "ExceptionAddress: ", Some(rdx), None);
+
+        rt.asm.set_label(&mut software_exception).unwrap();
+    }
+
+    // lea rax, [...]
     rt.asm
-        .lea(rcx, ptr(rt.data_labels[&DataDef::VehStart]))
+        .lea(rax, ptr(rt.data_labels[&DataDef::VehStart]))
         .unwrap();
-    // cmp rax, rcx
-    rt.asm.cmp(rax, rcx).unwrap();
+    // cmp rdx, rax
+    rt.asm.cmp(rdx, rax).unwrap();
     // jb ...
     rt.asm.jb(continue_search).unwrap();
 
-    // lea rcx, [...]
+    // lea rax, [...]
     rt.asm
-        .lea(rcx, ptr(rt.data_labels[&DataDef::VehEnd]))
+        .lea(rax, ptr(rt.data_labels[&DataDef::VehEnd]))
         .unwrap();
-    // cmp rax, rcx
-    rt.asm.cmp(rax, rcx).unwrap();
+    // cmp rdx, rax
+    rt.asm.cmp(rdx, rax).unwrap();
     // jae ...
     rt.asm.jae(continue_search).unwrap();
 
@@ -158,8 +179,8 @@ pub fn handler(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
-        // add rsp, 0x28
-        rt.asm.add(rsp, 0x28).unwrap();
+        // add rsp, 0x20
+        rt.asm.add(rsp, 0x20).unwrap();
         // pop r15
         rt.asm.pop(r15).unwrap();
         // pop r14
