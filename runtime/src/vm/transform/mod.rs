@@ -8,6 +8,7 @@ use crate::vm::{
 
 pub mod encrypt;
 pub mod mutation;
+pub mod peephole;
 pub mod permute;
 pub mod scramble;
 

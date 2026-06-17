@@ -14,6 +14,7 @@ use crate::vm::lifters::{
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
+use crate::vm::transform::peephole::Peephole;
 use crate::vm::transform::{permute, scramble, Transform};
 
 mapped! {
@@ -384,6 +385,7 @@ pub enum Phase {
     Permute,
     Scramble,
     Encrypt,
+    Peephole,
 }
 
 impl Phase {
@@ -394,6 +396,7 @@ impl Phase {
             Self::Permute => "permute",
             Self::Scramble => "scramble",
             Self::Encrypt => "encrypt",
+            Self::Peephole => "peephole",
         }
     }
 }
@@ -737,6 +740,7 @@ where
     operations = permute::permute(operations, &mut picker);
     operations = scramble::scramble(mapper, operations);
     operations = Mutation.run(mapper, operations);
+    operations = Peephole.run(mapper, operations);
     operations = Encrypt.run(mapper, operations);
     operations = permute::permute(operations, &mut picker);
 
@@ -762,6 +766,8 @@ where
     snapshots.record(Phase::Scramble, &operations);
     operations = Mutation.run(mapper, operations);
     snapshots.record(Mutation.phase(), &operations);
+    operations = Peephole.run(mapper, operations);
+    snapshots.record(Phase::Peephole, &operations);
     operations = Encrypt.run(mapper, operations);
     snapshots.record(Encrypt.phase(), &operations);
     operations = permute::permute(operations, &mut picker);
