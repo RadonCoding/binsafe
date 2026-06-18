@@ -209,20 +209,20 @@ enum EmissionTask {
     Bool(BoolDef),
     String(StringDef),
     Hash(HashDef),
-    Dispatch(usize),
+    DispatchTable(usize),
+    DispatchStub(usize, usize),
 }
 
 struct Dispatch {
     table: CodeLabel,
-    fallback: CodeLabel,
-    stubs: Vec<(u8, CodeLabel)>,
+    stubs: Vec<(u8, CodeLabel, CodeLabel)>,
 }
 
 impl Dispatch {
     fn slots(&self) -> usize {
         self.stubs
             .iter()
-            .map(|(i, _)| *i as usize)
+            .map(|(i, _, _)| *i as usize)
             .max()
             .map(|m| m + 1)
             .unwrap_or(0)
@@ -437,8 +437,6 @@ impl Runtime {
     fn dispatch(&mut self, key: AsmRegister64, cases: Vec<(u8, CodeLabel)>) {
         let table = self.asm.create_label();
 
-        let mut fallback = self.asm.create_label();
-
         let mut stubs = Vec::new();
 
         // mov r10, ...
@@ -453,34 +451,11 @@ impl Runtime {
         self.asm.jmp(r10).unwrap();
 
         for (index, target) in cases {
-            let mut stub = self.asm.create_label();
-
-            self.asm.set_label(&mut stub).unwrap();
-            {
-                // lea r10, [...]
-                self.asm.lea(r10, ptr(target)).unwrap();
-                // sub r10, r11
-                self.asm.sub(r10, r11).unwrap();
-                // mov [r11 + ...], r10
-                self.asm.mov(ptr(r11 + index as i32 * 8), r10).unwrap();
-                // add r10, r11
-                self.asm.add(r10, r11).unwrap();
-
-                // jmp r10
-                self.asm.jmp(r10).unwrap();
-            }
-
-            stubs.push((index, stub));
+            let stub = self.asm.create_label();
+            stubs.push((index, stub, target));
         }
 
-        self.asm.set_label(&mut fallback).unwrap();
-        self.asm.zero_bytes().unwrap();
-
-        self.dispatches.push(Dispatch {
-            table,
-            fallback,
-            stubs,
-        });
+        self.dispatches.push(Dispatch { table, stubs });
     }
 
     fn emit(&mut self, tasks: &[EmissionTask]) {
@@ -511,7 +486,7 @@ impl Runtime {
                     self.set_hash_label(def);
                     self.asm.db(&self.hashes[&def]).unwrap();
                 }
-                EmissionTask::Dispatch(index) => {
+                EmissionTask::DispatchTable(index) => {
                     let dispatch = &mut self.dispatches[index];
 
                     self.asm.set_label(&mut dispatch.table).unwrap();
@@ -519,6 +494,25 @@ impl Runtime {
                     for _ in 0..dispatch.slots() {
                         self.asm.dq(&[0u64]).unwrap();
                     }
+                }
+                EmissionTask::DispatchStub(dispatch_index, stub_index) => {
+                    let (index, stub, target) = self.dispatches[dispatch_index]
+                        .stubs
+                        .get_mut(stub_index)
+                        .unwrap();
+
+                    self.asm.set_label(stub).unwrap();
+
+                    // lea r10, [...]
+                    self.asm.lea(r10, ptr(*target)).unwrap();
+                    // sub r10, r11
+                    self.asm.sub(r10, r11).unwrap();
+                    // mov [r11 + ...], r10
+                    self.asm.mov(ptr(r11 + *index as i32 * 8), r10).unwrap();
+                    // add r10, r11
+                    self.asm.add(r10, r11).unwrap();
+                    // jmp r10
+                    self.asm.jmp(r10).unwrap();
                 }
             }
         }
@@ -749,7 +743,11 @@ impl Runtime {
         let mut phase_two = Vec::new();
 
         for i in 0..self.dispatches.len() {
-            phase_two.push(EmissionTask::Dispatch(i));
+            phase_two.push(EmissionTask::DispatchTable(i));
+
+            for j in 0..self.dispatches[i].stubs.len() {
+                phase_two.push(EmissionTask::DispatchStub(i, j));
+            }
         }
 
         phase_two.extend(data_phase_two.iter().cloned());
@@ -781,16 +779,10 @@ impl Runtime {
 
         for dispatch in &self.dispatches {
             let table = (result.label_ip(&dispatch.table).unwrap() - ip) as usize;
-            let fallback = result.label_ip(&dispatch.fallback).unwrap() as i64;
 
             let base = result.label_ip(&dispatch.table).unwrap() as i64;
 
-            for i in 0..dispatch.slots() {
-                let displacement = fallback - base;
-                code[table + i * 8..table + i * 8 + 8].copy_from_slice(&displacement.to_le_bytes());
-            }
-
-            for (index, stub) in &dispatch.stubs {
+            for (index, stub, _) in &dispatch.stubs {
                 let stub = result.label_ip(stub).unwrap() as i64;
                 let slot = table + *index as usize * 8;
                 let displacement = stub - base;
