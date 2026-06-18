@@ -1,11 +1,5 @@
-use crate::emitter::{ToGpr32, ToGpr64, ToGpr8Lo};
-use iced_x86::{
-    code_asm::{
-        asm_traits::{CodeAsmAnd, CodeAsmNeg},
-        CodeAssembler,
-    },
-    IcedError, Register,
-};
+use crate::emitter::{ToGpr32, ToGpr64};
+use iced_x86::{code_asm::CodeAssembler, IcedError, Register};
 use rand::Rng;
 
 #[derive(Clone, Copy, Default)]
@@ -141,53 +135,4 @@ pub fn junkify<T: Copy + Into<Register>>(
     }
 
     Ok(flags)
-}
-
-pub fn materialize<T>(
-    asm: &mut CodeAssembler,
-    reg: T,
-    flags: &KFlags,
-    rng: &mut impl Rng,
-) -> Result<u8, IcedError>
-where
-    T: Copy + Into<Register>,
-    CodeAssembler: CodeAsmAnd<T, i32> + CodeAsmNeg<T>,
-{
-    let mut known = Vec::with_capacity(5);
-
-    if let Some(v) = flags.cf {
-        known.push((0u8, v));
-    }
-    if let Some(v) = flags.zf {
-        known.push((1, v));
-    }
-    if let Some(v) = flags.sf {
-        known.push((2, v));
-    }
-    if let Some(v) = flags.of {
-        known.push((3, v));
-    }
-    if let Some(v) = flags.pf {
-        known.push((4, v));
-    }
-    assert!(!known.is_empty());
-
-    let (flag, set) = known[rng.gen_range(0..known.len())];
-
-    let r8 = reg.gpr8lo();
-
-    match flag {
-        0 => asm.setb(r8)?,
-        1 => asm.setz(r8)?,
-        2 => asm.sets(r8)?,
-        3 => asm.seto(r8)?,
-        _ => asm.setp(r8)?,
-    }
-
-    asm.and(reg, 1i32)?;
-
-    // reg ∈ {0, 1} ↦ neg(reg) ∈ {0, -1}
-    asm.neg(reg)?;
-
-    Ok(set as u8)
 }

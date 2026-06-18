@@ -495,11 +495,9 @@ impl Runtime {
                         self.asm.dq(&[0u64]).unwrap();
                     }
                 }
-                EmissionTask::DispatchStub(dispatch_index, stub_index) => {
-                    let (index, stub, target) = self.dispatches[dispatch_index]
-                        .stubs
-                        .get_mut(stub_index)
-                        .unwrap();
+                EmissionTask::DispatchStub(table, entry) => {
+                    let (index, stub, target) =
+                        self.dispatches[table].stubs.get_mut(entry).unwrap();
 
                     self.asm.set_label(stub).unwrap();
 
