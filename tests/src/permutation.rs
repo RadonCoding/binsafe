@@ -7,7 +7,8 @@ use runtime::vm::{
 use std::rc::Rc;
 
 use crate::{
-    encrypt, instruction, Difference, Executor, State, FAKE_BRANCH_ADDRESS, IMM64_A, SIMM32_A,
+    constants::{IMM64_A, SIMM32_A},
+    encrypt, instruction, Difference, Executor, State, FAKE_BRANCH_ADDRESS,
 };
 
 #[derive(Default)]

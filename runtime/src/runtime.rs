@@ -7,7 +7,7 @@ use iced_x86::{
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
-    assembler::Assembler,
+    emitter::Emitter,
     functions,
     mapper::{mapped, Mappable, Mapper},
     vm::{
@@ -230,7 +230,7 @@ impl Dispatch {
 }
 
 pub struct Runtime {
-    pub asm: Assembler,
+    pub asm: Emitter,
 
     pub nonce: u64,
 
@@ -256,7 +256,7 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new(bitness: u32) -> Self {
-        let mut asm = Assembler::new(bitness).unwrap();
+        let mut asm = Emitter::new(bitness).unwrap();
 
         let nonce = rand::thread_rng().gen::<u64>();
 

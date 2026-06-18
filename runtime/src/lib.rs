@@ -1,8 +1,10 @@
-pub mod assembler;
 #[cfg(debug_assertions)]
 pub mod debug;
+pub mod emitter;
+pub mod flags;
 pub mod functions;
 pub mod mapper;
+pub mod mba;
 pub mod runtime;
 pub mod vm;
 
