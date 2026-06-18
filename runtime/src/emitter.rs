@@ -223,41 +223,9 @@ macro_rules! implementation {
                 if dst.full_register() == Register::RSP {
                     return asm.add(dst, self);
                 }
-                if dst.full_register() == Register::R10
-                    || dst.full_register() == Register::R11
-                    || self.full_register() == Register::R10
-                    || self.full_register() == Register::R11
-                {
-                    return asm.add(dst, self);
-                }
-                add!(asm, dst, self, $tmp1, $tmp2)
-            }
-            fn sub(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
-                if dst.full_register() == Register::RSP {
-                    return asm.sub(dst, self);
-                }
-                if dst.full_register() == Register::R10
-                    || dst.full_register() == Register::R11
-                    || self.full_register() == Register::R10
-                    || self.full_register() == Register::R11
-                {
-                    return asm.sub(dst, self);
-                }
-                sub!(asm, dst, self, $tmp1, $tmp2)
-            }
-        }
-        impl Obfuscate<$dst> for i32 {
-            fn add(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
-                if dst.full_register() == Register::RSP {
-                    return asm.add(dst, self);
-                }
-                if dst.full_register() == Register::R10 || dst.full_register() == Register::R11 {
-                    return asm.add(dst, self);
-                }
                 let src = $scratch(&[dst.into(), $tmp1.into(), $tmp2.into()]);
                 operation!(asm, src, {
-                    operation!(asm, dst, { mov!(asm, src, $cast(self), dst, $tmp1, $tmp2) })?;
-
+                    operation!(asm, dst, { mov!(asm, src, self, dst, $tmp1, $tmp2) })?;
                     add!(asm, dst, src, $tmp1, $tmp2)
                 })
             }
@@ -265,13 +233,31 @@ macro_rules! implementation {
                 if dst.full_register() == Register::RSP {
                     return asm.sub(dst, self);
                 }
-                if dst.full_register() == Register::R10 || dst.full_register() == Register::R11 {
+                let src = $scratch(&[dst.into(), $tmp1.into(), $tmp2.into()]);
+                operation!(asm, src, {
+                    operation!(asm, dst, { mov!(asm, src, self, dst, $tmp1, $tmp2) })?;
+                    sub!(asm, dst, src, $tmp1, $tmp2)
+                })
+            }
+        }
+        impl Obfuscate<$dst> for i32 {
+            fn add(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
+                if dst.full_register() == Register::RSP {
+                    return asm.add(dst, self);
+                }
+                let src = $scratch(&[dst.into(), $tmp1.into(), $tmp2.into()]);
+                operation!(asm, src, {
+                    operation!(asm, dst, { mov!(asm, src, $cast(self), dst, $tmp1, $tmp2) })?;
+                    add!(asm, dst, src, $tmp1, $tmp2)
+                })
+            }
+            fn sub(self, dst: $dst, asm: &mut CodeAssembler) -> Result<(), IcedError> {
+                if dst.full_register() == Register::RSP {
                     return asm.sub(dst, self);
                 }
                 let src = $scratch(&[dst.into(), $tmp1.into(), $tmp2.into()]);
                 operation!(asm, src, {
                     operation!(asm, dst, { mov!(asm, src, $cast(self), dst, $tmp1, $tmp2) })?;
-
                     sub!(asm, dst, src, $tmp1, $tmp2)
                 })
             }
