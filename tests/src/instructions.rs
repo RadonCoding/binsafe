@@ -3,13 +3,12 @@ use std::slice;
 use iced_x86::MemoryOperand;
 use iced_x86::Register::{AL, CL, EAX, RAX, RBX, RCX, XMM0, XMM1, XMM2};
 use iced_x86::{Instruction, RflagsBits};
-use runtime::mapper::Mappable;
-use runtime::vm::bytecode::{self, VMFlag, VMReg, VMVec};
+use runtime::vm::bytecode::{self, VMFlag, VMReg};
 
-use crate::{
-    decrypt, encrypt, instruction, Difference, Executor, State, IMM128_A, IMM128_B, IMM128_C,
-    IMM32_A, IMM64_A, IMM64_B, IMM64_C, IMM8_A, SIMM32_A, SIMM8_A,
+use crate::constants::{
+    baseline, gpr, simd, IMM128_B, IMM128_C, IMM32_A, IMM64_A, IMM64_B, IMM8_A, SIMM32_A, SIMM8_A,
 };
+use crate::{decrypt, encrypt, instruction, Difference, Executor, State};
 
 #[test]
 fn test_crypt() {
@@ -26,62 +25,6 @@ fn test_crypt() {
     assert_eq!(before, after);
 }
 
-fn baseline() -> State {
-    let mut state = State::default();
-
-    for register in [
-        VMReg::Rax,
-        VMReg::Rcx,
-        VMReg::Rdx,
-        VMReg::Rbx,
-        VMReg::Rbp,
-        VMReg::Rsi,
-        VMReg::Rdi,
-        VMReg::R8,
-        VMReg::R9,
-        VMReg::R10,
-        VMReg::R11,
-        VMReg::R12,
-        VMReg::R13,
-        VMReg::R14,
-        VMReg::R15,
-        VMReg::Flags,
-    ] {
-        state.registers.insert(register, 0);
-    }
-
-    for &vector in VMVec::VARIANTS {
-        state.vectors.insert(vector, [0u128; 2]);
-    }
-
-    state
-}
-
-fn vector(mut state: State, register: VMVec, bytes: [u128; 2]) -> State {
-    state.vectors.insert(register, bytes);
-    state
-}
-
-fn bytes16(value: u128) -> [u128; 2] {
-    let mut vector = [0u128; 2];
-    vector[0] = value;
-    vector
-}
-
-fn gpr() -> State {
-    baseline()
-        .with(VMReg::Rax, IMM64_A)
-        .with(VMReg::Rcx, IMM64_B)
-        .with(VMReg::Rdx, IMM64_C)
-}
-
-fn simd() -> State {
-    let state = baseline();
-    let state = vector(state, VMVec::Ymm0, bytes16(IMM128_A));
-    let state = vector(state, VMVec::Ymm1, bytes16(IMM128_B));
-    vector(state, VMVec::Ymm2, bytes16(IMM128_C))
-}
-
 fn check(state: State, instruction: Instruction) {
     check_with_memory(state, instruction, &mut []);
 }
@@ -90,7 +33,7 @@ fn check_with_memory(state: State, instruction: Instruction, memory: &mut [u8]) 
     let baseline = memory.to_vec();
 
     let mut executor = Executor::new();
-    let mut native = executor.run_native(state.clone(), &instruction);
+    let mut native = executor.run_native(state.clone(), &[instruction]);
 
     memory.copy_from_slice(&baseline);
 

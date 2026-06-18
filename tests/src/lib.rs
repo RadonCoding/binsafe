@@ -10,9 +10,16 @@ use std::{
     },
 };
 
+use crate::{
+    constants::{FAKE_BRANCH_ADDRESS, REGISTERS, VECTORS},
+    instrumentation::{
+        initialize_context, native_handler, read_register, read_vectors, virtual_handler,
+        write_register, write_vectors,
+    },
+};
 use iced_x86::{
     code_asm::{ptr, r12, r12d, r8, r9, rax, rcx, ymm0},
-    Instruction,
+    BlockEncoder, BlockEncoderOptions, Instruction, InstructionBlock,
 };
 use obfuscator::protections::virtualization::crypt;
 use runtime::{
@@ -21,88 +28,34 @@ use runtime::{
     vm::bytecode::{VMFlag, VMReg, VMVec},
 };
 use windows::Win32::{
-    Foundation::{CloseHandle, EXCEPTION_SINGLE_STEP},
+    Foundation::CloseHandle,
     System::{
         Diagnostics::Debug::{
-            AddVectoredExceptionHandler, GetThreadContext, InitializeContext, LocateXStateFeature,
-            SetThreadContext, SetXStateFeaturesMask, CONTEXT, CONTEXT_ALL_AMD64, CONTEXT_FLAGS,
-            CONTEXT_XSTATE_AMD64, EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH,
-            EXCEPTION_POINTERS, M128A,
+            AddVectoredExceptionHandler, GetThreadContext, SetThreadContext, SetXStateFeaturesMask,
+            CONTEXT, CONTEXT_ALL_AMD64, CONTEXT_XSTATE_AMD64,
         },
         Memory::{
             VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE,
             PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
         },
         Threading::{
-            CreateThread, ExitThread, FlsAlloc, GetCurrentThreadId, ResumeThread, SuspendThread,
-            TlsAlloc, WaitForSingleObject, INFINITE, THREAD_CREATE_RUN_IMMEDIATELY,
+            CreateThread, FlsAlloc, ResumeThread, SuspendThread, TlsAlloc, WaitForSingleObject,
+            INFINITE, THREAD_CREATE_RUN_IMMEDIATELY, THREAD_CREATE_SUSPENDED,
         },
     },
 };
 
+mod constants;
+mod emitter;
 mod instructions;
+mod instrumentation;
 mod permutation;
-
-const REGISTERS: [VMReg; 17] = [
-    VMReg::Rax,
-    VMReg::Rcx,
-    VMReg::Rdx,
-    VMReg::Rbx,
-    VMReg::Rsp,
-    VMReg::Rbp,
-    VMReg::Rsi,
-    VMReg::Rdi,
-    VMReg::R8,
-    VMReg::R9,
-    VMReg::R10,
-    VMReg::R11,
-    VMReg::R12,
-    VMReg::R13,
-    VMReg::R14,
-    VMReg::R15,
-    VMReg::Flags,
-];
-const VECTORS: [VMVec; 16] = [
-    VMVec::Ymm0,
-    VMVec::Ymm1,
-    VMVec::Ymm2,
-    VMVec::Ymm3,
-    VMVec::Ymm4,
-    VMVec::Ymm5,
-    VMVec::Ymm6,
-    VMVec::Ymm7,
-    VMVec::Ymm8,
-    VMVec::Ymm9,
-    VMVec::Ymm10,
-    VMVec::Ymm11,
-    VMVec::Ymm12,
-    VMVec::Ymm13,
-    VMVec::Ymm14,
-    VMVec::Ymm15,
-];
-
-const IMM8_A: u8 = 0x85;
-const _IMM16_A: u16 = 0x8A5C;
-const IMM32_A: u32 = 0x8A5C_E179;
-const IMM64_A: u64 = 0x8A5C_E179_2D4B_7F67;
-const IMM64_B: u64 = 0x5BD4_F28A_3E5C_6E78;
-const IMM64_C: u64 = 0x4CE5_039B_4F6D_5D69;
-
-const SIMM8_A: i32 = 0x75;
-const _SIMM16_A: i16 = 0x6A5C;
-const SIMM32_A: i32 = 0x6A5C_E179;
-const _SIMM64_A: i64 = 0x6A5C_E179_2D4B_7F67;
-
-const IMM128_A: u128 = 0x6A5C_E179_2D4B_7F67_1032_5476_789A_BCDE;
-const IMM128_B: u128 = 0x5BD4_F28A_3E5C_6E78_2143_6587_89AB_CDEF;
-const IMM128_C: u128 = 0x4CE5_039B_4F6D_5D69_3254_7698_9ABC_DEF0;
-
-const FAKE_BRANCH_ADDRESS: u64 = 0x1234_ABCD;
 
 static FAKE_BRANCH_MAPPED: OnceLock<()> = OnceLock::new();
 
 static TLS_REGISTERS: OnceLock<u32> = OnceLock::new();
 static TLS_KEY: OnceLock<u32> = OnceLock::new();
+static TLS_DEBUG: OnceLock<u32> = OnceLock::new();
 static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
 
 static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize)>>> =
@@ -115,103 +68,6 @@ static VIRTUAL_HANDLER: OnceLock<()> = OnceLock::new();
 
 const XSTATE_AVX: u32 = 2;
 const XSTATE_MASK_AVX: u64 = 4;
-
-unsafe extern "system" fn virtual_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
-    if VIRTUAL_REGISTRY
-        .lock()
-        .unwrap()
-        .contains(&GetCurrentThreadId())
-    {
-        let ctx = (*info).ContextRecord;
-
-        (*ctx).Rsp = ((*ctx).Rsp & !0xF) - 8;
-        (*ctx).Rcx = 0;
-        (*ctx).Rip = ExitThread as *const () as u64;
-
-        eprintln!(
-            "EXCEPTION: 0x{:08X}",
-            (*(*info).ExceptionRecord).ExceptionCode.0
-        );
-
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-    EXCEPTION_CONTINUE_SEARCH
-}
-
-unsafe extern "system" fn native_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
-    let entry = NATIVE_REGISTRY
-        .lock()
-        .unwrap()
-        .get(&GetCurrentThreadId())
-        .copied();
-
-    if let Some((context, ready)) = entry {
-        (*(ready as *const AtomicBool)).store(true, Ordering::SeqCst);
-
-        if (*(*info).ExceptionRecord).ExceptionCode == EXCEPTION_SINGLE_STEP {
-            ptr::copy_nonoverlapping((*info).ContextRecord, context as *mut CONTEXT, 1);
-        } else {
-            eprintln!(
-                "EXCEPTION: 0x{:08X}",
-                (*(*info).ExceptionRecord).ExceptionCode.0
-            );
-        }
-
-        let ctx = (*info).ContextRecord;
-        (*ctx).EFlags &= !VMFlag::Trap.bit32();
-        (*ctx).Rsp = ((*ctx).Rsp & !0xF) - 8;
-        (*ctx).Rcx = 0;
-        (*ctx).Rip = ExitThread as *const () as u64;
-
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-
-    EXCEPTION_CONTINUE_SEARCH
-}
-
-fn initialize_context(flags: CONTEXT_FLAGS) -> (Vec<u8>, *mut CONTEXT) {
-    let mut length = 0;
-
-    unsafe {
-        let _ = InitializeContext(None, flags, ptr::null_mut(), &mut length);
-    }
-
-    let mut buffer = vec![0u8; length as usize];
-    let mut context = ptr::null_mut();
-
-    unsafe {
-        InitializeContext(
-            Some(buffer.as_mut_ptr() as *mut c_void),
-            flags,
-            &mut context,
-            &mut length,
-        )
-        .unwrap();
-    }
-
-    (buffer, context)
-}
-
-fn initialize_threads() -> [(DataDef, u32); 4] {
-    [
-        (
-            DataDef::VmRegistersTlsIndex,
-            *TLS_REGISTERS.get_or_init(|| unsafe { TlsAlloc() }),
-        ),
-        (
-            DataDef::VmKeyTlsIndex,
-            *TLS_KEY.get_or_init(|| unsafe { TlsAlloc() }),
-        ),
-        (
-            DataDef::VmDebugTlsIndex,
-            *TLS_KEY.get_or_init(|| unsafe { TlsAlloc() }),
-        ),
-        (
-            DataDef::VmCleanupFlsIndex,
-            *FLS_CLEANUP.get_or_init(|| unsafe { FlsAlloc(None) }),
-        ),
-    ]
-}
 
 #[derive(Clone, PartialEq, Eq, Default)]
 pub(crate) struct State {
@@ -284,9 +140,22 @@ impl Executor {
 
         rt.define_bool(BoolDef::VmHasVeh, true);
 
-        for (def, value) in initialize_threads() {
-            rt.define_data_dword(def, value);
-        }
+        rt.define_data_dword(
+            DataDef::VmRegistersTlsIndex,
+            *TLS_REGISTERS.get_or_init(|| unsafe { TlsAlloc() }),
+        );
+        rt.define_data_dword(
+            DataDef::VmKeyTlsIndex,
+            *TLS_KEY.get_or_init(|| unsafe { TlsAlloc() }),
+        );
+        rt.define_data_dword(
+            DataDef::VmDebugTlsIndex,
+            *TLS_DEBUG.get_or_init(|| unsafe { TlsAlloc() }),
+        );
+        rt.define_data_dword(
+            DataDef::VmCleanupFlsIndex,
+            *FLS_CLEANUP.get_or_init(|| unsafe { FlsAlloc(None) }),
+        );
 
         let mem = unsafe {
             VirtualAlloc(
@@ -422,6 +291,10 @@ impl Executor {
             ptr::copy_nonoverlapping(code.as_ptr(), self.mem as *mut u8, code.len());
         }
 
+        VIRTUAL_HANDLER.get_or_init(|| unsafe {
+            AddVectoredExceptionHandler(1, Some(virtual_handler));
+        });
+
         let mut thread_id = 0;
 
         let thread = unsafe {
@@ -433,19 +306,16 @@ impl Executor {
                     unsafe extern "system" fn(*mut c_void) -> u32,
                 >(self.mem as *const ())),
                 Some(self.mem as *mut c_void),
-                THREAD_CREATE_RUN_IMMEDIATELY,
+                THREAD_CREATE_SUSPENDED,
                 Some(&mut thread_id),
             )
             .unwrap()
         };
 
-        VIRTUAL_HANDLER.get_or_init(|| unsafe {
-            AddVectoredExceptionHandler(1, Some(virtual_handler));
-        });
-
         VIRTUAL_REGISTRY.lock().unwrap().insert(thread_id);
 
         unsafe {
+            ResumeThread(thread);
             WaitForSingleObject(thread, INFINITE);
             CloseHandle(thread).unwrap();
         }
@@ -464,21 +334,31 @@ impl Executor {
         }
     }
 
-    pub fn run_native(&mut self, state: State, instruction: &Instruction) -> State {
-        self.rt.asm.add_instruction(*instruction).unwrap();
-
+    pub fn run_native(&mut self, state: State, instructions: &[Instruction]) -> State {
         let ip = self.mem as u64;
 
-        let code = self.rt.assemble(ip);
+        let result = BlockEncoder::encode(
+            64,
+            InstructionBlock::new(instructions, ip),
+            BlockEncoderOptions::NONE,
+        )
+        .unwrap();
 
         unsafe {
-            ptr::copy_nonoverlapping(code.as_ptr(), self.mem as *mut u8, code.len());
+            ptr::copy_nonoverlapping(
+                result.code_buffer.as_ptr(),
+                self.mem as *mut u8,
+                result.code_buffer.len(),
+            );
         }
+
+        let limit = self.mem as usize + result.code_buffer.len();
 
         let initialized = AtomicBool::new(false);
 
         unsafe extern "system" fn spin(ready: *mut c_void) -> u32 {
             (*(ready as *const AtomicBool)).store(true, Ordering::SeqCst);
+
             loop {
                 hint::spin_loop();
             }
@@ -507,7 +387,6 @@ impl Executor {
         }
 
         let (_buffer, context) = initialize_context(CONTEXT_ALL_AMD64 | CONTEXT_XSTATE_AMD64);
-
         let context = unsafe {
             GetThreadContext(thread, context).unwrap();
             SetXStateFeaturesMask(context, XSTATE_MASK_AVX).unwrap();
@@ -519,35 +398,23 @@ impl Executor {
         for (&register, &value) in &state.registers {
             write_register(context, register, value);
         }
-
         context.EFlags |= VMFlag::Trap.bit32();
 
         unsafe { write_vectors(context, &state.vectors) };
-
-        let ready = AtomicBool::new(false);
 
         NATIVE_HANDLER.get_or_init(|| unsafe {
             AddVectoredExceptionHandler(1, Some(native_handler));
         });
 
-        NATIVE_REGISTRY.lock().unwrap().insert(
-            thread_id,
-            (
-                context as *mut CONTEXT as usize,
-                &ready as *const AtomicBool as usize,
-            ),
-        );
+        NATIVE_REGISTRY
+            .lock()
+            .unwrap()
+            .insert(thread_id, (context as *mut CONTEXT as usize, limit));
 
         unsafe {
             SetThreadContext(thread, context).unwrap();
             ResumeThread(thread);
-        }
-
-        while !ready.load(Ordering::SeqCst) {
-            hint::spin_loop();
-        }
-
-        unsafe {
+            WaitForSingleObject(thread, INFINITE);
             CloseHandle(thread).unwrap();
         }
 
@@ -559,7 +426,6 @@ impl Executor {
             .iter()
             .map(|&register| (register, read_register(context, register)))
             .collect();
-
         let vectors = unsafe { read_vectors(context) };
 
         State { registers, vectors }
@@ -572,90 +438,6 @@ impl Drop for Executor {
             let _ = VirtualFree(self.mem, 0, MEM_RELEASE);
         }
     }
-}
-
-fn write_register(context: &mut CONTEXT, register: VMReg, value: u64) {
-    match register {
-        VMReg::Rax => context.Rax = value,
-        VMReg::Rcx => context.Rcx = value,
-        VMReg::Rdx => context.Rdx = value,
-        VMReg::Rbx => context.Rbx = value,
-        VMReg::Rsp => context.Rsp = value,
-        VMReg::Rbp => context.Rbp = value,
-        VMReg::Rsi => context.Rsi = value,
-        VMReg::Rdi => context.Rdi = value,
-        VMReg::R8 => context.R8 = value,
-        VMReg::R9 => context.R9 = value,
-        VMReg::R10 => context.R10 = value,
-        VMReg::R11 => context.R11 = value,
-        VMReg::R12 => context.R12 = value,
-        VMReg::R13 => context.R13 = value,
-        VMReg::R14 => context.R14 = value,
-        VMReg::R15 => context.R15 = value,
-        VMReg::Flags => context.EFlags = value as u32,
-        _ => {}
-    }
-}
-
-fn read_register(context: &CONTEXT, register: VMReg) -> u64 {
-    match register {
-        VMReg::Rax => context.Rax,
-        VMReg::Rcx => context.Rcx,
-        VMReg::Rdx => context.Rdx,
-        VMReg::Rbx => context.Rbx,
-        VMReg::Rsp => context.Rsp,
-        VMReg::Rbp => context.Rbp,
-        VMReg::Rsi => context.Rsi,
-        VMReg::Rdi => context.Rdi,
-        VMReg::R8 => context.R8,
-        VMReg::R9 => context.R9,
-        VMReg::R10 => context.R10,
-        VMReg::R11 => context.R11,
-        VMReg::R12 => context.R12,
-        VMReg::R13 => context.R13,
-        VMReg::R14 => context.R14,
-        VMReg::R15 => context.R15,
-        VMReg::Flags => context.EFlags as u64,
-        _ => 0,
-    }
-}
-
-unsafe fn write_vectors(context: &mut CONTEXT, vectors: &HashMap<VMVec, [u128; 2]>) {
-    let upper = LocateXStateFeature(context, XSTATE_AVX, None) as *mut M128A;
-
-    for (&vector, &value) in vectors {
-        let index = VECTORS.iter().position(|&v| v == vector).unwrap();
-        context.Anonymous.FltSave.XmmRegisters[index] = M128A {
-            Low: value[0] as u64,
-            High: (value[0] >> 64) as i64,
-        };
-        *upper.add(index) = M128A {
-            Low: value[1] as u64,
-            High: (value[1] >> 64) as i64,
-        };
-    }
-}
-
-unsafe fn read_vectors(context: &mut CONTEXT) -> HashMap<VMVec, [u128; 2]> {
-    let upper = LocateXStateFeature(context, XSTATE_AVX, None) as *const M128A;
-
-    VECTORS
-        .iter()
-        .enumerate()
-        .map(|(index, &vector)| {
-            let low = context.Anonymous.FltSave.XmmRegisters[index];
-            let high = if upper.is_null() {
-                M128A::default()
-            } else {
-                *upper.add(index)
-            };
-            let value = [
-                low.Low as u128 | ((low.High as u64 as u128) << 64),
-                high.Low as u128 | ((high.High as u64 as u128) << 64),
-            ];
-            (vector, value)
-        })
-        .collect()
 }
 
 pub(crate) fn encrypt(bytecode: &mut Vec<u8>) {

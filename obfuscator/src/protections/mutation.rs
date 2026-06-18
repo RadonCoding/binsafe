@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use crate::engine::Engine;
 use crate::protections::Protection;
 use iced_x86::code_asm::*;
-use iced_x86::{Instruction, Mnemonic, OpKind, Register};
+use iced_x86::{Instruction, Mnemonic, OpKind};
 use logger::info;
 use rand::Rng;
 
@@ -12,54 +12,6 @@ use rand::Rng;
 pub struct Mutation;
 
 impl Mutation {
-    fn resolve_gpr32(&self, reg: Register) -> Option<AsmRegister32> {
-        use iced_x86::code_asm::registers::gpr32::*;
-
-        match reg {
-            Register::EAX => Some(eax),
-            Register::ECX => Some(ecx),
-            Register::EDX => Some(edx),
-            Register::EBX => Some(ebx),
-            Register::ESP => Some(esp),
-            Register::EBP => Some(ebp),
-            Register::ESI => Some(esi),
-            Register::EDI => Some(edi),
-            Register::R8D => Some(r8d),
-            Register::R9D => Some(r9d),
-            Register::R10D => Some(r10d),
-            Register::R11D => Some(r11d),
-            Register::R12D => Some(r12d),
-            Register::R13D => Some(r13d),
-            Register::R14D => Some(r14d),
-            Register::R15D => Some(r15d),
-            _ => None,
-        }
-    }
-
-    fn resolve_gpr64(&self, reg: Register) -> Option<AsmRegister64> {
-        use iced_x86::code_asm::registers::gpr64::*;
-
-        match reg {
-            Register::RAX => Some(rax),
-            Register::RCX => Some(rcx),
-            Register::RDX => Some(rdx),
-            Register::RBX => Some(rbx),
-            Register::RSP => Some(rsp),
-            Register::RBP => Some(rbp),
-            Register::RSI => Some(rsi),
-            Register::RDI => Some(rdi),
-            Register::R8 => Some(r8),
-            Register::R9 => Some(r9),
-            Register::R10 => Some(r10),
-            Register::R11 => Some(r11),
-            Register::R12 => Some(r12),
-            Register::R13 => Some(r13),
-            Register::R14 => Some(r14),
-            Register::R15 => Some(r15),
-            _ => None,
-        }
-    }
-
     fn has_dead_flags(&self, instructions: &[Instruction]) -> bool {
         let written_flags = instructions[0].rflags_written();
 
@@ -116,12 +68,12 @@ impl Protection for Mutation {
                         let imm = instruction.immediate(1);
                         let key = rng.gen::<u32>();
 
-                        if let Some(reg) = self.resolve_gpr64(raw) {
+                        if let Some(reg) = get_gpr64(raw) {
                             asm.mov(reg, imm ^ (key as u64)).unwrap();
                             asm.xor(reg, key as i32).unwrap();
                             mutated = true;
                             break 'mutation;
-                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                        } else if let Some(reg) = get_gpr32(raw) {
                             asm.mov(reg, (imm as u32) ^ key).unwrap();
                             asm.xor(reg, key as i32).unwrap();
                             mutated = true;
@@ -137,7 +89,7 @@ impl Protection for Mutation {
                         let imm = instruction.immediate(1) as i32;
                         let addition = mnemonic == Mnemonic::Add;
 
-                        if let Some(reg) = self.resolve_gpr64(raw) {
+                        if let Some(reg) = get_gpr64(raw) {
                             if addition {
                                 asm.sub(reg, -imm).unwrap();
                             } else {
@@ -145,7 +97,7 @@ impl Protection for Mutation {
                             }
                             mutated = true;
                             break 'mutation;
-                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                        } else if let Some(reg) = get_gpr32(raw) {
                             if addition {
                                 asm.sub(reg, -imm).unwrap();
                             } else {
@@ -163,12 +115,12 @@ impl Protection for Mutation {
                     {
                         let imm = instruction.immediate(1) as i32;
 
-                        if let Some(reg) = self.resolve_gpr64(raw) {
+                        if let Some(reg) = get_gpr64(raw) {
                             asm.not(reg).unwrap();
                             asm.xor(reg, !imm).unwrap();
                             mutated = true;
                             break 'mutation;
-                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                        } else if let Some(reg) = get_gpr32(raw) {
                             asm.not(reg).unwrap();
                             asm.xor(reg, !imm).unwrap();
                             mutated = true;
@@ -183,13 +135,13 @@ impl Protection for Mutation {
                     {
                         let imm = instruction.immediate(1) as i32;
 
-                        if let Some(reg) = self.resolve_gpr64(raw) {
+                        if let Some(reg) = get_gpr64(raw) {
                             asm.not(reg).unwrap();
                             asm.or(reg, !imm).unwrap();
                             asm.not(reg).unwrap();
                             mutated = true;
                             break 'mutation;
-                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                        } else if let Some(reg) = get_gpr32(raw) {
                             asm.not(reg).unwrap();
                             asm.or(reg, !imm).unwrap();
                             asm.not(reg).unwrap();
@@ -205,13 +157,13 @@ impl Protection for Mutation {
                     {
                         let imm = instruction.immediate(1) as i32;
 
-                        if let Some(reg) = self.resolve_gpr64(raw) {
+                        if let Some(reg) = get_gpr64(raw) {
                             asm.not(reg).unwrap();
                             asm.and(reg, !imm).unwrap();
                             asm.not(reg).unwrap();
                             mutated = true;
                             break 'mutation;
-                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                        } else if let Some(reg) = get_gpr32(raw) {
                             asm.not(reg).unwrap();
                             asm.and(reg, !imm).unwrap();
                             asm.not(reg).unwrap();
@@ -222,12 +174,12 @@ impl Protection for Mutation {
 
                     // NEG reg -> NOT reg; ADD reg, 1
                     if mnemonic == Mnemonic::Neg && dead_flags {
-                        if let Some(reg) = self.resolve_gpr64(raw) {
+                        if let Some(reg) = get_gpr64(raw) {
                             asm.not(reg).unwrap();
                             asm.add(reg, 1).unwrap();
                             mutated = true;
                             break 'mutation;
-                        } else if let Some(reg) = self.resolve_gpr32(raw) {
+                        } else if let Some(reg) = get_gpr32(raw) {
                             asm.not(reg).unwrap();
                             asm.add(reg, 1).unwrap();
                             mutated = true;
@@ -241,11 +193,11 @@ impl Protection for Mutation {
                         && instruction.op1_kind() == OpKind::Register
                     {
                         if raw == instruction.op1_register() && dead_flags {
-                            if let Some(reg) = self.resolve_gpr64(raw) {
+                            if let Some(reg) = get_gpr64(raw) {
                                 asm.xor(reg, reg).unwrap();
                                 mutated = true;
                                 break 'mutation;
-                            } else if let Some(reg) = self.resolve_gpr32(raw) {
+                            } else if let Some(reg) = get_gpr32(raw) {
                                 asm.xor(reg, reg).unwrap();
                                 mutated = true;
                                 break 'mutation;
