@@ -46,7 +46,6 @@ use windows::Win32::{
 };
 
 mod constants;
-mod emitter;
 mod instructions;
 mod instrumentation;
 mod permutation;
@@ -286,6 +285,8 @@ impl Executor {
         let ip = self.mem as u64;
 
         let code = self.rt.assemble(ip);
+
+        assert!(code.len() <= Self::SIZE);
 
         unsafe {
             ptr::copy_nonoverlapping(code.as_ptr(), self.mem as *mut u8, code.len());

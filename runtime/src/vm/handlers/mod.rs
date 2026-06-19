@@ -174,7 +174,6 @@ macro_rules! arithmetic {
 pub(crate) use arithmetic;
 
 pub mod add;
-pub mod add_carry;
 pub mod and;
 pub mod bit_scan_reverse;
 pub mod bit_test;
@@ -211,7 +210,6 @@ pub mod store_memory;
 pub mod store_merge;
 pub mod store_register;
 pub mod sub;
-pub mod sub_borrow;
 pub mod test;
 pub mod trailing_zeros;
 pub mod vector;

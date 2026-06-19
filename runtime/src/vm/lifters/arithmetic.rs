@@ -1,17 +1,16 @@
 use iced_x86::{Instruction, Mnemonic, OpKind};
 use std::rc::Rc;
 
-use crate::vm::bytecode::{VMMem, VMPrecision, VMReg, VMVec, VMWidth};
+use crate::vm::bytecode::{VMFlag, VMMem, VMPrecision, VMReg, VMVec, VMWidth};
 use crate::vm::encoders::vector_div::VectorDiv;
 use crate::vm::encoders::vector_mul::VectorMul;
 use crate::vm::encoders::{
-    add::Add, add_carry::AddCarry, and::And, discard::Discard, load_address::LoadAddress,
-    load_immediate::LoadImmediate, load_memory::LoadMemory, load_register::LoadRegister,
-    load_vector::LoadVector, or::Or, rol::Rol, ror::Ror, sar::Sar, shl::Shl, shr::Shr,
-    store_memory::StoreMemory, store_merge::StoreMerge, store_register::StoreRegister, sub::Sub,
-    sub_borrow::SubBorrow, test::Test, vector_add::VectorAdd, vector_and::VectorAnd,
-    vector_and_not::VectorAndNot, vector_or::VectorOr, vector_sub::VectorSub,
-    vector_xor::VectorXor, xor::Xor, Encode,
+    add::Add, and::And, discard::Discard, load_address::LoadAddress, load_immediate::LoadImmediate,
+    load_memory::LoadMemory, load_register::LoadRegister, load_vector::LoadVector, or::Or,
+    rol::Rol, ror::Ror, sar::Sar, shl::Shl, shr::Shr, store_memory::StoreMemory,
+    store_merge::StoreMerge, store_register::StoreRegister, sub::Sub, test::Test,
+    vector_add::VectorAdd, vector_and::VectorAnd, vector_and_not::VectorAndNot,
+    vector_or::VectorOr, vector_sub::VectorSub, vector_xor::VectorXor, xor::Xor, Encode,
 };
 use crate::vm::lifters::{operation_width, source};
 
@@ -24,8 +23,8 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     match instruction.mnemonic() {
         Mnemonic::Add => binary(instruction, |width| Add { width }, Tail::Writeback),
         Mnemonic::Sub => binary(instruction, |width| Sub { width }, Tail::Writeback),
-        Mnemonic::Adc => binary(instruction, |width| AddCarry { width }, Tail::Writeback),
-        Mnemonic::Sbb => binary(instruction, |width| SubBorrow { width }, Tail::Writeback),
+        Mnemonic::Adc => carry(instruction, |width| Add { width }),
+        Mnemonic::Sbb => carry(instruction, |width| Sub { width }),
         Mnemonic::Shl => binary(instruction, |width| Shl { width }, Tail::Writeback),
         Mnemonic::Shr => binary(instruction, |width| Shr { width }, Tail::Writeback),
         Mnemonic::Sar => binary(instruction, |width| Sar { width }, Tail::Writeback),
@@ -173,10 +172,9 @@ pub fn binary<O: Encode + 'static>(
     match tail {
         Tail::Writeback => match instruction.op0_kind() {
             OpKind::Register => {
-                let destination_register = VMReg::from(instruction.op0_register());
                 operations.push(Rc::new(StoreRegister {
                     width,
-                    destination: destination_register,
+                    destination: VMReg::from(instruction.op0_register()),
                 }));
             }
             OpKind::Memory => {
@@ -191,6 +189,50 @@ pub fn binary<O: Encode + 'static>(
             operations.push(Rc::new(Discard));
         }
     }
+    Some(operations)
+}
+
+pub fn carry<O: Encode + 'static>(
+    instruction: &Instruction,
+    make: impl Fn(VMWidth) -> O,
+) -> Option<Vec<Rc<dyn Encode>>> {
+    let mut operations = Vec::<Rc<dyn Encode>>::new();
+    let width = operation_width(instruction, 0);
+
+    source(&mut operations, instruction, 0, width);
+    source(&mut operations, instruction, 1, width);
+
+    operations.push(Rc::new(LoadRegister {
+        width: VMWidth::Lower64,
+        source: VMReg::Flags,
+    }));
+    operations.push(Rc::new(LoadImmediate {
+        width: VMWidth::Lower64,
+        source: VMFlag::Carry.bit64().to_le_bytes().to_vec(),
+    }));
+    operations.push(Rc::new(And {
+        width: VMWidth::Lower64,
+    }));
+
+    operations.push(Rc::new(Add { width }));
+
+    operations.push(Rc::new(make(width)));
+
+    match instruction.op0_kind() {
+        OpKind::Register => {
+            operations.push(Rc::new(StoreRegister {
+                width,
+                destination: VMReg::from(instruction.op0_register()),
+            }));
+        }
+        OpKind::Memory => {
+            operations.push(Rc::new(LoadAddress {
+                source: VMMem::from(instruction),
+            }));
+            operations.push(Rc::new(StoreMemory { width }));
+        }
+        _ => unreachable!(),
+    };
 
     Some(operations)
 }
