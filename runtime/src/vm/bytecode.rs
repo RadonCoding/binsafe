@@ -35,8 +35,6 @@ mapped! {
         // Arithmetic
         Add,
         Sub,
-        AddCarry,
-        SubBorrow,
         And,
         Or,
         Xor,

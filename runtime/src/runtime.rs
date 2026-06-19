@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 
 use iced_x86::{
-    code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeLabel},
+    code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeAssembler, CodeLabel},
     BlockEncoderOptions,
 };
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
-    emitter::Emitter,
     functions,
     mapper::{mapped, Mappable, Mapper},
     vm::{
@@ -66,8 +65,6 @@ mapped! {
         VmHandlerBitTestSet,
         VmHandlerBitTestReset,
         VmHandlerBitTestComplement,
-        VmHandlerAddCarry,
-        VmHandlerSubBorrow,
         VmHandlerExchange,
         VmHandlerExchangeAdd,
         VmHandlerCompareExchange,
@@ -230,7 +227,7 @@ impl Dispatch {
 }
 
 pub struct Runtime {
-    pub asm: Emitter,
+    pub asm: CodeAssembler,
 
     pub nonce: u64,
 
@@ -256,7 +253,7 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new(bitness: u32) -> Self {
-        let mut asm = Emitter::new(bitness).unwrap();
+        let mut asm = CodeAssembler::new(bitness).unwrap();
 
         let nonce = rand::thread_rng().gen::<u64>();
 
@@ -596,8 +593,6 @@ impl Runtime {
                 FnDef::VmHandlerBitTestComplement,
                 vm::handlers::bit_test_complement::build,
             ),
-            (FnDef::VmHandlerAddCarry, vm::handlers::add_carry::build),
-            (FnDef::VmHandlerSubBorrow, vm::handlers::sub_borrow::build),
             (FnDef::VmHandlerExchange, vm::handlers::exchange::build),
             (
                 FnDef::VmHandlerExchangeAdd,

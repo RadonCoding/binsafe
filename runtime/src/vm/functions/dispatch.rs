@@ -29,8 +29,6 @@ const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::StoreExtend, FnDef::VmHandlerStoreExtend),
     (VMOp::Add, FnDef::VmHandlerAdd),
     (VMOp::Sub, FnDef::VmHandlerSub),
-    (VMOp::AddCarry, FnDef::VmHandlerAddCarry),
-    (VMOp::SubBorrow, FnDef::VmHandlerSubBorrow),
     (VMOp::Exchange, FnDef::VmHandlerExchange),
     (VMOp::ExchangeAdd, FnDef::VmHandlerExchangeAdd),
     (VMOp::CompareExchange, FnDef::VmHandlerCompareExchange),

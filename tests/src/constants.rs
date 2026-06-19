@@ -100,7 +100,7 @@ pub fn simd() -> State {
 }
 
 pub const IMM8_A: u8 = 0x85;
-pub const IMM16_A: u16 = 0x8A5C;
+pub const _IMM16_A: u16 = 0x8A5C;
 pub const IMM32_A: u32 = 0x8A5C_E179;
 pub const IMM64_A: u64 = 0x8A5C_E179_2D4B_7F67;
 pub const IMM64_B: u64 = 0x5BD4_F28A_3E5C_6E78;
