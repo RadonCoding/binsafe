@@ -38,7 +38,6 @@ mapped! {
         And,
         Or,
         Xor,
-        Test,
         Rol,
         Ror,
         Shl,
@@ -122,14 +121,23 @@ mapped! {
         R15,
         Flags,
 
+        Vg0, // General Purpose
+        Vp0, // Persistent Purpose
+
+        VShadow, // Shadow Context
+
         NEntry, // Native Entry
         NBranch, // Native Branch
         NExit, // Native Exit
+
         BPointer, // Block Pointer
         BLength, // Block Length
+        BResume, // Block End
+
         VImage, // Image Base
-        VAtt, // Attestation Key
+
         VImm, // Immediate Key
+
         VStack, // Virtual Stack
         VScratch, // Virtual Scratch
         VVector, // Virtual Vectors
@@ -368,6 +376,32 @@ pub struct VMCondition {
     pub test: VMTest,
     pub lhs: u8,
     pub rhs: u8,
+}
+
+impl VMCondition {
+    pub fn cmp(lhs: VMFlag, rhs: u8) -> VMCondition {
+        VMCondition {
+            test: VMTest::CMP,
+            lhs: lhs as u8,
+            rhs,
+        }
+    }
+
+    pub fn eq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
+        VMCondition {
+            test: VMTest::EQ,
+            lhs: lhs as u8,
+            rhs: rhs as u8,
+        }
+    }
+
+    pub fn neq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
+        VMCondition {
+            test: VMTest::NEQ,
+            lhs: lhs as u8,
+            rhs: rhs as u8,
+        }
+    }
 }
 
 impl Encode for VMCondition {

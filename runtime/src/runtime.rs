@@ -18,15 +18,20 @@ use crate::{
 mapped! {
     FnDef {
         /* VM */
+        VmContextCreate,
+        VmContextDelete,
         VmGInit,
         VmTInit,
         VmEntry,
         VmExit,
         VmCrypt,
         VmDispatch,
+        VmInvoke,
         VmLookup,
         VmCleanup,
         VmRegistersCapture,
+        VmRegistersCaptureVolatile,
+        VmRegistersCaptureNonvolatile,
         VmRegistersRestore,
         VmRegistersCopy,
         VmVectorsCapture,
@@ -50,7 +55,6 @@ mapped! {
         VmHandlerAnd,
         VmHandlerOr,
         VmHandlerXor,
-        VmHandlerTest,
         VmHandlerRol,
         VmHandlerRor,
         VmHandlerShl,
@@ -98,7 +102,6 @@ mapped! {
 
 mapped! {
     DataDef {
-        Functions,
         VehStart,
         VmGlobalRegisters,
         VmGlobalVectors,
@@ -148,6 +151,7 @@ mapped! {
         RtlFreeHeap,
         NtSetInformationThread,
         NtQueryInformationThread,
+        NtTerminateProcess,
         #[cfg(debug_assertions)]
         AllocConsole,
         #[cfg(debug_assertions)]
@@ -166,6 +170,7 @@ mapped! {
         RtlFreeHeap,
         NtSetInformationThread,
         NtQueryInformationThread,
+        NtTerminateProcess,
         #[cfg(debug_assertions)]
         AllocConsole,
         #[cfg(debug_assertions)]
@@ -191,6 +196,7 @@ impl ImportDef {
             ImportDef::NtQueryInformationThread { .. } => {
                 (HashDef::Ntdll, HashDef::NtQueryInformationThread)
             }
+            ImportDef::NtTerminateProcess { .. } => (HashDef::Ntdll, HashDef::NtTerminateProcess),
             #[cfg(debug_assertions)]
             ImportDef::AllocConsole { .. } => (HashDef::KERNELBASE, HashDef::AllocConsole),
             #[cfg(debug_assertions)]
@@ -247,6 +253,7 @@ pub struct Runtime {
     dispatches: Vec<Dispatch>,
 
     addresses: HashMap<CodeLabel, u64>,
+    sizes: HashMap<CodeLabel, u64>,
 
     pub mapper: Mapper,
 }
@@ -314,6 +321,7 @@ impl Runtime {
             dispatches: Vec::new(),
 
             addresses: HashMap::new(),
+            sizes: HashMap::new(),
 
             mapper: Mapper::new(),
         }
@@ -346,6 +354,10 @@ impl Runtime {
 
     pub fn lookup(&self, label: CodeLabel) -> u64 {
         self.addresses[&label]
+    }
+
+    pub fn size(&self, label: CodeLabel) -> u64 {
+        self.sizes[&label]
     }
 
     fn hash(&self, value: &str) -> u64 {
@@ -515,15 +527,26 @@ impl Runtime {
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
         let functions: [(FnDef, fn(&mut Runtime)); FnDef::COUNT - 1] = [
+            (FnDef::VmContextCreate, vm::functions::context::create),
+            (FnDef::VmContextDelete, vm::functions::context::delete),
             (FnDef::VmGInit, vm::functions::ginit::build),
             (FnDef::VmTInit, vm::functions::tinit::build),
             (FnDef::VmEntry, vm::functions::entry::build),
             (FnDef::VmExit, vm::functions::exit::build),
             (FnDef::VmCrypt, vm::functions::crypt::build),
             (FnDef::VmDispatch, vm::functions::dispatch::build),
+            (FnDef::VmInvoke, vm::functions::invoke::build),
             (FnDef::VmLookup, vm::functions::lookup::build),
             (FnDef::VmCleanup, vm::functions::cleanup::build),
             (FnDef::VmRegistersCapture, vm::functions::registers::capture),
+            (
+                FnDef::VmRegistersCaptureVolatile,
+                vm::functions::registers::capture_volatile,
+            ),
+            (
+                FnDef::VmRegistersCaptureNonvolatile,
+                vm::functions::registers::capture_nonvolatile,
+            ),
             (FnDef::VmRegistersRestore, vm::functions::registers::restore),
             (FnDef::VmRegistersCopy, vm::functions::registers::copy),
             (FnDef::VmVectorsCapture, vm::functions::vectors::capture),
@@ -563,7 +586,6 @@ impl Runtime {
             (FnDef::VmHandlerAnd, vm::handlers::and::build),
             (FnDef::VmHandlerOr, vm::handlers::or::build),
             (FnDef::VmHandlerXor, vm::handlers::xor::build),
-            (FnDef::VmHandlerTest, vm::handlers::test::build),
             (FnDef::VmHandlerRol, vm::handlers::rol::build),
             (FnDef::VmHandlerRor, vm::handlers::ror::build),
             (FnDef::VmHandlerShl, vm::handlers::shl::build),
@@ -639,7 +661,6 @@ impl Runtime {
         self.define_data_byte(DataDef::VehStart, 0x0);
         self.define_data_byte(DataDef::VehEnd, 0x0);
 
-        self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
         self.define_data_bytes(DataDef::VmGlobalRegisters, &[0u8; VMReg::COUNT * 8]);
         self.define_data_bytes(DataDef::VmGlobalVectors, &[0u8; VMVec::COUNT * 32]);
 
@@ -675,6 +696,7 @@ impl Runtime {
             HashDef::NtQueryInformationThread,
             "NtQueryInformationThread",
         );
+        self.define_hash(HashDef::NtTerminateProcess, "NtTerminateProcess");
         #[cfg(debug_assertions)]
         self.define_hash(HashDef::AllocConsole, "AllocConsole");
         #[cfg(debug_assertions)]
@@ -685,7 +707,7 @@ impl Runtime {
         let mut data_tasks = Vec::new();
 
         for def in DataDef::VARIANTS {
-            if *def == DataDef::Functions || *def == DataDef::VehStart || *def == DataDef::VehEnd {
+            if *def == DataDef::VehStart || *def == DataDef::VehEnd {
                 continue;
             }
 
@@ -715,7 +737,6 @@ impl Runtime {
         data_tasks.shuffle(&mut rng);
 
         self.emit(&[
-            EmissionTask::Data(DataDef::Functions),
             EmissionTask::Function(FnDef::VmVehHandler, vm::functions::veh::handler),
             EmissionTask::Data(DataDef::VehStart),
         ]);
@@ -768,6 +789,25 @@ impl Runtime {
             }
         }
 
+        let mut labels = self
+            .addresses
+            .iter()
+            .map(|(label, address)| (*label, *address))
+            .collect::<Vec<(CodeLabel, u64)>>();
+        labels.sort_unstable_by_key(|(_, address)| *address);
+
+        for window in labels.windows(2) {
+            let (label, start) = window[0];
+            let (_, end) = window[1];
+
+            self.sizes.insert(label, end - start);
+        }
+
+        if let Some((label, start)) = labels.last() {
+            self.sizes
+                .insert(*label, ip + result.inner.code_buffer.len() as u64 - start);
+        }
+
         let mut code = result.inner.code_buffer.clone();
 
         for dispatch in &self.dispatches {
@@ -780,18 +820,6 @@ impl Runtime {
                 let slot = table + *index as usize * 8;
                 let displacement = stub - base;
                 code[slot..slot + 8].copy_from_slice(&displacement.to_le_bytes());
-            }
-        }
-
-        let functions = (result
-            .label_ip(&self.data_labels[&DataDef::Functions])
-            .unwrap()
-            - ip) as usize;
-
-        for def in FnDef::VARIANTS {
-            if let Ok(address) = result.label_ip(&self.function_labels[def]) {
-                let slot = functions + self.mapper.index(*def) as usize * 8;
-                code[slot..slot + 8].copy_from_slice(&address.to_le_bytes());
             }
         }
 

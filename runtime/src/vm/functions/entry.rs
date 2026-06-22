@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{ptr, r12, r12b, r12d, r8, rax, rcx, rdx, rsp};
+use iced_x86::code_asm::{ptr, r12, r12b, r12d, rax, rcx, rdx, rsp};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -12,13 +12,10 @@ use crate::{
 use crate::debug::{start_profiling, stop_profiling};
 
 pub fn build(rt: &mut Runtime) {
-    let mut acquire_global_lock = rt.asm.create_label();
+    let mut acquire_global = rt.asm.create_label();
 
     let mut invoke_ginit = rt.asm.create_label();
     let mut invoke_tinit = rt.asm.create_label();
-
-    let mut continue_attestation = rt.asm.create_label();
-    let mut finish_attestation = rt.asm.create_label();
 
     let mut initialize_state = rt.asm.create_label();
     let mut initialize_execution = rt.asm.create_label();
@@ -32,32 +29,19 @@ pub fn build(rt: &mut Runtime) {
     rt.asm
         .mov(r12d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
-    // test r12d, r12d
-    rt.asm.test(r12d, r12d).unwrap();
+    // test r12, r12
+    rt.asm.test(r12, r12).unwrap();
     // jz ...
-    rt.asm.jz(acquire_global_lock).unwrap();
+    rt.asm.jz(acquire_global).unwrap();
 
     // mov r12, [0x1480 + r12*8]
     rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
     // test r12, r12
     rt.asm.test(r12, r12).unwrap();
-    // jz ...
-    rt.asm.jz(acquire_global_lock).unwrap();
+    // jnz ...
+    rt.asm.jnz(initialize_state).unwrap();
 
-    // cmp [r12 + ...], 0x0
-    utils::vreg::cmp_imm(rt, r12, VMReg::VAtt, 0x0);
-    // jne ...
-    rt.asm.jne(initialize_state).unwrap();
-
-    // cmp [r12 + ...], 0x0
-    utils::vreg::cmp_imm(rt, r12, VMReg::BPointer, 0x0);
-    // je ...
-    rt.asm.je(initialize_state).unwrap();
-
-    // jmp ...
-    rt.asm.jmp(continue_attestation).unwrap();
-
-    lock::acquire_global(rt, r12b, Some(&mut acquire_global_lock));
+    lock::acquire_global(rt, r12b, Some(&mut acquire_global));
 
     // lea r12, [...]
     rt.asm
@@ -80,8 +64,8 @@ pub fn build(rt: &mut Runtime) {
     rt.asm
         .mov(r12d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
         .unwrap();
-    // test r12d, r12d
-    rt.asm.test(r12d, r12d).unwrap();
+    // test r12, r12
+    rt.asm.test(r12, r12).unwrap();
     // jz ...
     rt.asm.jz(invoke_ginit).unwrap();
     // jmp ...
@@ -128,111 +112,9 @@ pub fn build(rt: &mut Runtime) {
         .call(rt.function_labels[&FnDef::VmVectorsCopy])
         .unwrap();
 
-    // mov rax, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
-    rt.asm.mov(rax, ptr(0x60).gs()).unwrap();
-    // mov rax, [rax + 0x10] -> PVOID PEB->ImageBaseAddress
-    rt.asm.mov(rax, ptr(rax + 0x10)).unwrap();
-    // mov [r12 + ...], rax
-    utils::vreg::store_reg(rt, r12, rax, VMReg::VImage);
+    lock::release_global(rt);
 
-    // mov [r12 + ...], rsp
-    utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
-
-    // mov rsp, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VStack, rsp);
-
-    // lea rax, [...]
-    rt.asm
-        .lea(rax, ptr(rt.function_labels[&FnDef::VmEntry]))
-        .unwrap();
-    // mov [r12 + ...], rax
-    utils::vreg::store_reg(rt, r12, rax, VMReg::NExit);
-
-    #[cfg(feature = "profile")]
-    start_profiling(rt, "vm_dispatch_attestation");
-
-    // lea rcx, [...]
-    rt.asm
-        .lea(rcx, ptr(rt.data_labels[&DataDef::VmCode]))
-        .unwrap();
-    // call ...
-    rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
-
-    #[cfg(feature = "profile")]
-    stop_profiling(rt, "vm_dispatch_attestation");
-
-    // cmp [r12 + ...], 0x0
-    utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
-    // je ...
-    rt.asm.je(finish_attestation).unwrap();
-    // jmp ...
-    rt.asm.jmp(rt.function_labels[&FnDef::VmExit]).unwrap();
-
-    rt.asm.set_label(&mut continue_attestation).unwrap();
-    {
-        // call ...
-        rt.asm
-            .call(rt.function_labels[&FnDef::VmRegistersCapture])
-            .unwrap();
-
-        // mov rcx, [...]
-        utils::vreg::load_reg(rt, r12, VMReg::VVector, rcx);
-        // call ...
-        rt.asm
-            .call(rt.function_labels[&FnDef::VmVectorsCapture])
-            .unwrap();
-
-        // Skip the pushes from prologue:
-        // add rsp, 0x10
-        rt.asm.add(rsp, 0x10i32).unwrap();
-        // mov [r12 + ...], rsp
-        utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
-
-        // mov rsp, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::VStack, rsp);
-
-        // Set the block pointer past the padding, length word, and lock byte:
-        // mov rcx, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BPointer, rcx);
-        // mov rdx, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BLength, rdx);
-        // add rdx, 0x7
-        rt.asm.add(rdx, 0x7i32).unwrap();
-        // and rdx, -0x8
-        rt.asm.and(rdx, -0x8i32).unwrap();
-        // add rcx, rdx
-        rt.asm.add(rcx, rdx).unwrap();
-        // add rcx, 0x3
-        rt.asm.add(rcx, 0x3i32).unwrap();
-
-        #[cfg(feature = "profile")]
-        start_profiling(rt, "vm_dispatch_attestation");
-
-        // call ...
-        rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
-
-        #[cfg(feature = "profile")]
-        stop_profiling(rt, "vm_dispatch_attestation");
-
-        // cmp [r12 + ...], 0x0
-        utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
-        // je ...
-        rt.asm.je(finish_attestation).unwrap();
-
-        // jmp ...
-        rt.asm.jmp(rt.function_labels[&FnDef::VmExit]).unwrap();
-    }
-
-    rt.asm.set_label(&mut finish_attestation).unwrap();
-    {
-        lock::release_global(rt);
-
-        // mov rsp, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::Rsp, rsp);
-
-        // jmp ...
-        rt.asm.jmp(initialize_execution).unwrap();
-    }
+    rt.asm.jmp(initialize_execution).unwrap();
 
     rt.asm.set_label(&mut initialize_state).unwrap();
     {
@@ -262,18 +144,18 @@ pub fn build(rt: &mut Runtime) {
         utils::vreg::store_reg(rt, r12, rax, VMReg::Flags);
 
         // Pop the return address from the stack:
-        // pop rdx
-        rt.asm.pop(rdx).unwrap();
+        // pop rcx
+        rt.asm.pop(rcx).unwrap();
 
         // Pop the VM-table index from the stack:
-        // pop r8
-        rt.asm.pop(r8).unwrap();
+        // pop rdx
+        rt.asm.pop(rdx).unwrap();
 
         // Resolve the VM-table entry into the block pointer:
         // call ...
         rt.asm.call(rt.function_labels[&FnDef::VmLookup]).unwrap();
-        // mov rcx, rax
-        rt.asm.mov(rcx, rax).unwrap();
+        // mov [r12 + ...], rax
+        utils::vreg::store_reg(rt, r12, rax, VMReg::BPointer);
 
         // Stack now points to where it was before the caller stub:
         // mov [r12 + ...], rsp
@@ -284,13 +166,13 @@ pub fn build(rt: &mut Runtime) {
     }
 
     #[cfg(feature = "profile")]
-    start_profiling(rt, "vm_dispatch_native");
+    start_profiling(rt, "vm_dispatch");
 
     // call ...
     rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
 
     #[cfg(feature = "profile")]
-    stop_profiling(rt, "vm_dispatch_native");
+    stop_profiling(rt, "vm_dispatch");
 
     // jmp ...
     rt.asm.jmp(rt.function_labels[&FnDef::VmExit]).unwrap();

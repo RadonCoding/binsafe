@@ -2,12 +2,12 @@ use iced_x86::{Instruction, OpKind};
 use std::rc::Rc;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMFlag, VMLogic, VMMem, VMReg};
+use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg};
 use crate::vm::encoders::{
     compare_exchange::CompareExchange, discard::Discard, load_address::LoadAddress,
     load_register::LoadRegister, skip::Skip, store_register::StoreRegister, sub::Sub, Encode,
 };
-use crate::vm::lifters::{branch::cmp, operation_width};
+use crate::vm::lifters::operation_width;
 
 pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     let destination_width = operation_width(instruction, 0);
@@ -74,7 +74,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
             operations.push(Rc::new(Skip::new(
                 mapper,
                 VMLogic::SAND,
-                vec![cmp(VMFlag::Zero, 0)],
+                vec![VMCondition::cmp(VMFlag::Zero, 0)],
                 body,
             )));
         }

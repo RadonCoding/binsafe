@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use crate::{
     constants::{IMM64_A, SIMM32_A},
-    encrypt, instruction, Difference, Executor, State, FAKE_BRANCH_ADDRESS,
+    decrypt_payload, encrypt_block, instruction, Difference, Executor, State, FAKE_BRANCH_ADDRESS,
 };
 
 #[derive(Default)]
@@ -95,7 +95,8 @@ fn exhaust(instructions: &[Instruction], state: State, memory: &mut [u64]) {
 
         let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &permuted);
 
-        encrypt(&mut bytes);
+        encrypt_block(&mut bytes);
+        decrypt_payload(&mut bytes);
 
         let current = Run {
             state: executor.run_virtual(state.clone(), &bytes),

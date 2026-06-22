@@ -68,7 +68,7 @@ const VM_TO_CONTEXT: &[(VMReg, i32)] = &[
     (VMReg::Flags, 0x44),
 ];
 
-// long (*EXCEPTION_POINTERS)
+// LONG (*EXCEPTION_POINTERS)
 pub fn handler(rt: &mut Runtime) {
     let mut continue_search = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
@@ -113,6 +113,28 @@ pub fn handler(rt: &mut Runtime) {
         rt.asm.jne(software_exception).unwrap();
 
         debug::print_thread_message(rt, "ExceptionCode: ", Some(rcx), None);
+
+        // mov rax, [r14 + 0x20] -> ULONG_PTR EXCEPTION_RECORD->ExceptionInformation[0]
+        rt.asm.mov(rax, ptr(r14 + 0x20)).unwrap();
+        debug::print_thread_message(rt, "ExceptionInformation[0]: ", Some(rax), None);
+        // mov rax, [r14 + 0x28] -> ULONG_PTR EXCEPTION_RECORD->ExceptionInformation[1]
+        rt.asm.mov(rax, ptr(r14 + 0x28)).unwrap();
+        debug::print_thread_message(rt, "ExceptionInformation[1]: ", Some(rax), None);
+
+        // mov rax, [rdx] -> ExceptionAddress[0..8]
+        rt.asm.mov(rax, ptr(rdx)).unwrap();
+        debug::print_thread_message(rt, "ExceptionAddress[0..8]: ", Some(rax), None);
+        // mov rax, [rdx + 0x7] -> ExceptionAddress[7..15]
+        rt.asm.mov(rax, ptr(rdx + 0x7)).unwrap();
+        debug::print_thread_message(rt, "ExceptionAddress[7..15]: ", Some(rax), None);
+
+        // mov rax, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
+        rt.asm.mov(rax, ptr(0x60).gs()).unwrap();
+        // mov rax, [rax + 0x10] -> PVOID PEB->ImageBaseAddress
+        rt.asm.mov(rax, ptr(rax + 0x10)).unwrap();
+        // sub rdx, rax
+        rt.asm.sub(rdx, rax).unwrap();
+
         debug::print_thread_message(rt, "ExceptionAddress: ", Some(rdx), None);
 
         rt.asm.set_label(&mut software_exception).unwrap();
@@ -143,11 +165,11 @@ pub fn handler(rt: &mut Runtime) {
     // mov r12, gs:[0x1480 + r12*8]
     rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
 
-    for (vreg, offset) in VM_TO_CONTEXT {
+    for (register, offset) in VM_TO_CONTEXT {
         // mov rax, [rax + ...]
-        utils::vreg::load_reg(rt, r12, *vreg, rcx);
+        utils::vreg::load_reg(rt, r12, *register, rax);
 
-        if *vreg == VMReg::Flags {
+        if *register == VMReg::Flags {
             // mov [r15 + ...], eax
             rt.asm.mov(ptr(r15 + *offset), eax).unwrap();
         } else {
@@ -155,7 +177,7 @@ pub fn handler(rt: &mut Runtime) {
             rt.asm.mov(ptr(r15 + *offset), rax).unwrap();
         }
 
-        if *vreg == VMReg::NEntry {
+        if *register == VMReg::NEntry {
             // mov [r14 + 0x10], rax -> PVOID EXCEPTION_RECORD->ExceptionAddress
             rt.asm.mov(ptr(r14 + 0x10), rax).unwrap();
         }

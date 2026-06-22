@@ -1,9 +1,11 @@
 pub mod cleanup;
+pub mod context;
 pub mod crypt;
 pub mod dispatch;
 pub mod entry;
 pub mod exit;
 pub mod ginit;
+pub mod invoke;
 pub mod lookup;
 pub mod registers;
 pub mod tinit;

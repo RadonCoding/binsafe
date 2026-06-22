@@ -14,23 +14,44 @@ use iced_x86::code_asm::{
     AsmRegister64, AsmRegisterXmm, AsmRegisterYmm,
 };
 
-const REGISTERS_TO_NATIVE: &[(VMReg, AsmRegister64)] = &[
+const REGISTERS_TO_NATIVE_VOLATILE: &[(VMReg, AsmRegister64)] = &[
     (VMReg::Rax, rax),
     (VMReg::Rcx, rcx),
     (VMReg::Rdx, rdx),
-    (VMReg::Rbx, rbx),
-    (VMReg::Rbp, rbp),
-    (VMReg::Rsi, rsi),
-    (VMReg::Rdi, rdi),
     (VMReg::R8, r8),
     (VMReg::R9, r9),
     (VMReg::R10, r10),
     (VMReg::R11, r11),
-    // (VMReg::R12, r12),
+];
+
+const REGISTERS_TO_NATIVE_NONVOLATILE: &[(VMReg, AsmRegister64)] = &[
+    (VMReg::Rbx, rbx),
+    (VMReg::Rbp, rbp),
+    (VMReg::Rsi, rsi),
+    (VMReg::Rdi, rdi),
     (VMReg::R13, r13),
     (VMReg::R14, r14),
     (VMReg::R15, r15),
 ];
+
+const REGISTERS_TO_NATIVE_LENGTH: usize =
+    REGISTERS_TO_NATIVE_VOLATILE.len() + REGISTERS_TO_NATIVE_NONVOLATILE.len();
+
+const REGISTERS_TO_NATIVE: [(VMReg, AsmRegister64); REGISTERS_TO_NATIVE_LENGTH] = {
+    let mut out = [(VMReg::None, rax); REGISTERS_TO_NATIVE_LENGTH];
+
+    let mut i = 0;
+
+    while i < REGISTERS_TO_NATIVE_VOLATILE.len() {
+        out[i] = REGISTERS_TO_NATIVE_VOLATILE[i];
+        i += 1;
+    }
+    while i < REGISTERS_TO_NATIVE_LENGTH {
+        out[i] = REGISTERS_TO_NATIVE_NONVOLATILE[i - REGISTERS_TO_NATIVE_VOLATILE.len()];
+        i += 1;
+    }
+    out
+};
 
 const VECTORS_TO_NATIVE: &[(VMVec, AsmRegisterYmm, AsmRegisterXmm)] = &[
     (VMVec::Ymm0, ymm0, xmm0),

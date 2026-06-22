@@ -8,7 +8,9 @@ use runtime::vm::bytecode::{self, VMFlag, VMReg};
 use crate::constants::{
     baseline, gpr, simd, IMM128_B, IMM128_C, IMM32_A, IMM64_A, IMM64_B, IMM8_A, SIMM32_A, SIMM8_A,
 };
-use crate::{decrypt, encrypt, instruction, Difference, Executor, State};
+use crate::{
+    decrypt_block, decrypt_payload, encrypt_block, instruction, Difference, Executor, State,
+};
 
 #[test]
 fn test_crypt() {
@@ -16,9 +18,9 @@ fn test_crypt() {
 
     let before = buffer.clone();
 
-    encrypt(&mut buffer);
+    encrypt_block(&mut buffer);
 
-    decrypt(&mut buffer);
+    decrypt_block(&mut buffer);
 
     let after = buffer.clone();
 
@@ -43,7 +45,8 @@ fn check_with_memory(state: State, instruction: Instruction, memory: &mut [u8]) 
     let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |_| 0);
 
     let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed);
-    encrypt(&mut bytes);
+    encrypt_block(&mut bytes);
+    decrypt_payload(&mut bytes);
     let mut emulated = executor.run_virtual(state.clone(), &bytes);
 
     normalize_and_compare(&mut native, &mut emulated, instruction);

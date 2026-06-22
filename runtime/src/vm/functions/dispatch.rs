@@ -1,15 +1,15 @@
 use iced_x86::code_asm::{
-    byte_ptr, dword_ptr, eax, ptr, r12, r13, r14, r8, r8d, r9, rax, rcx, rdx, CodeLabel,
+    byte_ptr, dword_ptr, eax, edx, ptr, r12, r13, r14, r8, r8d, r9, rax, rcx, rdx, CodeLabel,
 };
 
 use crate::{
     mapper::Mappable,
-    runtime::{FnDef, Runtime},
+    runtime::{FnDef, ImportDef, Runtime},
     vm::{
         bytecode::{VMOp, VMReg},
         utils::{self},
     },
-    VM_DISPATCH_SIZE, VM_TRAMPOLINE_SIZE,
+    VM_DISPATCH_SIZE, VM_INTEGRITY_BYTE, VM_TRAMPOLINE_SIZE,
 };
 
 #[cfg(feature = "profile")]
@@ -35,7 +35,6 @@ const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::And, FnDef::VmHandlerAnd),
     (VMOp::Or, FnDef::VmHandlerOr),
     (VMOp::Xor, FnDef::VmHandlerXor),
-    (VMOp::Test, FnDef::VmHandlerTest),
     (VMOp::Rol, FnDef::VmHandlerRol),
     (VMOp::Ror, FnDef::VmHandlerRor),
     (VMOp::Shl, FnDef::VmHandlerShl),
@@ -65,14 +64,17 @@ const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::VectorDiv, FnDef::VmHandlerVectorDiv),
 ];
 
-// void (unsigned char*)
 pub fn build(rt: &mut Runtime) {
     let mut setup_block = rt.asm.create_label();
+    let mut resume_block = rt.asm.create_label();
+    let mut decrypt_block = rt.asm.create_label();
     let mut start_block = rt.asm.create_label();
     let mut execute_loop = rt.asm.create_label();
     let mut check_loop = rt.asm.create_label();
+    let mut check_suspend = rt.asm.create_label();
     let mut check_exit = rt.asm.create_label();
     let mut resolved = rt.asm.create_label();
+    let mut tamper = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // push r13
@@ -80,14 +82,11 @@ pub fn build(rt: &mut Runtime) {
     // push r14
     rt.asm.push(r14).unwrap();
 
-    // mov r13, rcx
-    rt.asm.mov(r13, rcx).unwrap();
-
     rt.asm.set_label(&mut setup_block).unwrap();
     {
         // Initialize block pointer and block length:
-        // mov [r12 + ...], r13
-        utils::vreg::store_reg(rt, r12, r13, VMReg::BPointer);
+        // mov r13, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
         // eax = length
         utils::bytecode::read_word_zx(rt, r13, eax);
         // mov [r12 + ...], rax
@@ -97,6 +96,29 @@ pub fn build(rt: &mut Runtime) {
         // lea r14, [r13 + rax]
         rt.asm.lea(r14, ptr(r13 + rax)).unwrap();
 
+        // Check if this is a fresh execution:
+        // cmp [r12 + ...], 0x0
+        utils::vreg::cmp_imm(rt, r12, VMReg::BResume, 0x0);
+        // je ...
+        rt.asm.je(decrypt_block).unwrap();
+    }
+
+    rt.asm.set_label(&mut resume_block).unwrap();
+    {
+        // mov r13, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::BResume, r13);
+
+        // mov [r12 + ...], 0x0
+        utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
+        // mov [r12 + ...], 0x0
+        utils::vreg::store_imm(rt, r12, 0x0, VMReg::BResume);
+
+        // jmp ...
+        rt.asm.jmp(execute_loop).unwrap();
+    }
+
+    rt.asm.set_label(&mut decrypt_block).unwrap();
+    {
         #[cfg(feature = "profile")]
         start_profiling(rt, "vm_crypt_decrypt");
 
@@ -108,6 +130,11 @@ pub fn build(rt: &mut Runtime) {
 
         #[cfg(feature = "profile")]
         stop_profiling(rt, "vm_crypt_decrypt");
+
+        // cmp [r14], ...
+        rt.asm.cmp(byte_ptr(r14), VM_INTEGRITY_BYTE as i32).unwrap();
+        // jne ...
+        rt.asm.jne(tamper).unwrap();
     }
 
     rt.asm.set_label(&mut start_block).unwrap();
@@ -124,6 +151,11 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.cmp(r13, r14).unwrap();
         // je ...
         rt.asm.je(check_loop).unwrap();
+
+        // cmp [r12 + ...], 0x0
+        utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
+        // jne ...
+        rt.asm.jne(check_suspend).unwrap();
 
         // r8d -> operation
         utils::bytecode::read_byte_zx(rt, r13, r8d);
@@ -147,27 +179,38 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut check_loop).unwrap();
     {
+        // Skip if the native branch is zero:
         // cmp [r12 + ...], 0x0
         utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
         // je ...
-        rt.asm.je(check_exit).unwrap();
+        rt.asm.je(check_suspend).unwrap();
 
+        // Skip if the native entry is not equal to the native branch:
         // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NEntry, rax);
         // cmp [r12 + ...],
         utils::vreg::cmp_reg(rt, r12, VMReg::NBranch, rax);
         // jne ...
-        rt.asm.jne(check_exit).unwrap();
+        rt.asm.jne(check_suspend).unwrap();
 
-        // If the branch points to the native entry then re-execute the block:
+        // Native branch points to the native entry so re-execute the block:
         // mov r13, [...]
         utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
-        // eax = length
-        utils::bytecode::read_word_zx(rt, r13, eax);
-        // mov [r12 + ...], rax
-        utils::vreg::store_reg(rt, r12, rax, VMReg::BLength);
         // jmp ...
         rt.asm.jmp(start_block).unwrap();
+    }
+
+    rt.asm.set_label(&mut check_suspend).unwrap();
+    {
+        // cmp r13, r14
+        rt.asm.cmp(r13, r14).unwrap();
+        // je ...
+        rt.asm.je(check_exit).unwrap();
+
+        // mov [r12 + ...], r13
+        utils::vreg::store_reg(rt, r12, r13, VMReg::BResume);
+        // jmp ...
+        rt.asm.jmp(epilogue).unwrap();
     }
 
     rt.asm.set_label(&mut check_exit).unwrap();
@@ -184,6 +227,20 @@ pub fn build(rt: &mut Runtime) {
         #[cfg(feature = "profile")]
         stop_profiling(rt, "vm_crypt_encrypt");
 
+        // Point block pointer at the next block:
+        // mov rax, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::BLength, rax);
+        // not rax
+        rt.asm.not(rax).unwrap();
+        // and rax, 0x7
+        rt.asm.and(rax, 0x7).unwrap();
+        // +1 for integrity +1 for state +1 for lock:
+        // lea rax, [r13 + rax + 0x1 + 0x1 + 0x1]
+        rt.asm.lea(rax, ptr(r13 + rax + 0x1 + 0x1 + 0x1)).unwrap();
+        // mov [r12 + ...], rax
+        utils::vreg::store_reg(rt, r12, rax, VMReg::BPointer);
+
+        // If there's no branch target, advance to next block:
         // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NExit, rax);
         // mov rcx, [r12 + ...]
@@ -191,7 +248,7 @@ pub fn build(rt: &mut Runtime) {
         // test rcx, rcx
         rt.asm.test(rcx, rcx).unwrap();
         // cmovnz rax, rcx
-        rt.asm.cmovne(rax, rcx).unwrap();
+        rt.asm.cmovnz(rax, rcx).unwrap();
         // test rax, rax
         rt.asm.test(rax, rax).unwrap();
         // je ...
@@ -216,22 +273,42 @@ pub fn build(rt: &mut Runtime) {
             // jne ...
             rt.asm.jne(epilogue).unwrap();
 
-            // mov r8d, [rax + 0x1]
-            rt.asm.mov(r8d, ptr(rax + 0x1)).unwrap();
+            // mov edx, [rax + 0x1]
+            rt.asm.mov(edx, ptr(rax + 0x1)).unwrap();
 
             // add rax, ...
             rt.asm.add(rax, VM_DISPATCH_SIZE as i32).unwrap();
 
-            // mov rdx, rax
-            rt.asm.mov(rdx, rax).unwrap();
+            // mov rcx, rax
+            rt.asm.mov(rcx, rax).unwrap();
             // call ...
             rt.asm.call(rt.function_labels[&FnDef::VmLookup]).unwrap();
-            // mov r13, rax
-            rt.asm.mov(r13, rax).unwrap();
+            // mov [r12 + ...], rax
+            utils::vreg::store_reg(rt, r12, rax, VMReg::BPointer);
 
             // jmp ...
             rt.asm.jmp(setup_block).unwrap();
         }
+    }
+
+    rt.asm.set_label(&mut tamper).unwrap();
+    {
+        #[cfg(debug_assertions)]
+        crate::debug::print_thread_message(
+            rt,
+            "INVALID BLOCK SIGNATURE",
+            Some(r14),
+            Some(byte_ptr(r14)),
+        );
+
+        // mov rcx, [...]; call ...
+        rt.resolve(ImportDef::NtTerminateProcess);
+        // mov rcx, -0x1
+        rt.asm.mov(rcx, -0x1i64).unwrap();
+        // mov rdx, 0xC0000001 -> STATUS_UNSUCCESSFUL
+        rt.asm.mov(rdx, 0xC0000001u64).unwrap();
+        // call rax
+        rt.asm.call(rax).unwrap();
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();
