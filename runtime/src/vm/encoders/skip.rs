@@ -50,7 +50,13 @@ impl Encode for Skip {
             .map(|op| op.size(mapper))
             .sum::<usize>();
 
-        let header = if body <= u8::MAX as usize { 3 } else { 4 };
+        let header = if body <= u8::MAX as usize {
+            3 // +2 for opcode +1 for immediate
+        } else if body <= u16::MAX as usize {
+            4 // +2 for opcode +2 for immediate
+        } else {
+            6 // +2 for opcode +4 for immediate
+        };
 
         let jcc = self.expansion[0].size(mapper);
 

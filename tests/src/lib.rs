@@ -18,14 +18,17 @@ use crate::{
     },
 };
 use iced_x86::{
-    code_asm::{ptr, r12, r12d, r8, r9, rax, rcx, ymm0},
+    code_asm::{ptr, r12, r12d, r8, r9, rax, ymm0},
     BlockEncoder, BlockEncoderOptions, Instruction, InstructionBlock,
 };
 use obfuscator::protections::virtualization::crypt;
 use runtime::{
     mapper::Mappable,
     runtime::{BoolDef, DataDef, FnDef, Runtime},
-    vm::bytecode::{VMFlag, VMReg, VMVec},
+    vm::{
+        bytecode::{VMFlag, VMReg, VMVec},
+        utils,
+    },
 };
 use windows::Win32::{
     Foundation::CloseHandle,
@@ -226,11 +229,14 @@ impl Executor {
                 .unwrap();
         }
 
-        // lea rcx, [...]
+        // lea rax, [...]
         self.rt
             .asm
-            .lea(rcx, ptr(self.rt.data_labels[&DataDef::VmCode]))
+            .lea(rax, ptr(self.rt.data_labels[&DataDef::VmCode]))
             .unwrap();
+        // mov [r12 + ...], rax
+        utils::vreg::store_reg(&mut self.rt, r12, rax, VMReg::BPointer);
+
         // call ...
         self.rt
             .asm
@@ -441,9 +447,9 @@ impl Drop for Executor {
     }
 }
 
-pub(crate) fn encrypt(bytecode: &mut Vec<u8>) {
-    crypt::encrypt(
-        bytecode,
+pub(crate) fn encrypt_block(block: &mut Vec<u8>) {
+    crypt::encrypt_block(
+        block,
         Executor::TEST_KEY_SEED,
         Executor::TEST_KEY_MUL,
         Executor::TEST_KEY_ADD,
@@ -451,8 +457,17 @@ pub(crate) fn encrypt(bytecode: &mut Vec<u8>) {
     );
 }
 
-pub(crate) fn decrypt(block: &mut Vec<u8>) {
-    crypt::decrypt(
+pub(crate) fn decrypt_payload(block: &mut Vec<u8>) {
+    crypt::decrypt_payload(
+        block,
+        Executor::TEST_KEY_SEED,
+        Executor::TEST_KEY_MUL,
+        Executor::TEST_KEY_ADD,
+        0,
+    )
+}
+pub(crate) fn decrypt_block(block: &mut Vec<u8>) {
+    crypt::decrypt_block(
         block,
         Executor::TEST_KEY_SEED,
         Executor::TEST_KEY_MUL,

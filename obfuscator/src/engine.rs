@@ -10,7 +10,7 @@ use iced_x86::{
 };
 use logger::info;
 use rand::Rng;
-use runtime::runtime::{FnDef, Runtime};
+use runtime::runtime::Runtime;
 use std::{collections::HashSet, fmt, mem};
 
 use crate::{args::Args, exceptions, protections::Protection};
@@ -530,18 +530,6 @@ impl<'a> Engine<'a> {
         section
     }
 
-    pub fn runtime_base(&self) -> u32 {
-        self.get_end_of_sections()
-    }
-
-    pub fn runtime_ip(&self) -> u64 {
-        self.runtime_base().into()
-    }
-
-    pub fn runtime_address(&mut self, def: FnDef) -> i32 {
-        self.runtime_base() as i32 + (self.rt.mapper.index(def) as i32 * 8)
-    }
-
     pub fn execute(&mut self) -> Vec<u8> {
         let mut protections = mem::take(&mut self.protections);
 
@@ -549,7 +537,8 @@ impl<'a> Engine<'a> {
             protection.initialize(self);
         }
 
-        let code = self.rt.assemble(self.runtime_ip());
+        let ip = self.get_end_of_sections() as u64;
+        let code = self.rt.assemble(ip);
         let new_section = self.create_section(
             Some("💀"),
             &code,

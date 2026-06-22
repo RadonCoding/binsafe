@@ -9,7 +9,7 @@ use crate::{
 };
 
 // unsigned char* (unsigned char*)
-pub fn build(rt:  &mut Runtime) {
+pub fn build(rt: &mut Runtime) {
     let mut add_base = rt.asm.create_label();
     let mut check_index = rt.asm.create_label();
     let mut add_displacement = rt.asm.create_label();

@@ -8,9 +8,9 @@ use crate::vm::encoders::{
     add::Add, and::And, discard::Discard, load_address::LoadAddress, load_immediate::LoadImmediate,
     load_memory::LoadMemory, load_register::LoadRegister, load_vector::LoadVector, or::Or,
     rol::Rol, ror::Ror, sar::Sar, shl::Shl, shr::Shr, store_memory::StoreMemory,
-    store_merge::StoreMerge, store_register::StoreRegister, sub::Sub, test::Test,
-    vector_add::VectorAdd, vector_and::VectorAnd, vector_and_not::VectorAndNot,
-    vector_or::VectorOr, vector_sub::VectorSub, vector_xor::VectorXor, xor::Xor, Encode,
+    store_merge::StoreMerge, store_register::StoreRegister, sub::Sub, vector_add::VectorAdd,
+    vector_and::VectorAnd, vector_and_not::VectorAndNot, vector_or::VectorOr,
+    vector_sub::VectorSub, vector_xor::VectorXor, xor::Xor, Encode,
 };
 use crate::vm::lifters::{operation_width, source};
 
@@ -31,7 +31,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         Mnemonic::Rol => binary(instruction, |width| Rol { width }, Tail::Writeback),
         Mnemonic::Ror => binary(instruction, |width| Ror { width }, Tail::Writeback),
         Mnemonic::Cmp => binary(instruction, |width| Sub { width }, Tail::Discard),
-        Mnemonic::Test => binary(instruction, |width| Test { width }, Tail::Discard),
+        Mnemonic::Test => binary(instruction, |width| And { width }, Tail::Discard),
         Mnemonic::And => binary(instruction, |width| And { width }, Tail::Writeback),
         Mnemonic::Or => binary(instruction, |width| Or { width }, Tail::Writeback),
         Mnemonic::Xor => binary(instruction, |width| Xor { width }, Tail::Writeback),

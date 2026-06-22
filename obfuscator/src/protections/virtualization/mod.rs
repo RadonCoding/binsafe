@@ -5,16 +5,14 @@ use std::{i32, mem, slice};
 
 use crate::engine::Engine;
 use crate::protections::Protection;
-use exe::Buffer;
+use exe::{Buffer, SectionCharacteristics};
 use exe::{PE, RVA};
 use iced_x86::code_asm::CodeAssembler;
 use iced_x86::Mnemonic;
 use logger::info;
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
-use runtime::vm::bytecode::{self, VMReg, VMWidth};
-use runtime::vm::encoders::load_immediate::LoadImmediate;
-use runtime::vm::encoders::store_register::StoreRegister;
+use runtime::vm::bytecode::{self};
 use runtime::vm::encoders::Encode;
 use runtime::{VM_DISPATCH_SIZE, VM_TRAMPOLINE_SIZE};
 
@@ -44,6 +42,8 @@ impl Default for Keys {
 #[derive(Default)]
 pub struct Virtualization {
     keys: Keys,
+    programs: Vec<Vec<Rc<dyn Encode>>>,
+    groups: Vec<Vec<u32>>,
     virtualized: HashMap<u32, usize>,
     trampolines: HashMap<u32, usize>,
     duplicates: usize,
@@ -53,12 +53,12 @@ pub struct Virtualization {
 
 impl Virtualization {
     fn attestation(&self, engine: &mut Engine) -> Vec<u8> {
-        let blocks = attestation::generate(engine, self.keys.att);
-
         let mut vcode = Vec::new();
 
         #[cfg(debug_assertions)]
         let mut log = Vec::new();
+
+        let blocks = attestation::generate(engine, self.keys.att);
 
         for (_index, operations) in blocks.into_iter().enumerate() {
             let mut rng = rand::thread_rng();
@@ -85,10 +85,11 @@ impl Virtualization {
             let key = if vcode.is_empty() {
                 self.keys.seed
             } else {
-                crypt::key(&vcode)
+                crypt::derive_key(&vcode)
             };
 
-            crypt::encrypt(&mut bytes, key, self.keys.mul, self.keys.add, 0);
+            crypt::encrypt_block(&mut bytes, key, self.keys.mul, self.keys.add, 0);
+            crypt::decrypt_payload(&mut bytes, key, self.keys.mul, self.keys.add, 0);
 
             vcode.extend_from_slice(&bytes);
         }
@@ -114,35 +115,11 @@ impl Protection for Virtualization {
         const MAX_LOGGING: usize = 16;
 
         let mut vtable = Vec::new();
-        let mut vcode = Vec::new();
 
         #[cfg(debug_assertions)]
         let mut logs = Vec::new();
 
-        if engine.args.attestation {
-            vcode.extend_from_slice(&self.attestation(engine));
-        } else {
-            let mut operations = Vec::<Rc<dyn Encode>>::new();
-            operations.push(Rc::new(LoadImmediate {
-                width: VMWidth::Lower64,
-                source: self.keys.att.to_le_bytes().to_vec(),
-            }));
-            operations.push(Rc::new(StoreRegister {
-                width: VMWidth::Lower64,
-                destination: VMReg::VAtt,
-            }));
-            let mut rng = rand::thread_rng();
-            let transformed = bytecode::transform(&mut engine.rt.mapper, operations, |ready| {
-                rng.gen_range(0..ready.len())
-            });
-            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
-            crypt::encrypt(&mut bytes, self.keys.seed, self.keys.mul, self.keys.add, 0);
-            vcode.extend_from_slice(&bytes);
-        }
-
         let mut lookup = HashMap::new();
-        let mut programs = Vec::new();
-        let mut groups = Vec::new();
 
         'outer: for block in &mut engine.blocks {
             if block.size < VM_TRAMPOLINE_SIZE {
@@ -200,37 +177,28 @@ impl Protection for Virtualization {
                     rng.gen_range(0..ready.len())
                 });
 
-                let index = programs.len();
-                programs.push(transformed);
+                let index = self.programs.len();
+                self.programs.push(transformed);
 
-                groups.push(vec![block]);
+                self.groups.push(vec![block.rva]);
 
                 lookup.insert(hash, index);
             } else {
                 self.duplicates += 1;
                 let index = lookup[&hash];
-                groups[index].push(block);
+                self.groups[index].push(block.rva);
             }
         }
 
-        for (program, group) in programs.iter().zip(groups) {
-            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, program);
-
-            let key = crypt::key(&vcode);
-
-            crypt::encrypt(&mut bytes, key, self.keys.mul, self.keys.add, self.keys.att);
-
-            let offset = TryInto::<u32>::try_into(vcode.len()).unwrap();
-            vcode.extend_from_slice(&bytes);
-
-            for block in group {
+        for (_, group) in self.programs.iter().zip(&self.groups) {
+            for &rva in group {
                 // Store the index of this VM-block's VM-table entry
                 let index = vtable.len() / 8;
-                self.virtualized.insert(block.rva, index);
+                self.virtualized.insert(rva, index);
 
-                // Store the placeholder for stub displacement and offset in the linear VM-code
+                // Store placeholders for stub displacement and bytecode offset
                 vtable.extend_from_slice(&0u32.to_le_bytes());
-                vtable.extend_from_slice(&offset.to_le_bytes());
+                vtable.extend_from_slice(&0u32.to_le_bytes());
             }
         }
 
@@ -256,7 +224,8 @@ impl Protection for Virtualization {
         }
 
         engine.rt.define_data_bytes(DataDef::VmTable, &vtable);
-        engine.rt.define_data_bytes(DataDef::VmCode, &vcode);
+
+        engine.rt.define_data_dword(DataDef::VmCode, 0);
 
         engine
             .rt
@@ -270,11 +239,55 @@ impl Protection for Virtualization {
     }
 
     fn apply(&self, engine: &mut Engine) {
-        let ventry_rva = engine.rt.lookup(engine.rt.function_labels[&FnDef::VmEntry]);
+        let attestation = self.attestation(engine);
+
+        let mut vcode = attestation;
 
         let vtable_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmTable]) as u32;
         let vtable_offset = engine.pe.translate(RVA(vtable_rva).into()).unwrap();
         let vtable = unsafe { engine.pe.as_ptr().add(vtable_offset) as *mut u8 };
+
+        for (program, group) in self.programs.iter().zip(&self.groups) {
+            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, program);
+
+            let key = crypt::derive_key(&vcode);
+
+            crypt::encrypt_block(&mut bytes, key, self.keys.mul, self.keys.add, self.keys.att);
+
+            let offset = TryInto::<u32>::try_into(vcode.len()).unwrap();
+            vcode.extend_from_slice(&bytes);
+
+            for &rva in group {
+                let index = self.virtualized[&rva];
+                unsafe {
+                    vtable
+                        .add(index * 8 + mem::size_of::<u32>())
+                        .copy_from(offset.to_le_bytes().as_ptr(), mem::size_of::<u32>());
+                }
+            }
+        }
+
+        let section = engine.create_section(
+            None,
+            &vcode,
+            SectionCharacteristics::CNT_INITIALIZED_DATA
+                | SectionCharacteristics::MEM_READ
+                | SectionCharacteristics::MEM_WRITE,
+        );
+
+        let vtable_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmTable]) as u32;
+        let vtable_offset = engine.pe.translate(RVA(vtable_rva).into()).unwrap();
+        let vtable = unsafe { engine.pe.as_ptr().add(vtable_offset) as *mut u8 };
+
+        let vcode_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmCode]) as u32;
+        let vcode_offset = engine.pe.translate(RVA(vcode_rva).into()).unwrap();
+        let displacement = section.virtual_address.0 as i64 - vcode_rva as i64;
+        engine
+            .pe
+            .write(vcode_offset, &(displacement as i32).to_le_bytes())
+            .unwrap();
+
+        let ventry_rva = engine.rt.lookup(engine.rt.function_labels[&FnDef::VmEntry]);
 
         let trampolines_rva = engine
             .rt
