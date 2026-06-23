@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
     stack,

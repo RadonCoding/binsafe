@@ -196,6 +196,10 @@ pub fn build(rt: &mut Runtime) {
         // Native branch points to the native entry so re-execute the block:
         // mov r13, [...]
         utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
+        // eax = length
+        utils::bytecode::read_word_zx(rt, r13, eax);
+        // mov [r12 + ...], rax
+        utils::vreg::store_reg(rt, r12, rax, VMReg::BLength);
         // jmp ...
         rt.asm.jmp(start_block).unwrap();
     }

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use crate::vm::encoders::Encode;
 use std::fmt;
 
@@ -134,8 +136,8 @@ fn indent(input: &str) -> String {
             }
             '[' => {
                 let parent_expanded = stack.last().map(|e| e.1).unwrap_or(false);
-                let expand = parent_expanded
-                    && matches!(chars.peek(), Some(c) if c.is_ascii_alphabetic());
+                let expand =
+                    parent_expanded && matches!(chars.peek(), Some(c) if c.is_ascii_alphabetic());
                 stack.push(('[', expand, depth));
                 out.push('[');
                 if expand {
