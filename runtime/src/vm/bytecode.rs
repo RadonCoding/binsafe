@@ -10,7 +10,7 @@ use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
     arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, divide, extend, integer, lea, multiply,
-    pcmpeqb, pmovskb, scalar, set, stack, transfer, tzcnt, xadd, xchg,
+    pcmpeqb, pmovskb, rdtsc, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -70,7 +70,9 @@ mapped! {
         VectorAdd,
         VectorSub,
         VectorMul,
-        VectorDiv
+        VectorDiv,
+        // Special
+        Timestamp
     }
 }
 
@@ -121,6 +123,8 @@ mapped! {
         R15,
         Flags,
 
+        Vt0, // Current Timestamp
+        Vt1, // Cached Timestamp
         Vg0, // General Purpose
         Vp0, // Persistent Purpose
         Vp1, // Persistent Purpose
@@ -739,6 +743,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
             | Mnemonic::Seto
             | Mnemonic::Setp
             | Mnemonic::Sets => set::encode(mapper, instruction)?,
+            Mnemonic::Rdtsc => rdtsc::encode(instruction)?,
             Mnemonic::Nop | Mnemonic::Int | Mnemonic::Int3 | Mnemonic::Ud2 | Mnemonic::Pause => {
                 continue
             }

@@ -543,6 +543,7 @@ impl<'a> Engine<'a> {
             Some("💀"),
             &code,
             SectionCharacteristics::CNT_CODE
+                | SectionCharacteristics::CNT_INITIALIZED_DATA
                 | SectionCharacteristics::MEM_EXECUTE
                 | SectionCharacteristics::MEM_READ
                 | SectionCharacteristics::MEM_WRITE,

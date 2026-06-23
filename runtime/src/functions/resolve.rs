@@ -114,7 +114,6 @@ pub fn build(rt: &mut Runtime) {
         // mov r14, rbx
         rt.asm.mov(r14, rbx).unwrap();
 
-        // module_loop:
         rt.asm.set_label(&mut resolve_module_loop).unwrap();
         {
             // lea rcx, [rbx + 0x48] -> UNICODE_STRING *LDR_DATA_TABLE_ENTRY->BaseDllName

@@ -7,6 +7,9 @@ pub fn build(rt: &mut Runtime) {
     let mut wide_loop = rt.asm.create_label();
     let mut ansi_loop = rt.asm.create_label();
 
+    let mut wide_lowercase = rt.asm.create_label();
+    let mut ansi_lowercase = rt.asm.create_label();
+
     let mut epilogue = rt.asm.create_label();
 
     // push r13
@@ -35,6 +38,21 @@ pub fn build(rt: &mut Runtime) {
         // and rdx, 0xff
         rt.asm.and(rdx, 0xff).unwrap();
 
+        // cmp rdx, 'A'
+        rt.asm.cmp(rdx, b'A' as i32).unwrap();
+        // jb ...
+        rt.asm.jb(wide_lowercase).unwrap();
+
+        // cmp rdx, 'Z'
+        rt.asm.cmp(rdx, b'Z' as i32).unwrap();
+        // ja ...
+        rt.asm.ja(wide_lowercase).unwrap();
+
+        // or rdx, 0x20
+        rt.asm.or(rdx, 0x20).unwrap();
+
+        rt.asm.set_label(&mut wide_lowercase).unwrap();
+
         // xor rax, rdx
         rt.asm.xor(rax, rdx).unwrap();
 
@@ -59,6 +77,21 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.test(rdx, rdx).unwrap();
         // jz ...
         rt.asm.jz(epilogue).unwrap();
+
+        // cmp rdx, 'A'
+        rt.asm.cmp(rdx, b'A' as i32).unwrap();
+        // jb ...
+        rt.asm.jb(ansi_lowercase).unwrap();
+
+        // cmp rdx, 'Z'
+        rt.asm.cmp(rdx, b'Z' as i32).unwrap();
+        // ja ...
+        rt.asm.ja(ansi_lowercase).unwrap();
+
+        // or rdx, 0x20
+        rt.asm.or(rdx, 0x20).unwrap();
+
+        rt.asm.set_label(&mut ansi_lowercase).unwrap();
 
         // xor rax, rdx
         rt.asm.xor(rax, rdx).unwrap();

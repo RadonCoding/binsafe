@@ -1,10 +1,11 @@
 use iced_x86::code_asm::{
-    byte_ptr, dword_ptr, eax, edx, ptr, r12, r13, r14, r8, r8d, r9, rax, rcx, rdx, CodeLabel,
+    byte_ptr, dword_ptr, eax, ecx, edx, ptr, r12, r13, r14, r8, r8d, r9, r9d, rax, rcx, rdx, rsp,
+    CodeLabel,
 };
 
 use crate::{
     mapper::Mappable,
-    runtime::{FnDef, ImportDef, Runtime},
+    runtime::{FnDef, ImportDef, Runtime, StringDef},
     vm::{
         bytecode::{VMOp, VMReg},
         utils::{self},
@@ -62,6 +63,7 @@ const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::VectorSub, FnDef::VmHandlerVectorSub),
     (VMOp::VectorMul, FnDef::VmHandlerVectorMul),
     (VMOp::VectorDiv, FnDef::VmHandlerVectorDiv),
+    (VMOp::Timestamp, FnDef::VmHandlerTimestamp),
 ];
 
 pub fn build(rt: &mut Runtime) {
@@ -81,6 +83,9 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.push(r13).unwrap();
     // push r14
     rt.asm.push(r14).unwrap();
+
+    // sub rsp, 0x28
+    rt.asm.sub(rsp, 0x28).unwrap();
 
     rt.asm.set_label(&mut setup_block).unwrap();
     {
@@ -297,26 +302,45 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut tamper).unwrap();
     {
-        #[cfg(debug_assertions)]
-        crate::debug::print_thread_message(
-            rt,
-            "INVALID BLOCK SIGNATURE",
-            Some(r14),
-            Some(byte_ptr(r14)),
-        );
+        // mov rcx, [...]; call ...
+        rt.resolve(ImportDef::LoadLibraryA);
+
+        // lea rcx, ...
+        rt.asm
+            .lea(rcx, ptr(rt.string_labels[&StringDef::User32]))
+            .unwrap();
+        // call rax
+        rt.asm.call(rax).unwrap();
+
+        // mov rcx, [...]; call ...
+        rt.resolve(ImportDef::MessageBoxA);
+        // xor rcx, rcx
+        rt.asm.xor(rcx, rcx).unwrap();
+        // lea rdx, [...]
+        rt.asm
+            .lea(rdx, ptr(rt.string_labels[&StringDef::Tampered]))
+            .unwrap();
+        // xor r8d, r8d
+        rt.asm.xor(r8, r8).unwrap();
+        // xor r9d, 0x00000030 -> MB_ICONWARNING | MB_OK
+        rt.asm.mov(r9d, 0x00000030u32).unwrap();
+        // call rax
+        rt.asm.call(rax).unwrap();
 
         // mov rcx, [...]; call ...
         rt.resolve(ImportDef::NtTerminateProcess);
         // mov rcx, -0x1
         rt.asm.mov(rcx, -0x1i64).unwrap();
-        // mov rdx, 0xC0000001 -> STATUS_UNSUCCESSFUL
-        rt.asm.mov(rdx, 0xC0000001u64).unwrap();
+        // mov edx, 0xC0000001 -> STATUS_UNSUCCESSFUL
+        rt.asm.mov(edx, 0xC0000001u32).unwrap();
         // call rax
         rt.asm.call(rax).unwrap();
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
+        rt.asm.add(rsp, 0x28).unwrap();
+
         // pop r14
         rt.asm.pop(r14).unwrap();
         // pop r13

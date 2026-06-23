@@ -14,7 +14,7 @@ use runtime::vm::encoders::store_memory::StoreMemory;
 use runtime::vm::encoders::store_register::StoreRegister;
 use runtime::vm::encoders::Encode;
 
-fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
+pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
     const VOLATILE: &[VMReg] = &[
         VMReg::Rax,
         VMReg::Rcx,
