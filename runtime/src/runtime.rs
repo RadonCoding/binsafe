@@ -158,7 +158,7 @@ mapped! {
         NtSetInformationThread,
         NtQueryInformationThread,
         MessageBoxA,
-        NtTerminateProcess,
+        RtlExitUserProcess,
         #[cfg(debug_assertions)]
         AllocConsole,
         #[cfg(debug_assertions)]
@@ -180,7 +180,7 @@ mapped! {
         NtSetInformationThread,
         NtQueryInformationThread,
         MessageBoxA,
-        NtTerminateProcess,
+        RtlExitUserProcess,
         #[cfg(debug_assertions)]
         AllocConsole,
         #[cfg(debug_assertions)]
@@ -211,7 +211,7 @@ impl ImportDef {
                 (HashDef::Ntdll, HashDef::NtQueryInformationThread)
             }
             ImportDef::MessageBoxA { .. } => (HashDef::User32, HashDef::MessageBoxA),
-            ImportDef::NtTerminateProcess { .. } => (HashDef::Ntdll, HashDef::NtTerminateProcess),
+            ImportDef::RtlExitUserProcess { .. } => (HashDef::Ntdll, HashDef::RtlExitUserProcess),
             #[cfg(debug_assertions)]
             ImportDef::AllocConsole { .. } => (HashDef::KernelBase, HashDef::AllocConsole),
             #[cfg(debug_assertions)]
@@ -734,7 +734,7 @@ impl Runtime {
             "NtQueryInformationThread",
         );
         self.define_hash(HashDef::MessageBoxA, "MessageBoxA");
-        self.define_hash(HashDef::NtTerminateProcess, "NtTerminateProcess");
+        self.define_hash(HashDef::RtlExitUserProcess, "RtlExitUserProcess");
         #[cfg(debug_assertions)]
         self.define_hash(HashDef::AllocConsole, "AllocConsole");
         #[cfg(debug_assertions)]
