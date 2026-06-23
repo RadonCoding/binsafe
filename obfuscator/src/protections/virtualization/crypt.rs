@@ -1,5 +1,5 @@
 use rand::Rng;
-use runtime::VM_INTEGRITY_BYTE;
+use runtime::VM_INTEGRITY_QWORD;
 
 const HEADER_SIZE: usize = size_of::<u16>();
 const TRAILER_SIZE: usize = size_of::<u8>() + size_of::<u8>();
@@ -27,7 +27,7 @@ pub fn decrypt_block(block: &mut Vec<u8>, key: u64, mul: u64, add: u64, att: u64
 fn align_payload(block: &mut Vec<u8>) {
     let mut rng = rand::thread_rng();
 
-    block.push(VM_INTEGRITY_BYTE);
+    block.extend(VM_INTEGRITY_QWORD.to_le_bytes());
 
     while block.len() % 8 != 0 {
         block.push(rng.gen::<u8>());
@@ -58,7 +58,10 @@ pub fn decrypt_payload(block: &mut [u8], mut key: u64, mul: u64, add: u64, att: 
         key = key.wrapping_mul(mul).wrapping_add(add);
     }
 
-    assert_eq!(payload[length], VM_INTEGRITY_BYTE);
+    assert_eq!(
+        u64::from_le_bytes(payload[length..].try_into().unwrap()),
+        VM_INTEGRITY_QWORD
+    );
 
     finalize_decrypt(block);
 }

@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, dword_ptr, eax, edx, ptr, r12, r13, r14, r8, r8d, r9, r9d, rax, rcx, rdx, rsp,
-    CodeLabel,
+    al, byte_ptr, dword_ptr, eax, edx, ptr, qword_ptr, r12, r13, r14, r8, r8d, r9, r9d, rax, rcx,
+    rdx, rsp, CodeLabel,
 };
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
         bytecode::{VMOp, VMReg},
         utils::{self, lock},
     },
-    VM_DISPATCH_SIZE, VM_INTEGRITY_BYTE, VM_TRAMPOLINE_SIZE,
+    VM_DISPATCH_SIZE, VM_INTEGRITY_QWORD, VM_TRAMPOLINE_SIZE,
 };
 
 #[cfg(feature = "profile")]
@@ -136,8 +136,10 @@ pub fn build(rt: &mut Runtime) {
         #[cfg(feature = "profile")]
         stop_profiling(rt, "vm_crypt_decrypt");
 
-        // cmp [r14], ...
-        rt.asm.cmp(byte_ptr(r14), VM_INTEGRITY_BYTE as i32).unwrap();
+        // mov rax, ...
+        rt.asm.mov(rax, VM_INTEGRITY_QWORD).unwrap();
+        // cmp [r14], rax
+        rt.asm.cmp(ptr(r14), rax).unwrap();
         // jne ...
         rt.asm.jne(tamper).unwrap();
     }
