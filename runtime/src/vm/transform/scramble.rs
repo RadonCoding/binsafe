@@ -94,7 +94,7 @@ fn chain<R: Rng>(
     result
 }
 
-/// Placeholder signed-offset [`LoadImmediate`] paired with an always-skip [`Jcc`]; [`Chain::seal`] rewrites the offset bytes.
+/// Placeholder signed-offset [`LoadImmediate`] paired with an always-skip [`Jcc`] and [`Chain::seal`] rewrites the offset bytes.
 fn jump() -> Vec<Rc<dyn Encode>> {
     vec![
         Rc::new(LoadImmediate {

@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{ecx, ptr, r8, rax, rcx, rdx, rsp};
+use iced_x86::code_asm::{ecx, ptr, rax, rcx, rdx, rsp};
 
 use crate::runtime::{DataDef, FnDef, ImportDef, Runtime};
 
@@ -20,7 +20,7 @@ pub fn build(rt: &mut Runtime) {
 
     #[cfg(debug_assertions)]
     {
-        use iced_x86::code_asm::{r12, r13};
+        use iced_x86::code_asm::{r12, r13, r8};
 
         use crate::VM_DEBUG_SIZE;
 
