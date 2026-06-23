@@ -38,7 +38,11 @@ pub trait Encode: Debug + Any {
         false
     }
 
-    fn children(&mut self) -> Option<&mut Vec<Rc<dyn Encode>>> {
+    fn children_ref(&self) -> Option<&[Rc<dyn Encode>]> {
+        None
+    }
+
+    fn children_mut(&mut self) -> Option<&mut Vec<Rc<dyn Encode>>> {
         None
     }
 

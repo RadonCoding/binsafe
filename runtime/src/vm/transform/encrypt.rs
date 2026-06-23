@@ -106,7 +106,7 @@ fn walk(
     while i < operations.len() {
         let entry = *key;
 
-        if let Some(children) = Rc::get_mut(&mut operations[i]).unwrap().children() {
+        if let Some(children) = Rc::get_mut(&mut operations[i]).unwrap().children_mut() {
             nested(mapper, children, position, deadzones, key);
             Rc::get_mut(&mut operations[i])
                 .unwrap()
@@ -151,7 +151,7 @@ fn nested(
     for operation in operations.iter_mut() {
         let entry = *key;
 
-        if let Some(children) = Rc::get_mut(operation).unwrap().children() {
+        if let Some(children) = Rc::get_mut(operation).unwrap().children_mut() {
             nested(mapper, children, position, deadzones, key);
 
             Rc::get_mut(operation).unwrap().seal(mapper, &mut |source| {

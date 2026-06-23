@@ -10,7 +10,6 @@ impl fmt::Display for dyn Encode {
             .replace(" }", ")");
         let s = hex_bytes(&s);
         let s = hex_decimals(&s);
-        let s = indent(&s);
         write!(f, "{s}")
     }
 }
@@ -113,60 +112,6 @@ fn hex_decimals(input: &str) -> String {
             }
         }
         i = end;
-    }
-    out
-}
-
-fn indent(input: &str) -> String {
-    let mut out = String::with_capacity(input.len() * 2);
-    let mut chars = input.chars().peekable();
-    let mut stack = Vec::<(char, bool, usize)>::new();
-    let mut depth = 0usize;
-
-    while let Some(ch) = chars.next() {
-        match ch {
-            '(' => {
-                let expand = chars.peek() == Some(&'[');
-                stack.push(('(', expand, depth));
-                out.push('(');
-            }
-            ')' => {
-                stack.pop();
-                out.push(')');
-            }
-            '[' => {
-                let parent_expanded = stack.last().map(|e| e.1).unwrap_or(false);
-                let expand =
-                    parent_expanded && matches!(chars.peek(), Some(c) if c.is_ascii_alphabetic());
-                stack.push(('[', expand, depth));
-                out.push('[');
-                if expand {
-                    depth += 1;
-                    out.push('\n');
-                    out.push_str(&"    ".repeat(depth));
-                }
-            }
-            ']' => {
-                let (_, expand, open_depth) = stack.pop().unwrap_or(('[', false, depth));
-                if expand {
-                    depth = open_depth;
-                    out.push('\n');
-                    out.push_str(&"    ".repeat(depth));
-                }
-                out.push(']');
-            }
-            ',' => {
-                out.push(',');
-                if matches!(stack.last(), Some(('[', true, _))) {
-                    out.push('\n');
-                    out.push_str(&"    ".repeat(depth));
-                    if chars.peek() == Some(&' ') {
-                        chars.next();
-                    }
-                }
-            }
-            c => out.push(c),
-        }
     }
     out
 }

@@ -51,7 +51,7 @@ where
 {
     fn go<F: FnMut(&mut [Rc<dyn Encode>])>(operations: &mut [Rc<dyn Encode>], f: &mut F) {
         for op in operations.iter_mut() {
-            if let Some(children) = Rc::get_mut(op).unwrap().children() {
+            if let Some(children) = Rc::get_mut(op).unwrap().children_mut() {
                 go(children, f);
             }
         }
@@ -93,7 +93,7 @@ fn scan(
     effect: &impl Fn(&Effect) -> bool,
 ) {
     for op in operations.iter_mut() {
-        if let Some(children) = Rc::get_mut(op).unwrap().children() {
+        if let Some(children) = Rc::get_mut(op).unwrap().children_mut() {
             scan(children, events, effect);
             continue;
         }
