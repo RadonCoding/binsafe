@@ -63,13 +63,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
         engine,
         VMReg::Rax,
         VMCondition::cmp(VMFlag::Zero, 1),
-        |engine| {
-            let mut b = Vec::<Rc<dyn Encode>>::new();
-
-            b.extend(copy(VMReg::Vt0, VMReg::Vt1));
-
-            b
-        },
+        |engine| vec![copy(VMReg::Vt0, VMReg::Vt1)]
     ));
 
     block.extend(correct(key, vp0, vp1));
