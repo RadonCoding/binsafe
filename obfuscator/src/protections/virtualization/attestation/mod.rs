@@ -210,6 +210,7 @@ fn data(engine: &mut Engine, def: DataDef) -> Vec<Rc<dyn Encode>> {
         VMReg::None,
         1,
         displacement,
+        VMSeg::None,
         VMWidth::Lower64,
     )
 }
@@ -477,14 +478,20 @@ fn xor(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
     instructions
 }
 
-fn compute(base: VMReg, index: VMReg, scale: u8, displacement: i32) -> Vec<Rc<dyn Encode>> {
+fn compute(
+    base: VMReg,
+    index: VMReg,
+    scale: u8,
+    displacement: i32,
+    segment: VMSeg,
+) -> Vec<Rc<dyn Encode>> {
     vec![Rc::new(LoadAddress {
         source: VMMem {
             base,
             index,
             scale,
             displacement,
-            segment: VMSeg::None,
+            segment,
         },
     })]
 }
@@ -494,10 +501,11 @@ fn load(
     index: VMReg,
     scale: u8,
     displacement: i32,
+    segment: VMSeg,
     width: VMWidth,
 ) -> Vec<Rc<dyn Encode>> {
     let mut instructions = Vec::<Rc<dyn Encode>>::new();
-    instructions.extend(compute(base, index, scale, displacement));
+    instructions.extend(compute(base, index, scale, displacement, segment));
     instructions.push(Rc::new(LoadMemory { width }));
     instructions
 }

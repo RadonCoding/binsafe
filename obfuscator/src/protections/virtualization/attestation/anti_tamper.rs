@@ -7,7 +7,7 @@ use exe::{Buffer, PE, RVA};
 use rand::Rng;
 use runtime::mapper::Mappable;
 use runtime::runtime::{DataDef, FnDef};
-use runtime::vm::bytecode::{VMReg, VMWidth};
+use runtime::vm::bytecode::{VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::Encode;
 
 const ACCUMULATOR: VMReg = VMReg::R13;
@@ -67,6 +67,7 @@ pub fn generate(
                     VMReg::Rax,
                     8,
                     functions + 4,
+                    VMSeg::None,
                     VMWidth::Lower32,
                 ));
                 outer.extend(save(VMReg::Rcx));
@@ -78,22 +79,36 @@ pub fn generate(
 
                 outer.extend(foreach(VMReg::R9, Bound::Register(VMReg::R8), 8, || {
                     let mut inner = Vec::<Rc<dyn Encode>>::new();
-                    inner.extend(load(VMReg::Rbx, VMReg::R9, 1, 0, VMWidth::Lower64));
+                    inner.extend(load(
+                        VMReg::Rbx,
+                        VMReg::R9,
+                        1,
+                        0,
+                        VMSeg::None,
+                        VMWidth::Lower64,
+                    ));
                     inner.extend(create(ACCUMULATOR, operation));
                     inner
                 }));
 
-                outer.extend(compute(VMReg::Rbx, VMReg::R9, 1, 0));
-                outer.extend(save(VMReg::R10));
+                outer.extend(compute(VMReg::Rbx, VMReg::R9, 1, 0, VMSeg::None));
+                outer.extend(save(VMReg::Rcx));
 
                 outer.extend(skip(
                     engine,
                     VMReg::Rdx,
                     VMCondition::cmp(VMFlag::Zero, 1),
                     |_| {
-                        foreach(VMReg::R11, Bound::Register(VMReg::Rdx), 1, || {
+                        foreach(VMReg::R8, Bound::Register(VMReg::Rdx), 1, || {
                             let mut inner = Vec::<Rc<dyn Encode>>::new();
-                            inner.extend(load(VMReg::R10, VMReg::R11, 1, 0, VMWidth::Lower8));
+                            inner.extend(load(
+                                VMReg::Rcx,
+                                VMReg::R8,
+                                1,
+                                0,
+                                VMSeg::None,
+                                VMWidth::Lower8,
+                            ));
                             inner.extend(create(ACCUMULATOR, operation));
                             inner
                         })

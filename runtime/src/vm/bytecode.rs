@@ -125,7 +125,9 @@ mapped! {
 
         Vt0, // Current Timestamp
         Vt1, // Cached Timestamp
+
         Vg0, // General Purpose
+
         Vp0, // Persistent Purpose
         Vp1, // Persistent Purpose
 
@@ -812,18 +814,25 @@ where
 
     let mut snapshots = Snapshots::new();
     snapshots.record(Phase::Lift, &operations);
+
     operations = Peephole.run(mapper, operations);
     snapshots.record(Phase::Peephole, &operations);
+
     operations = permute::permute(operations, &mut picker);
     snapshots.record(Phase::Permute, &operations);
+
     operations = scramble::scramble(mapper, operations);
     snapshots.record(Phase::Scramble, &operations);
+
     operations = Mutation.run(mapper, operations);
     snapshots.record(Mutation.phase(), &operations);
+
     operations = Encrypt.run(mapper, operations);
     snapshots.record(Encrypt.phase(), &operations);
+
     operations = permute::permute(operations, &mut picker);
     snapshots.record(Phase::Permute, &operations);
+
     operations = Peephole.run(mapper, operations);
     snapshots.record(Phase::Peephole, &operations);
 
