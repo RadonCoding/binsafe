@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, dword_ptr, eax, edx, ptr, qword_ptr, r12, r13, r14, r8, r8d, r9, r9d, rax, rcx,
-    rdx, rsp, CodeLabel,
+    byte_ptr, dword_ptr, eax, edx, ptr, r12, r13, r14, r15, r8, r8d, r9, r9d, rax, rcx, rdx, rsp,
+    CodeLabel,
 };
 
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
     runtime::{FnDef, ImportDef, Runtime, StringDef},
     vm::{
         bytecode::{VMOp, VMReg},
-        utils::{self, lock},
+        utils::{self},
     },
     VM_DISPATCH_SIZE, VM_INTEGRITY_QWORD, VM_TRAMPOLINE_SIZE,
 };
@@ -77,15 +77,18 @@ pub fn build(rt: &mut Runtime) {
     let mut check_exit = rt.asm.create_label();
     let mut resolved = rt.asm.create_label();
     let mut tamper = rt.asm.create_label();
+    let mut terminate = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // push r13
     rt.asm.push(r13).unwrap();
     // push r14
     rt.asm.push(r14).unwrap();
+    // push r15
+    rt.asm.push(r15).unwrap();
 
-    // sub rsp, 0x28
-    rt.asm.sub(rsp, 0x28).unwrap();
+    // sub rsp, 0x20
+    rt.asm.sub(rsp, 0x20).unwrap();
 
     rt.asm.set_label(&mut setup_block).unwrap();
     {
@@ -245,9 +248,9 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.not(rax).unwrap();
         // and rax, 0x7
         rt.asm.and(rax, 0x7).unwrap();
-        // +1 for integrity +1 for state +1 for lock:
-        // lea rax, [r13 + rax + 0x1 + 0x1 + 0x1]
-        rt.asm.lea(rax, ptr(r13 + rax + 0x1 + 0x1 + 0x1)).unwrap();
+        // +8 for integrity +1 for state +1 for lock:
+        // lea rax, [r13 + rax + 0x8 + 0x1 + 0x1]
+        rt.asm.lea(rax, ptr(r13 + rax + 0x8 + 0x1 + 0x1)).unwrap();
         // mov [r12 + ...], rax
         utils::vreg::store_reg(rt, r12, rax, VMReg::BPointer);
 
@@ -302,7 +305,7 @@ pub fn build(rt: &mut Runtime) {
         }
     }
 
-    lock::acquire_global(rt, al, Some(&mut tamper));
+    rt.asm.set_label(&mut tamper).unwrap();
     {
         // mov rcx, [...]; call ...
         rt.resolve(ImportDef::LoadLibraryA);
@@ -314,37 +317,59 @@ pub fn build(rt: &mut Runtime) {
         // call rax
         rt.asm.call(rax).unwrap();
 
+        // test rax, rax
+        rt.asm.test(rax, rax).unwrap();
+        // jz ...
+        rt.asm.jz(terminate).unwrap();
+
+        // mov rcx, [...]; call ...
+        rt.resolve(ImportDef::GetActiveWindow);
+        // call rax
+        rt.asm.call(rax).unwrap();
+
+        // mov r15, rax
+        rt.asm.mov(r15, rax).unwrap();
+
+        // test r15, r15
+        rt.asm.test(r15, r15).unwrap();
+        // jz ...
+        rt.asm.jz(terminate).unwrap();
+
         // mov rcx, [...]; call ...
         rt.resolve(ImportDef::MessageBoxA);
-        // xor rcx, rcx
-        rt.asm.xor(rcx, rcx).unwrap();
+
+        // mov rcx, r15
+        rt.asm.mov(rcx, r15).unwrap();
         // lea rdx, [...]
         rt.asm
             .lea(rdx, ptr(rt.string_labels[&StringDef::Tampered]))
             .unwrap();
         // xor r8d, r8d
         rt.asm.xor(r8, r8).unwrap();
-        // mov r9d, 0x50030 -> MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST
+        // mov r9d, 0x00050030 -> MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST
         rt.asm.mov(r9d, 0x00050030u32).unwrap();
         // call rax
         rt.asm.call(rax).unwrap();
 
-        lock::release_global(rt);
-
-        // mov rcx, [...]; call ...
-        rt.resolve(ImportDef::NtTerminateProcess);
-        // mov rcx, -0x1
-        rt.asm.mov(rcx, -0x1i64).unwrap();
-        // mov edx, 0xC0000001 -> STATUS_UNSUCCESSFUL
-        rt.asm.mov(edx, 0xC0000001u32).unwrap();
-        // call rax
-        rt.asm.call(rax).unwrap();
+        rt.asm.set_label(&mut terminate).unwrap();
+        {
+            // mov rcx, [...]; call ...
+            rt.resolve(ImportDef::NtTerminateProcess);
+            // mov rcx, -0x1
+            rt.asm.mov(rcx, -0x1i64).unwrap();
+            // mov edx, 0xC0000001 -> STATUS_UNSUCCESSFUL
+            rt.asm.mov(edx, 0xC0000001u32).unwrap();
+            // call rax
+            rt.asm.call(rax).unwrap();
+        }
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
-        rt.asm.add(rsp, 0x28).unwrap();
+        rt.asm.add(rsp, 0x20).unwrap();
 
+        // pop r15
+        rt.asm.pop(r15).unwrap();
         // pop r14
         rt.asm.pop(r14).unwrap();
         // pop r13

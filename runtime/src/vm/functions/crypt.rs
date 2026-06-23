@@ -45,9 +45,9 @@ pub fn build(rt: &mut Runtime) {
     // lea rbx, [r14 + 0x2]
     rt.asm.lea(rbx, ptr(r14 + 0x2)).unwrap();
 
-    // +1 for integrity +7 for alignment:
-    // add r15, 0x1 + 0x7
-    rt.asm.add(r15, 0x1 + 0x7).unwrap();
+    // +8 for integrity +7 for alignment:
+    // add r15, 0x8 + 0x7
+    rt.asm.add(r15, 0x8 + 0x7).unwrap();
     // and r15, -0x8
     rt.asm.and(r15, -0x8).unwrap();
     // add r15, rbx

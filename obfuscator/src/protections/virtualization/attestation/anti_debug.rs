@@ -25,6 +25,35 @@ const THREAD_HIDE_FROM_DEBUGGER: u64 = 0x11;
 const STATUS_PORT_NOT_SET: u64 = 0xc0000353;
 const STATUS_SUCCESS: u64 = 0;
 
+pub fn generate(
+    engine: &mut Engine,
+    rng: &mut impl Rng,
+    expected: &mut u64,
+) -> Vec<Rc<dyn Encode>> {
+    skip(
+        engine,
+        VMReg::Vp0,
+        VMCondition::cmp(VMFlag::Zero, 0),
+        |engine| {
+            let mut b = Vec::<Rc<dyn Encode>>::new();
+
+            b.extend(set(ACCUMULATOR, 0));
+
+            b.extend(reserve(0x28));
+
+            b.extend(query_process_debug_object_handle(engine, rng, expected));
+            b.extend(set_hide_from_debugger(engine, rng, expected));
+            b.extend(query_hide_from_debbuger(engine, rng, expected));
+
+            b.extend(release(0x28));
+
+            b.extend(copy(ACCUMULATOR, VMReg::Vp0));
+
+            b
+        },
+    )
+}
+
 fn query_process_debug_object_handle(
     engine: &mut Engine,
     rng: &mut impl Rng,
@@ -186,33 +215,4 @@ fn query_hide_from_debbuger(
     b.push(Rc::new(Discard));
 
     b
-}
-
-pub fn generate(
-    engine: &mut Engine,
-    rng: &mut impl Rng,
-    expected: &mut u64,
-) -> Vec<Rc<dyn Encode>> {
-    skip(
-        engine,
-        VMReg::Vp0,
-        VMCondition::cmp(VMFlag::Zero, 0),
-        |engine| {
-            let mut b = Vec::<Rc<dyn Encode>>::new();
-
-            b.extend(set(ACCUMULATOR, 0));
-
-            b.extend(reserve(0x28));
-
-            b.extend(query_process_debug_object_handle(engine, rng, expected));
-            b.extend(set_hide_from_debugger(engine, rng, expected));
-            b.extend(query_hide_from_debbuger(engine, rng, expected));
-
-            b.extend(release(0x28));
-
-            b.extend(copy(ACCUMULATOR, VMReg::Vp0));
-
-            b
-        },
-    )
 }
