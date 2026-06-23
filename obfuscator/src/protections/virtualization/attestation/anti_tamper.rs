@@ -121,6 +121,8 @@ pub fn generate(
             b.extend(xor(Some(ACCUMULATOR), Some(VMReg::Vt0)));
             b.extend(save(VMReg::Vp1));
 
+            b.extend(copy(VMReg::Vt0, VMReg::Vt1));
+
             b
         },
     ));
