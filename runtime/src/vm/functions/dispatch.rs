@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{
-    byte_ptr, dword_ptr, eax, edx, ptr, r12, r13, r14, r15, r8, r8d, r9, r9d, rax, rcx, rdx, rsp,
-    CodeLabel,
+    al, byte_ptr, dword_ptr, eax, edx, ptr, r12, r13, r14, r15, r8, r8d, r9, r9d, rax, rcx, rdx,
+    rsp, CodeLabel,
 };
 
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
     runtime::{FnDef, ImportDef, Runtime, StringDef},
     vm::{
         bytecode::{VMOp, VMReg},
-        utils::{self},
+        utils::{self, lock},
     },
     VM_DISPATCH_SIZE, VM_INTEGRITY_QWORD, VM_TRAMPOLINE_SIZE,
 };
@@ -305,7 +305,7 @@ pub fn build(rt: &mut Runtime) {
         }
     }
 
-    rt.asm.set_label(&mut tamper).unwrap();
+    lock::acquire_global(rt, al, Some(&mut tamper));
     {
         // mov rcx, [...]; call ...
         rt.resolve(ImportDef::LoadLibraryA);
@@ -333,9 +333,9 @@ pub fn build(rt: &mut Runtime) {
             .unwrap();
         // xor r8d, r8d
         rt.asm.xor(r8, r8).unwrap();
-        // mov r9d, 0x00050030 -> MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST | MB_SERVICE_NOTIFICATION
+        // mov r9d, ...  -> MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST | MB_SERVICE_NOTIFICATION
         rt.asm
-            .mov(r9d, 0x00000030 | 0x00010000 | 0x00040000 | 0x00200000)
+            .mov(r9d, 0x00000010 | 0x00010000 | 0x00040000 | 0x00200000)
             .unwrap();
         // call rax
         rt.asm.call(rax).unwrap();
