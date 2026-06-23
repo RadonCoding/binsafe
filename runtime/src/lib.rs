@@ -25,4 +25,4 @@ pub const VM_DISPATCH_SIZE: usize = 10;
 // JMP rel32
 pub const VM_TRAMPOLINE_SIZE: usize = 5;
 
-pub const VM_INTEGRITY_BYTE: u8 = 0xFF;
+pub const VM_INTEGRITY_QWORD: u64 = 0xFA11ED175001FA11;
