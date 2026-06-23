@@ -79,7 +79,11 @@ impl Encode for Skip {
         true
     }
 
-    fn children(&mut self) -> Option<&mut Vec<Rc<dyn Encode>>> {
+    fn children_ref(&self) -> Option<&[Rc<dyn Encode>]> {
+        Some(&self.expansion)
+    }
+
+    fn children_mut(&mut self) -> Option<&mut Vec<Rc<dyn Encode>>> {
         Some(&mut self.expansion)
     }
 
