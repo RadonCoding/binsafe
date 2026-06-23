@@ -157,6 +157,7 @@ mapped! {
         NtQueryInformationProcess,
         NtSetInformationThread,
         NtQueryInformationThread,
+        GetActiveWindow,
         MessageBoxA,
         NtTerminateProcess,
         #[cfg(debug_assertions)]
@@ -179,6 +180,7 @@ mapped! {
         NtQueryInformationProcess,
         NtSetInformationThread,
         NtQueryInformationThread,
+        GetActiveWindow,
         MessageBoxA,
         NtTerminateProcess,
         #[cfg(debug_assertions)]
@@ -210,6 +212,7 @@ impl ImportDef {
             ImportDef::NtQueryInformationThread { .. } => {
                 (HashDef::Ntdll, HashDef::NtQueryInformationThread)
             }
+            ImportDef::GetActiveWindow { .. } => (HashDef::User32, HashDef::GetActiveWindow),
             ImportDef::MessageBoxA { .. } => (HashDef::User32, HashDef::MessageBoxA),
             ImportDef::NtTerminateProcess { .. } => (HashDef::Ntdll, HashDef::NtTerminateProcess),
             #[cfg(debug_assertions)]
@@ -733,6 +736,7 @@ impl Runtime {
             HashDef::NtQueryInformationThread,
             "NtQueryInformationThread",
         );
+        self.define_hash(HashDef::GetActiveWindow, "GetActiveWindow");
         self.define_hash(HashDef::MessageBoxA, "MessageBoxA");
         self.define_hash(HashDef::NtTerminateProcess, "NtTerminateProcess");
         #[cfg(debug_assertions)]

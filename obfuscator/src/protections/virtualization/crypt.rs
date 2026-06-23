@@ -48,7 +48,7 @@ fn encrypt_payload(block: &mut [u8], key: u64, mul: u64, add: u64, att: u64) {
 
 pub fn decrypt_payload(block: &mut [u8], mut key: u64, mul: u64, add: u64, att: u64) {
     let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
-    let payload = &mut block[HEADER_SIZE..HEADER_SIZE + ((length + 1 + 7) & !7)];
+    let payload = &mut block[HEADER_SIZE..HEADER_SIZE + ((length + 8 + 7) & !7)];
 
     for chunk in payload.chunks_exact_mut(8) {
         let qword = u64::from_le_bytes(chunk.try_into().unwrap());
@@ -59,7 +59,11 @@ pub fn decrypt_payload(block: &mut [u8], mut key: u64, mul: u64, add: u64, att: 
     }
 
     assert_eq!(
-        u64::from_le_bytes(payload[length..].try_into().unwrap()),
+        u64::from_le_bytes(
+            payload[length..length + size_of::<u64>()]
+                .try_into()
+                .unwrap()
+        ),
         VM_INTEGRITY_QWORD
     );
 
