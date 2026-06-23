@@ -30,10 +30,15 @@ pub fn generate(
     rng: &mut impl Rng,
     expected: &mut u64,
 ) -> Vec<Rc<dyn Encode>> {
-    skip(
+    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+
+    instructions.extend(sub(Some(VMReg::Vt0), Some(VMReg::Vt1)));
+    instructions.extend(save(VMReg::Rax));
+
+    instructions.extend(skip(
         engine,
-        VMReg::Vp0,
-        VMCondition::cmp(VMFlag::Zero, 0),
+        VMReg::Rax,
+        VMCondition::cmp(VMFlag::Zero, 1),
         |engine| {
             let mut b = Vec::<Rc<dyn Encode>>::new();
 
@@ -45,13 +50,16 @@ pub fn generate(
             b.extend(set_hide_from_debugger(engine, rng, expected));
             b.extend(query_hide_from_debbuger(engine, rng, expected));
 
-            b.extend(release(0x28));
+            b.extend(xor(Some(ACCUMULATOR), Some(VMReg::Vt0)));
+            b.extend(save(VMReg::Vp0));
 
-            b.extend(copy(ACCUMULATOR, VMReg::Vp0));
+            b.extend(release(0x28));
 
             b
         },
-    )
+    ));
+
+    instructions
 }
 
 fn query_process_debug_object_handle(
