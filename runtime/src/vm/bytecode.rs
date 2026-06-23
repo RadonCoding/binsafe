@@ -546,6 +546,7 @@ impl fmt::Display for Snapshots {
         use std::collections::{HashMap, HashSet};
 
         let last = self.snapshots.last().unwrap();
+
         let surviving = last
             .operations
             .iter()
@@ -557,18 +558,11 @@ impl fmt::Display for Snapshots {
                 Some(value) => format!("{:>3}", value),
                 None => "   ".to_string(),
             };
+
             let display = display.replace('\n', "\n         ");
+
             format!("{} {:<4} {}", original, markers, display)
         };
-
-        let mut lines = last
-            .operations
-            .iter()
-            .map(|(target, display)| {
-                let (original, markers) = self.trace(*target);
-                render(original, &markers, display)
-            })
-            .collect::<Vec<String>>();
 
         let mut latest = HashMap::new();
 
@@ -578,21 +572,35 @@ impl fmt::Display for Snapshots {
             }
         }
 
+        let mut lines = Vec::new();
+
+        for (address, display) in &self.snapshots[0].operations {
+            let Some((_, _, latest_display)) = latest.get(address) else {
+                continue;
+            };
+
+            let (original, markers) = self.trace(*address);
+
+            if surviving.contains(address) || latest.contains_key(address) {
+                lines.push(render(original, &markers, latest_display));
+            }
+        }
+
         let mut removed = latest
             .into_iter()
             .filter(|(address, _)| !surviving.contains(address))
-            .filter_map(|(address, (index, position, content))| {
+            .filter_map(|(address, (index, _, content))| {
                 let remover = index + 1;
 
-                (remover < self.snapshots.len()).then_some((remover, position, address, content))
+                (remover < self.snapshots.len()).then_some((remover, address, content))
             })
-            .collect::<Vec<(usize, usize, usize, String)>>();
+            .collect::<Vec<_>>();
 
-        removed.sort_by_key(|(remover, position, _, _)| (*remover, *position));
+        removed.sort_by_key(|(remover, _, _)| *remover);
 
-        for (_, _, address, content) in &removed {
-            let (original, markers) = self.trace(*address);
-            lines.push(render(original, &markers, content));
+        for (_, address, content) in removed {
+            let (original, markers) = self.trace(address);
+            lines.push(render(original, &markers, &content));
         }
 
         write!(f, "{}", lines.join("\n"))
