@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
-use std::{i32, mem, slice};
+use std::{i32, slice};
 
 use crate::engine::Engine;
 use crate::protections::Protection;
@@ -94,16 +94,16 @@ impl Virtualization {
             vcode.extend_from_slice(&bytes);
         }
 
-        #[cfg(debug_assertions)]
-        {
-            use logger::debug;
+        // #[cfg(debug_assertions)]
+        // {
+        //     use logger::debug;
 
-            debug!(
-                "ATTESTATION @ 0x{:016X}:\n{}",
-                self.keys.att,
-                log.join("\n")
-            );
-        }
+        //     debug!(
+        //         "ATTESTATION @ 0x{:016X}:\n{}",
+        //         self.keys.att,
+        //         log.join("\n")
+        //     );
+        // }
 
         vcode
     }
@@ -261,8 +261,8 @@ impl Protection for Virtualization {
                 let index = self.virtualized[&rva];
                 unsafe {
                     vtable
-                        .add(index * 8 + mem::size_of::<u32>())
-                        .copy_from(offset.to_le_bytes().as_ptr(), mem::size_of::<u32>());
+                        .add(index * 8 + size_of::<u32>())
+                        .copy_from(offset.to_le_bytes().as_ptr(), size_of::<u32>());
                 }
             }
         }
@@ -332,7 +332,7 @@ impl Protection for Virtualization {
                     let displacement = (size - dispatch2.len()) as u32;
                     vtable
                         .add(vtable_index * 8)
-                        .copy_from(displacement.to_le_bytes().as_ptr(), mem::size_of::<u32>());
+                        .copy_from(displacement.to_le_bytes().as_ptr(), size_of::<u32>());
                 }
 
                 engine.replace(i, &dispatch2);
@@ -362,7 +362,7 @@ impl Protection for Virtualization {
                     let displacement = (rva as i64 + size as i64 - return_address as i64) as i32;
                     vtable.add(vtable_index * 8).copy_from(
                         (displacement as u32).to_le_bytes().as_ptr(),
-                        mem::size_of::<u32>(),
+                        size_of::<u32>(),
                     );
                 }
 

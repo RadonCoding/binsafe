@@ -37,7 +37,7 @@ pub fn scramble(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<
     result
 }
 
-/// Emits the first atom at the top level followed by a [`Skip`] whose body chains the remaining atoms in execution order, prefixed by a jump from the top-level atom into the body.
+/// Places atoms in physical order with a top-level jump into a [`Skip`] execution chain.
 fn chain<R: Rng>(
     mapper: &mut Mapper,
     head: Vec<Vec<Rc<dyn Encode>>>,
@@ -49,16 +49,18 @@ fn chain<R: Rng>(
     shuffle.shuffle(rng);
 
     let mut operations = Vec::<Rc<dyn Encode>>::new();
-    let mut anchors = vec![0usize; n];
+    let mut anchors = vec![0; n];
     let mut pending = Vec::<(usize, Option<usize>)>::new();
 
     pending.push((operations.len(), Some(1)));
+
     operations.extend(jump());
 
     for k in 0..(n - 1) {
         let i = shuffle[k];
 
         anchors[i] = operations.len();
+
         operations.extend(head[i].clone());
 
         let successor = if i + 1 == n { None } else { Some(i + 1) };

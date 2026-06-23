@@ -182,7 +182,7 @@ impl<'a> Engine<'a> {
 
                     let mut cursor = offset;
 
-                    while cursor + mem::size_of::<i32>() <= destination_data.len() {
+                    while cursor + size_of::<i32>() <= destination_data.len() {
                         let current_rva = table_rva + (cursor - offset) as u32;
 
                         if current_rva != table_rva && data_references.contains(&current_rva) {
@@ -190,7 +190,7 @@ impl<'a> Engine<'a> {
                         }
 
                         let displacement = i32::from_le_bytes(
-                            destination_data[cursor..cursor + mem::size_of::<i32>()]
+                            destination_data[cursor..cursor + size_of::<i32>()]
                                 .try_into()
                                 .unwrap(),
                         );
@@ -198,7 +198,7 @@ impl<'a> Engine<'a> {
                         let target_rva = (table_rva as i32 + displacement as i32) as u32;
 
                         if target_rva < indirect.ip() as u32 {
-                            cursor += mem::size_of::<i32>();
+                            cursor += size_of::<i32>();
                             continue;
                         }
 
@@ -208,7 +208,7 @@ impl<'a> Engine<'a> {
 
                         targets.push(target_rva);
 
-                        cursor += mem::size_of::<i32>();
+                        cursor += size_of::<i32>();
                     }
 
                     if !targets.is_empty() {

@@ -119,6 +119,7 @@ mapped! {
         VehEnd,
         ImportAddresses,
         ImportNames,
+        Functions
     }
 }
 
@@ -252,6 +253,8 @@ pub struct Runtime {
 
     dispatches: Vec<Dispatch>,
 
+    functions: HashMap<FnDef, (usize, usize)>,
+
     addresses: HashMap<CodeLabel, u64>,
     sizes: HashMap<CodeLabel, u64>,
 
@@ -319,6 +322,8 @@ impl Runtime {
             imports,
 
             dispatches: Vec::new(),
+
+            functions: HashMap::new(),
 
             addresses: HashMap::new(),
             sizes: HashMap::new(),
@@ -471,8 +476,11 @@ impl Runtime {
         for &task in tasks {
             match task {
                 EmissionTask::Function(def, builder) => {
+                    let start = self.asm.instructions().len();
                     self.set_function_label(def);
                     builder(self);
+                    let end = self.asm.instructions().len();
+                    self.functions.insert(def, (start, end));
                 }
                 EmissionTask::Data(def) => {
                     self.set_data_label(def);
@@ -673,6 +681,8 @@ impl Runtime {
         self.define_data_bytes(DataDef::ImportAddresses, &vec![0u8; self.imports.len() * 8]);
         self.define_data_bytes(DataDef::ImportNames, &vec![0u8; self.imports.len() * 16]);
 
+        self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
+
         self.define_bool(BoolDef::VmIsLocked, false);
         self.define_bool(BoolDef::VmHasVeh, false);
         #[cfg(debug_assertions)]
@@ -789,38 +799,43 @@ impl Runtime {
             }
         }
 
-        let mut labels = self
-            .addresses
-            .iter()
-            .map(|(label, address)| (*label, *address))
-            .collect::<Vec<(CodeLabel, u64)>>();
-        labels.sort_unstable_by_key(|(_, address)| *address);
+        let offsets = &result.inner.new_instruction_offsets;
 
-        for window in labels.windows(2) {
-            let (label, start) = window[0];
-            let (_, end) = window[1];
-
-            self.sizes.insert(label, end - start);
-        }
-
-        if let Some((label, start)) = labels.last() {
-            self.sizes
-                .insert(*label, ip + result.inner.code_buffer.len() as u64 - start);
+        for (def, (_, end)) in &self.functions {
+            let label = self.function_labels[def];
+            let start = result.label_ip(&label).unwrap();
+            let offset = offsets[end - 1] as u64;
+            let size = self.asm.instructions()[end - 1].len() as u64;
+            self.sizes.insert(label, ip + offset + size - start);
         }
 
         let mut code = result.inner.code_buffer.clone();
 
         for dispatch in &self.dispatches {
-            let table = (result.label_ip(&dispatch.table).unwrap() - ip) as usize;
-
-            let base = result.label_ip(&dispatch.table).unwrap() as i64;
+            let rva = result.label_ip(&dispatch.table).unwrap();
+            let offset = (rva - ip) as usize;
 
             for (index, stub, _) in &dispatch.stubs {
-                let stub = result.label_ip(stub).unwrap() as i64;
-                let slot = table + *index as usize * 8;
-                let displacement = stub - base;
-                code[slot..slot + 8].copy_from_slice(&displacement.to_le_bytes());
+                let displacement = result.label_ip(stub).unwrap() as i64 - rva as i64;
+                let slot = offset + *index as usize * size_of::<i64>();
+                code[slot..slot + size_of::<i64>()].copy_from_slice(&displacement.to_le_bytes());
             }
+        }
+
+        let offset = (result
+            .label_ip(self.data_labels.get(&DataDef::Functions).unwrap())
+            .unwrap()
+            - ip) as usize;
+
+        for (i, def) in FnDef::VARIANTS.iter().enumerate() {
+            let entry = offset + i * size_of::<u64>();
+
+            let rva = self.addresses[&self.function_labels[def]] as u32;
+            let size = self.sizes[&self.function_labels[def]] as u32;
+
+            code[entry..entry + size_of::<u32>()].copy_from_slice(&rva.to_le_bytes());
+            code[entry + size_of::<u32>()..entry + size_of::<u64>()]
+                .copy_from_slice(&size.to_le_bytes());
         }
 
         code

@@ -195,14 +195,17 @@ impl Executor {
             // mov [r12 + ...], rax
             self.rt
                 .asm
-                .mov(ptr(r12 + self.rt.mapper.index(register) * 8), rax)
+                .mov(ptr(r12 + self.rt.mapper.index(register) as i32 * 8), rax)
                 .unwrap();
         }
 
         // mov r8, [r12 + ...]
         self.rt
             .asm
-            .mov(r8, ptr(r12 + self.rt.mapper.index(VMReg::VVector) * 8))
+            .mov(
+                r8,
+                ptr(r12 + self.rt.mapper.index(VMReg::VVector) as i32 * 8),
+            )
             .unwrap();
 
         let mut vectors = vec![[0u128; 2]; VECTORS.len()];
@@ -253,19 +256,22 @@ impl Executor {
             // mov r9, [r12 + ...]
             self.rt
                 .asm
-                .mov(r9, ptr(r12 + self.rt.mapper.index(register) * 8))
+                .mov(r9, ptr(r12 + self.rt.mapper.index(register) as i32 * 8))
                 .unwrap();
             // mov [r8 + ...], r9
             self.rt
                 .asm
-                .mov(ptr(r8 + self.rt.mapper.index(register) * 8), r9)
+                .mov(ptr(r8 + self.rt.mapper.index(register) as i32 * 8), r9)
                 .unwrap();
         }
 
         // mov r8, [r12 + ...]
         self.rt
             .asm
-            .mov(r8, ptr(r12 + self.rt.mapper.index(VMReg::VVector) * 8))
+            .mov(
+                r8,
+                ptr(r12 + self.rt.mapper.index(VMReg::VVector) as i32 * 8),
+            )
             .unwrap();
         // mov r9, ...
         self.rt.asm.mov(r9, vectors.as_mut_ptr() as u64).unwrap();

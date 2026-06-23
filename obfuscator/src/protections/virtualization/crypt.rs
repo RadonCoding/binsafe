@@ -1,15 +1,14 @@
 use rand::Rng;
 use runtime::VM_INTEGRITY_BYTE;
-use std::mem;
 
-const HEADER_SIZE: usize = mem::size_of::<u16>();
-const TRAILER_SIZE: usize = mem::size_of::<u8>() + mem::size_of::<u8>();
+const HEADER_SIZE: usize = size_of::<u16>();
+const TRAILER_SIZE: usize = size_of::<u8>() + size_of::<u8>();
 const ENCRYPTED: u8 = 0;
 const DECRYPTED: u8 = 1;
 
 pub fn derive_key(bytes: &[u8]) -> u64 {
     let end = bytes.len() - TRAILER_SIZE;
-    let start = end - mem::size_of::<u64>();
+    let start = end - size_of::<u64>();
     u64::from_le_bytes(bytes[start..end].try_into().unwrap())
 }
 
