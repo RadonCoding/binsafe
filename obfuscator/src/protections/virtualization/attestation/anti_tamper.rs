@@ -42,7 +42,7 @@ pub fn generate(
 
     let mut instructions = Vec::<Rc<dyn Encode>>::new();
 
-    instructions.extend(sub(VMReg::Vt0, VMReg::Vt1));
+    instructions.extend(sub(Some(VMReg::Vt0), Some(VMReg::Vt1)));
     instructions.extend(save(VMReg::Rax));
 
     instructions.extend(skip(
@@ -71,9 +71,9 @@ pub fn generate(
                 ));
                 outer.extend(save(VMReg::Rcx));
 
-                outer.extend(mask(VMReg::Rcx, 7));
+                outer.extend(mask(Some(VMReg::Rcx), 7));
                 outer.extend(save(VMReg::Rdx));
-                outer.extend(sub(VMReg::Rcx, VMReg::Rdx));
+                outer.extend(sub(Some(VMReg::Rcx), Some(VMReg::Rdx)));
                 outer.extend(save(VMReg::R8));
 
                 outer.extend(foreach(VMReg::R9, Bound::Register(VMReg::R8), 8, || {
@@ -103,7 +103,7 @@ pub fn generate(
                 outer
             }));
 
-            b.extend(xor(ACCUMULATOR, VMReg::Vt0));
+            b.extend(xor(Some(ACCUMULATOR), Some(VMReg::Vt0)));
             b.extend(save(VMReg::Vp1));
             b.extend(copy(VMReg::Vt0, VMReg::Vt1));
 
