@@ -56,8 +56,6 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
     let mut vp1 = 0;
     block.extend(anti_tamper::generate(engine, &mut rng, &mut vp1));
 
-    block.extend(copy(VMReg::Vt0, VMReg::Vt1));
-
     block.extend(correct(key, vp0, vp1));
 
     blocks.push(block);
