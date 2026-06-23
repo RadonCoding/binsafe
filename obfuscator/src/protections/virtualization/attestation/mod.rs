@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::engine::Engine;
 use rand::Rng;
-use runtime::runtime::{FnDef, ImportDef};
+use runtime::runtime::{DataDef, FnDef, ImportDef};
 use runtime::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::add::Add;
 use runtime::vm::encoders::and::And;
@@ -14,6 +14,7 @@ use runtime::vm::encoders::load_address::LoadAddress;
 use runtime::vm::encoders::load_immediate::LoadImmediate;
 use runtime::vm::encoders::load_memory::LoadMemory;
 use runtime::vm::encoders::load_register::LoadRegister;
+use runtime::vm::encoders::mul::Mul;
 use runtime::vm::encoders::or::Or;
 use runtime::vm::encoders::shl::Shl;
 use runtime::vm::encoders::skip::Skip;
@@ -42,6 +43,19 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
     block.extend(timestamp());
     block.extend(save(VMReg::Vt0));
     block.extend(mask(VMReg::Vt0, !((1u64 << WINDOW) - 1)));
+
+    block.extend(save(VMReg::Vt0));
+
+    block.extend(data(engine, DataDef::VmKeyMul));
+    block.extend(save(VMReg::Rax));
+    block.extend(mul(VMReg::Vt0, VMReg::Rax));
+
+    block.extend(save(VMReg::Vt0));
+
+    block.extend(data(engine, DataDef::VmKeyAdd));
+    block.extend(save(VMReg::Rax));
+    block.extend(add(VMReg::Vt0, VMReg::Rax));
+
     block.extend(save(VMReg::Vt0));
 
     let mut vp0 = 0;
@@ -194,6 +208,17 @@ fn foreach<F: FnOnce() -> Vec<Rc<dyn Encode>>>(
     }));
 
     vec![Rc::new(Chain::new(operations, jumps))]
+}
+
+fn data(engine: &mut Engine, def: DataDef) -> Vec<Rc<dyn Encode>> {
+    let displacement = engine.rt.lookup(engine.rt.data_labels[&def]) as i32;
+    load(
+        VMReg::VImage,
+        VMReg::None,
+        1,
+        displacement,
+        VMWidth::Lower64,
+    )
 }
 
 fn timestamp() -> Vec<Rc<dyn Encode>> {
@@ -389,6 +414,39 @@ fn sub(a: VMReg, b: VMReg) -> Vec<Rc<dyn Encode>> {
         Rc::new(Sub {
             width: VMWidth::Lower64,
         }),
+    ]
+}
+
+fn add(a: VMReg, b: VMReg) -> Vec<Rc<dyn Encode>> {
+    vec![
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: a,
+        }),
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: b,
+        }),
+        Rc::new(Add {
+            width: VMWidth::Lower64,
+        }),
+    ]
+}
+
+fn mul(a: VMReg, b: VMReg) -> Vec<Rc<dyn Encode>> {
+    vec![
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: a,
+        }),
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: b,
+        }),
+        Rc::new(Mul {
+            width: VMWidth::Lower64,
+        }),
+        Rc::new(Discard),
     ]
 }
 
