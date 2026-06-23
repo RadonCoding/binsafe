@@ -83,6 +83,7 @@ pub mod store_memory;
 pub mod store_merge;
 pub mod store_register;
 pub mod sub;
+pub mod timestamp;
 pub mod trailing_zeros;
 pub mod vector_add;
 pub mod vector_and;

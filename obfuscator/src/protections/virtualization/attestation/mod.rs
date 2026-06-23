@@ -14,10 +14,13 @@ use runtime::vm::encoders::load_address::LoadAddress;
 use runtime::vm::encoders::load_immediate::LoadImmediate;
 use runtime::vm::encoders::load_memory::LoadMemory;
 use runtime::vm::encoders::load_register::LoadRegister;
+use runtime::vm::encoders::or::Or;
+use runtime::vm::encoders::shl::Shl;
 use runtime::vm::encoders::skip::Skip;
 use runtime::vm::encoders::store_memory::StoreMemory;
 use runtime::vm::encoders::store_register::StoreRegister;
 use runtime::vm::encoders::sub::Sub;
+use runtime::vm::encoders::timestamp::Timestamp;
 use runtime::vm::encoders::xor::Xor;
 use runtime::vm::encoders::Encode;
 
@@ -26,6 +29,9 @@ mod anti_tamper;
 #[cfg(debug_assertions)]
 mod debug;
 
+// Masks lower 34 bits of timestamp, creating a ~5s window on a 3.5 GHz CPU
+const WINDOW: u64 = 0x22;
+
 pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
     let mut rng = rand::thread_rng();
 
@@ -33,15 +39,71 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
 
     let mut block = Vec::<Rc<dyn Encode>>::new();
 
+    block.extend(timestamp());
+    block.extend(save(VMReg::Vt0));
+    block.extend(mask(VMReg::Vt0, !((1u64 << WINDOW) - 1)));
+    block.extend(save(VMReg::Vt0));
+
     let mut vp0 = 0;
     block.extend(anti_debug::generate(engine, &mut rng, &mut vp0));
     let mut vp1 = 0;
     block.extend(anti_tamper::generate(engine, &mut rng, &mut vp1));
 
     block.extend(correct(key, vp0, vp1));
+
     blocks.push(block);
 
     blocks
+}
+
+fn correct(key: u64, vp0: u64, vp1: u64) -> Vec<Rc<dyn Encode>> {
+    let correction = key ^ (vp0 ^ vp1);
+    vec![
+        Rc::new(LoadAddress {
+            source: VMMem {
+                base: VMReg::Vg0,
+                index: VMReg::None,
+                scale: 1,
+                displacement: -0x8 - 0x1 - 0x1,
+                segment: VMSeg::None,
+            },
+        }),
+        Rc::new(LoadMemory {
+            width: VMWidth::Lower64,
+        }),
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: VMReg::Vp0,
+        }),
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: VMReg::Vp1,
+        }),
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: VMReg::Vt0,
+        }),
+        Rc::new(Xor {
+            width: VMWidth::Lower64,
+        }),
+        Rc::new(Xor {
+            width: VMWidth::Lower64,
+        }),
+        Rc::new(LoadImmediate {
+            width: VMWidth::Lower64,
+            source: correction.to_le_bytes().to_vec(),
+        }),
+        Rc::new(Xor {
+            width: VMWidth::Lower64,
+        }),
+        Rc::new(Xor {
+            width: VMWidth::Lower64,
+        }),
+        Rc::new(StoreRegister {
+            width: VMWidth::Lower64,
+            destination: VMReg::Vg0,
+        }),
+    ]
 }
 
 fn skip<F: FnOnce(&mut Engine) -> Vec<Rc<dyn Encode>>>(
@@ -132,6 +194,22 @@ fn foreach<F: FnOnce() -> Vec<Rc<dyn Encode>>>(
     }));
 
     vec![Rc::new(Chain::new(operations, jumps))]
+}
+
+fn timestamp() -> Vec<Rc<dyn Encode>> {
+    vec![
+        Rc::new(Timestamp),
+        Rc::new(LoadImmediate {
+            width: VMWidth::Lower64,
+            source: 0x20u64.to_le_bytes().to_vec(),
+        }),
+        Rc::new(Shl {
+            width: VMWidth::Lower64,
+        }),
+        Rc::new(Or {
+            width: VMWidth::Lower64,
+        }),
+    ]
 }
 
 fn set(register: VMReg, value: u64) -> Vec<Rc<dyn Encode>> {
@@ -253,49 +331,6 @@ fn call(engine: &mut Engine, def: FnDef) -> Vec<Rc<dyn Encode>> {
     ]
 }
 
-fn correct(key: u64, vp0: u64, vp1: u64) -> Vec<Rc<dyn Encode>> {
-    let correction = key ^ (vp0 ^ vp1);
-    vec![
-        Rc::new(LoadAddress {
-            source: VMMem {
-                base: VMReg::Vg0,
-                index: VMReg::None,
-                scale: 1,
-                displacement: -0x8 - 0x1 - 0x1,
-                segment: VMSeg::None,
-            },
-        }),
-        Rc::new(LoadMemory {
-            width: VMWidth::Lower64,
-        }),
-        Rc::new(LoadRegister {
-            width: VMWidth::Lower64,
-            source: VMReg::Vp0,
-        }),
-        Rc::new(LoadRegister {
-            width: VMWidth::Lower64,
-            source: VMReg::Vp1,
-        }),
-        Rc::new(Xor {
-            width: VMWidth::Lower64,
-        }),
-        Rc::new(LoadImmediate {
-            width: VMWidth::Lower64,
-            source: correction.to_le_bytes().to_vec(),
-        }),
-        Rc::new(Xor {
-            width: VMWidth::Lower64,
-        }),
-        Rc::new(Xor {
-            width: VMWidth::Lower64,
-        }),
-        Rc::new(StoreRegister {
-            width: VMWidth::Lower64,
-            destination: VMReg::Vg0,
-        }),
-    ]
-}
-
 fn absolute(index: VMReg, scale: u8, displacement: i32, width: VMWidth) -> Vec<Rc<dyn Encode>> {
     let mut instructions = Vec::<Rc<dyn Encode>>::new();
     instructions.push(Rc::new(LoadAddress {
@@ -318,10 +353,10 @@ fn absolute(index: VMReg, scale: u8, displacement: i32, width: VMWidth) -> Vec<R
     instructions
 }
 
-fn save(dst: VMReg) -> Vec<Rc<dyn Encode>> {
+fn save(destination: VMReg) -> Vec<Rc<dyn Encode>> {
     vec![Rc::new(StoreRegister {
         width: VMWidth::Lower64,
-        destination: dst,
+        destination,
     })]
 }
 
@@ -352,6 +387,22 @@ fn sub(a: VMReg, b: VMReg) -> Vec<Rc<dyn Encode>> {
             source: b,
         }),
         Rc::new(Sub {
+            width: VMWidth::Lower64,
+        }),
+    ]
+}
+
+fn xor(a: VMReg, b: VMReg) -> Vec<Rc<dyn Encode>> {
+    vec![
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: a,
+        }),
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: b,
+        }),
+        Rc::new(Xor {
             width: VMWidth::Lower64,
         }),
     ]

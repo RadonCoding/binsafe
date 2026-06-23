@@ -24,6 +24,7 @@ pub mod lea;
 pub mod multiply;
 pub mod pcmpeqb;
 pub mod pmovskb;
+pub mod rdtsc;
 pub mod scalar;
 pub mod set;
 pub mod stack;

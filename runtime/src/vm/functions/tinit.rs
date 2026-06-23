@@ -3,8 +3,8 @@ use iced_x86::code_asm::{ecx, ptr, r8, rax, rcx, rdx, rsp};
 use crate::runtime::{DataDef, FnDef, ImportDef, Runtime};
 
 pub fn build(rt: &mut Runtime) {
-    // sub rsp, 0x20
-    rt.asm.sub(rsp, 0x20).unwrap();
+    // sub rsp, 0x28
+    rt.asm.sub(rsp, 0x28).unwrap();
 
     // call ...
     rt.asm
@@ -77,8 +77,9 @@ pub fn build(rt: &mut Runtime) {
     // call rax
     rt.asm.call(rax).unwrap();
 
-    // add rsp, 0x20
-    rt.asm.add(rsp, 0x20).unwrap();
+    // add rsp, 0x28
+    rt.asm.add(rsp, 0x28).unwrap();
+
     // ret
     rt.asm.ret().unwrap();
 }

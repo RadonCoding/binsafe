@@ -40,10 +40,15 @@ pub fn generate(
 
     let count = FnDef::VARIANTS.len();
 
-    skip(
+    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+
+    instructions.extend(sub(VMReg::Vt0, VMReg::Vt1));
+    instructions.extend(save(VMReg::Rax));
+
+    instructions.extend(skip(
         engine,
-        VMReg::Vp1,
-        VMCondition::cmp(VMFlag::Zero, 0),
+        VMReg::Rax,
+        VMCondition::cmp(VMFlag::Zero, 1),
         |engine| {
             let functions = engine.rt.lookup(engine.rt.data_labels[&DataDef::Functions]) as i32;
 
@@ -98,9 +103,13 @@ pub fn generate(
                 outer
             }));
 
-            b.extend(copy(ACCUMULATOR, VMReg::Vp1));
+            b.extend(xor(ACCUMULATOR, VMReg::Vt0));
+            b.extend(save(VMReg::Vp1));
+            b.extend(copy(VMReg::Vt0, VMReg::Vt1));
 
             b
         },
-    )
+    ));
+
+    instructions
 }

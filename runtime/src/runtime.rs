@@ -85,6 +85,7 @@ mapped! {
         VmHandlerVectorSub,
         VmHandlerVectorMul,
         VmHandlerVectorDiv,
+        VmHandlerTimestamp,
         /* VM VEH */
         VmVehInitialize,
         VmVehHandler,
@@ -134,15 +135,18 @@ mapped! {
 
 mapped! {
     StringDef {
-
+        User32,
+        Tampered
     }
 }
 
 mapped! {
     HashDef {
         Ntdll,
-        KERNEL32,
-        KERNELBASE,
+        Kernel32,
+        KernelBase,
+        User32,
+        LoadLibraryA,
         RtlAddVectoredExceptionHandler,
         TlsAlloc,
         RtlFlsAlloc,
@@ -152,6 +156,7 @@ mapped! {
         RtlFreeHeap,
         NtSetInformationThread,
         NtQueryInformationThread,
+        MessageBoxA,
         NtTerminateProcess,
         #[cfg(debug_assertions)]
         AllocConsole,
@@ -162,6 +167,7 @@ mapped! {
 
 mapped! {
     ImportDef {
+        LoadLibraryA,
         RtlAddVectoredExceptionHandler,
         TlsAlloc,
         RtlFlsAlloc,
@@ -171,6 +177,7 @@ mapped! {
         RtlFreeHeap,
         NtSetInformationThread,
         NtQueryInformationThread,
+        MessageBoxA,
         NtTerminateProcess,
         #[cfg(debug_assertions)]
         AllocConsole,
@@ -182,13 +189,14 @@ mapped! {
 impl ImportDef {
     pub fn get(&self) -> (HashDef, HashDef) {
         match self {
+            ImportDef::LoadLibraryA { .. } => (HashDef::KernelBase, HashDef::LoadLibraryA),
             ImportDef::RtlAddVectoredExceptionHandler { .. } => {
                 (HashDef::Ntdll, HashDef::RtlAddVectoredExceptionHandler)
             }
-            ImportDef::TlsAlloc { .. } => (HashDef::KERNEL32, HashDef::TlsAlloc),
+            ImportDef::TlsAlloc { .. } => (HashDef::Kernel32, HashDef::TlsAlloc),
             ImportDef::RtlFlsAlloc { .. } => (HashDef::Ntdll, HashDef::RtlFlsAlloc),
             ImportDef::RtlFlsSetValue { .. } => (HashDef::Ntdll, HashDef::RtlFlsSetValue),
-            ImportDef::GetProcessHeap { .. } => (HashDef::KERNEL32, HashDef::GetProcessHeap),
+            ImportDef::GetProcessHeap { .. } => (HashDef::Kernel32, HashDef::GetProcessHeap),
             ImportDef::RtlAllocateHeap { .. } => (HashDef::Ntdll, HashDef::RtlAllocateHeap),
             ImportDef::RtlFreeHeap { .. } => (HashDef::Ntdll, HashDef::RtlFreeHeap),
             ImportDef::NtSetInformationThread { .. } => {
@@ -197,9 +205,10 @@ impl ImportDef {
             ImportDef::NtQueryInformationThread { .. } => {
                 (HashDef::Ntdll, HashDef::NtQueryInformationThread)
             }
+            ImportDef::MessageBoxA { .. } => (HashDef::User32, HashDef::MessageBoxA),
             ImportDef::NtTerminateProcess { .. } => (HashDef::Ntdll, HashDef::NtTerminateProcess),
             #[cfg(debug_assertions)]
-            ImportDef::AllocConsole { .. } => (HashDef::KERNELBASE, HashDef::AllocConsole),
+            ImportDef::AllocConsole { .. } => (HashDef::KernelBase, HashDef::AllocConsole),
             #[cfg(debug_assertions)]
             ImportDef::NtWriteFile { .. } => (HashDef::Ntdll, HashDef::NtWriteFile),
         }
@@ -368,7 +377,7 @@ impl Runtime {
     fn hash(&self, value: &str) -> u64 {
         let mut hash = 14695981039346656037u64 ^ self.nonce;
 
-        for byte in value.bytes() {
+        for byte in value.bytes().map(|b| b.to_ascii_lowercase()) {
             hash ^= byte as u64;
             hash = hash.wrapping_mul(0x100000001b3);
         }
@@ -406,7 +415,7 @@ impl Runtime {
         self.bools.entry(def).or_insert(value);
     }
 
-    fn _define_string(&mut self, def: StringDef, string: &str) {
+    fn define_string(&mut self, def: StringDef, string: &str) {
         self.strings.entry(def).or_insert_with(|| {
             let mut bytes = string.as_bytes().to_vec();
             bytes.push(0);
@@ -654,6 +663,7 @@ impl Runtime {
             (FnDef::VmHandlerVectorSub, vm::handlers::vector_sub::build),
             (FnDef::VmHandlerVectorMul, vm::handlers::vector_mul::build),
             (FnDef::VmHandlerVectorDiv, vm::handlers::vector_div::build),
+            (FnDef::VmHandlerTimestamp, vm::handlers::timestamp::build),
             (FnDef::VmFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (FnDef::Hash, functions::hash::build),
@@ -688,9 +698,17 @@ impl Runtime {
         #[cfg(debug_assertions)]
         self.define_bool(BoolDef::VmDebug, false);
 
+        self.define_string(StringDef::User32, "user32.dll");
+        self.define_string(
+            StringDef::Tampered,
+            "This application has been tampered with or is running in an unsupported environment.",
+        );
+
         self.define_hash(HashDef::Ntdll, "ntdll.dll");
-        self.define_hash(HashDef::KERNEL32, "KERNEL32.DLL");
-        self.define_hash(HashDef::KERNELBASE, "KERNELBASE.dll");
+        self.define_hash(HashDef::Kernel32, "kernel32.dll");
+        self.define_hash(HashDef::KernelBase, "KernelBase.dll");
+        self.define_hash(HashDef::User32, "user32.dll");
+        self.define_hash(HashDef::LoadLibraryA, "LoadLibraryA");
         self.define_hash(
             HashDef::RtlAddVectoredExceptionHandler,
             "RtlAddVectoredExceptionHandler",
@@ -706,6 +724,7 @@ impl Runtime {
             HashDef::NtQueryInformationThread,
             "NtQueryInformationThread",
         );
+        self.define_hash(HashDef::MessageBoxA, "MessageBoxA");
         self.define_hash(HashDef::NtTerminateProcess, "NtTerminateProcess");
         #[cfg(debug_assertions)]
         self.define_hash(HashDef::AllocConsole, "AllocConsole");

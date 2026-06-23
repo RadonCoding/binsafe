@@ -55,8 +55,8 @@ pub fn build(rt: &mut Runtime) {
         // push r13
         rt.asm.push(r13).unwrap();
 
-        // sub rsp, 0x20
-        rt.asm.sub(rsp, 0x20).unwrap();
+        // sub rsp, 0x28
+        rt.asm.sub(rsp, 0x28).unwrap();
 
         // mov rcx, [...]; call ...
         rt.resolve(ImportDef::GetProcessHeap);
@@ -85,8 +85,8 @@ pub fn build(rt: &mut Runtime) {
         // call r13
         rt.asm.call(r13).unwrap();
 
-        // add rsp, 0x20
-        rt.asm.add(rsp, 0x20).unwrap();
+        // add rsp, 0x28
+        rt.asm.add(rsp, 0x28).unwrap();
 
         // pop r13
         rt.asm.pop(r13).unwrap();

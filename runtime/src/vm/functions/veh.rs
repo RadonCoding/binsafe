@@ -11,8 +11,8 @@ use crate::{
 pub fn initialize(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
-    // sub rsp, 0x20
-    rt.asm.sub(rsp, 0x20).unwrap();
+    // sub rsp, 0x28
+    rt.asm.sub(rsp, 0x28).unwrap();
 
     // cmp [...], 0x1
     rt.asm
@@ -40,8 +40,8 @@ pub fn initialize(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
-        // add rsp, 0x20
-        rt.asm.add(rsp, 0x20).unwrap();
+        // add rsp, 0x28
+        rt.asm.add(rsp, 0x28).unwrap();
         // ret
         rt.asm.ret().unwrap();
     }
@@ -82,8 +82,8 @@ pub fn handler(rt: &mut Runtime) {
     // push r15
     rt.asm.push(r15).unwrap();
 
-    // sub rsp, 0x20
-    rt.asm.sub(rsp, 0x20).unwrap();
+    // sub rsp, 0x28
+    rt.asm.sub(rsp, 0x28).unwrap();
 
     // mov r13, rcx
     rt.asm.mov(r13, rcx).unwrap();
@@ -201,8 +201,8 @@ pub fn handler(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
-        // add rsp, 0x20
-        rt.asm.add(rsp, 0x20).unwrap();
+        // add rsp, 0x28
+        rt.asm.add(rsp, 0x28).unwrap();
         // pop r15
         rt.asm.pop(r15).unwrap();
         // pop r14
