@@ -56,6 +56,8 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
     let mut vp1 = 0;
     block.extend(anti_tamper::generate(engine, &mut rng, &mut vp1));
 
+    block.extend(copy(VMReg::Vt0, VMReg::Vt1));
+
     block.extend(correct(key, vp0, vp1));
 
     blocks.push(block);
@@ -81,6 +83,13 @@ fn correct(key: u64, vp0: u64, vp1: u64) -> Vec<Rc<dyn Encode>> {
         Rc::new(LoadRegister {
             width: VMWidth::Lower64,
             source: VMReg::Vp0,
+        }),
+        Rc::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: VMReg::Vt0,
+        }),
+        Rc::new(Xor {
+            width: VMWidth::Lower64,
         }),
         Rc::new(LoadRegister {
             width: VMWidth::Lower64,
