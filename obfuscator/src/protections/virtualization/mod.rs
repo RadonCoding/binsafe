@@ -94,16 +94,16 @@ impl Virtualization {
             vcode.extend_from_slice(&bytes);
         }
 
-        // #[cfg(debug_assertions)]
-        // {
-        //     use logger::debug;
+        #[cfg(debug_assertions)]
+        {
+            use logger::debug;
 
-        //     debug!(
-        //         "ATTESTATION @ 0x{:016X}:\n{}",
-        //         self.keys.att,
-        //         log.join("\n")
-        //     );
-        // }
+            debug!(
+                "ATTESTATION @ 0x{:016X}:\n{}",
+                self.keys.att,
+                log.join("\n")
+            );
+        }
 
         vcode
     }
