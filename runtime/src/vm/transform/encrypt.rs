@@ -197,9 +197,7 @@ fn xor(source: &mut [u8], width: VMWidth, key: u64) {
     }
 }
 
-/// Builds a random roll sequence (XOR against a width-sized constant,
-/// or a whole-key ROL/ROR by an 8-bit count) and updates `key` to match,
-/// bracketing with a [`VMReg::Flags`] save/restore when the flags are live.
+/// Creates a random transformation sequence for [`VMReg::VImm`] and updates `key` while preserving flags.
 fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
     let mut rng = rand::thread_rng();
 

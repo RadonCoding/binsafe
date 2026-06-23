@@ -1,5 +1,5 @@
 use exe::{Buffer, ImageDirectoryEntry, PETranslation, VecPE, PE};
-use std::{collections::HashSet, mem};
+use std::collections::HashSet;
 
 #[repr(C, packed)]
 struct RuntimeFunction {
@@ -22,7 +22,7 @@ pub fn get_exception_handlers(pe: &VecPE) -> HashSet<u32> {
     let offset = pe
         .translate(PETranslation::Memory(exceptions.virtual_address))
         .unwrap();
-    let size = exceptions.size as usize / mem::size_of::<RuntimeFunction>();
+    let size = exceptions.size as usize / size_of::<RuntimeFunction>();
     let functions = pe.get_slice_ref::<RuntimeFunction>(offset, size).unwrap();
 
     for rf in functions {

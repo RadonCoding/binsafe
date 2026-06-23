@@ -1,5 +1,3 @@
-use std::mem;
-
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
     stack,
@@ -129,7 +127,7 @@ pub fn print(rt: &mut Runtime, message: &str, register: Option<AsmRegister64>) {
 
     let (register_value, register_string) = if register.is_some() {
         stack!(register_value, offset, 8);
-        stack!(register_string, offset, mem::size_of::<u64>() * 2 + 1);
+        stack!(register_string, offset, size_of::<u64>() * 2 + 1);
         (register_value, register_string)
     } else {
         (0, 0)
@@ -204,7 +202,7 @@ pub fn print_thread_message(
     let mut offset = 0;
 
     stack!(thread_value, offset, 8);
-    stack!(thread_string, offset, mem::size_of::<u64>() * 2 + 1);
+    stack!(thread_string, offset, size_of::<u64>() * 2 + 1);
     stack!(pipe_string, offset, PIPE.len() + 1);
     stack!(message_string, offset, message.len() + 1);
     stack!(colon_string, offset, COLON.len() + 1);

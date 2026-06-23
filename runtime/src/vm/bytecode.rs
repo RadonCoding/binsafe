@@ -123,6 +123,7 @@ mapped! {
 
         Vg0, // General Purpose
         Vp0, // Persistent Purpose
+        Vp1, // Persistent Purpose
 
         VShadow, // Shadow Context
 
