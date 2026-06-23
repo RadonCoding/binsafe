@@ -1,5 +1,5 @@
 use iced_x86::code_asm::{
-    byte_ptr, dword_ptr, eax, ecx, edx, ptr, r12, r13, r14, r8, r8d, r9, r9d, rax, rcx, rdx, rsp,
+    al, byte_ptr, dword_ptr, eax, edx, ptr, r12, r13, r14, r8, r8d, r9, r9d, rax, rcx, rdx, rsp,
     CodeLabel,
 };
 
@@ -8,7 +8,7 @@ use crate::{
     runtime::{FnDef, ImportDef, Runtime, StringDef},
     vm::{
         bytecode::{VMOp, VMReg},
-        utils::{self},
+        utils::{self, lock},
     },
     VM_DISPATCH_SIZE, VM_INTEGRITY_BYTE, VM_TRAMPOLINE_SIZE,
 };
@@ -300,7 +300,7 @@ pub fn build(rt: &mut Runtime) {
         }
     }
 
-    rt.asm.set_label(&mut tamper).unwrap();
+    lock::acquire_global(rt, al, Some(&mut tamper));
     {
         // mov rcx, [...]; call ...
         rt.resolve(ImportDef::LoadLibraryA);
@@ -322,10 +322,12 @@ pub fn build(rt: &mut Runtime) {
             .unwrap();
         // xor r8d, r8d
         rt.asm.xor(r8, r8).unwrap();
-        // xor r9d, 0x00000030 -> MB_ICONWARNING | MB_OK
-        rt.asm.mov(r9d, 0x00000030u32).unwrap();
+        // mov r9d, 0x50030 -> MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST
+        rt.asm.mov(r9d, 0x00050030u32).unwrap();
         // call rax
         rt.asm.call(rax).unwrap();
+
+        lock::release_global(rt);
 
         // mov rcx, [...]; call ...
         rt.resolve(ImportDef::NtTerminateProcess);
