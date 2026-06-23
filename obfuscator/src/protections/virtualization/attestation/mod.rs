@@ -41,20 +41,13 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
     let mut block = Vec::<Rc<dyn Encode>>::new();
 
     block.extend(timestamp());
-    block.extend(save(VMReg::Vt0));
-    block.extend(mask(VMReg::Vt0, !((1u64 << WINDOW) - 1)));
-
-    block.extend(save(VMReg::Vt0));
+    block.extend(mask(None, !((1u64 << WINDOW) - 1)));
 
     block.extend(data(engine, DataDef::VmKeyMul));
-    block.extend(save(VMReg::Rax));
-    block.extend(mul(VMReg::Vt0, VMReg::Rax));
-
-    block.extend(save(VMReg::Vt0));
+    block.extend(mul(None, None));
 
     block.extend(data(engine, DataDef::VmKeyAdd));
-    block.extend(save(VMReg::Rax));
-    block.extend(add(VMReg::Vt0, VMReg::Rax));
+    block.extend(add(None, None));
 
     block.extend(save(VMReg::Vt0));
 
@@ -385,85 +378,103 @@ fn save(destination: VMReg) -> Vec<Rc<dyn Encode>> {
     })]
 }
 
-fn mask(source: VMReg, mask: u64) -> Vec<Rc<dyn Encode>> {
-    vec![
-        Rc::new(LoadRegister {
+fn mask(source: Option<VMReg>, mask: u64) -> Vec<Rc<dyn Encode>> {
+    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+    if let Some(reg) = source {
+        instructions.push(Rc::new(LoadRegister {
             width: VMWidth::Lower64,
-            source: source,
-        }),
-        Rc::new(LoadImmediate {
-            width: VMWidth::Lower64,
-            source: mask.to_le_bytes().to_vec(),
-        }),
-        Rc::new(And {
-            width: VMWidth::Lower64,
-        }),
-    ]
+            source: reg,
+        }));
+    }
+    instructions.push(Rc::new(LoadImmediate {
+        width: VMWidth::Lower64,
+        source: mask.to_le_bytes().to_vec(),
+    }));
+    instructions.push(Rc::new(And {
+        width: VMWidth::Lower64,
+    }));
+    instructions
 }
 
-fn sub(a: VMReg, b: VMReg) -> Vec<Rc<dyn Encode>> {
-    vec![
-        Rc::new(LoadRegister {
+fn sub(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
+    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+    if let Some(reg) = a {
+        instructions.push(Rc::new(LoadRegister {
             width: VMWidth::Lower64,
-            source: a,
-        }),
-        Rc::new(LoadRegister {
+            source: reg,
+        }));
+    }
+    if let Some(reg) = b {
+        instructions.push(Rc::new(LoadRegister {
             width: VMWidth::Lower64,
-            source: b,
-        }),
-        Rc::new(Sub {
-            width: VMWidth::Lower64,
-        }),
-    ]
+            source: reg,
+        }));
+    }
+    instructions.push(Rc::new(Sub {
+        width: VMWidth::Lower64,
+    }));
+    instructions
 }
 
-fn add(a: VMReg, b: VMReg) -> Vec<Rc<dyn Encode>> {
-    vec![
-        Rc::new(LoadRegister {
+fn add(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
+    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+    if let Some(reg) = a {
+        instructions.push(Rc::new(LoadRegister {
             width: VMWidth::Lower64,
-            source: a,
-        }),
-        Rc::new(LoadRegister {
+            source: reg,
+        }));
+    }
+    if let Some(reg) = b {
+        instructions.push(Rc::new(LoadRegister {
             width: VMWidth::Lower64,
-            source: b,
-        }),
-        Rc::new(Add {
-            width: VMWidth::Lower64,
-        }),
-    ]
+            source: reg,
+        }));
+    }
+    instructions.push(Rc::new(Add {
+        width: VMWidth::Lower64,
+    }));
+    instructions
 }
 
-fn mul(a: VMReg, b: VMReg) -> Vec<Rc<dyn Encode>> {
-    vec![
-        Rc::new(LoadRegister {
+fn mul(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
+    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+    if let Some(reg) = a {
+        instructions.push(Rc::new(LoadRegister {
             width: VMWidth::Lower64,
-            source: a,
-        }),
-        Rc::new(LoadRegister {
+            source: reg,
+        }));
+    }
+    if let Some(reg) = b {
+        instructions.push(Rc::new(LoadRegister {
             width: VMWidth::Lower64,
-            source: b,
-        }),
-        Rc::new(Mul {
-            width: VMWidth::Lower64,
-        }),
-        Rc::new(Discard),
-    ]
+            source: reg,
+        }));
+    }
+    instructions.push(Rc::new(Mul {
+        width: VMWidth::Lower64,
+    }));
+    instructions.push(Rc::new(Discard));
+    instructions
 }
 
-fn xor(a: VMReg, b: VMReg) -> Vec<Rc<dyn Encode>> {
-    vec![
-        Rc::new(LoadRegister {
+fn xor(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
+    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+    if let Some(reg) = a {
+        instructions.push(Rc::new(LoadRegister {
             width: VMWidth::Lower64,
-            source: a,
-        }),
-        Rc::new(LoadRegister {
+            source: reg,
+        }));
+    }
+    if let Some(reg) = b {
+        instructions.push(Rc::new(LoadRegister {
             width: VMWidth::Lower64,
-            source: b,
-        }),
-        Rc::new(Xor {
-            width: VMWidth::Lower64,
-        }),
-    ]
+            source: reg,
+        }));
+    }
+    instructions.push(Rc::new(Xor {
+        width: VMWidth::Lower64,
+    }));
+    instructions
 }
 
 fn compute(base: VMReg, index: VMReg, scale: u8, displacement: i32) -> Vec<Rc<dyn Encode>> {
