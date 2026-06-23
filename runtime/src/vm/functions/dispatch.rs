@@ -323,31 +323,20 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.jz(terminate).unwrap();
 
         // mov rcx, [...]; call ...
-        rt.resolve(ImportDef::GetActiveWindow);
-        // call rax
-        rt.asm.call(rax).unwrap();
-
-        // mov r15, rax
-        rt.asm.mov(r15, rax).unwrap();
-
-        // test r15, r15
-        rt.asm.test(r15, r15).unwrap();
-        // jz ...
-        rt.asm.jz(terminate).unwrap();
-
-        // mov rcx, [...]; call ...
         rt.resolve(ImportDef::MessageBoxA);
 
-        // mov rcx, r15
-        rt.asm.mov(rcx, r15).unwrap();
+        // xor rcx, rcx
+        rt.asm.xor(rcx, rcx).unwrap();
         // lea rdx, [...]
         rt.asm
             .lea(rdx, ptr(rt.string_labels[&StringDef::Tampered]))
             .unwrap();
         // xor r8d, r8d
         rt.asm.xor(r8, r8).unwrap();
-        // mov r9d, 0x00050030 -> MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST
-        rt.asm.mov(r9d, 0x00050030u32).unwrap();
+        // mov r9d, 0x00050030 -> MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST | MB_SERVICE_NOTIFICATION
+        rt.asm
+            .mov(r9d, 0x00000030 | 0x00010000 | 0x00040000 | 0x00200000)
+            .unwrap();
         // call rax
         rt.asm.call(rax).unwrap();
 
