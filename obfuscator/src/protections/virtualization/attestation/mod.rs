@@ -49,10 +49,10 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
     block.extend(data(engine, DataDef::VmKeyAdd));
     block.extend(add(None, None));
 
-    block.extend(save(VMReg::Vt0));
+    block.extend(reload(VMReg::Vt0));
 
     block.extend(sub(Some(VMReg::Vt0), Some(VMReg::Vt1)));
-    block.extend(save(VMReg::Rax));
+    block.extend(reload(VMReg::Rax));
 
     let mut vp0 = 0;
     let mut vp1 = 0;
@@ -396,7 +396,14 @@ fn absolute(index: VMReg, scale: u8, displacement: i32, width: VMWidth) -> Vec<R
     instructions
 }
 
-fn save(destination: VMReg) -> Vec<Rc<dyn Encode>> {
+fn spill(source: VMReg) -> Vec<Rc<dyn Encode>> {
+    vec![Rc::new(LoadRegister {
+        width: VMWidth::Lower64,
+        source,
+    })]
+}
+
+fn reload(destination: VMReg) -> Vec<Rc<dyn Encode>> {
     vec![Rc::new(StoreRegister {
         width: VMWidth::Lower64,
         destination,
