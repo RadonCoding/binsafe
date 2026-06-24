@@ -183,7 +183,7 @@ fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
 
     operations.extend(set(counter, 0));
 
-    let destination = Label::new();
+    let destination = Label::target();
 
     operations.push(Box::new(destination));
 
@@ -209,7 +209,7 @@ fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
     }));
     operations.push(Box::new(Discard));
 
-    let source = Label::new();
+    let source = Label::marker();
 
     operations.push(Box::new(source));
 

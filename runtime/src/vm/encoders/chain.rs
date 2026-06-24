@@ -28,6 +28,33 @@ impl Chain {
     pub fn new(operations: Vec<Box<dyn Encode>>, jumps: Vec<Jump>) -> Self {
         Self { operations, jumps }
     }
+
+    fn position(
+        &self,
+        mapper: &mut Mapper,
+        operations: Option<&[Box<dyn Encode>]>,
+        label: usize,
+    ) -> Option<usize> {
+        let mut offset = 0;
+
+        for operation in operations.unwrap_or(&self.operations) {
+            if let Some(target) = operation.as_any().downcast_ref::<Label>() {
+                if target.id() == label {
+                    return Some(offset);
+                }
+            }
+
+            if let Some(children) = operation.children_ref() {
+                if let Some(position) = self.position(mapper, Some(children), label) {
+                    return Some(offset + position);
+                }
+            }
+
+            offset += operation.size(mapper);
+        }
+
+        None
+    }
 }
 
 impl Encode for Chain {
@@ -57,10 +84,6 @@ impl Encode for Chain {
 
     fn depth(&self) -> i32 {
         self.operations.iter().map(|op| op.depth()).sum()
-    }
-
-    fn branches(&self) -> bool {
-        true
     }
 
     fn children_ref(&self) -> Option<&[Box<dyn Encode>]> {
@@ -93,7 +116,7 @@ impl Encode for Chain {
                 + self.operations[index + 2].size(mapper);
 
             let target = match jump.destination {
-                Target::Label(label) => position(&self.operations, label.id(), mapper).unwrap(),
+                Target::Label(label) => self.position(mapper, None, label.id()).unwrap(),
                 Target::End => self.size(mapper),
             };
 
@@ -110,26 +133,4 @@ impl Encode for Chain {
             load.source = bytes;
         }
     }
-}
-
-fn position(operations: &[Box<dyn Encode>], label: usize, mapper: &mut Mapper) -> Option<usize> {
-    let mut offset = 0;
-
-    for operation in operations {
-        if let Some(target) = operation.as_any().downcast_ref::<Label>() {
-            if target.id() == label {
-                return Some(offset);
-            }
-        }
-
-        if let Some(children) = operation.children_ref() {
-            if let Some(position) = position(children, label, mapper) {
-                return Some(offset + position);
-            }
-        }
-
-        offset += operation.size(mapper);
-    }
-
-    None
 }
