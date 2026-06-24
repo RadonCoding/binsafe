@@ -18,6 +18,7 @@ pub fn capture(rt: &mut Runtime) {
 
 pub fn capture_volatile(rt: &mut Runtime) {
     for &(dst, src) in REGISTERS_TO_NATIVE_VOLATILE {
+        // mov [r12 + ...], ...
         utils::vreg::store_reg(rt, r12, src, dst);
     }
     rt.asm.ret().unwrap();
@@ -25,8 +26,10 @@ pub fn capture_volatile(rt: &mut Runtime) {
 
 pub fn capture_nonvolatile(rt: &mut Runtime) {
     for &(dst, src) in REGISTERS_TO_NATIVE_NONVOLATILE {
+        // mov [r12 + ...], ...
         utils::vreg::store_reg(rt, r12, src, dst);
     }
+    // ret
     rt.asm.ret().unwrap();
 }
 

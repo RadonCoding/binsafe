@@ -193,7 +193,7 @@ pub fn build(rt: &mut Runtime) {
         // cmp [r12 + ...], 0x0
         utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
         // je ...
-        rt.asm.je(check_suspend).unwrap();
+        rt.asm.je(check_exit).unwrap();
 
         // Skip if the native entry is not equal to the native branch:
         // mov rax, [r12 + ...]
@@ -201,7 +201,7 @@ pub fn build(rt: &mut Runtime) {
         // cmp [r12 + ...],
         utils::vreg::cmp_reg(rt, r12, VMReg::NBranch, rax);
         // jne ...
-        rt.asm.jne(check_suspend).unwrap();
+        rt.asm.jne(check_exit).unwrap();
 
         // Native branch points to the native entry so re-execute the block:
         // mov r13, [...]
