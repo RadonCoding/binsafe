@@ -450,7 +450,7 @@ impl<'a> Engine<'a> {
 
             let flow = instruction.flow_control();
 
-            if !matches!(flow, FlowControl::Next | FlowControl::Exception) {
+            if !matches!(flow, FlowControl::Next) {
                 let next = instruction.next_ip() as u32;
                 capture(&mut block, next);
                 inblock = false;
@@ -459,8 +459,8 @@ impl<'a> Engine<'a> {
 
         info!("Found {} blocks", self.blocks.len());
 
-        // let start = 14482;
-        // let end = 14483;
+        // let start = 96731;
+        // let end = 96732;
         // let middle = start + (end - start) / 2;
 
         // self.blocks.drain(end..);

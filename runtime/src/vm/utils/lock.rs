@@ -38,19 +38,19 @@ fn release(rt: &mut Runtime, def: BoolDef) {
 }
 
 pub fn acquire_global(rt: &mut Runtime, scratch: AsmRegister8, label: Option<&mut CodeLabel>) {
-    acquire(rt, scratch, label, BoolDef::VmIsLocked);
+    acquire(rt, scratch, label, BoolDef::IsLocked);
 }
 
 pub fn release_global(rt: &mut Runtime) {
-    release(rt, BoolDef::VmIsLocked);
+    release(rt, BoolDef::IsLocked);
 }
 
 #[cfg(debug_assertions)]
 pub fn acquire_debug(rt: &mut Runtime, scratch: AsmRegister8, label: Option<&mut CodeLabel>) {
-    acquire(rt, scratch, label, BoolDef::VmDebug);
+    acquire(rt, scratch, label, BoolDef::IsDebugged);
 }
 
 #[cfg(debug_assertions)]
 pub fn release_debug(rt: &mut Runtime) {
-    release(rt, BoolDef::VmDebug);
+    release(rt, BoolDef::IsDebugged);
 }

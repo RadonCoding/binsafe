@@ -16,7 +16,7 @@ pub fn initialize(rt: &mut Runtime) {
 
     // cmp [...], 0x1
     rt.asm
-        .cmp(byte_ptr(rt.bool_labels[&BoolDef::VmHasVeh]), 0x1)
+        .cmp(byte_ptr(rt.bool_labels[&BoolDef::HasVeh]), 0x1)
         .unwrap();
     // je ...
     rt.asm.je(epilogue).unwrap();
@@ -35,7 +35,7 @@ pub fn initialize(rt: &mut Runtime) {
 
     // mov [...], 0x1
     rt.asm
-        .mov(byte_ptr(rt.bool_labels[&BoolDef::VmHasVeh]), 0x1)
+        .mov(byte_ptr(rt.bool_labels[&BoolDef::HasVeh]), 0x1)
         .unwrap();
 
     rt.asm.set_label(&mut epilogue).unwrap();

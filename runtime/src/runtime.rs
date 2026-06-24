@@ -34,6 +34,7 @@ mapped! {
         VmRegistersCaptureNonvolatile,
         VmRegistersRestore,
         VmRegistersCopy,
+        VmVectorsAvx,
         VmVectorsCapture,
         VmVectorsRestore,
         VmVectorsCopy,
@@ -126,10 +127,11 @@ mapped! {
 
 mapped! {
     BoolDef {
-        VmIsLocked,
-        VmHasVeh,
+        IsLocked,
+        HasAvx,
+        HasVeh,
         #[cfg(debug_assertions)]
-        VmDebug
+        IsDebugged
     }
 }
 
@@ -571,6 +573,7 @@ impl Runtime {
             ),
             (FnDef::VmRegistersRestore, vm::functions::registers::restore),
             (FnDef::VmRegistersCopy, vm::functions::registers::copy),
+            (FnDef::VmVectorsAvx, vm::functions::vectors::avx),
             (FnDef::VmVectorsCapture, vm::functions::vectors::capture),
             (FnDef::VmVectorsRestore, vm::functions::vectors::restore),
             (FnDef::VmVectorsCopy, vm::functions::vectors::copy),
@@ -698,10 +701,11 @@ impl Runtime {
 
         self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
 
-        self.define_bool(BoolDef::VmIsLocked, false);
-        self.define_bool(BoolDef::VmHasVeh, false);
+        self.define_bool(BoolDef::IsLocked, false);
+        self.define_bool(BoolDef::HasAvx, false);
+        self.define_bool(BoolDef::HasVeh, false);
         #[cfg(debug_assertions)]
-        self.define_bool(BoolDef::VmDebug, false);
+        self.define_bool(BoolDef::IsDebugged, false);
 
         self.define_string(StringDef::User32, "user32.dll");
         self.define_string(
