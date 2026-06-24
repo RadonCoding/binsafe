@@ -1,19 +1,16 @@
 use std::any::Any;
 use std::collections::HashSet;
 use std::mem;
-use std::rc::Rc;
 
 use crate::mapper::Mappable;
 use crate::vm::bytecode::{VMMem, VMReg, VMVec, VMWidth};
-use crate::vm::encoders::chain::Chain;
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
-use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{Effect, Encode};
-use crate::vm::transform::address;
+use crate::vm::transform::branches;
 
 struct Access {
     memory: VMMem,
@@ -32,29 +29,10 @@ struct Profile {
 }
 
 /// Shuffles `operations` into a semantically equivalent sequence by using `picker` to select among available atomic blocks.
-pub fn permute<F>(operations: Vec<Rc<dyn Encode>>, picker: &mut F) -> Vec<Rc<dyn Encode>>
+pub fn permute<F>(operations: Vec<Box<dyn Encode>>, picker: &mut F) -> Vec<Box<dyn Encode>>
 where
     F: FnMut(&[usize]) -> usize,
 {
-    let mut operations = operations;
-
-    for operation in operations.iter_mut() {
-        let any = &**operation as &dyn Any;
-
-        if any.is::<Skip>() {
-            if let Some(children) = Rc::get_mut(operation).and_then(|op| op.children_mut()) {
-                let inner = children[1..].to_vec();
-                let processed = permute(inner, picker);
-                children.truncate(1);
-                children.extend(processed);
-            }
-        } else if any.is::<Chain>() {
-            if let Some(children) = Rc::get_mut(operation).and_then(|op| op.children_mut()) {
-                let inner = children.to_vec();
-                *children = permute(inner, picker);
-            }
-        }
-    }
     let atoms = atomize(operations);
 
     let live = atoms
@@ -91,12 +69,12 @@ where
 }
 
 /// Removes adjacent [`StoreRegister`]/[`LoadRegister`] pairs created by incomplete scheduling.
-fn cleanup(operations: &mut Vec<Rc<dyn Encode>>, parked: &HashSet<usize>) {
+fn cleanup(operations: &mut Vec<Box<dyn Encode>>, parked: &HashSet<usize>) {
     let mut i = 0;
 
     while i + 1 < operations.len() {
-        if !parked.contains(&address(&operations[i]))
-            || !parked.contains(&address(&operations[i + 1]))
+        if !parked.contains(&operations[i].address())
+            || !parked.contains(&operations[i + 1].address())
         {
             i += 1;
             continue;
@@ -122,15 +100,15 @@ fn cleanup(operations: &mut Vec<Rc<dyn Encode>>, parked: &HashSet<usize>) {
 }
 
 /// Partitions `operations` into atomic blocks based on depth analysis.
-fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
+fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
     let mut atoms = Vec::new();
-    let mut current = Vec::<Rc<dyn Encode>>::new();
+    let mut current = Vec::<Box<dyn Encode>>::new();
     let mut depth = 0;
 
-    for op in operations {
-        depth += op.depth();
+    for operation in operations {
+        depth += operation.depth();
 
-        current.push(op);
+        current.push(operation);
 
         if depth == 0 {
             atoms.push(mem::take(&mut current));
@@ -138,7 +116,7 @@ fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
     }
 
     if !current.is_empty() {
-        let mut single = Vec::<Rc<dyn Encode>>::new();
+        let mut single = Vec::<Box<dyn Encode>>::new();
 
         for atom in atoms.drain(..) {
             single.extend(atom);
@@ -154,9 +132,9 @@ fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
 
 /// Decomposes atoms at depth-1 points, using registers to park state across blocks.
 fn decouple(
-    atoms: Vec<Vec<Rc<dyn Encode>>>,
+    atoms: Vec<Vec<Box<dyn Encode>>>,
     live: &HashSet<VMReg>,
-) -> (Vec<Vec<Rc<dyn Encode>>>, HashSet<usize>) {
+) -> (Vec<Vec<Box<dyn Encode>>>, HashSet<usize>) {
     let plans = (0..atoms.len())
         .map(|i| {
             let cuts = cuts(&atoms[i]);
@@ -183,7 +161,7 @@ fn decouple(
 }
 
 /// Identifies internal indices where scratch depth is 1.
-fn cuts(atom: &Vec<Rc<dyn Encode>>) -> Vec<usize> {
+fn cuts(atom: &Vec<Box<dyn Encode>>) -> Vec<usize> {
     let mut points = Vec::new();
     let mut depth = 0;
 
@@ -200,7 +178,7 @@ fn cuts(atom: &Vec<Rc<dyn Encode>>) -> Vec<usize> {
 
 /// Finds [`VMReg`]s in future atoms available to store intermediate state without conflicts.
 fn vacant(
-    atoms: &[Vec<Rc<dyn Encode>>],
+    atoms: &[Vec<Box<dyn Encode>>],
     pair: usize,
     count: usize,
     live: &HashSet<VMReg>,
@@ -243,15 +221,15 @@ fn vacant(
 
 /// Partitions `atom` at `cuts`, inserting [`LoadRegister`] and [`StoreRegister`] pairs to persist state.
 fn split(
-    atom: Vec<Rc<dyn Encode>>,
+    atom: Vec<Box<dyn Encode>>,
     cuts: &[usize],
     registers: &[VMReg],
     parked: &mut HashSet<usize>,
-) -> Vec<Vec<Rc<dyn Encode>>> {
+) -> Vec<Vec<Box<dyn Encode>>> {
     let mut operations = atom
         .into_iter()
         .map(Some)
-        .collect::<Vec<Option<Rc<dyn Encode>>>>();
+        .collect::<Vec<Option<Box<dyn Encode>>>>();
 
     let total = operations.len();
 
@@ -263,12 +241,12 @@ fn split(
         let mut piece = Vec::new();
 
         if k > 0 {
-            let load = Rc::new(LoadRegister {
+            let load = Box::new(LoadRegister {
                 width: VMWidth::Lower64,
                 source: registers[k - 1],
-            }) as Rc<dyn Encode>;
+            }) as Box<dyn Encode>;
 
-            parked.insert(address(&load));
+            parked.insert(load.address());
 
             piece.push(load);
         }
@@ -277,12 +255,12 @@ fn split(
             piece.push(operations[j].take().unwrap());
         }
 
-        let store = Rc::new(StoreRegister {
+        let store = Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: registers[k],
-        }) as Rc<dyn Encode>;
+        }) as Box<dyn Encode>;
 
-        parked.insert(address(&store));
+        parked.insert(store.address());
 
         piece.push(store);
 
@@ -293,12 +271,12 @@ fn split(
 
     let mut last = Vec::new();
 
-    let load = Rc::new(LoadRegister {
+    let load = Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source: *registers.last().unwrap(),
-    }) as Rc<dyn Encode>;
+    }) as Box<dyn Encode>;
 
-    parked.insert(address(&load));
+    parked.insert(load.address());
 
     last.push(load);
 
@@ -312,7 +290,7 @@ fn split(
 }
 
 /// Extracts register read and write sets for an atom.
-fn effects(atom: &Vec<Rc<dyn Encode>>) -> (HashSet<VMReg>, HashSet<VMReg>) {
+fn effects(atom: &Vec<Box<dyn Encode>>) -> (HashSet<VMReg>, HashSet<VMReg>) {
     let mut reads = HashSet::new();
     let mut writes = HashSet::new();
 
@@ -338,7 +316,7 @@ fn effects(atom: &Vec<Rc<dyn Encode>>) -> (HashSet<VMReg>, HashSet<VMReg>) {
 }
 
 /// Builds a dependency graph and calculates indegrees for atoms.
-fn dependencies(atoms: &[Vec<Rc<dyn Encode>>]) -> (Vec<Vec<usize>>, Vec<usize>) {
+fn dependencies(atoms: &[Vec<Box<dyn Encode>>]) -> (Vec<Vec<usize>>, Vec<usize>) {
     let head = atoms.iter().rposition(branches).unwrap_or(atoms.len());
     let profiles = atoms[..head].iter().map(profile).collect::<Vec<Profile>>();
 
@@ -358,7 +336,7 @@ fn dependencies(atoms: &[Vec<Rc<dyn Encode>>]) -> (Vec<Vec<usize>>, Vec<usize>) 
 }
 
 /// Flattens scheduled atoms into an ordered sequence of operations.
-fn schedule(mut atoms: Vec<Vec<Rc<dyn Encode>>>, order: &[usize]) -> Vec<Rc<dyn Encode>> {
+fn schedule(mut atoms: Vec<Vec<Box<dyn Encode>>>, order: &[usize]) -> Vec<Box<dyn Encode>> {
     let tail = match atoms.iter().rposition(branches) {
         Some(i) => atoms.split_off(i),
         None => Vec::new(),
@@ -367,7 +345,7 @@ fn schedule(mut atoms: Vec<Vec<Rc<dyn Encode>>>, order: &[usize]) -> Vec<Rc<dyn 
     let mut pool = atoms
         .into_iter()
         .map(Some)
-        .collect::<Vec<Option<Vec<Rc<dyn Encode>>>>>();
+        .collect::<Vec<Option<Vec<Box<dyn Encode>>>>>();
 
     order
         .iter()
@@ -378,7 +356,7 @@ fn schedule(mut atoms: Vec<Vec<Rc<dyn Encode>>>, order: &[usize]) -> Vec<Rc<dyn 
 }
 
 /// Generates an effect [`Profile`] for an atom.
-fn profile(atom: &Vec<Rc<dyn Encode>>) -> Profile {
+fn profile(atom: &Vec<Box<dyn Encode>>) -> Profile {
     let mut register_reads = 0;
     let mut register_writes = 0;
     let mut vector_reads = 0;
@@ -450,7 +428,7 @@ fn vector_bit(vec: VMVec) -> u32 {
 }
 
 /// Pairs memory operations with address loads for dependency analysis.
-fn accesses(atom: &Vec<Rc<dyn Encode>>) -> Option<Vec<Access>> {
+fn accesses(atom: &Vec<Box<dyn Encode>>) -> Option<Vec<Access>> {
     let mut result = Vec::new();
 
     for i in 0..atom.len() {
@@ -508,9 +486,4 @@ fn aliases(a: &Access, b: &Access) -> bool {
     let end_b = start_b + b.width as isize;
 
     !(end_a <= start_b || end_b <= start_a)
-}
-
-/// Returns true if the atom contains a branch, defining an execution boundary.
-fn branches(atom: &Vec<Rc<dyn Encode>>) -> bool {
-    atom.iter().any(|op| op.branches())
 }

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::rc::Rc;
+
 use std::{i32, slice};
 
 use crate::engine::Engine;
@@ -42,7 +42,7 @@ impl Default for Keys {
 #[derive(Default)]
 pub struct Virtualization {
     keys: Keys,
-    programs: Vec<Vec<Rc<dyn Encode>>>,
+    programs: Vec<Vec<Box<dyn Encode>>>,
     groups: Vec<Vec<u32>>,
     virtualized: HashMap<u32, usize>,
     trampolines: HashMap<u32, usize>,

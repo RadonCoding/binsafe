@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{self, VMCondition, VMLogic, VMWidth};
 use crate::vm::encoders::jcc::Jcc;
@@ -8,7 +6,7 @@ use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
 pub struct Skip {
-    pub expansion: Vec<Rc<dyn Encode>>,
+    expansion: Vec<Box<dyn Encode>>,
     width: VMWidth,
     source: Vec<u8>,
 }
@@ -18,10 +16,10 @@ impl Skip {
         _mapper: &mut Mapper,
         logic: VMLogic,
         conditions: Vec<VMCondition>,
-        body: Vec<Rc<dyn Encode>>,
+        body: Vec<Box<dyn Encode>>,
     ) -> Self {
         let mut expansion = Vec::with_capacity(1 + body.len());
-        expansion.push(Rc::new(Jcc { logic, conditions }) as Rc<dyn Encode>);
+        expansion.push(Box::new(Jcc { logic, conditions }) as Box<dyn Encode>);
         expansion.extend(body);
 
         Self {
@@ -38,7 +36,6 @@ impl Encode for Skip {
             width: self.width,
             source: self.source.clone(),
         };
-
         let mut bytes = header.encode(mapper);
         bytes.extend(bytecode::assemble(mapper, &self.expansion));
         bytes
@@ -49,18 +46,11 @@ impl Encode for Skip {
             .iter()
             .map(|op| op.size(mapper))
             .sum::<usize>();
-
-        let header = if body <= u8::MAX as usize {
-            3 // +2 for opcode +1 for immediate
-        } else if body <= u16::MAX as usize {
-            4 // +2 for opcode +2 for immediate
-        } else {
-            6 // +2 for opcode +4 for immediate
+        let header = LoadImmediate {
+            width: self.width,
+            source: self.source.clone(),
         };
-
-        let jcc = self.expansion[0].size(mapper);
-
-        header + jcc + body
+        header.size(mapper) + self.expansion[0].size(mapper) + body
     }
 
     fn reads(&self) -> Vec<Effect> {
@@ -79,11 +69,11 @@ impl Encode for Skip {
         true
     }
 
-    fn children_ref(&self) -> Option<&[Rc<dyn Encode>]> {
+    fn children_ref(&self) -> Option<&[Box<dyn Encode>]> {
         Some(&self.expansion)
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Rc<dyn Encode>>> {
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Encode>>> {
         Some(&mut self.expansion)
     }
 

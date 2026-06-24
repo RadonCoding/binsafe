@@ -1,5 +1,4 @@
 use iced_x86::Instruction;
-use std::rc::Rc;
 
 use crate::vm::bytecode::VMReg;
 use crate::vm::encoders::{
@@ -7,19 +6,19 @@ use crate::vm::encoders::{
 };
 use crate::vm::lifters::operation_width;
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let destination_width = operation_width(instruction, 0);
     let destination_register = VMReg::from(instruction.op0_register());
 
     Some(vec![
-        Rc::new(LoadRegister {
+        Box::new(LoadRegister {
             width: destination_width,
             source: destination_register,
         }),
-        Rc::new(ByteSwap {
+        Box::new(ByteSwap {
             width: destination_width,
         }),
-        Rc::new(StoreRegister {
+        Box::new(StoreRegister {
             width: destination_width,
             destination: destination_register,
         }),

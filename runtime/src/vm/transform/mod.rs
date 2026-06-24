@@ -1,9 +1,9 @@
 use std::any::Any;
 use std::mem;
-use std::rc::Rc;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::VMReg;
+use crate::vm::encoders::chain::Chain;
 use crate::vm::{
     bytecode::Phase,
     encoders::{Effect, Encode},
@@ -18,11 +18,11 @@ pub mod scramble;
 pub trait Transform {
     fn phase(&self) -> Phase;
 
-    fn run(&self, mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>>;
+    fn run(&self, mapper: &mut Mapper, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>>;
 }
 
 /// Groups operations into depth-balanced atoms, appending any trailing unbalanced run as a final atom.
-pub fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
+pub fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
     let mut atoms = Vec::new();
     let mut current = Vec::new();
 
@@ -42,22 +42,22 @@ pub fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
     atoms
 }
 
-/// Stable identity for a refcounted operation.
-pub fn address(op: &Rc<dyn Encode>) -> usize {
-    &**op as *const dyn Encode as *const () as usize
-}
-
 /// Recursively descends into [`Encode::children`], applying `f` to each level after its children have been processed.
-pub fn descend<F>(operations: &mut [Rc<dyn Encode>], mut f: F)
+pub fn descend<F>(operations: &mut Vec<Box<dyn Encode>>, mut f: F)
 where
-    F: FnMut(&mut [Rc<dyn Encode>]),
+    F: FnMut(&mut Vec<Box<dyn Encode>>),
 {
-    fn go<F: FnMut(&mut [Rc<dyn Encode>])>(operations: &mut [Rc<dyn Encode>], f: &mut F) {
+    fn go<F: FnMut(&mut Vec<Box<dyn Encode>>)>(operations: &mut Vec<Box<dyn Encode>>, f: &mut F) {
         for operation in operations.iter_mut() {
-            if let Some(children) = Rc::get_mut(operation).unwrap().children_mut() {
+            if downcast::<Chain>(operation).is_some() {
+                continue;
+            }
+
+            if let Some(children) = operation.children_mut() {
                 go(children, f);
             }
         }
+
         f(operations);
     }
 
@@ -65,7 +65,10 @@ where
 }
 
 /// Per-leaf deadzone mask computed against `effect` via a backward live-variable walk over the leaves.
-pub fn deadzones(operations: &mut [Rc<dyn Encode>], effect: impl Fn(&Effect) -> bool) -> Vec<bool> {
+pub fn deadzones(
+    operations: &mut [Box<dyn Encode>],
+    effect: impl Fn(&Effect) -> bool,
+) -> Vec<bool> {
     let mut events = Vec::new();
 
     scan(operations, &mut events, &effect);
@@ -91,12 +94,12 @@ pub fn deadzones(operations: &mut [Rc<dyn Encode>], effect: impl Fn(&Effect) -> 
 
 /// Records each leaf's read/write flags for `effect`, recursing through children.
 fn scan(
-    operations: &mut [Rc<dyn Encode>],
+    operations: &mut [Box<dyn Encode>],
     events: &mut Vec<(bool, bool)>,
     effect: &impl Fn(&Effect) -> bool,
 ) {
     for op in operations.iter_mut() {
-        if let Some(children) = Rc::get_mut(op).unwrap().children_mut() {
+        if let Some(children) = op.children_mut() {
             scan(children, events, effect);
             continue;
         }
@@ -109,12 +112,12 @@ fn scan(
 }
 
 /// Downcasts an operation to a concrete encoder type.
-fn downcast<T: 'static>(operation: &Rc<dyn Encode>) -> Option<&T> {
+fn downcast<T: 'static>(operation: &Box<dyn Encode>) -> Option<&T> {
     (&**operation as &dyn Any).downcast_ref::<T>()
 }
 
 /// Whether `register` is written before it is read in the slice.
-fn overwritten(operations: &[Rc<dyn Encode>], register: VMReg) -> bool {
+fn overwritten(operations: &[Box<dyn Encode>], register: VMReg) -> bool {
     for operation in operations {
         // Check if conditional since writes inside are not guaranteed
         if operation.branches() {
@@ -145,4 +148,9 @@ fn overwritten(operations: &[Rc<dyn Encode>], register: VMReg) -> bool {
         }
     }
     false
+}
+
+/// Whether the given atom contains a branch.
+fn branches(atom: &Vec<Box<dyn Encode>>) -> bool {
+    atom.iter().any(|op| op.branches())
 }

@@ -1,5 +1,5 @@
 use iced_x86::{Instruction, Mnemonic};
-use std::rc::Rc;
+
 
 use crate::vm::encoders::{
     bit_test::BitTest, bit_test_complement::BitTestComplement, bit_test_reset::BitTestReset,
@@ -7,7 +7,7 @@ use crate::vm::encoders::{
 };
 use crate::vm::lifters::arithmetic::{self, Tail};
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     match instruction.mnemonic() {
         Mnemonic::Bt => arithmetic::binary(instruction, |width| BitTest { width }, Tail::Discard),
         Mnemonic::Bts => {

@@ -1,5 +1,4 @@
 use iced_x86::{Code, Instruction, OpKind};
-use std::rc::Rc;
 
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMWidth};
 use crate::vm::encoders::load_address::LoadAddress;
@@ -10,7 +9,7 @@ use crate::vm::encoders::ret::Ret;
 use crate::vm::encoders::{jcc::Jcc, Encode};
 use crate::vm::lifters::operation_width;
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let code = instruction.code();
 
     match code {
@@ -18,21 +17,21 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             OpKind::Register => {
                 let source_register = VMReg::from(instruction.op0_register());
                 Some(vec![
-                    Rc::new(LoadRegister {
+                    Box::new(LoadRegister {
                         width: VMWidth::Lower64,
                         source: source_register,
                     }),
-                    Rc::new(Jcc::jump()),
+                    Box::new(Jcc::jump()),
                 ])
             }
             OpKind::Memory => Some(vec![
-                Rc::new(LoadAddress {
+                Box::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }),
-                Rc::new(LoadMemory {
+                Box::new(LoadMemory {
                     width: VMWidth::Lower64,
                 }),
-                Rc::new(Jcc::jump()),
+                Box::new(Jcc::jump()),
             ]),
             _ => unreachable!(),
         },
@@ -41,7 +40,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             let displacement = instruction.memory_displacement64().try_into().unwrap();
 
             Some(vec![
-                Rc::new(LoadAddress {
+                Box::new(LoadAddress {
                     source: VMMem {
                         base: VMReg::VImage,
                         index: VMReg::None,
@@ -50,7 +49,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Rc::new(Jcc::jump()),
+                Box::new(Jcc::jump()),
             ])
         }
 
@@ -58,7 +57,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             let displacement = instruction.memory_displacement64().try_into().unwrap();
 
             Some(vec![
-                Rc::new(LoadAddress {
+                Box::new(LoadAddress {
                     source: VMMem {
                         base: VMReg::VImage,
                         index: VMReg::None,
@@ -67,7 +66,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Rc::new(Jcc::call()),
+                Box::new(Jcc::call()),
             ])
         }
 
@@ -83,11 +82,11 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                 0
             };
             Some(vec![
-                Rc::new(LoadImmediate {
+                Box::new(LoadImmediate {
                     width: immediate_width,
                     source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),
                 }),
-                Rc::new(Ret),
+                Box::new(Ret),
             ])
         }
 
@@ -95,21 +94,21 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             OpKind::Register => {
                 let source_register = VMReg::from(instruction.op0_register());
                 Some(vec![
-                    Rc::new(LoadRegister {
+                    Box::new(LoadRegister {
                         width: VMWidth::Lower64,
                         source: source_register,
                     }),
-                    Rc::new(Jcc::call()),
+                    Box::new(Jcc::call()),
                 ])
             }
             OpKind::Memory => Some(vec![
-                Rc::new(LoadAddress {
+                Box::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }),
-                Rc::new(LoadMemory {
+                Box::new(LoadMemory {
                     width: VMWidth::Lower64,
                 }),
-                Rc::new(Jcc::call()),
+                Box::new(Jcc::call()),
             ]),
             _ => unreachable!(),
         },
@@ -204,7 +203,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             };
 
             Some(vec![
-                Rc::new(LoadAddress {
+                Box::new(LoadAddress {
                     source: VMMem {
                         base: VMReg::VImage,
                         index: VMReg::None,
@@ -213,7 +212,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Rc::new(Jcc { logic, conditions }),
+                Box::new(Jcc { logic, conditions }),
             ])
         }
     }

@@ -1,5 +1,5 @@
 use iced_x86::{Instruction, Mnemonic, OpKind};
-use std::rc::Rc;
+
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 use crate::vm::encoders::{
@@ -8,8 +8,8 @@ use crate::vm::encoders::{
 };
 use crate::vm::lifters::operation_width;
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
     let signed = matches!(instruction.mnemonic(), Mnemonic::Movsx | Mnemonic::Movsxd);
 
@@ -29,23 +29,23 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     match instruction.op1_kind() {
         OpKind::Register => {
             let source_register = VMReg::from(instruction.op1_register());
-            operations.push(Rc::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width: source_width,
                 source: source_register,
             }));
         }
         OpKind::Memory => {
-            operations.push(Rc::new(LoadAddress {
+            operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Rc::new(LoadMemory {
+            operations.push(Box::new(LoadMemory {
                 width: source_width,
             }));
         }
         _ => unreachable!(),
     }
 
-    operations.push(Rc::new(StoreRegister {
+    operations.push(Box::new(StoreRegister {
         width: destination_width,
         destination: destination_register,
     }));

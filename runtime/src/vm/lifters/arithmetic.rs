@@ -1,5 +1,4 @@
 use iced_x86::{Instruction, Mnemonic, OpKind};
-use std::rc::Rc;
 
 use crate::vm::bytecode::{VMFlag, VMMem, VMPrecision, VMReg, VMVec, VMWidth};
 use crate::vm::encoders::vector_div::VectorDiv;
@@ -19,7 +18,7 @@ pub enum Tail {
     Discard,
 }
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     match instruction.mnemonic() {
         Mnemonic::Add => binary(instruction, |width| Add { width }, Tail::Writeback),
         Mnemonic::Sub => binary(instruction, |width| Sub { width }, Tail::Writeback),
@@ -159,34 +158,34 @@ pub fn binary<O: Encode + 'static>(
     instruction: &Instruction,
     make: impl Fn(VMWidth) -> O,
     tail: Tail,
-) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+) -> Option<Vec<Box<dyn Encode>>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
     let width = operation_width(instruction, 0);
 
     source(&mut operations, instruction, 0, width).unwrap();
     source(&mut operations, instruction, 1, width).unwrap();
 
-    operations.push(Rc::new(make(width)));
+    operations.push(Box::new(make(width)));
 
     match tail {
         Tail::Writeback => match instruction.op0_kind() {
             OpKind::Register => {
-                operations.push(Rc::new(StoreRegister {
+                operations.push(Box::new(StoreRegister {
                     width,
                     destination: VMReg::from(instruction.op0_register()),
                 }));
             }
             OpKind::Memory => {
-                operations.push(Rc::new(LoadAddress {
+                operations.push(Box::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }));
-                operations.push(Rc::new(StoreMemory { width }));
+                operations.push(Box::new(StoreMemory { width }));
             }
             _ => unreachable!(),
         },
         Tail::Discard => {
-            operations.push(Rc::new(Discard));
+            operations.push(Box::new(Discard));
         }
     }
     Some(operations)
@@ -195,41 +194,41 @@ pub fn binary<O: Encode + 'static>(
 pub fn carry<O: Encode + 'static>(
     instruction: &Instruction,
     make: impl Fn(VMWidth) -> O,
-) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+) -> Option<Vec<Box<dyn Encode>>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
     let width = operation_width(instruction, 0);
 
     source(&mut operations, instruction, 0, width);
     source(&mut operations, instruction, 1, width);
 
-    operations.push(Rc::new(LoadRegister {
+    operations.push(Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source: VMReg::Flags,
     }));
-    operations.push(Rc::new(LoadImmediate {
+    operations.push(Box::new(LoadImmediate {
         width: VMWidth::Lower64,
         source: VMFlag::Carry.bit64().to_le_bytes().to_vec(),
     }));
-    operations.push(Rc::new(And {
+    operations.push(Box::new(And {
         width: VMWidth::Lower64,
     }));
 
-    operations.push(Rc::new(Add { width }));
+    operations.push(Box::new(Add { width }));
 
-    operations.push(Rc::new(make(width)));
+    operations.push(Box::new(make(width)));
 
     match instruction.op0_kind() {
         OpKind::Register => {
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width,
                 destination: VMReg::from(instruction.op0_register()),
             }));
         }
         OpKind::Memory => {
-            operations.push(Rc::new(LoadAddress {
+            operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Rc::new(StoreMemory { width }));
+            operations.push(Box::new(StoreMemory { width }));
         }
         _ => unreachable!(),
     };
@@ -243,53 +242,53 @@ fn unary<O: Encode + 'static>(
     reverse: bool,
     preserve: bool,
     make: impl Fn(VMWidth) -> O,
-) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+) -> Option<Vec<Box<dyn Encode>>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
     let width = operation_width(instruction, 0);
 
     if preserve {
-        operations.push(Rc::new(LoadRegister {
+        operations.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: VMReg::Flags,
         }));
     }
 
     if reverse {
-        operations.push(Rc::new(LoadImmediate {
+        operations.push(Box::new(LoadImmediate {
             width,
             source: immediate.to_le_bytes()[..width.size()].to_vec(),
         }));
         source(&mut operations, instruction, 0, width);
     } else {
         source(&mut operations, instruction, 0, width);
-        operations.push(Rc::new(LoadImmediate {
+        operations.push(Box::new(LoadImmediate {
             width,
             source: immediate.to_le_bytes()[..width.size()].to_vec(),
         }));
     }
 
-    operations.push(Rc::new(make(width)));
+    operations.push(Box::new(make(width)));
 
     match instruction.op0_kind() {
         OpKind::Register => {
             let destination_register = VMReg::from(instruction.op0_register());
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width,
                 destination: destination_register,
             }));
         }
         OpKind::Memory => {
-            operations.push(Rc::new(LoadAddress {
+            operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Rc::new(StoreMemory { width }));
+            operations.push(Box::new(StoreMemory { width }));
         }
         _ => unreachable!(),
     }
 
     if preserve {
-        operations.push(Rc::new(StoreRegister {
+        operations.push(Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: VMReg::Flags,
         }));
@@ -301,8 +300,8 @@ fn unary<O: Encode + 'static>(
 fn vector<O: Encode + 'static>(
     instruction: &Instruction,
     make: impl Fn(VMWidth) -> O,
-) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+) -> Option<Vec<Box<dyn Encode>>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
     let destination = VMVec::from(instruction.op0_register());
 
@@ -321,24 +320,24 @@ fn vector<O: Encode + 'static>(
     for &index in &[first, second] {
         match instruction.op_kind(index) {
             OpKind::Register => {
-                operations.push(Rc::new(LoadVector {
+                operations.push(Box::new(LoadVector {
                     width,
                     source: VMVec::from(instruction.op_register(index)),
                 }));
             }
             OpKind::Memory => {
-                operations.push(Rc::new(LoadAddress {
+                operations.push(Box::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }));
-                operations.push(Rc::new(LoadMemory { width }));
+                operations.push(Box::new(LoadMemory { width }));
             }
             _ => unreachable!(),
         }
     }
 
-    operations.push(Rc::new(make(width)));
+    operations.push(Box::new(make(width)));
 
-    operations.push(Rc::new(StoreMerge { width, destination }));
+    operations.push(Box::new(StoreMerge { width, destination }));
 
     Some(operations)
 }

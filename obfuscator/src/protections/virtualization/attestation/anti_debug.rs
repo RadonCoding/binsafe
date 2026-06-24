@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::engine::Engine;
 use crate::protections::virtualization::attestation::*;
 use rand::Rng;
@@ -26,8 +24,8 @@ pub fn generate(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
-) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
 
     instructions.extend(reserve(0x30));
 
@@ -49,7 +47,7 @@ fn query_process_debug_object_handle(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
-) -> Vec<Rc<dyn Encode>> {
+) -> Vec<Box<dyn Encode>> {
     let mut b = Vec::new();
 
     b.extend(import(engine, ImportDef::NtQueryInformationProcess));
@@ -101,7 +99,7 @@ fn set_hide_from_debugger(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
-) -> Vec<Rc<dyn Encode>> {
+) -> Vec<Box<dyn Encode>> {
     let mut b = Vec::new();
 
     b.extend(import(engine, ImportDef::NtSetInformationThread));
@@ -138,7 +136,7 @@ fn query_hide_from_debbuger(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
-) -> Vec<Rc<dyn Encode>> {
+) -> Vec<Box<dyn Encode>> {
     let mut b = Vec::new();
 
     b.extend(import(engine, ImportDef::NtQueryInformationThread));

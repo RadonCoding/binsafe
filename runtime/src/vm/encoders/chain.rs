@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::rc::Rc;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode;
@@ -9,7 +8,7 @@ use crate::vm::encoders::{Effect, Encode};
 /// [`Jump`]-paired operations referenced by index, with offsets recomputed at [`Chain::seal`].
 #[derive(Debug)]
 pub struct Chain {
-    operations: Vec<Rc<dyn Encode>>,
+    operations: Vec<Box<dyn Encode>>,
     jumps: Vec<Jump>,
 }
 
@@ -26,7 +25,7 @@ pub enum Target {
 }
 
 impl Chain {
-    pub fn new(operations: Vec<Rc<dyn Encode>>, jumps: Vec<Jump>) -> Self {
+    pub fn new(operations: Vec<Box<dyn Encode>>, jumps: Vec<Jump>) -> Self {
         Self { operations, jumps }
     }
 }
@@ -56,11 +55,11 @@ impl Encode for Chain {
         true
     }
 
-    fn children_ref(&self) -> Option<&[Rc<dyn Encode>]> {
+    fn children_ref(&self) -> Option<&[Box<dyn Encode>]> {
         Some(&self.operations)
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Rc<dyn Encode>>> {
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Encode>>> {
         Some(&mut self.operations)
     }
 
@@ -93,7 +92,7 @@ impl Encode for Chain {
             let mut source = offset.to_le_bytes().to_vec();
             transform(&mut source);
 
-            let any: &mut dyn Any = Rc::get_mut(&mut self.operations[jump.source]).unwrap();
+            let any: &mut dyn Any = self.operations[jump.source].as_mut();
             let load = any.downcast_mut::<LoadImmediate>().unwrap();
             load.source = source;
         }

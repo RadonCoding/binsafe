@@ -1,5 +1,5 @@
 use iced_x86::{Instruction, Mnemonic, OpKind};
-use std::rc::Rc;
+
 
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 use crate::vm::encoders::{
@@ -9,7 +9,7 @@ use crate::vm::encoders::{
 };
 use crate::vm::lifters::{operation_immediate, operation_width};
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     match instruction.mnemonic() {
         Mnemonic::Push => push(instruction),
         Mnemonic::Pop => pop(instruction),
@@ -17,23 +17,23 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
     }
 }
 
-fn push(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+fn push(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
     match instruction.op0_kind() {
         OpKind::Register => {
             let source_register = VMReg::from(instruction.op0_register());
 
-            operations.push(Rc::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width: VMWidth::Lower64,
                 source: source_register,
             }));
         }
         OpKind::Memory => {
-            operations.push(Rc::new(LoadAddress {
+            operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Rc::new(LoadMemory {
+            operations.push(Box::new(LoadMemory {
                 width: VMWidth::Lower64,
             }));
         }
@@ -41,7 +41,7 @@ fn push(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
             let immediate_source = operation_immediate(instruction, instruction.op0_kind());
             let immediate_width = operation_width(instruction, 0);
 
-            operations.push(Rc::new(LoadImmediate {
+            operations.push(Box::new(LoadImmediate {
                 width: immediate_width,
                 source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),
             }));
@@ -49,30 +49,30 @@ fn push(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         _ => unreachable!(),
     }
 
-    operations.push(Rc::new(Push));
+    operations.push(Box::new(Push));
 
     Some(operations)
 }
 
-fn pop(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+fn pop(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
-    operations.push(Rc::new(Pop));
+    operations.push(Box::new(Pop));
 
     match instruction.op0_kind() {
         OpKind::Register => {
             let destination_register = VMReg::from(instruction.op0_register());
 
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width: VMWidth::Lower64,
                 destination: destination_register,
             }));
         }
         OpKind::Memory => {
-            operations.push(Rc::new(LoadAddress {
+            operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Rc::new(StoreMemory {
+            operations.push(Box::new(StoreMemory {
                 width: VMWidth::Lower64,
             }));
         }

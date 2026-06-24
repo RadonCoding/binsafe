@@ -1,5 +1,5 @@
 use iced_x86::{Instruction, OpKind};
-use std::rc::Rc;
+
 
 use crate::vm::bytecode::{VMMem, VMReg};
 use crate::vm::encoders::{
@@ -8,25 +8,25 @@ use crate::vm::encoders::{
 };
 use crate::vm::lifters::operation_width;
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let destination_width = operation_width(instruction, 0);
     let source_register = VMReg::from(instruction.op1_register());
 
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
     match instruction.op0_kind() {
         OpKind::Memory => {
-            operations.push(Rc::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width: destination_width,
                 source: source_register,
             }));
-            operations.push(Rc::new(LoadAddress {
+            operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Rc::new(ExchangeAdd {
+            operations.push(Box::new(ExchangeAdd {
                 width: destination_width,
             }));
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width: destination_width,
                 destination: source_register,
             }));
@@ -34,26 +34,26 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         OpKind::Register => {
             let destination_register = VMReg::from(instruction.op0_register());
 
-            operations.push(Rc::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width: destination_width,
                 source: destination_register,
             }));
-            operations.push(Rc::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width: destination_width,
                 source: destination_register,
             }));
-            operations.push(Rc::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width: destination_width,
                 source: source_register,
             }));
-            operations.push(Rc::new(Add {
+            operations.push(Box::new(Add {
                 width: destination_width,
             }));
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width: destination_width,
                 destination: destination_register,
             }));
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width: destination_width,
                 destination: source_register,
             }));

@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use std::{convert::TryInto, i32};
 
 use crate::engine::Engine;
@@ -16,7 +15,7 @@ pub fn generate(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
-) -> Vec<Rc<dyn Encode>> {
+) -> Vec<Box<dyn Encode>> {
     let operation = rng.gen_range(0..3);
 
     for &function in FnDef::VARIANTS.iter() {
@@ -42,12 +41,12 @@ pub fn generate(
 
     let functions = engine.rt.lookup(engine.rt.data_labels[&DataDef::Functions]) as i32;
 
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
 
     instructions.extend(set(ACCUMULATOR, 0));
 
     instructions.extend(foreach(VMReg::Rax, Bound::Immediate(count), 1, || {
-        let mut outer = Vec::<Rc<dyn Encode>>::new();
+        let mut outer = Vec::<Box<dyn Encode>>::new();
 
         outer.extend(absolute(VMReg::Rax, 8, functions, VMWidth::Lower32));
         outer.extend(reload(VMReg::Rbx));
@@ -68,7 +67,7 @@ pub fn generate(
         outer.extend(reload(VMReg::R8));
 
         outer.extend(foreach(VMReg::R9, Bound::Register(VMReg::R8), 8, || {
-            let mut inner = Vec::<Rc<dyn Encode>>::new();
+            let mut inner = Vec::<Box<dyn Encode>>::new();
             inner.extend(load(
                 VMReg::Rbx,
                 VMReg::R9,
@@ -90,7 +89,7 @@ pub fn generate(
             VMCondition::cmp(VMFlag::Zero, 1),
             |_| {
                 foreach(VMReg::R8, Bound::Register(VMReg::Rdx), 1, || {
-                    let mut inner = Vec::<Rc<dyn Encode>>::new();
+                    let mut inner = Vec::<Box<dyn Encode>>::new();
                     inner.extend(load(
                         VMReg::Rcx,
                         VMReg::R8,

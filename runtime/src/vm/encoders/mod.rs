@@ -1,6 +1,5 @@
 use std::any::{type_name, Any};
 use std::fmt::Debug;
-use std::rc::Rc;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMReg, VMVec};
@@ -18,6 +17,10 @@ pub enum Effect {
 pub trait Encode: Debug + Any {
     fn name(&self) -> &'static str {
         type_name::<Self>().rsplit("::").next().unwrap()
+    }
+
+    fn address(&self) -> usize {
+        self as *const Self as *const () as usize
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8>;
@@ -42,11 +45,11 @@ pub trait Encode: Debug + Any {
         false
     }
 
-    fn children_ref(&self) -> Option<&[Rc<dyn Encode>]> {
+    fn children_ref(&self) -> Option<&[Box<dyn Encode>]> {
         None
     }
 
-    fn children_mut(&mut self) -> Option<&mut Vec<Rc<dyn Encode>>> {
+    fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Encode>>> {
         None
     }
 

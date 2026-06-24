@@ -1,7 +1,6 @@
 use core::panic;
 #[cfg(debug_assertions)]
 use std::fmt;
-use std::rc::Rc;
 
 use iced_x86::{Instruction, Mnemonic, Register};
 use strum_macros::EnumIter;
@@ -448,7 +447,7 @@ struct Snapshot {
 
 #[cfg(debug_assertions)]
 impl Snapshot {
-    fn new(phase: Phase, operations: &[Rc<dyn Encode>]) -> Self {
+    fn new(phase: Phase, operations: &[Box<dyn Encode>]) -> Self {
         let mut flattened = Vec::new();
 
         for operation in operations {
@@ -461,10 +460,10 @@ impl Snapshot {
         }
     }
 
-    fn flatten(flattened: &mut Vec<(usize, String)>, operation: &Rc<dyn Encode>, depth: usize) {
+    fn flatten(flattened: &mut Vec<(usize, String)>, operation: &Box<dyn Encode>, depth: usize) {
         if let Some(children) = operation.children_ref() {
             flattened.push((
-                address(operation),
+                operation.address(),
                 format!("{}{}", "  ".repeat(depth), operation.name()),
             ));
 
@@ -473,16 +472,11 @@ impl Snapshot {
             }
         } else {
             flattened.push((
-                address(operation),
+                operation.address(),
                 format!("{}{}", "  ".repeat(depth), operation),
             ));
         }
     }
-}
-
-#[cfg(debug_assertions)]
-fn address(operation: &Rc<dyn Encode>) -> usize {
-    &**operation as *const dyn Encode as *const () as usize
 }
 
 #[cfg(debug_assertions)]
@@ -498,7 +492,7 @@ impl Snapshots {
         }
     }
 
-    pub fn record(&mut self, phase: Phase, operations: &[Rc<dyn Encode>]) {
+    pub fn record(&mut self, phase: Phase, operations: &[Box<dyn Encode>]) {
         self.snapshots.push(Snapshot::new(phase, operations));
     }
 }
@@ -620,8 +614,8 @@ impl fmt::Display for Snapshots {
     }
 }
 
-pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut output: Vec<Rc<dyn Encode>> = Vec::new();
+pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
+    let mut output: Vec<Box<dyn Encode>> = Vec::new();
 
     for instruction in instructions {
         let operations = match instruction.mnemonic() {
@@ -777,7 +771,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Rc<
     Some(output)
 }
 
-pub fn assemble(mapper: &mut Mapper, operations: &[Rc<dyn Encode>]) -> Vec<u8> {
+pub fn assemble(mapper: &mut Mapper, operations: &[Box<dyn Encode>]) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     for operation in operations {
@@ -788,9 +782,9 @@ pub fn assemble(mapper: &mut Mapper, operations: &[Rc<dyn Encode>]) -> Vec<u8> {
 
 pub fn transform<F>(
     mapper: &mut Mapper,
-    operations: Vec<Rc<dyn Encode>>,
+    operations: Vec<Box<dyn Encode>>,
     mut picker: F,
-) -> Vec<Rc<dyn Encode>>
+) -> Vec<Box<dyn Encode>>
 where
     F: FnMut(&[usize]) -> usize,
 {
@@ -810,9 +804,9 @@ where
 #[cfg(debug_assertions)]
 pub fn transform_with_snapshots<F>(
     mapper: &mut Mapper,
-    operations: Vec<Rc<dyn Encode>>,
+    operations: Vec<Box<dyn Encode>>,
     mut picker: F,
-) -> (Vec<Rc<dyn Encode>>, Snapshots)
+) -> (Vec<Box<dyn Encode>>, Snapshots)
 where
     F: FnMut(&[usize]) -> usize,
 {
