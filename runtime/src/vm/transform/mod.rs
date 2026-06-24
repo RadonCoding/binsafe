@@ -84,7 +84,7 @@ where
     go(operations, &mut f);
 }
 
-/// Per-leaf deadzone mask computed against `effect` via a backward live-variable walk over the leaves.
+/// Per-leaf deadzone mask computed against `effect` via a backward walk over the leaves.
 pub fn deadzones(
     operations: &mut [Box<dyn Encode>],
     effect: impl Fn(&Effect) -> bool,
