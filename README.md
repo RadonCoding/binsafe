@@ -26,7 +26,8 @@ Code virtualizer for compiled 64-bit portable executables.
 
 #### State
 
-- **TLS**: VM state lives in [Thread Local Storage](https://learn.microsoft.com/en-us/windows/win32/procthread/thread-local-storage), so each thread runs the interpreter against its own registers and stacks.
+- **Thread Contexts**: each thread maintains isolated VM state in [Thread Local Storage](https://learn.microsoft.com/en-us/windows/win32/procthread/thread-local-storage), with its own registers and stacks.
+- **Shadow Contexts**: nested execution contexts preserve parent state when the VM re-enters itself.
 
 #### Execution
 
@@ -35,7 +36,7 @@ Code virtualizer for compiled 64-bit portable executables.
 
 #### Protection
 
-- **Attestation**: anti-debug and integrity checks are woven into the key derivation process, so any tampered or debugged environment silently corrupts decryption.
+- **Attestation**: anti-debug and integrity checks execute as VM bytecode and directly influence block decryption. Tampering or debugging silently corrupts execution through incorrect decryption rather than producing detectable failures.
 
 ## Testing
 
@@ -44,7 +45,7 @@ The `tests` crate spins up a frankenstein version of the VM, minimally instrumen
 - **Instructions**: instruction is executed through the VM and the resulting context is compared against the CPU.
 - **Permutation**: instruction sequence's dependency graph is exhaustively executed through the VM and verified.
 
-## Usage7
+## Usage
 
 `cargo run --release --bin obfuscator -- <filename> --virtualization --mutation`
 
