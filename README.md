@@ -35,7 +35,7 @@ Code virtualizer for compiled 64-bit portable executables.
 
 #### Protection
 
-- **Attestation**: a leading sequence of VM-blocks runs anti-debug and integrity checks whose results feed into the decryption chain.
+- **Attestation**: anti-debug and integrity checks are woven into the key derivation process, so any tampered or debugged environment silently corrupts decryption.
 
 ## Testing
 
@@ -44,7 +44,7 @@ The `tests` crate spins up a frankenstein version of the VM, minimally instrumen
 - **Instructions**: instruction is executed through the VM and the resulting context is compared against the CPU.
 - **Permutation**: instruction sequence's dependency graph is exhaustively executed through the VM and verified.
 
-## Usage
+## Usage7
 
 `cargo run --release --bin obfuscator -- <filename> --virtualization --mutation`
 
