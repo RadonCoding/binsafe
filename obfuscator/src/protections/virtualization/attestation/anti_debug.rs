@@ -4,10 +4,7 @@ use crate::engine::Engine;
 use crate::protections::virtualization::attestation::*;
 use rand::Rng;
 use runtime::runtime::ImportDef;
-use runtime::vm::bytecode::{VMMem, VMReg, VMSeg, VMWidth};
-use runtime::vm::encoders::discard::Discard;
-use runtime::vm::encoders::load_address::LoadAddress;
-use runtime::vm::encoders::load_immediate::LoadImmediate;
+use runtime::vm::bytecode::{VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::Encode;
 
 const ACCUMULATOR: VMReg = VMReg::Rbx;
@@ -32,7 +29,7 @@ pub fn generate(
 ) -> Vec<Rc<dyn Encode>> {
     let mut instructions = Vec::<Rc<dyn Encode>>::new();
 
-    instructions.extend(reserve(0x28));
+    instructions.extend(reserve(0x30));
 
     instructions.extend(set(ACCUMULATOR, 0));
 
@@ -41,9 +38,9 @@ pub fn generate(
     instructions.extend(query_hide_from_debbuger(engine, rng, expected));
 
     instructions.extend(xor(Some(ACCUMULATOR), Some(VMReg::Vt0)));
-    instructions.extend(save(VMReg::Vp0));
+    instructions.extend(reload(VMReg::Vp0));
 
-    instructions.extend(release(0x28));
+    instructions.extend(release(0x30));
 
     instructions
 }
@@ -63,32 +60,21 @@ fn query_process_debug_object_handle(
         &NT_QUERY_INFORMATION_PROCESS_PROLOGUE,
         expected,
     ));
-    // ALLOCATE ProcessDebugObjectHandle
-    b.push(Rc::new(LoadImmediate {
-        width: VMWidth::Lower64,
-        source: 0u64.to_le_bytes().to_vec(),
-    }));
-    b.push(Rc::new(LoadAddress {
-        source: VMMem {
-            base: VMReg::VScratch,
-            index: VMReg::None,
-            scale: 1,
-            displacement: 0,
-            segment: VMSeg::None,
-        },
-    }));
     // ProcessHandle -> RCX
     b.extend(set(VMReg::Rcx, NT_CURRENT_PROCESS as u64));
     // ProcessInformationClass -> RDX
     b.extend(set(VMReg::Rdx, PROCESS_DEBUG_OBJECT_HANDLE));
+    // ALLOCATE ProcessDebugObjectHandle
+    b.extend(compute(VMReg::Rsp, VMReg::None, 1, 0x28, VMSeg::None));
     // ProcessInformation -> R8
-    b.extend(save(VMReg::R8));
+    b.extend(reload(VMReg::R8));
     // ProcessInformationLength -> R9
     b.extend(set(VMReg::R9, 8));
     // ReturnLength -> [RSP + ...]
     b.extend(store(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
     // NtQueryInformationProcess
     b.extend(invoke(VMReg::Rax));
+
     b.extend(accumulate(
         rng,
         ACCUMULATOR,
@@ -96,18 +82,17 @@ fn query_process_debug_object_handle(
         STATUS_PORT_NOT_SET,
         expected,
     ));
+
     // READ ProcessDebugObjectHandle
     b.extend(accumulate_memory(
         rng,
         ACCUMULATOR,
-        VMReg::VScratch,
-        0,
+        VMReg::Rsp,
+        0x28,
         VMWidth::Lower64,
         0,
         expected,
     ));
-    // DISCARD ProcessDebugObjectHandle
-    b.push(Rc::new(Discard));
 
     b
 }
@@ -137,6 +122,7 @@ fn set_hide_from_debugger(
     b.extend(set(VMReg::R9, 0));
     // NtSetInformationThread
     b.extend(invoke(VMReg::Rax));
+
     b.extend(accumulate(
         rng,
         ACCUMULATOR,
@@ -163,32 +149,22 @@ fn query_hide_from_debbuger(
         &NT_QUERY_INFORMATION_THREAD_PROLOGUE,
         expected,
     ));
-    // ALLOCATE ThreadHideFromDebugger
-    b.push(Rc::new(LoadImmediate {
-        width: VMWidth::Lower8,
-        source: vec![0],
-    }));
-    b.push(Rc::new(LoadAddress {
-        source: VMMem {
-            base: VMReg::VScratch,
-            index: VMReg::None,
-            scale: 1,
-            displacement: 0,
-            segment: VMSeg::None,
-        },
-    }));
+
     // ThreadHandle -> RCX
     b.extend(set(VMReg::Rcx, NT_CURRENT_THREAD as u64));
     // ThreadInformationClass -> RDX
     b.extend(set(VMReg::Rdx, THREAD_HIDE_FROM_DEBUGGER));
+    // ALLOCATE ThreadHideFromDebugger
+    b.extend(compute(VMReg::Rsp, VMReg::None, 1, 0x28, VMSeg::None));
     // ThreadInformation -> R8
-    b.extend(save(VMReg::R8));
+    b.extend(reload(VMReg::R8));
     // ThreadInformationLength -> R9
     b.extend(set(VMReg::R9, 1));
     // ReturnLength -> [RSP + ...]
     b.extend(store(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
     // NtQueryInformationThread
     b.extend(invoke(VMReg::Rax));
+
     b.extend(accumulate(
         rng,
         ACCUMULATOR,
@@ -196,17 +172,16 @@ fn query_hide_from_debbuger(
         STATUS_SUCCESS,
         expected,
     ));
+
     // READ ThreadHideFromDebugger
     b.extend(accumulate_byte(
         rng,
         ACCUMULATOR,
-        VMReg::VScratch,
-        0,
+        VMReg::Rsp,
+        0x28,
         1,
         expected,
     ));
-    // DISCARD ThreadHideFromDebugger
-    b.push(Rc::new(Discard));
 
     b
 }

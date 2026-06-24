@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, dword_ptr, eax, ecx, edx, ptr, r12, r13, r14, r15, r8, r8d, r9, r9d, rax, rcx,
-    rdx, rsp, CodeLabel,
+    al, byte_ptr, dword_ptr, eax, edx, ptr, r12, r13, r14, r8, r8d, r9, r9d, rax, rcx, rdx, rsp,
+    CodeLabel,
 };
 
 use crate::{
@@ -84,11 +84,9 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.push(r13).unwrap();
     // push r14
     rt.asm.push(r14).unwrap();
-    // push r15
-    rt.asm.push(r15).unwrap();
 
-    // sub rsp, 0x20
-    rt.asm.sub(rsp, 0x20).unwrap();
+    // sub rsp, 0x28
+    rt.asm.sub(rsp, 0x28).unwrap();
 
     rt.asm.set_label(&mut setup_block).unwrap();
     {
@@ -343,9 +341,11 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.set_label(&mut terminate).unwrap();
         {
             // mov rcx, [...]; call ...
-            rt.resolve(ImportDef::RtlExitUserProcess);
-            // mov ecx, 0xC0000001 -> STATUS_UNSUCCESSFUL
-            rt.asm.mov(ecx, 0xC0000001u32).unwrap();
+            rt.resolve(ImportDef::NtTerminateProcess);
+            // mov rcx, -0x1
+            rt.asm.mov(rcx, -0x1i64).unwrap();
+            // mov edx, 0xC0000001 -> STATUS_UNSUCCESSFUL
+            rt.asm.mov(edx, 0xC0000001u32).unwrap();
             // call rax
             rt.asm.call(rax).unwrap();
         }
@@ -353,10 +353,9 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
-        rt.asm.add(rsp, 0x20).unwrap();
+        // add rsp, 0x28
+        rt.asm.add(rsp, 0x28).unwrap();
 
-        // pop r15
-        rt.asm.pop(r15).unwrap();
         // pop r14
         rt.asm.pop(r14).unwrap();
         // pop r13

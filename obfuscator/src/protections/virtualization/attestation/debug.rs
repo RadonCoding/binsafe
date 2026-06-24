@@ -10,6 +10,8 @@ use runtime::vm::bytecode::{VMMem, VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::load_address::LoadAddress;
 use runtime::vm::encoders::load_immediate::LoadImmediate;
 use runtime::vm::encoders::load_register::LoadRegister;
+use runtime::vm::encoders::pop::Pop;
+use runtime::vm::encoders::push::Push;
 use runtime::vm::encoders::store_memory::StoreMemory;
 use runtime::vm::encoders::store_register::StoreRegister;
 use runtime::vm::encoders::Encode;
@@ -28,25 +30,14 @@ pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec
     let mut instructions = Vec::<Rc<dyn Encode>>::new();
 
     for &register in VOLATILE {
-        instructions.push(Rc::new(LoadRegister {
-            width: VMWidth::Lower64,
-            source: register,
-        }));
+        instructions.extend(spill(register));
     }
 
     if let Some(register) = register {
-        instructions.push(Rc::new(LoadRegister {
-            width: VMWidth::Lower64,
-            source: register,
-        }));
+        instructions.extend(spill(register));
     }
 
-    let length = message.len()
-        + if register.is_some() {
-            1 + 16 + 1 + 1
-        } else {
-            2
-        };
+    let length = (message.len() + if register.is_some() { 19 } else { 2 } + 15) & !15;
 
     instructions.extend(reserve(length as u64));
 
@@ -59,54 +50,34 @@ pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec
 
         offset += 1;
 
-        instructions.push(Rc::new(LoadAddress {
-            source: VMMem {
-                base: VMReg::Rsp,
-                index: VMReg::None,
-                scale: 1,
-                displacement: offset as i32,
-                segment: VMSeg::None,
-            },
-        }));
-        instructions.push(Rc::new(StoreRegister {
-            width: VMWidth::Lower64,
-            destination: VMReg::Rcx,
-        }));
-        instructions.push(Rc::new(StoreRegister {
-            width: VMWidth::Lower64,
-            destination: VMReg::Rdx,
-        }));
+        instructions.extend(compute(
+            VMReg::Rsp,
+            VMReg::None,
+            1,
+            offset as i32,
+            VMSeg::None,
+        ));
+        instructions.extend(reload(VMReg::Rcx));
+        instructions.extend(reload(VMReg::Rdx));
         instructions.extend(call(engine, FnDef::Format));
 
-        instructions.extend(write_byte(VMReg::Rsp, (offset + 16) as i32, b'\n'));
-        instructions.extend(write_byte(VMReg::Rsp, (offset + 17) as i32, 0));
+        offset += 16;
+
+        instructions.extend(write_byte(VMReg::Rsp, offset as i32, b'\n'));
+        instructions.extend(write_byte(VMReg::Rsp, (offset + 1) as i32, 0));
     } else {
         instructions.extend(write_byte(VMReg::Rsp, offset as i32, b'\n'));
         instructions.extend(write_byte(VMReg::Rsp, (offset + 1) as i32, 0));
     }
 
-    instructions.push(Rc::new(LoadAddress {
-        source: VMMem {
-            base: VMReg::Rsp,
-            index: VMReg::None,
-            scale: 1,
-            displacement: 0,
-            segment: VMSeg::None,
-        },
-    }));
-    instructions.push(Rc::new(StoreRegister {
-        width: VMWidth::Lower64,
-        destination: VMReg::Rcx,
-    }));
+    instructions.extend(compute(VMReg::Rsp, VMReg::None, 1, 0, VMSeg::None));
+    instructions.extend(reload(VMReg::Rcx));
     instructions.extend(call(engine, FnDef::Print));
 
     instructions.extend(release(length as u64));
 
     for &register in VOLATILE.iter().rev() {
-        instructions.push(Rc::new(StoreRegister {
-            width: VMWidth::Lower64,
-            destination: register,
-        }));
+        instructions.extend(reload(register));
     }
 
     instructions
