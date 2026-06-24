@@ -68,7 +68,7 @@ fn chain<R: Rng>(
     let mut anchors = vec![None; count];
     let mut pending = Vec::new();
 
-    let entry = Label::new();
+    let entry = Label::marker();
     operations.push(Box::new(entry));
 
     let (label, procedure) = placeholder();
@@ -80,7 +80,7 @@ fn chain<R: Rng>(
     for k in 0..(count - 1) {
         let i = shuffle[k];
 
-        let anchor = Label::new();
+        let anchor = Label::marker();
         anchors[i] = Some(anchor);
         operations.push(Box::new(anchor));
 
@@ -119,7 +119,7 @@ fn chain<R: Rng>(
 
 /// Placeholder signed-offset [`LoadImmediate`] paired with an always-skip [`Jcc`] and [`Chain::seal`] rewrites the offset bytes.
 fn placeholder() -> (Label, Vec<Box<dyn Encode>>) {
-    let label = Label::new();
+    let label = Label::marker();
 
     let mut procedure = Vec::<Box<dyn Encode>>::new();
     procedure.push(Box::new(label));

@@ -31,7 +31,11 @@ pub fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
     let mut label = false;
 
     for operation in operations {
-        if operation.as_any().is::<Label>() {
+        if operation
+            .as_any()
+            .downcast_ref::<Label>()
+            .map_or(false, |l| l.is_target())
+        {
             label = true;
         }
 
