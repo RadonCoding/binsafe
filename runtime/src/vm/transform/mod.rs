@@ -1,9 +1,9 @@
-use std::any::Any;
 use std::mem;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::VMReg;
 use crate::vm::encoders::chain::Chain;
+use crate::vm::encoders::label::Label;
 use crate::vm::{
     bytecode::Phase,
     encoders::{Effect, Encode},
@@ -28,12 +28,19 @@ pub fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
 
     let mut depth = 0;
 
+    let mut label = false;
+
     for operation in operations {
+        if operation.as_any().is::<Label>() {
+            label = true;
+        }
+
         depth += operation.depth();
         current.push(operation);
 
-        if depth == 0 {
+        if depth == 0 && !label {
             atoms.push(mem::take(&mut current));
+            label = false;
         }
     }
     if !current.is_empty() {
@@ -49,8 +56,8 @@ where
 {
     fn go<F: FnMut(&mut Vec<Box<dyn Encode>>)>(operations: &mut Vec<Box<dyn Encode>>, f: &mut F) {
         for operation in operations.iter_mut() {
-            if downcast::<Chain>(operation).is_some() {
-                continue;
+            if operation.as_any().downcast_ref::<Chain>().is_some() {
+                // continue;
             }
 
             if let Some(children) = operation.children_mut() {
@@ -109,11 +116,6 @@ fn scan(
 
         events.push((reads, writes));
     }
-}
-
-/// Downcasts an operation to a concrete encoder type.
-fn downcast<T: 'static>(operation: &Box<dyn Encode>) -> Option<&T> {
-    (&**operation as &dyn Any).downcast_ref::<T>()
 }
 
 /// Whether `register` is written before it is read in the slice.

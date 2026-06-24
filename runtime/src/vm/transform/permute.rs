@@ -73,9 +73,7 @@ fn cleanup(operations: &mut Vec<Box<dyn Encode>>, parked: &HashSet<usize>) {
     let mut i = 0;
 
     while i + 1 < operations.len() {
-        if !parked.contains(&operations[i].address())
-            || !parked.contains(&operations[i + 1].address())
-        {
+        if !parked.contains(&operations[i].id()) || !parked.contains(&operations[i + 1].id()) {
             i += 1;
             continue;
         }
@@ -246,7 +244,7 @@ fn split(
                 source: registers[k - 1],
             }) as Box<dyn Encode>;
 
-            parked.insert(load.address());
+            parked.insert(load.id());
 
             piece.push(load);
         }
@@ -260,7 +258,7 @@ fn split(
             destination: registers[k],
         }) as Box<dyn Encode>;
 
-        parked.insert(store.address());
+        parked.insert(store.id());
 
         piece.push(store);
 
@@ -276,7 +274,7 @@ fn split(
         source: *registers.last().unwrap(),
     }) as Box<dyn Encode>;
 
-    parked.insert(load.address());
+    parked.insert(load.id());
 
     last.push(load);
 

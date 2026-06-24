@@ -7,6 +7,7 @@ use crate::mapper::Mapper;
 use crate::vm::bytecode::VMWidth;
 use crate::vm::encoders::chain::{Chain, Jump, Target};
 use crate::vm::encoders::jcc::Jcc;
+use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::Encode;
@@ -35,9 +36,7 @@ pub fn scramble(mapper: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Ve
         let mut rng = rand::thread_rng();
 
         let mut result = chain(mapper, atoms, &mut rng);
-
         result.extend(tail.into_iter().flatten());
-
         *operations = result;
     });
 
@@ -59,20 +58,24 @@ fn chain<R: Rng>(
     let mut anchors = vec![0; count];
     let mut pending = Vec::<(usize, Option<usize>)>::new();
 
-    pending.push((operations.len(), Some(1)));
-
+    let entry = Label::new();
+    operations.push(Box::new(entry));
     operations.extend(jump());
+    pending.push((operations[1].id(), Some(1)));
 
     for k in 0..(count - 1) {
         let i = shuffle[k];
 
-        anchors[i] = operations.len();
+        let label = Label::new();
+        anchors[i] = label.id();
+        operations.push(Box::new(label));
 
         operations.extend(head[i].drain(..));
 
-        let successor = if i + 1 == count { None } else { Some(i + 1) };
-        pending.push((operations.len(), successor));
+        let source = operations.len();
         operations.extend(jump());
+        let successor = if i + 1 == count { None } else { Some(i + 1) };
+        pending.push((operations[source].id(), successor));
     }
 
     let jumps = pending
@@ -80,7 +83,7 @@ fn chain<R: Rng>(
         .map(|(source, successor)| Jump {
             source,
             destination: match successor {
-                Some(index) => Target::Operation(anchors[index]),
+                Some(index) => Target::Label(anchors[index]),
                 None => Target::End,
             },
         })
@@ -88,16 +91,12 @@ fn chain<R: Rng>(
 
     let chain = Chain::new(operations, jumps);
     let pass = Jcc::pass();
-    let skip = Skip::new(
-        mapper,
-        pass.logic,
-        pass.conditions,
-        vec![Box::new(chain) as Box<dyn Encode>],
-    );
+    let skip = Skip::new(mapper, pass.logic, pass.conditions, vec![Box::new(chain)]);
 
-    let mut result = Vec::<Box<dyn Encode>>::new();
+    let mut result = Vec::new();
     result.extend(head[0].drain(..));
     result.push(Box::new(skip));
+
     result
 }
 

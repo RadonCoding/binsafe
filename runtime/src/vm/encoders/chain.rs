@@ -2,10 +2,10 @@ use std::any::Any;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode;
+use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::{Effect, Encode};
 
-/// [`Jump`]-paired operations referenced by index, with offsets recomputed at [`Chain::seal`].
 #[derive(Debug)]
 pub struct Chain {
     operations: Vec<Box<dyn Encode>>,
@@ -20,7 +20,7 @@ pub struct Jump {
 
 #[derive(Debug)]
 pub enum Target {
-    Operation(usize),
+    Label(usize),
     End,
 }
 
@@ -31,6 +31,14 @@ impl Chain {
 }
 
 impl Encode for Chain {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         bytecode::assemble(mapper, &self.operations)
     }
@@ -62,39 +70,64 @@ impl Encode for Chain {
     fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Encode>>> {
         Some(&mut self.operations)
     }
-
     fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8])) {
-        let n = self.operations.len();
-
-        let mut positions = vec![0usize; n + 1];
-
-        let mut cursor = 0;
-
-        for i in 0..n {
-            positions[i] = cursor;
-            cursor += self.operations[i].size(mapper);
-        }
-
-        positions[n] = cursor;
-
         for jump in &self.jumps {
-            let after = positions[jump.source]
-                + self.operations[jump.source].size(mapper)
-                + self.operations[jump.source + 1].size(mapper);
+            let index = self
+                .operations
+                .iter()
+                .position(|op| op.id() == jump.source)
+                .unwrap();
+
+            let mut source = 0;
+
+            for operation in &self.operations {
+                if operation.id() == jump.source {
+                    break;
+                }
+
+                source += operation.size(mapper);
+            }
+
+            let after = source
+                + self.operations[index].size(mapper)
+                + self.operations[index + 1].size(mapper);
 
             let target = match jump.destination {
-                Target::Operation(index) => positions[index],
-                Target::End => positions[n],
+                Target::Label(id) => position(&self.operations, id, mapper).unwrap(),
+                Target::End => self.size(mapper),
             };
 
             let offset = i16::try_from(target as isize - after as isize).unwrap();
 
-            let mut source = offset.to_le_bytes().to_vec();
-            transform(&mut source);
+            let mut bytes = offset.to_le_bytes().to_vec();
 
-            let any: &mut dyn Any = self.operations[jump.source].as_mut();
+            transform(&mut bytes);
+
+            let any = self.operations[index].as_mut() as &mut dyn Any;
             let load = any.downcast_mut::<LoadImmediate>().unwrap();
-            load.source = source;
+            load.source = bytes;
         }
     }
+}
+
+fn position(operations: &[Box<dyn Encode>], label: usize, mapper: &mut Mapper) -> Option<usize> {
+    let mut offset = 0;
+
+    for operation in operations {
+        if let Some(target) = operation.as_any().downcast_ref::<Label>() {
+            if target.id() == label {
+                return Some(offset);
+            }
+        }
+
+        if let Some(children) = operation.children_ref() {
+            if let Some(position) = position(children, label, mapper) {
+                return Some(offset + position);
+            }
+        }
+
+        offset += operation.size(mapper);
+    }
+
+    None
 }

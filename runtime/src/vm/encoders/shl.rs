@@ -1,6 +1,7 @@
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMOp, VMReg, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
+use std::any::Any;
 
 #[derive(Debug)]
 pub struct Shl {
@@ -8,6 +9,14 @@ pub struct Shl {
 }
 
 impl Encode for Shl {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(VMOp::Shl), mapper.index(self.width)]
     }

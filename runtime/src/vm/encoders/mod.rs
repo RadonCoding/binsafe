@@ -15,11 +15,15 @@ pub enum Effect {
 }
 
 pub trait Encode: Debug + Any {
+    fn as_any(&self) -> &dyn Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
     fn name(&self) -> &'static str {
         type_name::<Self>().rsplit("::").next().unwrap()
     }
 
-    fn address(&self) -> usize {
+    fn id(&self) -> usize {
         self as *const Self as *const () as usize
     }
 
@@ -71,6 +75,7 @@ pub mod divide;
 pub mod exchange;
 pub mod exchange_add;
 pub mod jcc;
+pub mod label;
 pub mod load_address;
 pub mod load_immediate;
 pub mod load_memory;

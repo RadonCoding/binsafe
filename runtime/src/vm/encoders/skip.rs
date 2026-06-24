@@ -3,6 +3,7 @@ use crate::vm::bytecode::{self, VMCondition, VMLogic, VMWidth};
 use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::{Effect, Encode};
+use std::any::Any;
 
 #[derive(Debug)]
 pub struct Skip {
@@ -31,6 +32,14 @@ impl Skip {
 }
 
 impl Encode for Skip {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         let header = LoadImmediate {
             width: self.width,
