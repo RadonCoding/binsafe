@@ -14,6 +14,10 @@ pub enum Effect {
     Memory,
 }
 
+pub fn identity(operation: &Box<dyn Encode>) -> usize {
+    operation as *const Box<dyn Encode> as usize
+}
+
 pub trait Encode: Debug + Any {
     fn as_any(&self) -> &dyn Any;
 
@@ -21,10 +25,6 @@ pub trait Encode: Debug + Any {
 
     fn name(&self) -> &'static str {
         type_name::<Self>().rsplit("::").next().unwrap()
-    }
-
-    fn address(&self) -> usize {
-        self as *const Self as *const () as usize
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8>;

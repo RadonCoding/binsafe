@@ -9,7 +9,7 @@ use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
-use crate::vm::encoders::{Effect, Encode};
+use crate::vm::encoders::{identity, Effect, Encode};
 use crate::vm::transform::{branches, collapse, descend};
 
 struct Access {
@@ -71,8 +71,8 @@ fn cleanup(operations: &mut Vec<Box<dyn Encode>>, parked: &HashSet<usize>) {
     let mut i = 0;
 
     while i + 1 < operations.len() {
-        if !parked.contains(&operations[i].address())
-            || !parked.contains(&operations[i + 1].address())
+        if !parked.contains(&identity(&operations[i]))
+            || !parked.contains(&identity(&operations[i + 1]))
         {
             i += 1;
             continue;
@@ -213,7 +213,7 @@ fn split(
                 source: registers[k - 1],
             }) as Box<dyn Encode>;
 
-            parked.insert(load.address());
+            parked.insert(identity(&load));
 
             piece.push(load);
         }
@@ -227,7 +227,7 @@ fn split(
             destination: registers[k],
         }) as Box<dyn Encode>;
 
-        parked.insert(store.address());
+        parked.insert(identity(&store));
 
         piece.push(store);
 
@@ -243,7 +243,7 @@ fn split(
         source: *registers.last().unwrap(),
     }) as Box<dyn Encode>;
 
-    parked.insert(load.address());
+    parked.insert(identity(&load));
 
     last.push(load);
 
