@@ -9,6 +9,7 @@ use runtime::vm::encoders::and::And;
 use runtime::vm::encoders::chain::{Chain, Jump, Target};
 use runtime::vm::encoders::discard::Discard;
 use runtime::vm::encoders::jcc::Jcc;
+use runtime::vm::encoders::label::Label;
 use runtime::vm::encoders::load_address::LoadAddress;
 use runtime::vm::encoders::load_immediate::LoadImmediate;
 use runtime::vm::encoders::load_memory::LoadMemory;
@@ -177,20 +178,18 @@ fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
     body: F,
 ) -> Vec<Box<dyn Encode>> {
     let mut operations = Vec::<Box<dyn Encode>>::new();
+
     let mut jumps = Vec::new();
 
     operations.extend(set(counter, 0));
 
-    let head = operations.len();
+    let label = Label::new();
 
+    operations.push(Box::new(label));
     operations.extend(body());
-
     operations.extend(increment(counter, step));
+    operations.extend(spill(counter));
 
-    operations.push(Box::new(LoadRegister {
-        width: VMWidth::Lower64,
-        source: counter,
-    }));
     match bound {
         Bound::Immediate(value) => {
             operations.push(Box::new(LoadImmediate {
@@ -198,6 +197,7 @@ fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
                 source: (value as u64).to_le_bytes().to_vec(),
             }));
         }
+
         Bound::Register(reg) => {
             operations.push(Box::new(LoadRegister {
                 width: VMWidth::Lower64,
@@ -205,6 +205,7 @@ fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
             }));
         }
     }
+
     operations.push(Box::new(Sub {
         width: VMWidth::Lower64,
     }));
@@ -214,15 +215,18 @@ fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
         width: VMWidth::SLower16,
         source: vec![0, 0],
     }));
+
+    let source = operations.last().unwrap().id();
+
     jumps.push(Jump {
-        source: operations.len() - 1,
-        destination: Target::Operation(head),
+        source,
+        destination: Target::Label(label.id()),
     });
+
     operations.push(Box::new(Jcc {
         logic: VMLogic::SAND,
         conditions: vec![VMCondition::cmp(VMFlag::Carry, 1)],
     }));
-
     vec![Box::new(Chain::new(operations, jumps))]
 }
 

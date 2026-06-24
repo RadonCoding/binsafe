@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use rand::seq::SliceRandom;
 use rand::Rng;
 use strum::IntoEnumIterator;
@@ -8,7 +6,7 @@ use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMTest};
 use crate::vm::encoders::jcc::{is_canonical, Jcc};
 use crate::vm::encoders::Encode;
-use crate::vm::transform::{descend, downcast, Phase, Transform};
+use crate::vm::transform::{descend, Phase, Transform};
 
 pub struct Mutation;
 
@@ -29,8 +27,10 @@ impl Transform for Mutation {
 fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
     descend(operations, |operations| {
         for i in 0..operations.len() {
-            let Some((logic, conditions)) =
-                downcast::<Jcc>(&operations[i]).map(|j| (j.logic, j.conditions.clone()))
+            let Some((logic, conditions)) = operations[i]
+                .as_any()
+                .downcast_ref::<Jcc>()
+                .map(|j| (j.logic, j.conditions.clone()))
             else {
                 continue;
             };
@@ -58,8 +58,7 @@ fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
                 None => (logic, mutated(rng, logic, conditions)),
             };
 
-            let any: &mut dyn Any = operations[i].as_mut();
-            let jcc = any.downcast_mut::<Jcc>().unwrap();
+            let jcc = operations[i].as_any_mut().downcast_mut::<Jcc>().unwrap();
             jcc.logic = logic;
             jcc.conditions = conditions;
         }

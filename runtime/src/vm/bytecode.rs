@@ -1,4 +1,5 @@
 use core::panic;
+use std::any::Any;
 #[cfg(debug_assertions)]
 use std::fmt;
 
@@ -322,6 +323,14 @@ pub struct VMMem {
 }
 
 impl Encode for VMMem {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.push(mapper.index(self.base));
@@ -411,6 +420,14 @@ impl VMCondition {
 }
 
 impl Encode for VMCondition {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(self.test), self.lhs, self.rhs]
     }
@@ -463,7 +480,7 @@ impl Snapshot {
     fn flatten(flattened: &mut Vec<(usize, String)>, operation: &Box<dyn Encode>, depth: usize) {
         if let Some(children) = operation.children_ref() {
             flattened.push((
-                operation.address(),
+                operation.id(),
                 format!("{}{}", "  ".repeat(depth), operation.name()),
             ));
 
@@ -472,7 +489,7 @@ impl Snapshot {
             }
         } else {
             flattened.push((
-                operation.address(),
+                operation.id(),
                 format!("{}{}", "  ".repeat(depth), operation),
             ));
         }
