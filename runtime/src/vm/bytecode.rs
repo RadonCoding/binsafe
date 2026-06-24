@@ -452,7 +452,7 @@ impl Snapshot {
         let mut flattened = Vec::new();
 
         for operation in operations {
-            Self::flatten(&mut flattened, operation);
+            Self::flatten(&mut flattened, operation, 0);
         }
 
         Self {
@@ -461,13 +461,21 @@ impl Snapshot {
         }
     }
 
-    fn flatten(flattened: &mut Vec<(usize, String)>, operation: &Rc<dyn Encode>) {
+    fn flatten(flattened: &mut Vec<(usize, String)>, operation: &Rc<dyn Encode>, depth: usize) {
         if let Some(children) = operation.children_ref() {
+            flattened.push((
+                address(operation),
+                format!("{}{}", "  ".repeat(depth), operation.name()),
+            ));
+
             for child in children {
-                Self::flatten(flattened, child);
+                Self::flatten(flattened, child, depth + 1);
             }
         } else {
-            flattened.push((address(operation), format!("{}", operation)));
+            flattened.push((
+                address(operation),
+                format!("{}{}", "  ".repeat(depth), operation),
+            ));
         }
     }
 }
@@ -518,11 +526,11 @@ impl Snapshots {
                     if index == 0 {
                         original = Some(position);
                     } else {
-                        markers.push(letter(snapshot.phase));
+                        markers.extend(letter(snapshot.phase));
                     }
                 }
                 Some(prior) if prior != current.as_str() => {
-                    markers.push(letter(snapshot.phase));
+                    markers.extend(letter(snapshot.phase));
                 }
                 _ => {}
             }
@@ -535,7 +543,7 @@ impl Snapshots {
             let remover = closing + 1;
 
             if remover < self.snapshots.len() {
-                markers.push(letter(self.snapshots[remover].phase));
+                markers.extend(letter(self.snapshots[remover].phase));
             }
         }
 
@@ -544,15 +552,13 @@ impl Snapshots {
 }
 
 #[cfg(debug_assertions)]
-fn letter(phase: Phase) -> char {
-    phase
-        .identifier()
-        .chars()
-        .next()
-        .unwrap()
-        .to_uppercase()
-        .next()
-        .unwrap()
+fn letter(phase: Phase) -> [char; 2] {
+    let mut chars = phase.identifier().chars();
+
+    [
+        chars.next().unwrap().to_ascii_uppercase(),
+        chars.next().unwrap().to_ascii_uppercase(),
+    ]
 }
 
 #[cfg(debug_assertions)]

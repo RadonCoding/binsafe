@@ -12,7 +12,7 @@ pub fn build(rt: &mut Runtime) {
     let mut initialized = rt.asm.create_label();
 
     let mut execute_loop = rt.asm.create_label();
-    let mut execute_entry = rt.asm.create_label();
+    let mut execute_continue = rt.asm.create_label();
 
     let mut epilogue = rt.asm.create_label();
 
@@ -69,14 +69,9 @@ pub fn build(rt: &mut Runtime) {
     utils::vreg::store_reg(rt, r12, r15, VMReg::Vg0);
 
     // lea rax, [...]
-    rt.asm.lea(rax, ptr(execute_entry)).unwrap();
+    rt.asm.lea(rax, ptr(execute_continue)).unwrap();
     // mov [r12 + ...], rax
     utils::vreg::store_reg(rt, r12, rax, VMReg::NExit);
-
-    // // mov [r12 + ...], rsp
-    // utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
-    // // mov rsp, [r12 + ...]
-    // utils::vreg::load_reg(rt, r12, VMReg::VStack, rsp);
 
     // push [r12 + ...]
     utils::vreg::push(rt, r12, VMReg::VStack);
@@ -94,8 +89,6 @@ pub fn build(rt: &mut Runtime) {
 
         // store rsp
         scratch::store(rt, r13, rsp);
-        // store r12
-        scratch::store(rt, r13, r12);
 
         // call ...
         rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
@@ -103,15 +96,14 @@ pub fn build(rt: &mut Runtime) {
         // jmp ...
         rt.asm.jmp(rt.function_labels[&FnDef::VmExit]).unwrap();
 
-        rt.asm.set_label(&mut execute_entry).unwrap();
-        {
-            // call ...
-            rt.asm
-                .call(rt.function_labels[&FnDef::VmRegistersCaptureVolatile])
-                .unwrap();
-            // mov [r12 + ...], rsp
-            utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
-        }
+        rt.asm.set_label(&mut execute_continue).unwrap();
+
+        // call ...
+        rt.asm
+            .call(rt.function_labels[&FnDef::VmRegistersCaptureVolatile])
+            .unwrap();
+        // mov [r12 + ...], rsp
+        utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
 
         // mov r13d, [...]
         rt.asm
@@ -120,8 +112,6 @@ pub fn build(rt: &mut Runtime) {
         // mov r13, gs:[0x1480 + r13*8]
         rt.asm.mov(r13, ptr(0x1480 + r13 * 8).gs()).unwrap();
 
-        // load r12
-        scratch::load(rt, r13, r12);
         // load rsp
         scratch::load(rt, r13, rsp);
 

@@ -5,9 +5,11 @@ use std::rc::Rc;
 
 use crate::mapper::Mappable;
 use crate::vm::bytecode::{VMMem, VMReg, VMVec, VMWidth};
+use crate::vm::encoders::chain::Chain;
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
+use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{Effect, Encode};
@@ -34,6 +36,25 @@ pub fn permute<F>(operations: Vec<Rc<dyn Encode>>, picker: &mut F) -> Vec<Rc<dyn
 where
     F: FnMut(&[usize]) -> usize,
 {
+    let mut operations = operations;
+
+    for operation in operations.iter_mut() {
+        let any = &**operation as &dyn Any;
+
+        if any.is::<Skip>() {
+            if let Some(children) = Rc::get_mut(operation).and_then(|op| op.children_mut()) {
+                let inner = children[1..].to_vec();
+                let processed = permute(inner, picker);
+                children.truncate(1);
+                children.extend(processed);
+            }
+        } else if any.is::<Chain>() {
+            if let Some(children) = Rc::get_mut(operation).and_then(|op| op.children_mut()) {
+                let inner = children.to_vec();
+                *children = permute(inner, picker);
+            }
+        }
+    }
     let atoms = atomize(operations);
 
     let live = atoms

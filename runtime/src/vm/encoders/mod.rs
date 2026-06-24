@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::any::{type_name, Any};
 use std::fmt::Debug;
 use std::rc::Rc;
 
@@ -16,6 +16,10 @@ pub enum Effect {
 }
 
 pub trait Encode: Debug + Any {
+    fn name(&self) -> &'static str {
+        type_name::<Self>().rsplit("::").next().unwrap()
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8>;
 
     fn size(&self, mapper: &mut Mapper) -> usize {

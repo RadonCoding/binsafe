@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::mem;
 use std::rc::Rc;
 
 use crate::mapper::Mapper;
@@ -24,13 +25,15 @@ pub trait Transform {
 pub fn atomize(operations: Vec<Rc<dyn Encode>>) -> Vec<Vec<Rc<dyn Encode>>> {
     let mut atoms = Vec::new();
     let mut current = Vec::new();
+
     let mut depth = 0;
 
-    for op in operations {
-        depth += op.depth();
-        current.push(op);
+    for operation in operations {
+        depth += operation.depth();
+        current.push(operation);
+
         if depth == 0 {
-            atoms.push(std::mem::take(&mut current));
+            atoms.push(mem::take(&mut current));
         }
     }
     if !current.is_empty() {
@@ -50,8 +53,8 @@ where
     F: FnMut(&mut [Rc<dyn Encode>]),
 {
     fn go<F: FnMut(&mut [Rc<dyn Encode>])>(operations: &mut [Rc<dyn Encode>], f: &mut F) {
-        for op in operations.iter_mut() {
-            if let Some(children) = Rc::get_mut(op).unwrap().children_mut() {
+        for operation in operations.iter_mut() {
+            if let Some(children) = Rc::get_mut(operation).unwrap().children_mut() {
                 go(children, f);
             }
         }

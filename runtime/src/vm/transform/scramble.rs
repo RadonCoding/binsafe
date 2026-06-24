@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::rc::Rc;
 
 use rand::seq::SliceRandom;
@@ -14,6 +15,24 @@ use crate::vm::transform::atomize;
 
 /// Shuffles the physical order of atoms by chaining them in execution order through signed-offset [`Jcc`]s inside a [`Skip`] body.
 pub fn scramble(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
+    let mut operations = operations;
+
+    for operation in operations.iter_mut() {
+        let any = &**operation as &dyn Any;
+        if any.is::<Skip>() {
+            if let Some(children) = Rc::get_mut(operation).and_then(|o| o.children_mut()) {
+                let inner = children[1..].to_vec();
+                let processed = scramble(mapper, inner);
+                children.truncate(1);
+                children.extend(processed);
+            }
+        } else if any.is::<Chain>() {
+            if let Some(children) = Rc::get_mut(operation).and_then(|o| o.children_mut()) {
+                let inner = children.to_vec();
+                *children = scramble(mapper, inner);
+            }
+        }
+    }
     let atoms = atomize(operations);
 
     let cut = atoms
