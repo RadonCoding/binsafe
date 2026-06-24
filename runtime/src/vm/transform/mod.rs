@@ -2,7 +2,6 @@ use std::mem;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::VMReg;
-use crate::vm::encoders::chain::Chain;
 use crate::vm::encoders::label::Label;
 use crate::vm::{
     bytecode::Phase,
@@ -24,6 +23,7 @@ pub trait Transform {
 /// Groups operations into depth-balanced atoms, appending any trailing unbalanced run as a final atom.
 pub fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
     let mut atoms = Vec::new();
+
     let mut current = Vec::new();
 
     let mut depth = 0;
@@ -36,6 +36,7 @@ pub fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
         }
 
         depth += operation.depth();
+
         current.push(operation);
 
         if depth == 0 && !label {
@@ -43,10 +44,22 @@ pub fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
             label = false;
         }
     }
+
     if !current.is_empty() {
         atoms.push(current);
     }
+
     atoms
+}
+
+/// Atomizes `operations` into depth-balanced atoms, collapsing into one if the sequence is unbalanced.
+pub fn collapse(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
+    let mut atoms = atomize(operations);
+    if atoms.len() <= 1 {
+        return atoms;
+    }
+    let single = atoms.drain(..).flatten().collect();
+    vec![single]
 }
 
 /// Recursively descends into [`Encode::children`], applying `f` to each level after its children have been processed.
@@ -56,10 +69,6 @@ where
 {
     fn go<F: FnMut(&mut Vec<Box<dyn Encode>>)>(operations: &mut Vec<Box<dyn Encode>>, f: &mut F) {
         for operation in operations.iter_mut() {
-            if operation.as_any().downcast_ref::<Chain>().is_some() {
-                // continue;
-            }
-
             if let Some(children) = operation.children_mut() {
                 go(children, f);
             }

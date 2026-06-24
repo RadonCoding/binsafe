@@ -10,7 +10,7 @@ use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{Effect, Encode};
-use crate::vm::transform::branches;
+use crate::vm::transform::{branches, collapse, descend};
 
 struct Access {
     memory: VMMem,
@@ -29,43 +29,41 @@ struct Profile {
 }
 
 /// Shuffles `operations` into a semantically equivalent sequence by using `picker` to select among available atomic blocks.
-pub fn permute<F>(operations: Vec<Box<dyn Encode>>, picker: &mut F) -> Vec<Box<dyn Encode>>
+pub fn permute<F>(mut operations: Vec<Box<dyn Encode>>, picker: &mut F) -> Vec<Box<dyn Encode>>
 where
     F: FnMut(&[usize]) -> usize,
 {
-    let atoms = atomize(operations);
+    descend(&mut operations, |operations| {
+        let atoms = collapse(mem::take(operations));
 
-    let live = atoms
-        .iter()
-        .flat_map(|atom| effects(atom).0)
-        .collect::<HashSet<VMReg>>();
+        let live = atoms
+            .iter()
+            .flat_map(|atom| effects(atom).0)
+            .collect::<HashSet<VMReg>>();
+        let (atoms, parked) = decouple(atoms, &live);
+        let (successors, mut indegree) = dependencies(&atoms);
 
-    let (atoms, parked) = decouple(atoms, &live);
+        let n = successors.len();
+        let mut ready = (0..n).filter(|&i| indegree[i] == 0).collect::<Vec<usize>>();
+        let mut order = Vec::with_capacity(n);
 
-    let (successors, mut indegree) = dependencies(&atoms);
-    let n = successors.len();
-    let mut ready = (0..n).filter(|&i| indegree[i] == 0).collect::<Vec<usize>>();
-    let mut order = Vec::with_capacity(n);
-
-    while !ready.is_empty() {
-        let chosen = ready.swap_remove(picker(&ready));
-
-        order.push(chosen);
-
-        for &next in &successors[chosen] {
-            indegree[next] -= 1;
-
-            if indegree[next] == 0 {
-                ready.push(next);
+        while !ready.is_empty() {
+            let chosen = ready.swap_remove(picker(&ready));
+            order.push(chosen);
+            for &next in &successors[chosen] {
+                indegree[next] -= 1;
+                if indegree[next] == 0 {
+                    ready.push(next);
+                }
             }
         }
-    }
 
-    let mut permutated = schedule(atoms, &order);
+        let mut permutated = schedule(atoms, &order);
+        cleanup(&mut permutated, &parked);
+        *operations = permutated;
+    });
 
-    cleanup(&mut permutated, &parked);
-
-    permutated
+    operations
 }
 
 /// Removes adjacent [`StoreRegister`]/[`LoadRegister`] pairs created by incomplete scheduling.
@@ -73,7 +71,9 @@ fn cleanup(operations: &mut Vec<Box<dyn Encode>>, parked: &HashSet<usize>) {
     let mut i = 0;
 
     while i + 1 < operations.len() {
-        if !parked.contains(&operations[i].id()) || !parked.contains(&operations[i + 1].id()) {
+        if !parked.contains(&operations[i].address())
+            || !parked.contains(&operations[i + 1].address())
+        {
             i += 1;
             continue;
         }
@@ -95,37 +95,6 @@ fn cleanup(operations: &mut Vec<Box<dyn Encode>>, parked: &HashSet<usize>) {
 
         i += 1;
     }
-}
-
-/// Partitions `operations` into atomic blocks based on depth analysis.
-fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
-    let mut atoms = Vec::new();
-    let mut current = Vec::<Box<dyn Encode>>::new();
-    let mut depth = 0;
-
-    for operation in operations {
-        depth += operation.depth();
-
-        current.push(operation);
-
-        if depth == 0 {
-            atoms.push(mem::take(&mut current));
-        }
-    }
-
-    if !current.is_empty() {
-        let mut single = Vec::<Box<dyn Encode>>::new();
-
-        for atom in atoms.drain(..) {
-            single.extend(atom);
-        }
-
-        single.extend(current);
-
-        atoms.push(single);
-    }
-
-    atoms
 }
 
 /// Decomposes atoms at depth-1 points, using registers to park state across blocks.
@@ -244,7 +213,7 @@ fn split(
                 source: registers[k - 1],
             }) as Box<dyn Encode>;
 
-            parked.insert(load.id());
+            parked.insert(load.address());
 
             piece.push(load);
         }
@@ -258,7 +227,7 @@ fn split(
             destination: registers[k],
         }) as Box<dyn Encode>;
 
-        parked.insert(store.id());
+        parked.insert(store.address());
 
         piece.push(store);
 
@@ -274,7 +243,7 @@ fn split(
         source: *registers.last().unwrap(),
     }) as Box<dyn Encode>;
 
-    parked.insert(load.id());
+    parked.insert(load.address());
 
     last.push(load);
 

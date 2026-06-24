@@ -480,7 +480,7 @@ impl Snapshot {
     fn flatten(flattened: &mut Vec<(usize, String)>, operation: &Box<dyn Encode>, depth: usize) {
         if let Some(children) = operation.children_ref() {
             flattened.push((
-                operation.id(),
+                operation.address(),
                 format!("{}{}", "  ".repeat(depth), operation.name()),
             ));
 
@@ -489,7 +489,7 @@ impl Snapshot {
             }
         } else {
             flattened.push((
-                operation.id(),
+                operation.address(),
                 format!("{}{}", "  ".repeat(depth), operation),
             ));
         }
