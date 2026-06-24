@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::rc::Rc;
 
 use rand::seq::SliceRandom;
 use rand::Rng;
@@ -18,7 +17,7 @@ impl Transform for Mutation {
         Phase::Mutation
     }
 
-    fn run(&self, _mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
+    fn run(&self, _mapper: &mut Mapper, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
         let mut operations = operations;
         let mut rng = rand::thread_rng();
         walk(&mut operations, &mut rng);
@@ -27,7 +26,7 @@ impl Transform for Mutation {
 }
 
 /// Rewrites each [`Jcc`] in place, dispatching always-true and always-false branches to [`opaque`], and runtime branches to [`mutated`].
-fn walk<R: Rng>(operations: &mut Vec<Rc<dyn Encode>>, rng: &mut R) {
+fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
     descend(operations, |operations| {
         for i in 0..operations.len() {
             let Some((logic, conditions)) =
@@ -59,7 +58,7 @@ fn walk<R: Rng>(operations: &mut Vec<Rc<dyn Encode>>, rng: &mut R) {
                 None => (logic, mutated(rng, logic, conditions)),
             };
 
-            let any: &mut dyn Any = Rc::get_mut(&mut operations[i]).unwrap();
+            let any: &mut dyn Any = operations[i].as_mut();
             let jcc = any.downcast_mut::<Jcc>().unwrap();
             jcc.logic = logic;
             jcc.conditions = conditions;

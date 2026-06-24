@@ -1,4 +1,4 @@
-use std::rc::Rc;
+
 
 use iced_x86::{Instruction, OpKind};
 
@@ -86,28 +86,28 @@ fn operation_immediate(instruction: &Instruction, kind: OpKind) -> u64 {
 }
 
 fn source(
-    operations: &mut Vec<Rc<dyn Encode>>,
+    operations: &mut Vec<Box<dyn Encode>>,
     instruction: &Instruction,
     index: u32,
     width: VMWidth,
 ) -> Option<()> {
     match instruction.op_kind(index) {
         OpKind::Register => {
-            operations.push(Rc::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width,
                 source: VMReg::from(instruction.op_register(index)),
             }));
         }
         OpKind::Memory => {
-            operations.push(Rc::new(LoadAddress {
+            operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Rc::new(LoadMemory { width }));
+            operations.push(Box::new(LoadMemory { width }));
         }
         kind if is_immediate(kind) => {
             let immediate_source = operation_immediate(instruction, kind);
             let immediate_width = operation_width(instruction, 1);
-            operations.push(Rc::new(LoadImmediate {
+            operations.push(Box::new(LoadImmediate {
                 width: immediate_width,
                 source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),
             }));

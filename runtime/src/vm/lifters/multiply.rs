@@ -1,5 +1,5 @@
 use iced_x86::{Instruction, Mnemonic};
-use std::rc::Rc;
+
 
 use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::{
@@ -8,7 +8,7 @@ use crate::vm::encoders::{
 };
 use crate::vm::lifters::{operation_immediate, operation_width, source};
 
-pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     match instruction.mnemonic() {
         Mnemonic::Mul => wide(instruction, |width| Mul { width }),
         Mnemonic::Imul if instruction.op_count() == 1 => wide(instruction, |width| Mul {
@@ -22,37 +22,37 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
 pub fn wide<O: Encode + 'static>(
     instruction: &Instruction,
     make: impl Fn(VMWidth) -> O,
-) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+) -> Option<Vec<Box<dyn Encode>>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
     let width = operation_width(instruction, 0);
 
-    operations.push(Rc::new(LoadRegister {
+    operations.push(Box::new(LoadRegister {
         width,
         source: VMReg::Rax,
     }));
 
     source(&mut operations, instruction, 0, width)?;
 
-    operations.push(Rc::new(make(width)));
+    operations.push(Box::new(make(width)));
 
     match width {
         VMWidth::Lower8 | VMWidth::Higher8 => {
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width: VMWidth::Lower8,
                 destination: VMReg::Rax,
             }));
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width: VMWidth::Higher8,
                 destination: VMReg::Rax,
             }));
         }
         _ => {
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width,
                 destination: VMReg::Rax,
             }));
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width,
                 destination: VMReg::Rdx,
             }));
@@ -62,15 +62,15 @@ pub fn wide<O: Encode + 'static>(
     Some(operations)
 }
 
-pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+pub fn narrow(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
     let destination_width = VMWidth::from(instruction.op0_register());
     let destination_register = VMReg::from(instruction.op0_register());
 
     match instruction.op_count() {
         2 => {
-            operations.push(Rc::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width: destination_width,
                 source: destination_register,
             }));
@@ -81,7 +81,7 @@ pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
 
             let immediate_source = operation_immediate(instruction, instruction.op_kind(2));
             let immediate_width = operation_width(instruction, 2);
-            operations.push(Rc::new(LoadImmediate {
+            operations.push(Box::new(LoadImmediate {
                 width: immediate_width,
                 source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),
             }));
@@ -89,14 +89,14 @@ pub fn narrow(instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
         _ => unreachable!(),
     }
 
-    operations.push(Rc::new(Mul {
+    operations.push(Box::new(Mul {
         width: destination_width.signed(),
     }));
-    operations.push(Rc::new(StoreRegister {
+    operations.push(Box::new(StoreRegister {
         width: destination_width,
         destination: destination_register,
     }));
-    operations.push(Rc::new(Discard));
+    operations.push(Box::new(Discard));
 
     Some(operations)
 }

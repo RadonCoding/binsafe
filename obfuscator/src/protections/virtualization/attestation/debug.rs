@@ -1,7 +1,6 @@
 #![allow(unused)]
 
 use std::i32;
-use std::rc::Rc;
 
 use crate::engine::Engine;
 use crate::protections::virtualization::attestation::*;
@@ -16,7 +15,7 @@ use runtime::vm::encoders::store_memory::StoreMemory;
 use runtime::vm::encoders::store_register::StoreRegister;
 use runtime::vm::encoders::Encode;
 
-pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
+pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     const VOLATILE: &[VMReg] = &[
         VMReg::Rax,
         VMReg::Rcx,
@@ -27,7 +26,7 @@ pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec
         VMReg::R11,
     ];
 
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
 
     for &register in VOLATILE {
         instructions.extend(spill(register));
@@ -83,13 +82,13 @@ pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec
     instructions
 }
 
-fn write_byte(base: VMReg, displacement: i32, byte: u8) -> Vec<Rc<dyn Encode>> {
+fn write_byte(base: VMReg, displacement: i32, byte: u8) -> Vec<Box<dyn Encode>> {
     vec![
-        Rc::new(LoadImmediate {
+        Box::new(LoadImmediate {
             width: VMWidth::Lower8,
             source: vec![byte],
         }),
-        Rc::new(LoadAddress {
+        Box::new(LoadAddress {
             source: VMMem {
                 base,
                 index: VMReg::None,
@@ -98,13 +97,13 @@ fn write_byte(base: VMReg, displacement: i32, byte: u8) -> Vec<Rc<dyn Encode>> {
                 segment: VMSeg::None,
             },
         }),
-        Rc::new(StoreMemory {
+        Box::new(StoreMemory {
             width: VMWidth::Lower8,
         }),
     ]
 }
 
-fn write_bytes(base: VMReg, displacement: i32, bytes: &[u8]) -> Vec<Rc<dyn Encode>> {
+fn write_bytes(base: VMReg, displacement: i32, bytes: &[u8]) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::new();
 
     for (i, &b) in bytes.iter().enumerate() {
@@ -113,6 +112,6 @@ fn write_bytes(base: VMReg, displacement: i32, bytes: &[u8]) -> Vec<Rc<dyn Encod
     instructions
 }
 
-fn write_string(base: VMReg, displacement: i32, string: &str) -> Vec<Rc<dyn Encode>> {
+fn write_string(base: VMReg, displacement: i32, string: &str) -> Vec<Box<dyn Encode>> {
     write_bytes(base, displacement, string.as_bytes())
 }

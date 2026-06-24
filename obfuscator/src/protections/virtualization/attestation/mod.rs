@@ -1,5 +1,4 @@
 use std::i32;
-use std::rc::Rc;
 
 use crate::engine::Engine;
 use rand::Rng;
@@ -33,12 +32,12 @@ mod debug;
 // Masks lower 34 bits of timestamp, creating a ~5s window on a 3.5 GHz CPU
 const WINDOW: u64 = 0x22;
 
-pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
+pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
     let mut rng = rand::thread_rng();
 
-    let mut blocks = Vec::<Vec<Rc<dyn Encode>>>::new();
+    let mut blocks = Vec::<Vec<Box<dyn Encode>>>::new();
 
-    let mut block = Vec::<Rc<dyn Encode>>::new();
+    let mut block = Vec::<Box<dyn Encode>>::new();
 
     block.extend(timestamp());
     block.extend(mask(None, !((1u64 << WINDOW) - 1)));
@@ -62,7 +61,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
         VMReg::Rax,
         VMCondition::cmp(VMFlag::Zero, 1),
         |engine| {
-            let mut b = Vec::<Rc<dyn Encode>>::new();
+            let mut b = Vec::<Box<dyn Encode>>::new();
 
             b.extend(anti_debug::generate(engine, &mut rng, &mut vp0));
             b.extend(anti_tamper::generate(engine, &mut rng, &mut vp1));
@@ -80,10 +79,10 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Rc<dyn Encode>>> {
     blocks
 }
 
-fn correct(key: u64, vp0: u64, vp1: u64) -> Vec<Rc<dyn Encode>> {
+fn correct(key: u64, vp0: u64, vp1: u64) -> Vec<Box<dyn Encode>> {
     let correction = key ^ (vp0 ^ vp1);
     vec![
-        Rc::new(LoadAddress {
+        Box::new(LoadAddress {
             source: VMMem {
                 base: VMReg::Vg0,
                 index: VMReg::None,
@@ -92,72 +91,72 @@ fn correct(key: u64, vp0: u64, vp1: u64) -> Vec<Rc<dyn Encode>> {
                 segment: VMSeg::None,
             },
         }),
-        Rc::new(LoadMemory {
+        Box::new(LoadMemory {
             width: VMWidth::Lower64,
         }),
-        Rc::new(LoadRegister {
+        Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: VMReg::Vp0,
         }),
-        Rc::new(LoadRegister {
+        Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: VMReg::Vt0,
         }),
-        Rc::new(Xor {
+        Box::new(Xor {
             width: VMWidth::Lower64,
         }),
-        Rc::new(LoadRegister {
+        Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: VMReg::Vp1,
         }),
-        Rc::new(LoadRegister {
+        Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: VMReg::Vt0,
         }),
-        Rc::new(Xor {
+        Box::new(Xor {
             width: VMWidth::Lower64,
         }),
-        Rc::new(Xor {
+        Box::new(Xor {
             width: VMWidth::Lower64,
         }),
-        Rc::new(LoadImmediate {
+        Box::new(LoadImmediate {
             width: VMWidth::Lower64,
             source: correction.to_le_bytes().to_vec(),
         }),
-        Rc::new(Xor {
+        Box::new(Xor {
             width: VMWidth::Lower64,
         }),
-        Rc::new(Xor {
+        Box::new(Xor {
             width: VMWidth::Lower64,
         }),
-        Rc::new(StoreRegister {
+        Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: VMReg::Vg0,
         }),
     ]
 }
 
-fn skip<F: FnOnce(&mut Engine) -> Vec<Rc<dyn Encode>>>(
+fn skip<F: FnOnce(&mut Engine) -> Vec<Box<dyn Encode>>>(
     engine: &mut Engine,
     register: VMReg,
     condition: VMCondition,
     body: F,
-) -> Vec<Rc<dyn Encode>> {
+) -> Vec<Box<dyn Encode>> {
     let body = body(engine);
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
-    instructions.push(Rc::new(LoadRegister {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+    instructions.push(Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source: register,
     }));
-    instructions.push(Rc::new(LoadRegister {
+    instructions.push(Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source: register,
     }));
-    instructions.push(Rc::new(And {
+    instructions.push(Box::new(And {
         width: VMWidth::Lower64,
     }));
-    instructions.push(Rc::new(Discard));
-    instructions.push(Rc::new(Skip::new(
+    instructions.push(Box::new(Discard));
+    instructions.push(Box::new(Skip::new(
         &mut engine.rt.mapper,
         VMLogic::SAND,
         vec![condition],
@@ -171,13 +170,13 @@ enum Bound {
     Register(VMReg),
 }
 
-fn foreach<F: FnOnce() -> Vec<Rc<dyn Encode>>>(
+fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
     counter: VMReg,
     bound: Bound,
     step: u64,
     body: F,
-) -> Vec<Rc<dyn Encode>> {
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+) -> Vec<Box<dyn Encode>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
     let mut jumps = Vec::new();
 
     operations.extend(set(counter, 0));
@@ -188,30 +187,30 @@ fn foreach<F: FnOnce() -> Vec<Rc<dyn Encode>>>(
 
     operations.extend(increment(counter, step));
 
-    operations.push(Rc::new(LoadRegister {
+    operations.push(Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source: counter,
     }));
     match bound {
         Bound::Immediate(value) => {
-            operations.push(Rc::new(LoadImmediate {
+            operations.push(Box::new(LoadImmediate {
                 width: VMWidth::Lower64,
                 source: (value as u64).to_le_bytes().to_vec(),
             }));
         }
         Bound::Register(reg) => {
-            operations.push(Rc::new(LoadRegister {
+            operations.push(Box::new(LoadRegister {
                 width: VMWidth::Lower64,
                 source: reg,
             }));
         }
     }
-    operations.push(Rc::new(Sub {
+    operations.push(Box::new(Sub {
         width: VMWidth::Lower64,
     }));
-    operations.push(Rc::new(Discard));
+    operations.push(Box::new(Discard));
 
-    operations.push(Rc::new(LoadImmediate {
+    operations.push(Box::new(LoadImmediate {
         width: VMWidth::SLower16,
         source: vec![0, 0],
     }));
@@ -219,15 +218,15 @@ fn foreach<F: FnOnce() -> Vec<Rc<dyn Encode>>>(
         source: operations.len() - 1,
         destination: Target::Operation(head),
     });
-    operations.push(Rc::new(Jcc {
+    operations.push(Box::new(Jcc {
         logic: VMLogic::SAND,
         conditions: vec![VMCondition::cmp(VMFlag::Carry, 1)],
     }));
 
-    vec![Rc::new(Chain::new(operations, jumps))]
+    vec![Box::new(Chain::new(operations, jumps))]
 }
 
-fn data(engine: &mut Engine, def: DataDef) -> Vec<Rc<dyn Encode>> {
+fn data(engine: &mut Engine, def: DataDef) -> Vec<Box<dyn Encode>> {
     let displacement = engine.rt.lookup(engine.rt.data_labels[&def]) as i32;
     load(
         VMReg::VImage,
@@ -239,129 +238,129 @@ fn data(engine: &mut Engine, def: DataDef) -> Vec<Rc<dyn Encode>> {
     )
 }
 
-fn timestamp() -> Vec<Rc<dyn Encode>> {
+fn timestamp() -> Vec<Box<dyn Encode>> {
     vec![
-        Rc::new(Timestamp),
-        Rc::new(LoadImmediate {
+        Box::new(Timestamp),
+        Box::new(LoadImmediate {
             width: VMWidth::Lower64,
             source: 0x20u64.to_le_bytes().to_vec(),
         }),
-        Rc::new(Shl {
+        Box::new(Shl {
             width: VMWidth::Lower64,
         }),
-        Rc::new(Or {
+        Box::new(Or {
             width: VMWidth::Lower64,
         }),
     ]
 }
 
-fn set(register: VMReg, value: u64) -> Vec<Rc<dyn Encode>> {
+fn set(register: VMReg, value: u64) -> Vec<Box<dyn Encode>> {
     vec![
-        Rc::new(LoadImmediate {
+        Box::new(LoadImmediate {
             width: VMWidth::Lower64,
             source: value.to_le_bytes().to_vec(),
         }),
-        Rc::new(StoreRegister {
+        Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: register,
         }),
     ]
 }
 
-fn copy(source: VMReg, destination: VMReg) -> Vec<Rc<dyn Encode>> {
+fn copy(source: VMReg, destination: VMReg) -> Vec<Box<dyn Encode>> {
     vec![
-        Rc::new(LoadRegister {
+        Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: source,
         }),
-        Rc::new(StoreRegister {
+        Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: destination,
         }),
     ]
 }
 
-fn increment(register: VMReg, amount: u64) -> Vec<Rc<dyn Encode>> {
+fn increment(register: VMReg, amount: u64) -> Vec<Box<dyn Encode>> {
     vec![
-        Rc::new(LoadRegister {
+        Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: register,
         }),
-        Rc::new(LoadImmediate {
+        Box::new(LoadImmediate {
             width: VMWidth::Lower64,
             source: amount.to_le_bytes().to_vec(),
         }),
-        Rc::new(Add {
+        Box::new(Add {
             width: VMWidth::Lower64,
         }),
-        Rc::new(StoreRegister {
+        Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: register,
         }),
     ]
 }
 
-fn reserve(amount: u64) -> Vec<Rc<dyn Encode>> {
+fn reserve(amount: u64) -> Vec<Box<dyn Encode>> {
     vec![
-        Rc::new(LoadRegister {
+        Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: VMReg::Rsp,
         }),
-        Rc::new(LoadImmediate {
+        Box::new(LoadImmediate {
             width: VMWidth::Lower64,
             source: amount.to_le_bytes().to_vec(),
         }),
-        Rc::new(Sub {
+        Box::new(Sub {
             width: VMWidth::Lower64,
         }),
-        Rc::new(StoreRegister {
+        Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: VMReg::Rsp,
         }),
     ]
 }
 
-fn release(amount: u64) -> Vec<Rc<dyn Encode>> {
+fn release(amount: u64) -> Vec<Box<dyn Encode>> {
     vec![
-        Rc::new(LoadRegister {
+        Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: VMReg::Rsp,
         }),
-        Rc::new(LoadImmediate {
+        Box::new(LoadImmediate {
             width: VMWidth::Lower64,
             source: amount.to_le_bytes().to_vec(),
         }),
-        Rc::new(Add {
+        Box::new(Add {
             width: VMWidth::Lower64,
         }),
-        Rc::new(StoreRegister {
+        Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: VMReg::Rsp,
         }),
     ]
 }
 
-fn invoke(target: VMReg) -> Vec<Rc<dyn Encode>> {
+fn invoke(target: VMReg) -> Vec<Box<dyn Encode>> {
     vec![
-        Rc::new(LoadRegister {
+        Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: target,
         }),
-        Rc::new(Jcc::call()),
+        Box::new(Jcc::call()),
     ]
 }
 
-fn import(engine: &mut Engine, def: ImportDef) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+fn import(engine: &mut Engine, def: ImportDef) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
     instructions.extend(set(VMReg::Rcx, engine.rt.mapper.index(def) as u64));
     instructions.extend(call(engine, FnDef::Resolve));
     instructions
 }
 
-fn call(engine: &mut Engine, def: FnDef) -> Vec<Rc<dyn Encode>> {
+fn call(engine: &mut Engine, def: FnDef) -> Vec<Box<dyn Encode>> {
     let displacement = engine.rt.lookup(engine.rt.function_labels[&def]) as i32;
     vec![
-        Rc::new(LoadAddress {
+        Box::new(LoadAddress {
             source: VMMem {
                 base: VMReg::VImage,
                 index: VMReg::None,
@@ -370,13 +369,13 @@ fn call(engine: &mut Engine, def: FnDef) -> Vec<Rc<dyn Encode>> {
                 segment: VMSeg::None,
             },
         }),
-        Rc::new(Jcc::call()),
+        Box::new(Jcc::call()),
     ]
 }
 
-fn absolute(index: VMReg, scale: u8, displacement: i32, width: VMWidth) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
-    instructions.push(Rc::new(LoadAddress {
+fn absolute(index: VMReg, scale: u8, displacement: i32, width: VMWidth) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+    instructions.push(Box::new(LoadAddress {
         source: VMMem {
             base: VMReg::VImage,
             index,
@@ -385,125 +384,125 @@ fn absolute(index: VMReg, scale: u8, displacement: i32, width: VMWidth) -> Vec<R
             segment: VMSeg::None,
         },
     }));
-    instructions.push(Rc::new(LoadMemory { width }));
-    instructions.push(Rc::new(LoadRegister {
+    instructions.push(Box::new(LoadMemory { width }));
+    instructions.push(Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source: VMReg::VImage,
     }));
-    instructions.push(Rc::new(Add {
+    instructions.push(Box::new(Add {
         width: VMWidth::Lower64,
     }));
     instructions
 }
 
-fn spill(source: VMReg) -> Vec<Rc<dyn Encode>> {
-    vec![Rc::new(LoadRegister {
+fn spill(source: VMReg) -> Vec<Box<dyn Encode>> {
+    vec![Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source,
     })]
 }
 
-fn reload(destination: VMReg) -> Vec<Rc<dyn Encode>> {
-    vec![Rc::new(StoreRegister {
+fn reload(destination: VMReg) -> Vec<Box<dyn Encode>> {
+    vec![Box::new(StoreRegister {
         width: VMWidth::Lower64,
         destination,
     })]
 }
 
-fn mask(source: Option<VMReg>, mask: u64) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+fn mask(source: Option<VMReg>, mask: u64) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
     if let Some(reg) = source {
-        instructions.push(Rc::new(LoadRegister {
+        instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: reg,
         }));
     }
-    instructions.push(Rc::new(LoadImmediate {
+    instructions.push(Box::new(LoadImmediate {
         width: VMWidth::Lower64,
         source: mask.to_le_bytes().to_vec(),
     }));
-    instructions.push(Rc::new(And {
+    instructions.push(Box::new(And {
         width: VMWidth::Lower64,
     }));
     instructions
 }
 
-fn sub(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+fn sub(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
     if let Some(reg) = a {
-        instructions.push(Rc::new(LoadRegister {
+        instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: reg,
         }));
     }
     if let Some(reg) = b {
-        instructions.push(Rc::new(LoadRegister {
+        instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: reg,
         }));
     }
-    instructions.push(Rc::new(Sub {
+    instructions.push(Box::new(Sub {
         width: VMWidth::Lower64,
     }));
     instructions
 }
 
-fn add(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+fn add(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
     if let Some(reg) = a {
-        instructions.push(Rc::new(LoadRegister {
+        instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: reg,
         }));
     }
     if let Some(reg) = b {
-        instructions.push(Rc::new(LoadRegister {
+        instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: reg,
         }));
     }
-    instructions.push(Rc::new(Add {
+    instructions.push(Box::new(Add {
         width: VMWidth::Lower64,
     }));
     instructions
 }
 
-fn mul(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+fn mul(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
     if let Some(reg) = a {
-        instructions.push(Rc::new(LoadRegister {
+        instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: reg,
         }));
     }
     if let Some(reg) = b {
-        instructions.push(Rc::new(LoadRegister {
+        instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: reg,
         }));
     }
-    instructions.push(Rc::new(Mul {
+    instructions.push(Box::new(Mul {
         width: VMWidth::Lower64,
     }));
-    instructions.push(Rc::new(Discard));
+    instructions.push(Box::new(Discard));
     instructions
 }
 
-fn xor(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+fn xor(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
     if let Some(reg) = a {
-        instructions.push(Rc::new(LoadRegister {
+        instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: reg,
         }));
     }
     if let Some(reg) = b {
-        instructions.push(Rc::new(LoadRegister {
+        instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: reg,
         }));
     }
-    instructions.push(Rc::new(Xor {
+    instructions.push(Box::new(Xor {
         width: VMWidth::Lower64,
     }));
     instructions
@@ -515,8 +514,8 @@ fn compute(
     scale: u8,
     displacement: i32,
     segment: VMSeg,
-) -> Vec<Rc<dyn Encode>> {
-    vec![Rc::new(LoadAddress {
+) -> Vec<Box<dyn Encode>> {
+    vec![Box::new(LoadAddress {
         source: VMMem {
             base,
             index,
@@ -534,10 +533,10 @@ fn load(
     displacement: i32,
     segment: VMSeg,
     width: VMWidth,
-) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
     instructions.extend(compute(base, index, scale, displacement, segment));
-    instructions.push(Rc::new(LoadMemory { width }));
+    instructions.push(Box::new(LoadMemory { width }));
     instructions
 }
 
@@ -547,13 +546,13 @@ fn store(
     scale: u8,
     displacement: i32,
     value: u64,
-) -> Vec<Rc<dyn Encode>> {
+) -> Vec<Box<dyn Encode>> {
     vec![
-        Rc::new(LoadImmediate {
+        Box::new(LoadImmediate {
             width: VMWidth::Lower64,
             source: value.to_le_bytes().to_vec(),
         }),
-        Rc::new(LoadAddress {
+        Box::new(LoadAddress {
             source: VMMem {
                 base,
                 index,
@@ -562,7 +561,7 @@ fn store(
                 segment: VMSeg::None,
             },
         }),
-        Rc::new(StoreMemory {
+        Box::new(StoreMemory {
             width: VMWidth::Lower64,
         }),
     ]
@@ -576,24 +575,24 @@ fn apply(operation: u32, value: u64, expected: &mut u64) {
     }
 }
 
-fn create(accumulator: VMReg, operation: u32) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
-    instructions.push(Rc::new(LoadRegister {
+fn create(accumulator: VMReg, operation: u32) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+    instructions.push(Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source: accumulator,
     }));
     match operation {
-        0 => instructions.push(Rc::new(Add {
+        0 => instructions.push(Box::new(Add {
             width: VMWidth::Lower64,
         })),
-        1 => instructions.push(Rc::new(Sub {
+        1 => instructions.push(Box::new(Sub {
             width: VMWidth::Lower64,
         })),
-        _ => instructions.push(Rc::new(Xor {
+        _ => instructions.push(Box::new(Xor {
             width: VMWidth::Lower64,
         })),
     }
-    instructions.push(Rc::new(StoreRegister {
+    instructions.push(Box::new(StoreRegister {
         width: VMWidth::Lower64,
         destination: accumulator,
     }));
@@ -606,10 +605,10 @@ fn accumulate<R: Rng>(
     source: VMReg,
     value: u64,
     expected: &mut u64,
-) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
     let operation = rng.gen_range(0..3);
-    instructions.push(Rc::new(LoadRegister {
+    instructions.push(Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source: source,
     }));
@@ -626,10 +625,10 @@ fn accumulate_memory<R: Rng>(
     width: VMWidth,
     value: u64,
     expected: &mut u64,
-) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
     let operation = rng.gen_range(0..3);
-    instructions.push(Rc::new(LoadAddress {
+    instructions.push(Box::new(LoadAddress {
         source: VMMem {
             base,
             index: VMReg::None,
@@ -638,7 +637,7 @@ fn accumulate_memory<R: Rng>(
             segment: VMSeg::None,
         },
     }));
-    instructions.push(Rc::new(LoadMemory { width }));
+    instructions.push(Box::new(LoadMemory { width }));
     instructions.extend(create(accumulator, operation));
     apply(operation, value, expected);
     instructions
@@ -651,7 +650,7 @@ fn accumulate_byte<R: Rng>(
     displacement: i32,
     value: u64,
     expected: &mut u64,
-) -> Vec<Rc<dyn Encode>> {
+) -> Vec<Box<dyn Encode>> {
     accumulate_memory(
         rng,
         accumulator,
@@ -669,8 +668,8 @@ fn accumulate_prologue<R: Rng>(
     base: VMReg,
     prologue: &[u8; 3],
     expected: &mut u64,
-) -> Vec<Rc<dyn Encode>> {
-    let mut instructions = Vec::<Rc<dyn Encode>>::new();
+) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
 
     for (offset, byte) in prologue.iter().enumerate() {
         instructions.extend(accumulate_byte(

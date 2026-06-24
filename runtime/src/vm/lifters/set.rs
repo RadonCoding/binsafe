@@ -1,5 +1,5 @@
 use iced_x86::{Code, Instruction, OpKind};
-use std::rc::Rc;
+
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMWidth};
@@ -10,7 +10,7 @@ use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::Encode;
 
-pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<dyn Encode>>> {
+pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let code = instruction.code();
 
     let (logic, conditions) = match code {
@@ -79,35 +79,35 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
         _ => panic!("unsupported code: {:?}", instruction.code()),
     };
 
-    let zero = || -> Rc<dyn Encode> {
-        Rc::new(LoadImmediate {
+    let zero = || -> Box<dyn Encode> {
+        Box::new(LoadImmediate {
             width: VMWidth::Lower8,
             source: vec![0],
         })
     };
-    let one = || -> Rc<dyn Encode> {
-        Rc::new(LoadImmediate {
+    let one = || -> Box<dyn Encode> {
+        Box::new(LoadImmediate {
             width: VMWidth::Lower8,
             source: vec![1],
         })
     };
 
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
+    let mut operations = Vec::<Box<dyn Encode>>::new();
 
-    let body: Vec<Rc<dyn Encode>>;
+    let body: Vec<Box<dyn Encode>>;
 
     match instruction.op0_kind() {
         OpKind::Register => {
             let destination_register = VMReg::from(instruction.op0_register());
 
             operations.push(zero());
-            operations.push(Rc::new(StoreRegister {
+            operations.push(Box::new(StoreRegister {
                 width: VMWidth::Lower8,
                 destination: destination_register,
             }));
             body = vec![
                 one(),
-                Rc::new(StoreRegister {
+                Box::new(StoreRegister {
                     width: VMWidth::Lower8,
                     destination: destination_register,
                 }),
@@ -115,18 +115,18 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
         }
         OpKind::Memory => {
             operations.push(zero());
-            operations.push(Rc::new(LoadAddress {
+            operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Rc::new(StoreMemory {
+            operations.push(Box::new(StoreMemory {
                 width: VMWidth::Lower8,
             }));
             body = vec![
                 one(),
-                Rc::new(LoadAddress {
+                Box::new(LoadAddress {
                     source: VMMem::from(instruction),
                 }),
-                Rc::new(StoreMemory {
+                Box::new(StoreMemory {
                     width: VMWidth::Lower8,
                 }),
             ];
@@ -134,7 +134,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Rc<d
         _ => unreachable!(),
     }
 
-    operations.push(Rc::new(Skip::new(mapper, logic, conditions, body)));
+    operations.push(Box::new(Skip::new(mapper, logic, conditions, body)));
 
     Some(operations)
 }

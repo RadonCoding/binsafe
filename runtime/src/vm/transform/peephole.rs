@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::mapper::Mapper;
 use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::store_register::StoreRegister;
@@ -16,15 +14,15 @@ impl Transform for Peephole {
     fn run(
         &self,
         _mapper: &mut Mapper,
-        mut operations: Vec<Rc<dyn Encode>>,
-    ) -> Vec<Rc<dyn Encode>> {
+        mut operations: Vec<Box<dyn Encode>>,
+    ) -> Vec<Box<dyn Encode>> {
         optimize(&mut operations);
         operations
     }
 }
 
 /// Optimizes [`LoadRegister`] and [`StoreRegister`] sequences by eliminating redundant register round-trips.
-fn optimize(operations: &mut Vec<Rc<dyn Encode>>) {
+fn optimize(operations: &mut Vec<Box<dyn Encode>>) {
     let mut index = 0;
 
     while index + 1 < operations.len() {

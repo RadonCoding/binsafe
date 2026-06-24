@@ -1,5 +1,4 @@
-use std::any::Any;
-use std::rc::Rc;
+use std::mem;
 
 use rand::seq::SliceRandom;
 use rand::Rng;
@@ -11,86 +10,75 @@ use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::Encode;
-use crate::vm::transform::atomize;
+use crate::vm::transform::{atomize, descend};
 
 /// Shuffles the physical order of atoms by chaining them in execution order through signed-offset [`Jcc`]s inside a [`Skip`] body.
-pub fn scramble(mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
-    let mut operations = operations;
+pub fn scramble(mapper: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+    descend(&mut operations, |operations| {
+        let current = mem::take(operations);
 
-    for operation in operations.iter_mut() {
-        let any = &**operation as &dyn Any;
-        if any.is::<Skip>() {
-            if let Some(children) = Rc::get_mut(operation).and_then(|o| o.children_mut()) {
-                let inner = children[1..].to_vec();
-                let processed = scramble(mapper, inner);
-                children.truncate(1);
-                children.extend(processed);
-            }
-        } else if any.is::<Chain>() {
-            if let Some(children) = Rc::get_mut(operation).and_then(|o| o.children_mut()) {
-                let inner = children.to_vec();
-                *children = scramble(mapper, inner);
-            }
+        let mut atoms = atomize(current);
+
+        let cut = atoms
+            .iter()
+            .rposition(|atom| atom.iter().any(|op| op.branches()))
+            .unwrap_or(atoms.len());
+
+        let tail = atoms.split_off(cut);
+
+        if atoms.len() < 2 {
+            atoms.extend(tail);
+            *operations = atoms.into_iter().flatten().collect();
+            return;
         }
-    }
-    let atoms = atomize(operations);
 
-    let cut = atoms
-        .iter()
-        .rposition(|atom| atom.iter().any(|op| op.branches()))
-        .unwrap_or(atoms.len());
+        let mut rng = rand::thread_rng();
 
-    let (head, tail) = atoms.split_at(cut);
+        let mut result = chain(mapper, atoms, &mut rng);
 
-    if head.len() < 2 {
-        return atoms.into_iter().flatten().collect();
-    }
+        result.extend(tail.into_iter().flatten());
 
-    let mut rng = rand::thread_rng();
+        *operations = result;
+    });
 
-    let mut result = chain(mapper, head.to_vec(), &mut rng);
-
-    for atom in tail {
-        result.extend(atom.iter().cloned());
-    }
-    result
+    operations
 }
 
 /// Places atoms in physical order with a top-level jump into a [`Skip`] execution chain.
 fn chain<R: Rng>(
     mapper: &mut Mapper,
-    head: Vec<Vec<Rc<dyn Encode>>>,
+    mut head: Vec<Vec<Box<dyn Encode>>>,
     rng: &mut R,
-) -> Vec<Rc<dyn Encode>> {
-    let n = head.len();
+) -> Vec<Box<dyn Encode>> {
+    let count = head.len();
 
-    let mut shuffle = (1..n).collect::<Vec<usize>>();
+    let mut shuffle = (1..count).collect::<Vec<usize>>();
     shuffle.shuffle(rng);
 
-    let mut operations = Vec::<Rc<dyn Encode>>::new();
-    let mut anchors = vec![0; n];
+    let mut operations = Vec::<Box<dyn Encode>>::new();
+    let mut anchors = vec![0; count];
     let mut pending = Vec::<(usize, Option<usize>)>::new();
 
     pending.push((operations.len(), Some(1)));
 
     operations.extend(jump());
 
-    for k in 0..(n - 1) {
+    for k in 0..(count - 1) {
         let i = shuffle[k];
 
         anchors[i] = operations.len();
 
-        operations.extend(head[i].clone());
+        operations.extend(head[i].drain(..));
 
-        let successor = if i + 1 == n { None } else { Some(i + 1) };
+        let successor = if i + 1 == count { None } else { Some(i + 1) };
         pending.push((operations.len(), successor));
         operations.extend(jump());
     }
 
     let jumps = pending
         .into_iter()
-        .map(|(at, successor)| Jump {
-            source: at,
+        .map(|(source, successor)| Jump {
+            source,
             destination: match successor {
                 Some(index) => Target::Operation(anchors[index]),
                 None => Target::End,
@@ -104,22 +92,22 @@ fn chain<R: Rng>(
         mapper,
         pass.logic,
         pass.conditions,
-        vec![Rc::new(chain) as Rc<dyn Encode>],
+        vec![Box::new(chain) as Box<dyn Encode>],
     );
 
-    let mut result = Vec::<Rc<dyn Encode>>::new();
-    result.extend(head[0].clone());
-    result.push(Rc::new(skip));
+    let mut result = Vec::<Box<dyn Encode>>::new();
+    result.extend(head[0].drain(..));
+    result.push(Box::new(skip));
     result
 }
 
 /// Placeholder signed-offset [`LoadImmediate`] paired with an always-skip [`Jcc`] and [`Chain::seal`] rewrites the offset bytes.
-fn jump() -> Vec<Rc<dyn Encode>> {
+fn jump() -> Vec<Box<dyn Encode>> {
     vec![
-        Rc::new(LoadImmediate {
+        Box::new(LoadImmediate {
             width: VMWidth::SLower16,
             source: vec![0, 0],
         }),
-        Rc::new(Jcc::skip()),
+        Box::new(Jcc::skip()),
     ]
 }

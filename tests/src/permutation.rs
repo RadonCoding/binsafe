@@ -4,7 +4,6 @@ use runtime::vm::{
     encoders::Encode,
     transform::permute,
 };
-use std::rc::Rc;
 
 use crate::{
     constants::{IMM64_A, SIMM32_A},
@@ -54,7 +53,7 @@ impl Enumerator {
     }
 }
 
-fn dump(operations: &[Rc<dyn Encode>]) -> String {
+fn dump(operations: &[Box<dyn Encode>]) -> String {
     let mut lines = Vec::new();
 
     for (i, op) in operations.iter().enumerate() {

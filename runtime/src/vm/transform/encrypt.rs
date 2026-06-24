@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::rc::Rc;
 
 use rand::Rng;
 
@@ -17,7 +16,7 @@ use crate::vm::transform::{deadzones, Phase, Transform};
 
 struct Encryptor<'a> {
     mapper: &'a mut Mapper,
-    operations: &'a mut Vec<Rc<dyn Encode>>,
+    operations: &'a mut Vec<Box<dyn Encode>>,
     deadzones: Vec<bool>,
     position: usize,
     key: u64,
@@ -31,7 +30,7 @@ impl Transform for Encrypt {
         Phase::Encrypt
     }
 
-    fn run(&self, mapper: &mut Mapper, operations: Vec<Rc<dyn Encode>>) -> Vec<Rc<dyn Encode>> {
+    fn run(&self, mapper: &mut Mapper, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
         let mut operations = operations;
 
         let key = rand::thread_rng().gen::<u64>();
@@ -47,7 +46,7 @@ impl Transform for Encrypt {
 
 impl<'a> Encryptor<'a> {
     /// Builds an [`Encryptor`] with a deadzone mask derived from a depth-first flag-effect scan over `operations` and their children.
-    fn new(mapper: &'a mut Mapper, operations: &'a mut Vec<Rc<dyn Encode>>, key: u64) -> Self {
+    fn new(mapper: &'a mut Mapper, operations: &'a mut Vec<Box<dyn Encode>>, key: u64) -> Self {
         let deadzones = deadzones(operations, |effect| {
             matches!(effect, Effect::Register(VMReg::Flags))
         });
@@ -77,14 +76,14 @@ impl<'a> Encryptor<'a> {
     fn prologue(&mut self, key: u64) {
         self.operations.insert(
             0,
-            Rc::new(LoadImmediate {
+            Box::new(LoadImmediate {
                 width: VMWidth::Lower64,
                 source: key.to_le_bytes().to_vec(),
             }),
         );
         self.operations.insert(
             1,
-            Rc::new(StoreRegister {
+            Box::new(StoreRegister {
                 width: VMWidth::Lower64,
                 destination: VMReg::VImm,
             }),
@@ -95,7 +94,7 @@ impl<'a> Encryptor<'a> {
 /// Encrypts each leaf in place at the top level, splicing a roll sequence after every immediate, descending into children without rolling.
 fn walk(
     mapper: &mut Mapper,
-    operations: &mut Vec<Rc<dyn Encode>>,
+    operations: &mut Vec<Box<dyn Encode>>,
     position: &mut usize,
     deadzones: &[bool],
     key: &mut u64,
@@ -106,17 +105,15 @@ fn walk(
     while i < operations.len() {
         let entry = *key;
 
-        if let Some(children) = Rc::get_mut(&mut operations[i]).unwrap().children_mut() {
+        if let Some(children) = operations[i].children_mut() {
             nested(mapper, children, position, deadzones, key);
-            Rc::get_mut(&mut operations[i])
-                .unwrap()
-                .seal(mapper, &mut |source| {
-                    let bytes = entry.to_le_bytes();
+            operations[i].seal(mapper, &mut |source| {
+                let bytes = entry.to_le_bytes();
 
-                    for (i, byte) in source.iter_mut().enumerate() {
-                        *byte ^= bytes[i];
-                    }
-                });
+                for (i, byte) in source.iter_mut().enumerate() {
+                    *byte ^= bytes[i];
+                }
+            });
             i += 1;
             continue;
         }
@@ -143,7 +140,7 @@ fn walk(
 /// Encrypts each leaf in place inside a children slice without rolling, descending recursively.
 fn nested(
     mapper: &mut Mapper,
-    operations: &mut [Rc<dyn Encode>],
+    operations: &mut [Box<dyn Encode>],
     position: &mut usize,
     deadzones: &[bool],
     key: &mut u64,
@@ -151,10 +148,10 @@ fn nested(
     for operation in operations.iter_mut() {
         let entry = *key;
 
-        if let Some(children) = Rc::get_mut(operation).unwrap().children_mut() {
+        if let Some(children) = operation.children_mut() {
             nested(mapper, children, position, deadzones, key);
 
-            Rc::get_mut(operation).unwrap().seal(mapper, &mut |source| {
+            operation.seal(mapper, &mut |source| {
                 let bytes = entry.to_le_bytes();
 
                 for (i, byte) in source.iter_mut().enumerate() {
@@ -171,8 +168,8 @@ fn nested(
 }
 
 /// Encrypts the leaf in place when it matches [`LoadImmediate`] or [`LoadAddress`], returning whether a match was found.
-fn leaf(operation: &mut Rc<dyn Encode>, key: u64) -> bool {
-    let any: &mut dyn Any = Rc::get_mut(operation).unwrap();
+fn leaf(operation: &mut Box<dyn Encode>, key: u64) -> bool {
+    let any: &mut dyn Any = operation.as_mut();
 
     if let Some(load) = any.downcast_mut::<LoadImmediate>() {
         xor(&mut load.source, load.width, key);
@@ -198,22 +195,22 @@ fn xor(source: &mut [u8], width: VMWidth, key: u64) {
 }
 
 /// Creates a random transformation sequence for [`VMReg::VImm`] and updates `key` while preserving flags.
-fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
+fn rolling(key: &mut u64, preserve: bool) -> Vec<Box<dyn Encode>> {
     let mut rng = rand::thread_rng();
 
     let mut sequence = Vec::new();
 
     if preserve {
-        sequence.push(Rc::new(LoadRegister {
+        sequence.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: VMReg::Flags,
-        }) as Rc<dyn Encode>);
+        }) as Box<dyn Encode>);
     }
 
-    sequence.push(Rc::new(LoadRegister {
+    sequence.push(Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source: VMReg::VImm,
-    }) as Rc<dyn Encode>);
+    }) as Box<dyn Encode>);
 
     match rng.gen_range(0..3) {
         0 => {
@@ -233,11 +230,11 @@ fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
             let constant = rng.gen::<u64>() & mask;
             let cipher = (constant ^ *key) & mask;
 
-            sequence.push(Rc::new(LoadImmediate {
+            sequence.push(Box::new(LoadImmediate {
                 width,
                 source: cipher.to_le_bytes()[..bytes].to_vec(),
             }));
-            sequence.push(Rc::new(Xor {
+            sequence.push(Box::new(Xor {
                 width: VMWidth::Lower64,
             }));
 
@@ -247,11 +244,11 @@ fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
             let count = rng.gen_range(1..64u32);
             let cipher = (count as u64 ^ *key) as u8;
 
-            sequence.push(Rc::new(LoadImmediate {
+            sequence.push(Box::new(LoadImmediate {
                 width: VMWidth::Lower8,
                 source: vec![cipher],
             }));
-            sequence.push(Rc::new(Rol {
+            sequence.push(Box::new(Rol {
                 width: VMWidth::Lower64,
             }));
 
@@ -261,11 +258,11 @@ fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
             let count = rng.gen_range(1..64u32);
             let cipher = (count as u64 ^ *key) as u8;
 
-            sequence.push(Rc::new(LoadImmediate {
+            sequence.push(Box::new(LoadImmediate {
                 width: VMWidth::Lower8,
                 source: vec![cipher],
             }));
-            sequence.push(Rc::new(Ror {
+            sequence.push(Box::new(Ror {
                 width: VMWidth::Lower64,
             }));
 
@@ -273,13 +270,13 @@ fn rolling(key: &mut u64, preserve: bool) -> Vec<Rc<dyn Encode>> {
         }
     }
 
-    sequence.push(Rc::new(StoreRegister {
+    sequence.push(Box::new(StoreRegister {
         width: VMWidth::Lower64,
         destination: VMReg::VImm,
     }));
 
     if preserve {
-        sequence.push(Rc::new(StoreRegister {
+        sequence.push(Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: VMReg::Flags,
         }));
