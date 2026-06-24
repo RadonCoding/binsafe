@@ -26,6 +26,10 @@ fn optimize(operations: &mut Vec<Box<dyn Encode>>) {
     let mut index = 0;
 
     while index + 1 < operations.len() {
+        if let Some(children) = operations[index].children_mut() {
+            optimize(children);
+        }
+
         if let (Some(load), Some(store)) = (
             operations[index].as_any().downcast_ref::<LoadRegister>(),
             operations[index + 1]

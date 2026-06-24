@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode;
+use crate::vm::bytecode::{self};
 use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::{Effect, Encode};
@@ -14,13 +14,13 @@ pub struct Chain {
 
 #[derive(Debug)]
 pub struct Jump {
-    pub source: usize,
+    pub source: Label,
     pub destination: Target,
 }
 
 #[derive(Debug)]
 pub enum Target {
-    Label(usize),
+    Label(Label),
     End,
 }
 
@@ -70,30 +70,30 @@ impl Encode for Chain {
     fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Encode>>> {
         Some(&mut self.operations)
     }
+
     fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8])) {
         for jump in &self.jumps {
             let index = self
                 .operations
                 .iter()
-                .position(|op| op.id() == jump.source)
+                .position(|op| {
+                    op.as_any()
+                        .downcast_ref::<Label>()
+                        .map_or(false, |l| l.id() == jump.source.id())
+                })
                 .unwrap();
 
-            let mut source = 0;
-
-            for operation in &self.operations {
-                if operation.id() == jump.source {
-                    break;
-                }
-
-                source += operation.size(mapper);
-            }
+            let source = self.operations[..index]
+                .iter()
+                .map(|op| op.size(mapper))
+                .sum::<usize>();
 
             let after = source
-                + self.operations[index].size(mapper)
-                + self.operations[index + 1].size(mapper);
+                + self.operations[index + 1].size(mapper)
+                + self.operations[index + 2].size(mapper);
 
             let target = match jump.destination {
-                Target::Label(id) => position(&self.operations, id, mapper).unwrap(),
+                Target::Label(label) => position(&self.operations, label.id(), mapper).unwrap(),
                 Target::End => self.size(mapper),
             };
 
@@ -103,8 +103,10 @@ impl Encode for Chain {
 
             transform(&mut bytes);
 
-            let any = self.operations[index].as_mut() as &mut dyn Any;
-            let load = any.downcast_mut::<LoadImmediate>().unwrap();
+            let load = self.operations[index + 1]
+                .as_any_mut()
+                .downcast_mut::<LoadImmediate>()
+                .unwrap();
             load.source = bytes;
         }
     }

@@ -3,10 +3,7 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{
-    mapper::Mapper,
-    vm::encoders::{Effect, Encode},
-};
+use crate::{mapper::Mapper, vm::encoders::Encode};
 
 static LABEL_ID: AtomicUsize = AtomicUsize::new(0);
 
@@ -37,22 +34,6 @@ impl Encode for Label {
     }
 
     fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {
-        Vec::new()
-    }
-
-    fn size(&self, _mapper: &mut Mapper) -> usize {
-        0
-    }
-
-    fn reads(&self) -> Vec<Effect> {
-        Vec::new()
-    }
-
-    fn writes(&self) -> Vec<Effect> {
-        Vec::new()
-    }
-
-    fn depth(&self) -> i32 {
-        0
+        vec![]
     }
 }

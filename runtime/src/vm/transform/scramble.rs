@@ -16,16 +16,14 @@ use crate::vm::transform::{atomize, descend};
 /// Shuffles the physical order of atoms by chaining them in execution order through signed-offset [`Jcc`]s inside a [`Skip`] body.
 pub fn scramble(mapper: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
     descend(&mut operations, |operations| {
-        let current = mem::take(operations);
-
-        let mut atoms = atomize(current);
+        let mut atoms = atomize(mem::take(operations));
 
         let cut = atoms
             .iter()
             .rposition(|atom| atom.iter().any(|op| op.branches()))
             .unwrap_or(atoms.len());
 
-        let tail = atoms.split_off(cut);
+        let mut tail = atoms.split_off(cut);
 
         if atoms.len() < 2 {
             atoms.extend(tail);
@@ -35,9 +33,21 @@ pub fn scramble(mapper: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Ve
 
         let mut rng = rand::thread_rng();
 
-        let mut result = chain(mapper, atoms, &mut rng);
-        result.extend(tail.into_iter().flatten());
-        *operations = result;
+        let mut body = chain(mapper, atoms, &mut rng);
+
+        if !tail.is_empty() {
+            let branch = tail.remove(0);
+
+            body.extend(branch);
+
+            if tail.len() >= 2 {
+                body.extend(chain(mapper, tail, &mut rng));
+            } else {
+                body.extend(tail.into_iter().flatten());
+            }
+        }
+
+        *operations = body;
     });
 
     operations
@@ -55,27 +65,34 @@ fn chain<R: Rng>(
     shuffle.shuffle(rng);
 
     let mut operations = Vec::<Box<dyn Encode>>::new();
-    let mut anchors = vec![0; count];
-    let mut pending = Vec::<(usize, Option<usize>)>::new();
+    let mut anchors = vec![None; count];
+    let mut pending = Vec::new();
 
     let entry = Label::new();
     operations.push(Box::new(entry));
-    operations.extend(jump());
-    pending.push((operations[1].id(), Some(1)));
+
+    let (label, procedure) = placeholder();
+
+    operations.extend(procedure);
+
+    pending.push((label, Some(1)));
 
     for k in 0..(count - 1) {
         let i = shuffle[k];
 
-        let label = Label::new();
-        anchors[i] = label.id();
-        operations.push(Box::new(label));
+        let anchor = Label::new();
+        anchors[i] = Some(anchor);
+        operations.push(Box::new(anchor));
 
         operations.extend(head[i].drain(..));
 
-        let source = operations.len();
-        operations.extend(jump());
+        let (label, procedure) = placeholder();
+
+        operations.extend(procedure);
+
         let successor = if i + 1 == count { None } else { Some(i + 1) };
-        pending.push((operations[source].id(), successor));
+
+        pending.push((label, successor));
     }
 
     let jumps = pending
@@ -83,7 +100,7 @@ fn chain<R: Rng>(
         .map(|(source, successor)| Jump {
             source,
             destination: match successor {
-                Some(index) => Target::Label(anchors[index]),
+                Some(index) => Target::Label(anchors[index].unwrap()),
                 None => Target::End,
             },
         })
@@ -101,12 +118,16 @@ fn chain<R: Rng>(
 }
 
 /// Placeholder signed-offset [`LoadImmediate`] paired with an always-skip [`Jcc`] and [`Chain::seal`] rewrites the offset bytes.
-fn jump() -> Vec<Box<dyn Encode>> {
-    vec![
-        Box::new(LoadImmediate {
-            width: VMWidth::SLower16,
-            source: vec![0, 0],
-        }),
-        Box::new(Jcc::skip()),
-    ]
+fn placeholder() -> (Label, Vec<Box<dyn Encode>>) {
+    let label = Label::new();
+
+    let mut procedure = Vec::<Box<dyn Encode>>::new();
+    procedure.push(Box::new(label));
+    procedure.push(Box::new(LoadImmediate {
+        width: VMWidth::SLower16,
+        source: vec![0, 0],
+    }));
+    procedure.push(Box::new(Jcc::skip()));
+
+    (label, procedure)
 }
