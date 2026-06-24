@@ -40,90 +40,76 @@ pub fn generate(
 
     let count = FnDef::VARIANTS.len();
 
+    let functions = engine.rt.lookup(engine.rt.data_labels[&DataDef::Functions]) as i32;
+
     let mut instructions = Vec::<Rc<dyn Encode>>::new();
 
-    instructions.extend(sub(Some(VMReg::Vt0), Some(VMReg::Vt1)));
-    instructions.extend(save(VMReg::Rax));
+    instructions.extend(set(ACCUMULATOR, 0));
 
-    instructions.extend(skip(
-        engine,
-        VMReg::Rax,
-        VMCondition::cmp(VMFlag::Zero, 1),
-        |engine| {
-            let functions = engine.rt.lookup(engine.rt.data_labels[&DataDef::Functions]) as i32;
+    instructions.extend(foreach(VMReg::Rax, Bound::Immediate(count), 1, || {
+        let mut outer = Vec::<Rc<dyn Encode>>::new();
 
-            let mut b = Vec::<Rc<dyn Encode>>::new();
+        outer.extend(absolute(VMReg::Rax, 8, functions, VMWidth::Lower32));
+        outer.extend(save(VMReg::Rbx));
 
-            b.extend(set(ACCUMULATOR, 0));
+        outer.extend(load(
+            VMReg::VImage,
+            VMReg::Rax,
+            8,
+            functions + 4,
+            VMSeg::None,
+            VMWidth::Lower32,
+        ));
+        outer.extend(save(VMReg::Rcx));
 
-            b.extend(foreach(VMReg::Rax, Bound::Immediate(count), 1, || {
-                let mut outer = Vec::<Rc<dyn Encode>>::new();
+        outer.extend(mask(Some(VMReg::Rcx), 7));
+        outer.extend(save(VMReg::Rdx));
+        outer.extend(sub(Some(VMReg::Rcx), Some(VMReg::Rdx)));
+        outer.extend(save(VMReg::R8));
 
-                outer.extend(absolute(VMReg::Rax, 8, functions, VMWidth::Lower32));
-                outer.extend(save(VMReg::Rbx));
+        outer.extend(foreach(VMReg::R9, Bound::Register(VMReg::R8), 8, || {
+            let mut inner = Vec::<Rc<dyn Encode>>::new();
+            inner.extend(load(
+                VMReg::Rbx,
+                VMReg::R9,
+                1,
+                0,
+                VMSeg::None,
+                VMWidth::Lower64,
+            ));
+            inner.extend(create(ACCUMULATOR, operation));
+            inner
+        }));
 
-                outer.extend(load(
-                    VMReg::VImage,
-                    VMReg::Rax,
-                    8,
-                    functions + 4,
-                    VMSeg::None,
-                    VMWidth::Lower32,
-                ));
-                outer.extend(save(VMReg::Rcx));
+        outer.extend(compute(VMReg::Rbx, VMReg::R9, 1, 0, VMSeg::None));
+        outer.extend(save(VMReg::Rcx));
 
-                outer.extend(mask(Some(VMReg::Rcx), 7));
-                outer.extend(save(VMReg::Rdx));
-                outer.extend(sub(Some(VMReg::Rcx), Some(VMReg::Rdx)));
-                outer.extend(save(VMReg::R8));
-
-                outer.extend(foreach(VMReg::R9, Bound::Register(VMReg::R8), 8, || {
+        outer.extend(skip(
+            engine,
+            VMReg::Rdx,
+            VMCondition::cmp(VMFlag::Zero, 1),
+            |_| {
+                foreach(VMReg::R8, Bound::Register(VMReg::Rdx), 1, || {
                     let mut inner = Vec::<Rc<dyn Encode>>::new();
                     inner.extend(load(
-                        VMReg::Rbx,
-                        VMReg::R9,
+                        VMReg::Rcx,
+                        VMReg::R8,
                         1,
                         0,
                         VMSeg::None,
-                        VMWidth::Lower64,
+                        VMWidth::Lower8,
                     ));
                     inner.extend(create(ACCUMULATOR, operation));
                     inner
-                }));
+                })
+            },
+        ));
 
-                outer.extend(compute(VMReg::Rbx, VMReg::R9, 1, 0, VMSeg::None));
-                outer.extend(save(VMReg::Rcx));
+        outer
+    }));
 
-                outer.extend(skip(
-                    engine,
-                    VMReg::Rdx,
-                    VMCondition::cmp(VMFlag::Zero, 1),
-                    |_| {
-                        foreach(VMReg::R8, Bound::Register(VMReg::Rdx), 1, || {
-                            let mut inner = Vec::<Rc<dyn Encode>>::new();
-                            inner.extend(load(
-                                VMReg::Rcx,
-                                VMReg::R8,
-                                1,
-                                0,
-                                VMSeg::None,
-                                VMWidth::Lower8,
-                            ));
-                            inner.extend(create(ACCUMULATOR, operation));
-                            inner
-                        })
-                    },
-                ));
-
-                outer
-            }));
-
-            b.extend(xor(Some(ACCUMULATOR), Some(VMReg::Vt0)));
-            b.extend(save(VMReg::Vp1));
-
-            b
-        },
-    ));
+    instructions.extend(xor(Some(ACCUMULATOR), Some(VMReg::Vt0)));
+    instructions.extend(save(VMReg::Vp1));
 
     instructions
 }

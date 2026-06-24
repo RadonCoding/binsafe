@@ -32,32 +32,18 @@ pub fn generate(
 ) -> Vec<Rc<dyn Encode>> {
     let mut instructions = Vec::<Rc<dyn Encode>>::new();
 
-    instructions.extend(sub(Some(VMReg::Vt0), Some(VMReg::Vt1)));
-    instructions.extend(save(VMReg::Rax));
+    instructions.extend(reserve(0x28));
 
-    instructions.extend(skip(
-        engine,
-        VMReg::Rax,
-        VMCondition::cmp(VMFlag::Zero, 1),
-        |engine| {
-            let mut b = Vec::<Rc<dyn Encode>>::new();
+    instructions.extend(set(ACCUMULATOR, 0));
 
-            b.extend(set(ACCUMULATOR, 0));
+    instructions.extend(query_process_debug_object_handle(engine, rng, expected));
+    instructions.extend(set_hide_from_debugger(engine, rng, expected));
+    instructions.extend(query_hide_from_debbuger(engine, rng, expected));
 
-            b.extend(reserve(0x28));
+    instructions.extend(xor(Some(ACCUMULATOR), Some(VMReg::Vt0)));
+    instructions.extend(save(VMReg::Vp0));
 
-            b.extend(query_process_debug_object_handle(engine, rng, expected));
-            b.extend(set_hide_from_debugger(engine, rng, expected));
-            b.extend(query_hide_from_debbuger(engine, rng, expected));
-
-            b.extend(xor(Some(ACCUMULATOR), Some(VMReg::Vt0)));
-            b.extend(save(VMReg::Vp0));
-
-            b.extend(release(0x28));
-
-            b
-        },
-    ));
+    instructions.extend(release(0x28));
 
     instructions
 }
