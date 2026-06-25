@@ -15,6 +15,7 @@ pub fn generate(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
+    mix: u32,
 ) -> Vec<Box<dyn Encode>> {
     let operation = rng.gen_range(0..3);
 
@@ -68,6 +69,7 @@ pub fn generate(
 
         outer.extend(foreach(VMReg::R9, Bound::Register(VMReg::R8), 8, || {
             let mut inner = Vec::<Box<dyn Encode>>::new();
+            inner.extend(spill(ACCUMULATOR));
             inner.extend(load(
                 VMReg::Rbx,
                 VMReg::R9,
@@ -76,7 +78,8 @@ pub fn generate(
                 VMSeg::None,
                 VMWidth::Lower64,
             ));
-            inner.extend(create(ACCUMULATOR, operation));
+            inner.extend(create(operation));
+            inner.extend(reload(ACCUMULATOR));
             inner
         }));
 
@@ -90,6 +93,7 @@ pub fn generate(
             |_| {
                 foreach(VMReg::R8, Bound::Register(VMReg::Rdx), 1, || {
                     let mut inner = Vec::<Box<dyn Encode>>::new();
+                    inner.extend(spill(ACCUMULATOR));
                     inner.extend(load(
                         VMReg::Rcx,
                         VMReg::R8,
@@ -98,7 +102,8 @@ pub fn generate(
                         VMSeg::None,
                         VMWidth::Lower8,
                     ));
-                    inner.extend(create(ACCUMULATOR, operation));
+                    inner.extend(create(operation));
+                    inner.extend(reload(ACCUMULATOR));
                     inner
                 })
             },
@@ -107,7 +112,9 @@ pub fn generate(
         outer
     }));
 
-    instructions.extend(xor(Some(ACCUMULATOR), Some(VMReg::Vt0)));
+    instructions.extend(spill(ACCUMULATOR));
+    instructions.extend(spill(VMReg::Vt0));
+    instructions.extend(create(mix));
     instructions.extend(reload(VMReg::Vp1));
 
     instructions
