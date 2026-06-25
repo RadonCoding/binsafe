@@ -24,6 +24,7 @@ pub fn generate(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
+    mix: u32,
 ) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
@@ -35,7 +36,9 @@ pub fn generate(
     instructions.extend(set_hide_from_debugger(engine, rng, expected));
     instructions.extend(query_hide_from_debbuger(engine, rng, expected));
 
-    instructions.extend(xor(Some(ACCUMULATOR), Some(VMReg::Vt0)));
+    instructions.extend(spill(ACCUMULATOR));
+    instructions.extend(spill(VMReg::Vt0));
+    instructions.extend(create(mix));
     instructions.extend(reload(VMReg::Vp0));
 
     instructions.extend(release(0x30));
