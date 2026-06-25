@@ -30,16 +30,16 @@ pub fn generate(
 
     instructions.extend(reserve(0x30));
 
-    instructions.extend(set(ACCUMULATOR, 0));
+    instructions.extend(set_register(ACCUMULATOR, 0));
 
     instructions.extend(query_process_debug_object_handle(engine, rng, expected));
     instructions.extend(set_hide_from_debugger(engine, rng, expected));
     instructions.extend(query_hide_from_debbuger(engine, rng, expected));
 
-    instructions.extend(spill(ACCUMULATOR));
-    instructions.extend(spill(VMReg::Vt0));
+    instructions.extend(spill_register(ACCUMULATOR));
+    instructions.extend(spill_register(VMReg::Vt0));
     instructions.extend(create(mix));
-    instructions.extend(reload(VMReg::Vp0));
+    instructions.extend(reload_register(VMReg::Vp0));
 
     instructions.extend(release(0x30));
 
@@ -62,15 +62,15 @@ fn query_process_debug_object_handle(
         expected,
     ));
     // ProcessHandle -> RCX
-    b.extend(set(VMReg::Rcx, NT_CURRENT_PROCESS as u64));
+    b.extend(set_register(VMReg::Rcx, NT_CURRENT_PROCESS as u64));
     // ProcessInformationClass -> RDX
-    b.extend(set(VMReg::Rdx, PROCESS_DEBUG_OBJECT_HANDLE));
+    b.extend(set_register(VMReg::Rdx, PROCESS_DEBUG_OBJECT_HANDLE));
     // ALLOCATE ProcessDebugObjectHandle
     b.extend(compute(VMReg::Rsp, VMReg::None, 1, 0x28, VMSeg::None));
     // ProcessInformation -> R8
-    b.extend(reload(VMReg::R8));
+    b.extend(reload_register(VMReg::R8));
     // ProcessInformationLength -> R9
-    b.extend(set(VMReg::R9, 8));
+    b.extend(set_register(VMReg::R9, 8));
     // ReturnLength -> [RSP + ...]
     b.extend(store(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
     // NtQueryInformationProcess
@@ -114,13 +114,13 @@ fn set_hide_from_debugger(
         expected,
     ));
     // ThreadHandle -> RCX
-    b.extend(set(VMReg::Rcx, NT_CURRENT_THREAD as u64));
+    b.extend(set_register(VMReg::Rcx, NT_CURRENT_THREAD as u64));
     // ThreadInformationClass -> RDX
-    b.extend(set(VMReg::Rdx, THREAD_HIDE_FROM_DEBUGGER));
+    b.extend(set_register(VMReg::Rdx, THREAD_HIDE_FROM_DEBUGGER));
     // ThreadInformation -> R8
-    b.extend(set(VMReg::R8, 0));
+    b.extend(set_register(VMReg::R8, 0));
     // ThreadInformationLength -> R9
-    b.extend(set(VMReg::R9, 0));
+    b.extend(set_register(VMReg::R9, 0));
     // NtSetInformationThread
     b.extend(invoke(VMReg::Rax));
 
@@ -152,15 +152,15 @@ fn query_hide_from_debbuger(
     ));
 
     // ThreadHandle -> RCX
-    b.extend(set(VMReg::Rcx, NT_CURRENT_THREAD as u64));
+    b.extend(set_register(VMReg::Rcx, NT_CURRENT_THREAD as u64));
     // ThreadInformationClass -> RDX
-    b.extend(set(VMReg::Rdx, THREAD_HIDE_FROM_DEBUGGER));
+    b.extend(set_register(VMReg::Rdx, THREAD_HIDE_FROM_DEBUGGER));
     // ALLOCATE ThreadHideFromDebugger
     b.extend(compute(VMReg::Rsp, VMReg::None, 1, 0x28, VMSeg::None));
     // ThreadInformation -> R8
-    b.extend(reload(VMReg::R8));
+    b.extend(reload_register(VMReg::R8));
     // ThreadInformationLength -> R9
-    b.extend(set(VMReg::R9, 1));
+    b.extend(set_register(VMReg::R9, 1));
     // ReturnLength -> [RSP + ...]
     b.extend(store(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
     // NtQueryInformationThread

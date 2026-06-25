@@ -29,11 +29,11 @@ pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
     for &register in VOLATILE {
-        instructions.extend(spill(register));
+        instructions.extend(spill_register(register));
     }
 
     if let Some(register) = register {
-        instructions.extend(spill(register));
+        instructions.extend(spill_register(register));
     }
 
     let length = (message.len() + if register.is_some() { 19 } else { 2 } + 15) & !15;
@@ -56,8 +56,8 @@ pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec
             offset as i32,
             VMSeg::None,
         ));
-        instructions.extend(reload(VMReg::Rcx));
-        instructions.extend(reload(VMReg::Rdx));
+        instructions.extend(reload_register(VMReg::Rcx));
+        instructions.extend(reload_register(VMReg::Rdx));
         instructions.extend(call(engine, FnDef::Format));
 
         offset += 16;
@@ -70,13 +70,13 @@ pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec
     }
 
     instructions.extend(compute(VMReg::Rsp, VMReg::None, 1, 0, VMSeg::None));
-    instructions.extend(reload(VMReg::Rcx));
+    instructions.extend(reload_register(VMReg::Rcx));
     instructions.extend(call(engine, FnDef::Print));
 
     instructions.extend(release(length as u64));
 
     for &register in VOLATILE.iter().rev() {
-        instructions.extend(reload(register));
+        instructions.extend(reload_register(register));
     }
 
     instructions
