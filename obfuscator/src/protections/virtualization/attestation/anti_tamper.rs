@@ -15,9 +15,9 @@ pub fn generate(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
-    mix: u32,
+    mix: Operation,
 ) -> Vec<Box<dyn Encode>> {
-    let operation = rng.gen_range(0..3);
+    let operation = Operation::random(rng);
 
     let mut lane0 = 0;
     let mut lane1 = 0;
@@ -34,12 +34,12 @@ pub fn generate(
         for chunk in &mut chunks {
             let lo = u64::from_le_bytes(chunk[0..8].try_into().unwrap());
             let hi = u64::from_le_bytes(chunk[8..16].try_into().unwrap());
-            apply(operation, lo, &mut lane0);
-            apply(operation, hi, &mut lane1);
+            apply_operation(operation, lo, &mut lane0);
+            apply_operation(operation, hi, &mut lane1);
         }
 
         for &byte in chunks.remainder() {
-            apply(operation, byte as u64, &mut lane0);
+            apply_operation(operation, byte as u64, &mut lane0);
         }
     }
 
@@ -55,18 +55,25 @@ pub fn generate(
     instructions.extend(foreach(VMReg::Rax, Bound::Immediate(count), 1, || {
         let mut outer = Vec::<Box<dyn Encode>>::new();
 
-        outer.extend(absolute(VMReg::Rax, 8, functions, VMWidth::Lower32));
-        outer.extend(reload_register(VMReg::Rcx));
-
         outer.extend(load(
             VMReg::VImage,
             VMReg::Rax,
             8,
-            functions + 4,
+            functions,
             VMSeg::None,
-            VMWidth::Lower32,
+            VMWidth::Lower64,
         ));
+        outer.extend(reload_register(VMReg::Rcx));
+
+        outer.extend(spill_register(VMReg::Rcx));
+        outer.extend(immediate(0x20));
+        outer.extend(shr(None, None));
         outer.extend(reload_register(VMReg::Rdx));
+
+        outer.extend(mask(Some(VMReg::Rcx), 0xFFFF_FFFF));
+        outer.extend(spill_register(VMReg::VImage));
+        outer.extend(add(None, None));
+        outer.extend(reload_register(VMReg::Rcx));
 
         outer.extend(mask(Some(VMReg::Rdx), 15));
         outer.extend(reload_register(VMReg::R8));
@@ -85,7 +92,7 @@ pub fn generate(
                 VMSeg::None,
                 VMWidth::Lower128,
             ));
-            inner.push(create_vector(operation));
+            inner.push(vector_operation(operation));
             inner.extend(reload_vector(ACCUMULATOR, VMWidth::Lower128));
 
             inner
@@ -111,7 +118,7 @@ pub fn generate(
                         VMSeg::None,
                         VMWidth::Lower8,
                     ));
-                    inner.extend(create(operation));
+                    inner.extend(register_operation(operation));
                     inner.extend(reload_vector(ACCUMULATOR, VMWidth::Lower64));
 
                     inner
@@ -125,7 +132,7 @@ pub fn generate(
     instructions.extend(spill_vector(ACCUMULATOR, VMWidth::Lower128));
     instructions.extend(xor(None, None));
     instructions.extend(spill_register(VMReg::Vt0));
-    instructions.extend(create(mix));
+    instructions.extend(register_operation(mix));
     instructions.extend(reload_register(VMReg::Vp1));
 
     instructions

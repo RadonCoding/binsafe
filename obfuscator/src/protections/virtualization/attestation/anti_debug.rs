@@ -24,7 +24,7 @@ pub fn generate(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
-    mix: u32,
+    mix: Operation,
 ) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
@@ -38,7 +38,7 @@ pub fn generate(
 
     instructions.extend(spill_register(ACCUMULATOR));
     instructions.extend(spill_register(VMReg::Vt0));
-    instructions.extend(create(mix));
+    instructions.extend(register_operation(mix));
     instructions.extend(reload_register(VMReg::Vp0));
 
     instructions.extend(release(0x30));
