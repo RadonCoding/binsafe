@@ -18,6 +18,7 @@ use runtime::{VM_DISPATCH_SIZE, VM_TRAMPOLINE_SIZE};
 
 mod attestation;
 pub mod crypt;
+mod language;
 
 struct Keys {
     seed: u64,
