@@ -58,7 +58,7 @@ pub fn build(rt: &mut Runtime) {
         Some(Box::new(|rt| {
             // load xmm0
             scratch::load_128(rt, r12, xmm0);
-            // vmovaps xmm0, xmm0 (VEX encoding zeroes upper 128 bits)
+            // vmovaps xmm0, xmm0
             rt.asm.vmovaps(xmm0, xmm0).unwrap();
             // vmovups [rax + r9], ymm0
             rt.asm.vmovups(ptr(rax + r9), ymm0).unwrap();

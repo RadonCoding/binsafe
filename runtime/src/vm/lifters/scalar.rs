@@ -6,11 +6,10 @@ use crate::vm::encoders::{
 };
 use iced_x86::{Instruction, Mnemonic, OpKind};
 
-
 pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let mut operations = Vec::<Box<dyn Encode>>::new();
 
-    let lane_width = match instruction.mnemonic() {
+    let width = match instruction.mnemonic() {
         Mnemonic::Movss => VMWidth::Lower32,
         Mnemonic::Movsd => VMWidth::Lower64,
         _ => panic!("unsupported mnemonic: {:?}", instruction.mnemonic()),
@@ -18,38 +17,26 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
 
     match (instruction.op1_kind(), instruction.op0_kind()) {
         (OpKind::Register, OpKind::Register) => {
-            let source_vector = VMVec::from(instruction.op1_register());
-            operations.push(Box::new(LoadVector {
-                width: lane_width,
-                source: source_vector,
-            }));
-            let destination_vector = VMVec::from(instruction.op0_register());
-            operations.push(Box::new(StoreMerge {
-                width: lane_width,
-                destination: destination_vector,
-            }));
+            let source = VMVec::from(instruction.op1_register());
+            operations.push(Box::new(LoadVector { width, source }));
+            let destination = VMVec::from(instruction.op0_register());
+            operations.push(Box::new(StoreMerge { width, destination }));
         }
         (OpKind::Memory, OpKind::Register) => {
-            let destination_vector = VMVec::from(instruction.op0_register());
+            let destination = VMVec::from(instruction.op0_register());
             operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Box::new(LoadMemory { width: lane_width }));
-            operations.push(Box::new(StoreExtend {
-                width: lane_width,
-                destination: destination_vector,
-            }));
+            operations.push(Box::new(LoadMemory { width }));
+            operations.push(Box::new(StoreExtend { width, destination }));
         }
         (OpKind::Register, OpKind::Memory) => {
-            let source_vector = VMVec::from(instruction.op1_register());
-            operations.push(Box::new(LoadVector {
-                width: lane_width,
-                source: source_vector,
-            }));
+            let source = VMVec::from(instruction.op1_register());
+            operations.push(Box::new(LoadVector { width, source }));
             operations.push(Box::new(LoadAddress {
                 source: VMMem::from(instruction),
             }));
-            operations.push(Box::new(StoreMemory { width: lane_width }));
+            operations.push(Box::new(StoreMemory { width }));
         }
         _ => unreachable!(),
     }

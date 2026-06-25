@@ -3,7 +3,9 @@ use std::i32;
 use crate::engine::Engine;
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef, ImportDef};
-use runtime::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMWidth};
+use runtime::vm::bytecode::{
+    VMCondition, VMFlag, VMLogic, VMMem, VMPrecision, VMReg, VMSeg, VMVec, VMWidth,
+};
 use runtime::vm::encoders::add::Add;
 use runtime::vm::encoders::and::And;
 use runtime::vm::encoders::chain::{Chain, Jump, Target};
@@ -14,14 +16,19 @@ use runtime::vm::encoders::load_address::LoadAddress;
 use runtime::vm::encoders::load_immediate::LoadImmediate;
 use runtime::vm::encoders::load_memory::LoadMemory;
 use runtime::vm::encoders::load_register::LoadRegister;
+use runtime::vm::encoders::load_vector::LoadVector;
 use runtime::vm::encoders::mul::Mul;
 use runtime::vm::encoders::or::Or;
 use runtime::vm::encoders::shl::Shl;
 use runtime::vm::encoders::skip::Skip;
 use runtime::vm::encoders::store_memory::StoreMemory;
+use runtime::vm::encoders::store_merge::StoreMerge;
 use runtime::vm::encoders::store_register::StoreRegister;
 use runtime::vm::encoders::sub::Sub;
 use runtime::vm::encoders::timestamp::Timestamp;
+use runtime::vm::encoders::vector_add::VectorAdd;
+use runtime::vm::encoders::vector_sub::VectorSub;
+use runtime::vm::encoders::vector_xor::VectorXor;
 use runtime::vm::encoders::xor::Xor;
 use runtime::vm::encoders::Encode;
 
@@ -49,10 +56,10 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
     block.extend(data(engine, DataDef::VmKeyAdd));
     block.extend(add(None, None));
 
-    block.extend(reload(VMReg::Vt0));
+    block.extend(reload_register(VMReg::Vt0));
 
     block.extend(sub(Some(VMReg::Vt0), Some(VMReg::Vt1)));
-    block.extend(reload(VMReg::Rax));
+    block.extend(reload_register(VMReg::Rax));
 
     let mut vp0 = 0;
     let mut vp1 = 0;
@@ -106,11 +113,11 @@ fn correct(
     let combined = combine(operation, vp0, vp1);
     let correction = combined ^ key;
 
-    instructions.extend(spill(VMReg::Vp0));
-    instructions.extend(spill(VMReg::Vt0));
+    instructions.extend(spill_register(VMReg::Vp0));
+    instructions.extend(spill_register(VMReg::Vt0));
     instructions.extend(create(invert(mix0)));
-    instructions.extend(spill(VMReg::Vp1));
-    instructions.extend(spill(VMReg::Vt0));
+    instructions.extend(spill_register(VMReg::Vp1));
+    instructions.extend(spill_register(VMReg::Vt0));
     instructions.extend(create(invert(mix1)));
     instructions.extend(create(operation));
     instructions.extend(immediate(correction));
@@ -118,7 +125,7 @@ fn correct(
 
     instructions.extend(xor(None, None));
 
-    instructions.extend(reload(VMReg::Vg0));
+    instructions.extend(reload_register(VMReg::Vg0));
 
     instructions
 }
@@ -180,7 +187,7 @@ fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
 
     let mut jumps = Vec::new();
 
-    operations.extend(set(counter, 0));
+    operations.extend(set_register(counter, 0));
 
     let destination = Label::target();
 
@@ -188,7 +195,7 @@ fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
 
     operations.extend(body());
     operations.extend(increment(counter, step));
-    operations.extend(spill(counter));
+    operations.extend(spill_register(counter));
     match bound {
         Bound::Immediate(value) => {
             operations.push(Box::new(LoadImmediate {
@@ -257,7 +264,7 @@ fn timestamp() -> Vec<Box<dyn Encode>> {
     ]
 }
 
-fn set(register: VMReg, value: u64) -> Vec<Box<dyn Encode>> {
+fn set_register(register: VMReg, value: u64) -> Vec<Box<dyn Encode>> {
     vec![
         Box::new(LoadImmediate {
             width: VMWidth::Lower64,
@@ -268,6 +275,24 @@ fn set(register: VMReg, value: u64) -> Vec<Box<dyn Encode>> {
             destination: register,
         }),
     ]
+}
+
+fn set_vector(destination: VMVec, lo: u64, hi: u64) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+
+    instructions.push(Box::new(LoadImmediate {
+        width: VMWidth::Lower64,
+        source: lo.to_le_bytes().to_vec(),
+    }));
+    instructions.push(Box::new(LoadImmediate {
+        width: VMWidth::Lower64,
+        source: hi.to_le_bytes().to_vec(),
+    }));
+    instructions.push(Box::new(StoreMerge {
+        width: VMWidth::Lower128,
+        destination,
+    }));
+    instructions
 }
 
 fn copy(source: VMReg, destination: VMReg) -> Vec<Box<dyn Encode>> {
@@ -355,7 +380,7 @@ fn invoke(target: VMReg) -> Vec<Box<dyn Encode>> {
 
 fn import(engine: &mut Engine, def: ImportDef) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
-    instructions.extend(set(VMReg::Rcx, engine.rt.mapper.index(def) as u64));
+    instructions.extend(set_register(VMReg::Rcx, engine.rt.mapper.index(def) as u64));
     instructions.extend(call(engine, FnDef::Resolve));
     instructions
 }
@@ -398,18 +423,26 @@ fn absolute(index: VMReg, scale: u8, displacement: i32, width: VMWidth) -> Vec<B
     instructions
 }
 
-fn spill(source: VMReg) -> Vec<Box<dyn Encode>> {
+fn spill_register(source: VMReg) -> Vec<Box<dyn Encode>> {
     vec![Box::new(LoadRegister {
         width: VMWidth::Lower64,
         source,
     })]
 }
 
-fn reload(destination: VMReg) -> Vec<Box<dyn Encode>> {
+fn spill_vector(source: VMVec, width: VMWidth) -> Vec<Box<dyn Encode>> {
+    vec![Box::new(LoadVector { width, source })]
+}
+
+fn reload_register(destination: VMReg) -> Vec<Box<dyn Encode>> {
     vec![Box::new(StoreRegister {
         width: VMWidth::Lower64,
         destination,
     })]
+}
+
+fn reload_vector(destination: VMVec, width: VMWidth) -> Vec<Box<dyn Encode>> {
+    vec![Box::new(StoreMerge { width, destination })]
 }
 
 fn mask(source: Option<VMReg>, mask: u64) -> Vec<Box<dyn Encode>> {
@@ -598,6 +631,24 @@ fn create(operation: u32) -> Vec<Box<dyn Encode>> {
     instructions
 }
 
+fn create_vector(operation: u32) -> Box<dyn Encode> {
+    match operation {
+        0 => Box::new(VectorAdd {
+            width: VMWidth::Lower128,
+            stride: VMWidth::Lower64,
+            precision: VMPrecision::Integer,
+        }),
+        1 => Box::new(VectorSub {
+            width: VMWidth::Lower128,
+            stride: VMWidth::Lower64,
+            precision: VMPrecision::Integer,
+        }),
+        _ => Box::new(VectorXor {
+            width: VMWidth::Lower128,
+        }),
+    }
+}
+
 fn accumulate<R: Rng>(
     rng: &mut R,
     accumulator: VMReg,
@@ -607,10 +658,10 @@ fn accumulate<R: Rng>(
 ) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
     let operation = rng.gen_range(0..3);
-    instructions.extend(spill(accumulator));
-    instructions.extend(spill(source));
+    instructions.extend(spill_register(accumulator));
+    instructions.extend(spill_register(source));
     instructions.extend(create(operation));
-    instructions.extend(reload(accumulator));
+    instructions.extend(reload_register(accumulator));
     apply(operation, value, expected);
     instructions
 }
@@ -627,10 +678,10 @@ fn accumulate_memory<R: Rng>(
     let mut instructions = Vec::<Box<dyn Encode>>::new();
     let operation = rng.gen_range(0..3);
 
-    instructions.extend(spill(accumulator));
+    instructions.extend(spill_register(accumulator));
     instructions.extend(load(base, VMReg::None, 1, displacement, VMSeg::None, width));
     instructions.extend(create(operation));
-    instructions.extend(reload(accumulator));
+    instructions.extend(reload_register(accumulator));
 
     apply(operation, value, expected);
     instructions
