@@ -58,7 +58,7 @@ fn query_kd_debugger_enabled(
 ) -> Vec<Box<dyn Encode>> {
     let mut b = Vec::new();
 
-    b.extend(load(
+    b.extend(load_memory(
         VMReg::None,
         VMReg::None,
         1,
@@ -79,7 +79,13 @@ fn query_kd_debugger_enabled(
     // SystemInformationClass -> RCX
     b.extend(set_register(VMReg::Rcx, SYSTEM_KERNEL_DEBUGGER_INFORMATION));
     // ALLOCATE SystemKernelDebuggerInformation
-    b.extend(compute(VMReg::Rsp, VMReg::None, 1, 0x28, VMSeg::None));
+    b.extend(compute_memory(
+        VMReg::Rsp,
+        VMReg::None,
+        1,
+        0x28,
+        VMSeg::None,
+    ));
     // SystemInformation -> RDX
     b.extend(reload_register(VMReg::Rdx));
     // SystemInformationLength -> R8
@@ -131,7 +137,13 @@ fn query_process_debug_object_handle(
     // ProcessInformationClass -> RDX
     b.extend(set_register(VMReg::Rdx, PROCESS_DEBUG_OBJECT_HANDLE));
     // ALLOCATE ProcessDebugObjectHandle
-    b.extend(compute(VMReg::Rsp, VMReg::None, 1, 0x28, VMSeg::None));
+    b.extend(compute_memory(
+        VMReg::Rsp,
+        VMReg::None,
+        1,
+        0x28,
+        VMSeg::None,
+    ));
     // ProcessInformation -> R8
     b.extend(reload_register(VMReg::R8));
     // ProcessInformationLength -> R9
@@ -221,7 +233,13 @@ fn query_hide_from_debbuger(
     // ThreadInformationClass -> RDX
     b.extend(set_register(VMReg::Rdx, THREAD_HIDE_FROM_DEBUGGER));
     // ALLOCATE ThreadHideFromDebugger
-    b.extend(compute(VMReg::Rsp, VMReg::None, 1, 0x28, VMSeg::None));
+    b.extend(compute_memory(
+        VMReg::Rsp,
+        VMReg::None,
+        1,
+        0x28,
+        VMSeg::None,
+    ));
     // ThreadInformation -> R8
     b.extend(reload_register(VMReg::R8));
     // ThreadInformationLength -> R9

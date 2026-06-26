@@ -50,12 +50,13 @@ pub fn generate(
     let functions = engine.rt.lookup(engine.rt.data_labels[&DataDef::Functions]) as i32;
 
     let mut instructions = Vec::<Box<dyn Encode>>::new();
+
     instructions.extend(set_vector(ACCUMULATOR, 0, 0));
 
     instructions.extend(foreach(VMReg::Rax, Bound::Immediate(count), 1, || {
         let mut outer = Vec::<Box<dyn Encode>>::new();
 
-        outer.extend(load(
+        outer.extend(load_memory(
             VMReg::VImage,
             VMReg::Rax,
             8,
@@ -84,7 +85,7 @@ pub fn generate(
             let mut inner = Vec::<Box<dyn Encode>>::new();
 
             inner.extend(spill_vector(ACCUMULATOR, VMWidth::Lower128));
-            inner.extend(load(
+            inner.extend(load_memory(
                 VMReg::Rcx,
                 VMReg::R10,
                 1,
@@ -98,7 +99,7 @@ pub fn generate(
             inner
         }));
 
-        outer.extend(compute(VMReg::Rcx, VMReg::R10, 1, 0, VMSeg::None));
+        outer.extend(compute_memory(VMReg::Rcx, VMReg::R10, 1, 0, VMSeg::None));
         outer.extend(reload_register(VMReg::Rdx));
 
         outer.extend(skip(
@@ -110,7 +111,7 @@ pub fn generate(
                     let mut inner = Vec::<Box<dyn Encode>>::new();
 
                     inner.extend(spill_vector(ACCUMULATOR, VMWidth::Lower64));
-                    inner.extend(load(
+                    inner.extend(load_memory(
                         VMReg::Rdx,
                         VMReg::R9,
                         1,

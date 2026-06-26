@@ -49,7 +49,7 @@ pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec
 
         offset += 1;
 
-        instructions.extend(compute(
+        instructions.extend(compute_memory(
             VMReg::Rsp,
             VMReg::None,
             1,
@@ -69,7 +69,7 @@ pub fn print(engine: &mut Engine, message: &str, register: Option<VMReg>) -> Vec
         instructions.extend(write_byte(VMReg::Rsp, (offset + 1) as i32, 0));
     }
 
-    instructions.extend(compute(VMReg::Rsp, VMReg::None, 1, 0, VMSeg::None));
+    instructions.extend(compute_memory(VMReg::Rsp, VMReg::None, 1, 0, VMSeg::None));
     instructions.extend(reload_register(VMReg::Rcx));
     instructions.extend(call(engine, FnDef::Print));
 

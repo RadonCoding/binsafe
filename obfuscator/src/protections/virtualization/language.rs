@@ -125,16 +125,42 @@ pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
     vec![Box::new(Chain::new(operations, jumps))]
 }
 
-pub fn data(engine: &mut Engine, def: DataDef) -> Vec<Box<dyn Encode>> {
+pub fn compute_data(engine: &mut Engine, def: DataDef) -> Vec<Box<dyn Encode>> {
     let displacement = engine.rt.lookup(engine.rt.data_labels[&def]) as i32;
-    load(
+    compute_memory(VMReg::VImage, VMReg::None, 1, displacement, VMSeg::None)
+}
+
+pub fn load_data(engine: &mut Engine, def: DataDef, width: VMWidth) -> Vec<Box<dyn Encode>> {
+    let displacement = engine.rt.lookup(engine.rt.data_labels[&def]) as i32;
+    load_memory(
         VMReg::VImage,
         VMReg::None,
         1,
         displacement,
         VMSeg::None,
-        VMWidth::Lower64,
+        width,
     )
+}
+
+pub fn load_absolute(engine: &mut Engine, def: DataDef, register: VMReg) -> Vec<Box<dyn Encode>> {
+    let mut operations = Vec::<Box<dyn Encode>>::new();
+
+    operations.extend(compute_data(engine, def));
+    operations.extend(reload_register(register));
+
+    operations.extend(spill_register(register));
+    operations.extend(load_memory(
+        register,
+        VMReg::None,
+        1,
+        0,
+        VMSeg::None,
+        VMWidth::SLower32,
+    ));
+    operations.extend(add(None, None));
+    operations.extend(reload_register(register));
+
+    operations
 }
 
 pub fn timestamp() -> Vec<Box<dyn Encode>> {
@@ -437,7 +463,7 @@ pub fn shr(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     instructions
 }
 
-pub fn compute(
+pub fn compute_memory(
     base: VMReg,
     index: VMReg,
     scale: u8,
@@ -455,7 +481,7 @@ pub fn compute(
     })]
 }
 
-pub fn load(
+pub fn load_memory(
     base: VMReg,
     index: VMReg,
     scale: u8,
@@ -464,7 +490,7 @@ pub fn load(
     width: VMWidth,
 ) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
-    instructions.extend(compute(base, index, scale, displacement, segment));
+    instructions.extend(compute_memory(base, index, scale, displacement, segment));
     instructions.push(Box::new(LoadMemory { width }));
     instructions
 }

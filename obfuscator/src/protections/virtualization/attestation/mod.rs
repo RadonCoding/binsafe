@@ -1,7 +1,7 @@
 use std::i32;
 
 use crate::engine::Engine;
-use crate::protections::virtualization::language::*;
+use crate::protections::virtualization::{crypt, language::*};
 use rand::Rng;
 use runtime::runtime::DataDef;
 use runtime::vm::bytecode::{VMCondition, VMFlag, VMPrecision, VMReg, VMSeg, VMWidth};
@@ -53,10 +53,10 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
     block.extend(timestamp());
     block.extend(mask(None, !((1u64 << WINDOW) - 1)));
 
-    block.extend(data(engine, DataDef::VmKeyMul));
+    block.extend(load_data(engine, DataDef::VmKeyMul, VMWidth::Lower64));
     block.extend(mul(None, None));
 
-    block.extend(data(engine, DataDef::VmKeyAdd));
+    block.extend(load_data(engine, DataDef::VmKeyAdd, VMWidth::Lower64));
     block.extend(add(None, None));
 
     block.extend(reload_register(VMReg::Vt0));
@@ -86,7 +86,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
         },
     ));
 
-    block.extend(correct(&mut rng, key, vp0, mix0, vp1, mix1));
+    block.extend(correct(engine, &mut rng, key, vp0, mix0, vp1, mix1));
 
     blocks.push(block);
 
@@ -94,6 +94,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
 }
 
 fn correct(
+    engine: &mut Engine,
     rng: &mut impl Rng,
     key: u64,
     vp0: u64,
@@ -103,13 +104,64 @@ fn correct(
 ) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
-    instructions.extend(load(
-        VMReg::Vg0,
-        VMReg::None,
-        1,
-        -0xA,
-        VMSeg::None,
-        VMWidth::Lower64,
+    instructions.extend(load_absolute(engine, DataDef::VmAttestation, VMReg::Rax));
+    instructions.extend(load_absolute(engine, DataDef::VmCode, VMReg::Rcx));
+
+    instructions.extend(sub(Some(VMReg::Vg0), Some(VMReg::Rax)));
+    instructions.extend(reload_register(VMReg::Rdx));
+
+    instructions.extend(skip(
+        engine,
+        VMReg::Rdx,
+        VMCondition::cmp(VMFlag::Zero, 0),
+        |_| {
+            let mut b = Vec::new();
+
+            b.extend(sub(Some(VMReg::Rax), Some(VMReg::Rcx)));
+            b.extend(immediate((crypt::HEADER_SIZE + crypt::TRAILER_SIZE) as u64));
+            b.extend(sub(None, None));
+            b.extend(reload_register(VMReg::R9));
+
+            b.extend(set_register(VMReg::R10, 0));
+
+            b.extend(foreach(VMReg::R8, Bound::Register(VMReg::R9), 8, || {
+                let mut outer = Vec::new();
+
+                outer.extend(spill_register(VMReg::R10));
+                outer.extend(load_memory(
+                    VMReg::Rcx,
+                    VMReg::R8,
+                    1,
+                    crypt::HEADER_SIZE as i32,
+                    VMSeg::None,
+                    VMWidth::Lower64,
+                ));
+                outer.extend(xor(None, None));
+                outer.extend(reload_register(VMReg::R10));
+
+                outer
+            }));
+
+            b.extend(spill_register(VMReg::R10));
+
+            b
+        },
+    ));
+
+    instructions.extend(skip(
+        engine,
+        VMReg::Rdx,
+        VMCondition::cmp(VMFlag::Zero, 1),
+        |_| {
+            load_memory(
+                VMReg::Vg0,
+                VMReg::None,
+                1,
+                -0xA,
+                VMSeg::None,
+                VMWidth::Lower64,
+            )
+        },
     ));
 
     let operation = Operation::random(rng);
@@ -216,7 +268,14 @@ fn accumulate_memory<R: Rng>(
     let operation = Operation::random(rng);
 
     instructions.extend(spill_register(accumulator));
-    instructions.extend(load(base, VMReg::None, 1, displacement, VMSeg::None, width));
+    instructions.extend(load_memory(
+        base,
+        VMReg::None,
+        1,
+        displacement,
+        VMSeg::None,
+        width,
+    ));
     instructions.extend(register_operation(operation));
     instructions.extend(reload_register(accumulator));
 

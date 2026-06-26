@@ -227,6 +227,7 @@ impl Protection for Virtualization {
         engine.rt.define_data_bytes(DataDef::VmTable, &vtable);
 
         engine.rt.define_data_dword(DataDef::VmCode, 0);
+        engine.rt.define_data_dword(DataDef::VmAttestation, 0);
 
         engine
             .rt
@@ -242,7 +243,8 @@ impl Protection for Virtualization {
     fn apply(&self, engine: &mut Engine) {
         let attestation = self.attestation(engine);
 
-        let mut vcode = attestation;
+        let mut vcode = Vec::new();
+        vcode.extend_from_slice(&attestation);
 
         let vtable_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmTable]) as u32;
         let vtable_offset = engine.pe.translate(RVA(vtable_rva).into()).unwrap();
@@ -251,7 +253,11 @@ impl Protection for Virtualization {
         for (program, group) in self.programs.iter().zip(&self.groups) {
             let mut bytes = bytecode::assemble(&mut engine.rt.mapper, program);
 
-            let key = crypt::derive_key(&vcode);
+            let key = if vcode.len() == attestation.len() {
+                crypt::derive_hash(&vcode)
+            } else {
+                crypt::derive_key(&vcode)
+            };
 
             crypt::encrypt_block(&mut bytes, key, self.keys.mul, self.keys.add, self.keys.att);
 
@@ -282,10 +288,25 @@ impl Protection for Virtualization {
 
         let vcode_rva = engine.rt.lookup(engine.rt.data_labels[&DataDef::VmCode]) as u32;
         let vcode_offset = engine.pe.translate(RVA(vcode_rva).into()).unwrap();
-        let displacement = section.virtual_address.0 as i64 - vcode_rva as i64;
+        let vcode_displacement = (section.virtual_address.0 as i64 - vcode_rva as i64) as i32;
         engine
             .pe
-            .write(vcode_offset, &(displacement as i32).to_le_bytes())
+            .write(vcode_offset, &vcode_displacement.to_le_bytes())
+            .unwrap();
+
+        let vattestation_rva = engine
+            .rt
+            .lookup(engine.rt.data_labels[&DataDef::VmAttestation])
+            as u32;
+        let vattestation_offset = engine.pe.translate(RVA(vattestation_rva).into()).unwrap();
+        let vattestation_displacement =
+            (section.virtual_address.0 as i64 + attestation.len() as i64) - vattestation_rva as i64;
+        engine
+            .pe
+            .write(
+                vattestation_offset,
+                &vattestation_displacement.to_le_bytes(),
+            )
             .unwrap();
 
         let ventry_rva = engine.rt.lookup(engine.rt.function_labels[&FnDef::VmEntry]);
