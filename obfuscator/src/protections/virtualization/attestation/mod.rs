@@ -240,16 +240,21 @@ fn accumulate<R: Rng>(
 
     let operation = Operation::random(rng);
 
+    let mix = rng.gen::<u64>();
+
     instructions.extend(spill_register(accumulator));
 
     if let Some(source) = source {
         instructions.extend(spill_register(source));
     }
+    instructions.extend(immediate(mix));
+    instructions.extend(xor(None, None));
 
     instructions.extend(register_operation(operation));
+
     instructions.extend(reload_register(accumulator));
 
-    apply_operation(operation, value, expected);
+    apply_operation(operation, value ^ mix, expected);
 
     instructions
 }
