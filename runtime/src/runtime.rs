@@ -114,6 +114,7 @@ mapped! {
         VmCleanupFlsIndex,
         VmTable,
         VmCode,
+        VmAttestation,
         VmTrampolines,
         VmKeySeed,
         VmKeyMul,

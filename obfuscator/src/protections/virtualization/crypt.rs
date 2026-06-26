@@ -1,10 +1,20 @@
 use rand::Rng;
 use runtime::VM_INTEGRITY_QWORD;
 
-const HEADER_SIZE: usize = size_of::<u16>();
-const TRAILER_SIZE: usize = size_of::<u8>() + size_of::<u8>();
+pub const HEADER_SIZE: usize = size_of::<u16>();
+pub const TRAILER_SIZE: usize = size_of::<u8>() + size_of::<u8>();
+
 const ENCRYPTED: u8 = 0;
 const DECRYPTED: u8 = 1;
+
+pub fn derive_hash(bytes: &[u8]) -> u64 {
+    let start = HEADER_SIZE;
+    let end = bytes.len() - TRAILER_SIZE;
+    let payload = &bytes[start..end];
+    payload.chunks_exact(8).fold(0, |key, chunk| {
+        key ^ u64::from_le_bytes(chunk.try_into().unwrap())
+    })
+}
 
 pub fn derive_key(bytes: &[u8]) -> u64 {
     let end = bytes.len() - TRAILER_SIZE;
