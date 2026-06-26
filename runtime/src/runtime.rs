@@ -156,6 +156,7 @@ mapped! {
         GetProcessHeap,
         RtlAllocateHeap,
         RtlFreeHeap,
+        NtQuerySystemInformation,
         NtQueryInformationProcess,
         NtSetInformationThread,
         NtQueryInformationThread,
@@ -178,6 +179,7 @@ mapped! {
         GetProcessHeap,
         RtlAllocateHeap,
         RtlFreeHeap,
+        NtQuerySystemInformation,
         NtQueryInformationProcess,
         NtSetInformationThread,
         NtQueryInformationThread,
@@ -203,6 +205,9 @@ impl ImportDef {
             ImportDef::GetProcessHeap { .. } => (HashDef::Kernel32, HashDef::GetProcessHeap),
             ImportDef::RtlAllocateHeap { .. } => (HashDef::Ntdll, HashDef::RtlAllocateHeap),
             ImportDef::RtlFreeHeap { .. } => (HashDef::Ntdll, HashDef::RtlFreeHeap),
+            ImportDef::NtQuerySystemInformation { .. } => {
+                (HashDef::Ntdll, HashDef::NtQuerySystemInformation)
+            }
             ImportDef::NtQueryInformationProcess { .. } => {
                 (HashDef::Ntdll, HashDef::NtQueryInformationProcess)
             }
@@ -728,6 +733,10 @@ impl Runtime {
         self.define_hash(HashDef::GetProcessHeap, "GetProcessHeap");
         self.define_hash(HashDef::RtlAllocateHeap, "RtlAllocateHeap");
         self.define_hash(HashDef::RtlFreeHeap, "RtlFreeHeap");
+        self.define_hash(
+            HashDef::NtQuerySystemInformation,
+            "NtQuerySystemInformation",
+        );
         self.define_hash(
             HashDef::NtQueryInformationProcess,
             "NtQueryInformationProcess",

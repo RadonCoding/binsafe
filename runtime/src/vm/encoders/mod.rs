@@ -71,7 +71,7 @@ pub mod byte_swap;
 pub mod chain;
 pub mod compare_exchange;
 pub mod discard;
-pub mod divide;
+pub mod div;
 pub mod exchange;
 pub mod exchange_add;
 pub mod jcc;

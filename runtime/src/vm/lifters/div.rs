@@ -1,16 +1,15 @@
 use iced_x86::{Instruction, Mnemonic};
 
-
 use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::{
-    divide::Divide, load_register::LoadRegister, store_register::StoreRegister, Encode,
+    div::Div, load_register::LoadRegister, store_register::StoreRegister, Encode,
 };
 use crate::vm::lifters::{operation_width, source};
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     match instruction.mnemonic() {
-        Mnemonic::Div => wide(instruction, |width| Divide { width }),
-        Mnemonic::Idiv => wide(instruction, |width| Divide {
+        Mnemonic::Div => wide(instruction, |width| Div { width }),
+        Mnemonic::Idiv => wide(instruction, |width| Div {
             width: width.signed(),
         }),
         mnemonic => panic!("unsupported mnemonic: {mnemonic:?}"),

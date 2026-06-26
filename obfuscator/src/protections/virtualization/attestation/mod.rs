@@ -180,7 +180,7 @@ fn vector_operation(operation: Operation) -> Box<dyn Encode> {
 fn accumulate<R: Rng>(
     rng: &mut R,
     accumulator: VMReg,
-    source: VMReg,
+    source: Option<VMReg>,
     value: u64,
     expected: &mut u64,
 ) -> Vec<Box<dyn Encode>> {
@@ -189,7 +189,11 @@ fn accumulate<R: Rng>(
     let operation = Operation::random(rng);
 
     instructions.extend(spill_register(accumulator));
-    instructions.extend(spill_register(source));
+
+    if let Some(source) = source {
+        instructions.extend(spill_register(source));
+    }
+
     instructions.extend(register_operation(operation));
     instructions.extend(reload_register(accumulator));
 
