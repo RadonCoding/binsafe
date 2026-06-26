@@ -83,15 +83,15 @@ fn query_kd_debugger_enabled(
         VMReg::Rsp,
         VMReg::None,
         1,
-        0x28,
+        0x20,
         VMSeg::None,
     ));
     // SystemInformation -> RDX
     b.extend(reload_register(VMReg::Rdx));
     // SystemInformationLength -> R8
     b.extend(set_register(VMReg::R8, 0x2));
-    // ReturnLength -> [RSP + ...]
-    b.extend(store(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
+    // ReturnLength -> R9
+    b.extend(set_register(VMReg::R9, 0));
     // NtQuerySystemInformation
     b.extend(invoke(VMReg::Rax));
 
@@ -108,7 +108,7 @@ fn query_kd_debugger_enabled(
         rng,
         ACCUMULATOR,
         VMReg::Rsp,
-        0x28,
+        0x20,
         VMWidth::Lower16,
         0x0100,
         expected,
