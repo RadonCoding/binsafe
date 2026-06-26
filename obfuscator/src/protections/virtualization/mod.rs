@@ -299,8 +299,9 @@ impl Protection for Virtualization {
             .lookup(engine.rt.data_labels[&DataDef::VmAttestation])
             as u32;
         let vattestation_offset = engine.pe.translate(RVA(vattestation_rva).into()).unwrap();
-        let vattestation_displacement =
-            (section.virtual_address.0 as i64 + attestation.len() as i64) - vattestation_rva as i64;
+        let vattestation_displacement = ((section.virtual_address.0 as i64
+            + attestation.len() as i64)
+            - vattestation_rva as i64) as i32;
         engine
             .pe
             .write(
