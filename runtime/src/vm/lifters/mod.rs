@@ -1,5 +1,3 @@
-
-
 use iced_x86::{Instruction, OpKind};
 
 use crate::vm::{
@@ -17,7 +15,7 @@ pub mod bswap;
 pub mod bt;
 pub mod cmov;
 pub mod cmpxchg;
-pub mod divide;
+pub mod div;
 pub mod extend;
 pub mod integer;
 pub mod lea;

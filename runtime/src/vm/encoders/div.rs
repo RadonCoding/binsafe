@@ -4,11 +4,11 @@ use crate::vm::encoders::Encode;
 use std::any::Any;
 
 #[derive(Debug)]
-pub struct Divide {
+pub struct Div {
     pub width: VMWidth,
 }
 
-impl Encode for Divide {
+impl Encode for Div {
     fn as_any(&self) -> &dyn Any {
         self
     }

@@ -7,7 +7,7 @@ use strum_macros::EnumIter;
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, divide, extend, integer, lea, multiply,
+    arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, div, extend, integer, lea, multiply,
     pcmpeqb, pmovskb, rdtsc, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
 #[cfg(debug_assertions)]
@@ -560,7 +560,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Box
             | Mnemonic::Divpd
             | Mnemonic::Vdivpd => arithmetic::encode(instruction)?,
             Mnemonic::Mul | Mnemonic::Imul => multiply::encode(instruction)?,
-            Mnemonic::Div | Mnemonic::Idiv => divide::encode(instruction)?,
+            Mnemonic::Div | Mnemonic::Idiv => div::encode(instruction)?,
             Mnemonic::Tzcnt => tzcnt::encode(instruction)?,
             Mnemonic::Bsr => bsr::encode(instruction)?,
             Mnemonic::Bswap => bswap::encode(instruction)?,

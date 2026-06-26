@@ -314,10 +314,11 @@ pub fn reload_vector(destination: VMVec, width: VMWidth) -> Vec<Box<dyn Encode>>
 
 pub fn mask(source: Option<VMReg>, mask: u64) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
-    if let Some(reg) = source {
+
+    if let Some(source) = source {
         instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
-            source: reg,
+            source,
         }));
     }
     instructions.push(Box::new(LoadImmediate {
@@ -332,6 +333,7 @@ pub fn mask(source: Option<VMReg>, mask: u64) -> Vec<Box<dyn Encode>> {
 
 pub fn sub(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
+
     if let Some(reg) = a {
         instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
@@ -352,6 +354,7 @@ pub fn sub(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
 
 pub fn add(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
+
     if let Some(reg) = a {
         instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
@@ -372,6 +375,7 @@ pub fn add(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
 
 pub fn mul(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
+
     if let Some(reg) = a {
         instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
@@ -393,6 +397,7 @@ pub fn mul(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
 
 pub fn xor(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
+
     if let Some(reg) = a {
         instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
@@ -413,6 +418,7 @@ pub fn xor(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
 
 pub fn shr(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
+
     if let Some(reg) = a {
         instructions.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,

@@ -14,6 +14,10 @@ const NT_QUERY_INFORMATION_THREAD_PROLOGUE: [u8; 3] = [0x4C, 0x8B, 0xD1];
 const NT_CURRENT_PROCESS: i64 = -1;
 const NT_CURRENT_THREAD: i64 = -2;
 
+const KUSER_SHARED_DATA: i32 = 0x7FFE0000;
+const KD_DEBUGGER_ENABLED_OFFSET: i32 = 0x02D4;
+
+const SYSTEM_KERNEL_DEBUGGER_INFORMATION: u64 = 0x23;
 const PROCESS_DEBUG_OBJECT_HANDLE: u64 = 0x1e;
 const THREAD_HIDE_FROM_DEBUGGER: u64 = 0x11;
 
@@ -32,6 +36,7 @@ pub fn generate(
 
     instructions.extend(set_register(ACCUMULATOR, 0));
 
+    instructions.extend(query_kd_debugger_enabled(engine, rng, expected));
     instructions.extend(query_process_debug_object_handle(engine, rng, expected));
     instructions.extend(set_hide_from_debugger(engine, rng, expected));
     instructions.extend(query_hide_from_debbuger(engine, rng, expected));
@@ -44,6 +49,66 @@ pub fn generate(
     instructions.extend(release(0x30));
 
     instructions
+}
+
+fn query_kd_debugger_enabled(
+    engine: &mut Engine,
+    rng: &mut impl Rng,
+    expected: &mut u64,
+) -> Vec<Box<dyn Encode>> {
+    let mut b = Vec::new();
+
+    b.extend(load(
+        VMReg::None,
+        VMReg::None,
+        1,
+        KUSER_SHARED_DATA + KD_DEBUGGER_ENABLED_OFFSET,
+        VMSeg::None,
+        VMWidth::Lower8,
+    ));
+    b.extend(accumulate(rng, ACCUMULATOR, None, 0, &mut *expected));
+
+    b.extend(import(engine, ImportDef::NtQuerySystemInformation));
+    b.extend(accumulate_prologue(
+        rng,
+        ACCUMULATOR,
+        VMReg::Rax,
+        &NT_QUERY_INFORMATION_PROCESS_PROLOGUE,
+        expected,
+    ));
+    // SystemInformationClass -> RCX
+    b.extend(set_register(VMReg::Rcx, SYSTEM_KERNEL_DEBUGGER_INFORMATION));
+    // ALLOCATE SystemKernelDebuggerInformation
+    b.extend(compute(VMReg::Rsp, VMReg::None, 1, 0x28, VMSeg::None));
+    // SystemInformation -> RDX
+    b.extend(reload_register(VMReg::Rdx));
+    // SystemInformationLength -> R8
+    b.extend(set_register(VMReg::R8, 0x2));
+    // ReturnLength -> [RSP + ...]
+    b.extend(store(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
+    // NtQuerySystemInformation
+    b.extend(invoke(VMReg::Rax));
+
+    b.extend(accumulate(
+        rng,
+        ACCUMULATOR,
+        Some(VMReg::Rax),
+        STATUS_SUCCESS,
+        expected,
+    ));
+
+    // READ KernelDebuggerEnabled + KernelDebuggerNotPresent
+    b.extend(accumulate_memory(
+        rng,
+        ACCUMULATOR,
+        VMReg::Rsp,
+        0x28,
+        VMWidth::Lower16,
+        0x0100,
+        expected,
+    ));
+
+    b
 }
 
 fn query_process_debug_object_handle(
@@ -79,7 +144,7 @@ fn query_process_debug_object_handle(
     b.extend(accumulate(
         rng,
         ACCUMULATOR,
-        VMReg::Rax,
+        Some(VMReg::Rax),
         STATUS_PORT_NOT_SET,
         expected,
     ));
@@ -127,7 +192,7 @@ fn set_hide_from_debugger(
     b.extend(accumulate(
         rng,
         ACCUMULATOR,
-        VMReg::Rax,
+        Some(VMReg::Rax),
         STATUS_SUCCESS,
         expected,
     ));
@@ -169,7 +234,7 @@ fn query_hide_from_debbuger(
     b.extend(accumulate(
         rng,
         ACCUMULATOR,
-        VMReg::Rax,
+        Some(VMReg::Rax),
         STATUS_SUCCESS,
         expected,
     ));
