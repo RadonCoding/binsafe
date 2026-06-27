@@ -275,7 +275,7 @@ impl Protection for Virtualization {
         }
 
         let section = engine.create_section(
-            None,
+            Some("🏴‍☠️"),
             &vcode,
             SectionCharacteristics::CNT_INITIALIZED_DATA
                 | SectionCharacteristics::MEM_READ
