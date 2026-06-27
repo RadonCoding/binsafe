@@ -2,7 +2,7 @@ use crate::vm::bytecode::{VMLogic, VMTest};
 use crate::vm::utils::{self};
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
 use iced_x86::code_asm::{
-    eax, r12, r13, r13b, r13d, r14, r14d, r15, r15b, r8, r8b, r8d, r9b, r9d, rax, rcx,
+    eax, r12, r13, r13d, r14, r14d, r15, r15b, r8, r8b, r8d, r9b, r9d, rax, rcx,
 };
 
 // unsigned char* (unsigned char*)
@@ -30,6 +30,7 @@ pub fn build(rt: &mut Runtime) {
 
     let mut validate = rt.asm.create_label();
 
+    let mut handle_jump = rt.asm.create_label();
     let mut handle_call = rt.asm.create_label();
     let mut handle_skip = rt.asm.create_label();
 
@@ -401,63 +402,41 @@ pub fn build(rt: &mut Runtime) {
         // jz ...
         rt.asm.jz(epilogue).unwrap();
 
-        // cmp r13b, ...
-        rt.asm
-            .cmp(r13b, rt.mapper.index(VMLogic::SAND) as i32)
-            .unwrap();
-        // je ...
-        rt.asm.je(handle_skip).unwrap();
+        let cases = vec![
+            (rt.mapper.index(VMLogic::SAND) as u8, handle_skip),
+            (rt.mapper.index(VMLogic::SOR) as u8, handle_skip),
+            (rt.mapper.index(VMLogic::SXOR) as u8, handle_skip),
+            (rt.mapper.index(VMLogic::CAND) as u8, handle_call),
+            (rt.mapper.index(VMLogic::COR) as u8, handle_call),
+            (rt.mapper.index(VMLogic::CXOR) as u8, handle_call),
+            (rt.mapper.index(VMLogic::JAND) as u8, handle_jump),
+            (rt.mapper.index(VMLogic::JOR) as u8, handle_jump),
+            (rt.mapper.index(VMLogic::JXOR) as u8, handle_jump),
+        ];
 
-        // cmp r13b, ...
-        rt.asm
-            .cmp(r13b, rt.mapper.index(VMLogic::SOR) as i32)
-            .unwrap();
-        // je ...
-        rt.asm.je(handle_skip).unwrap();
+        rt.jumps(r13, cases);
+    }
 
-        // cmp r13b, ...
-        rt.asm
-            .cmp(r13b, rt.mapper.index(VMLogic::SXOR) as i32)
-            .unwrap();
-        // je ...
-        rt.asm.je(handle_skip).unwrap();
-
+    rt.asm.set_label(&mut handle_jump).unwrap();
+    {
         // mov [r12 + ...], rax
         utils::vreg::store_reg(rt, r12, rax, VMReg::NBranch);
-
-        // cmp r13b, ...
-        rt.asm
-            .cmp(r13b, rt.mapper.index(VMLogic::CAND) as i32)
-            .unwrap();
-        // je ...
-        rt.asm.je(handle_call).unwrap();
-
-        // cmp r13b, ...
-        rt.asm
-            .cmp(r13b, rt.mapper.index(VMLogic::COR) as i32)
-            .unwrap();
-        // je ...
-        rt.asm.je(handle_call).unwrap();
-
-        // cmp r13b, ...
-        rt.asm
-            .cmp(r13b, rt.mapper.index(VMLogic::CXOR) as i32)
-            .unwrap();
-        // je ...
-        rt.asm.je(handle_call).unwrap();
-
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
 
     rt.asm.set_label(&mut handle_call).unwrap();
     {
+        // mov [r12 + ...], rax
+        utils::vreg::store_reg(rt, r12, rax, VMReg::NBranch);
+
         // sub [r12 + ...], 0x8
         utils::vreg::sub_imm(rt, r12, 0x8, VMReg::Rsp);
         // mov r8, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NExit, r8);
         // mov rax, [r12 + ...]; mov [rax], r8
         utils::vreg::store_mem(rt, r12, VMReg::Rsp, rax, r8);
+
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
