@@ -7,20 +7,17 @@ Type "r2 notepad.exe"
 Enter
 Type "aa"
 Enter
-Sleep 1s
-Type "pdf @ entry0"
+Type "pdb @ 0x0000000140005674"
 Enter
 Sleep 5s
 
 Type "q"
 Enter
-Sleep 1s
 
 Type "r2 notepad.protected.exe"
 Enter
 Type "aa"
 Enter
-Sleep 1s
-Type "pdf @ entry0"
+Type "pdb @ 0x0000000140005674"
 Enter
 Sleep 5s
