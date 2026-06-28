@@ -1,0 +1,49 @@
+name: Generate Example
+
+on:
+  push:
+    branches:
+      - readme-upgrade
+jobs:
+  generate-example:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: x86_64-pc-windows-gnu
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 radare2 wine wine32 wine64 ttyd vhs
+
+      - name: Build for Windows
+        run: cargo build --bin obfuscator --release --target x86_64-pc-windows-gnu
+
+      - name: Get notepad.exe
+        run: |
+          wineboot -u
+          cp ~/.wine/drive_c/windows/system32/notepad.exe .
+
+      - name: Run obfuscator
+        run: wine target/x86_64-pc-windows-gnu/release/obfuscator.exe notepad.exe --virtualization --mutation
+
+      - name: Generate example
+        run: vhs example.tape
+
+      - name: Commit and push
+        uses: EndBug/add-and-commit@v9
+        with:
+          default_author: github_actions
+          add: "example.gif"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
