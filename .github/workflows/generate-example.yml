@@ -34,11 +34,10 @@ jobs:
 
       - name: Generate example
         run: |
-          docker build -t vhs-r2 - <<'EOF'
-          FROM ghcr.io/charmbracelet/vhs
-          RUN apk add --no-cache radare2
-          EOF
-          docker run --rm -v $PWD:/vhs vhs-r2 example.tape
+          docker run --rm \
+            -v $PWD:/vhs \
+            -v $(which r2):/usr/local/bin/r2 \
+            ghcr.io/charmbracelet/vhs example.tape
 
       - name: Commit and push
         uses: EndBug/add-and-commit@v9
