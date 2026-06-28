@@ -6,7 +6,7 @@ Set Theme "Dracula"
 Type "r2 notepad.exe"
 Enter
 Type "aa"
-Enter¨
+Enter
 Sleep 1s
 Type "pdf @ entry0"
 Enter
