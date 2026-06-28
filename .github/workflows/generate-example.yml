@@ -15,24 +15,21 @@ jobs:
         with:
           target: x86_64-pc-windows-gnu
 
-      - name: Install MinGW-w64
-        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
-
-      - name: Install Wine
+      - name: Install dependencies
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y wine wine32 wine64
+          sudo apt-get install -y mingw-w64 radare2 wine wine32 wine64
 
       - name: Build for Windows
         run: cargo build --bin obfuscator --release --target x86_64-pc-windows-gnu
 
-      - name: Get notepad.exe from Wine
+      - name: Get notepad.exe
         run: |
           wineboot -u
           cp ~/.wine/drive_c/windows/system32/notepad.exe .
 
-      - name: Run obfuscator with Wine
+      - name: Run obfuscator
         run: wine target/x86_64-pc-windows-gnu/release/obfuscator.exe notepad.exe --virtualization --mutation
 
       - name: Generate example
