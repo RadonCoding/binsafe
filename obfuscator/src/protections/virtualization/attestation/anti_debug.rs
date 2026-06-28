@@ -149,7 +149,7 @@ fn query_process_debug_object_handle(
     // ProcessInformationLength -> R9
     b.extend(set_register(VMReg::R9, 8));
     // ReturnLength -> [RSP + ...]
-    b.extend(store(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
+    b.extend(store_memory(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
     // NtQueryInformationProcess
     b.extend(invoke(VMReg::Rax));
 
@@ -245,7 +245,7 @@ fn query_hide_from_debbuger(
     // ThreadInformationLength -> R9
     b.extend(set_register(VMReg::R9, 1));
     // ReturnLength -> [RSP + ...]
-    b.extend(store(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
+    b.extend(store_memory(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
     // NtQueryInformationThread
     b.extend(invoke(VMReg::Rax));
 
