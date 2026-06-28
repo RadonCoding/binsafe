@@ -25,11 +25,11 @@ Code virtualizer for compiled 64-bit portable executables.
 
 #### Bootstrap
 - **Assembly**: the VM is assembled directly into the output binary as x86 machine code, with functions and data shuffled into a randomized layout between builds.
-- **Imports**: all imports are resolved at runtime by walking the PEB, keyed by a nonce-seeded hash of module and export names rather than an import table.
+- **Imports**: the imports are resolved at runtime by walking the PEB, keyed by a nonce-seeded hash of module and export names rather than an import table.
 
 #### Execution
 - **Dispatch**: a stub transfers CPU state to the VM, which decrypts and interprets bytecode through indirect dispatch.
-- **Isolation**: each thread maintains an isolated context in thread-local storage, with a child context for nested execution.
+- **Isolation**: a thread maintains an isolated context in thread-local storage, with a child context for nested execution.
 - **Exceptions**: a vectored handler catches faults inside the VM and reconstructs the CPU context for external handlers.
 
 #### Protection
