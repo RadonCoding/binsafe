@@ -15,6 +15,9 @@ jobs:
         with:
           target: x86_64-pc-windows-gnu
 
+      - name: Install MinGW-w64
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+
       - name: Install Wine
         run: |
           sudo dpkg --add-architecture i386
