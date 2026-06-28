@@ -12,16 +12,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: x86_64-pc-windows-gnu
 
-      - name: Run build
-        run: cargo build --bin obfuscator --release
-
-      - name: Download notepad.exe
+      - name: Install Wine
         run: |
-          curl -L https://github.com/microsoft/Windows-classic-samples/raw/main/Samples/Win7Samples/apps/Notepad/notepad.exe -o notepad.exe
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y wine wine32 wine64
 
-      - name: Run obfuscator
-        run: ./target/release/obfuscator notepad.exe --virtualization --mutation
+      - name: Build for Windows
+        run: cargo build --bin obfuscator --release --target x86_64-pc-windows-gnu
+
+      - name: Get notepad.exe from Wine
+        run: |
+          wineboot -u
+          cp ~/.wine/drive_c/windows/system32/notepad.exe .
+
+      - name: Run obfuscator with Wine
+        run: wine target/x86_64-pc-windows-gnu/release/obfuscator.exe notepad.exe --virtualization --mutation
 
       - name: Generate example
         run: |
