@@ -24,7 +24,7 @@ jobs:
           echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
 
           sudo apt-get update
-          sudo apt-get install -y mingw-w64 radare2 wine wine32 wine64 vhs
+          sudo apt-get install -y mingw-w64 radare2 wine wine32 wine64 ttyd vhs
 
       - name: Build for Windows
         run: cargo build --bin obfuscator --release --target x86_64-pc-windows-gnu
