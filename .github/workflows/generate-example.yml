@@ -34,11 +34,12 @@ jobs:
 
       - name: Generate example
         run: |
-          docker run --rm -v $PWD:/vhs $(docker build -q - <<EOF
+          IMAGE=$(docker build -q - <<EOF
           FROM ghcr.io/charmbracelet/vhs
           RUN apt-get update && apt-get install -y radare2
           EOF
-          ) example.tape
+          )
+          docker run --rm -v $PWD:/vhs $IMAGE vhs example.tape
 
       - name: Commit and push
         uses: EndBug/add-and-commit@v9
