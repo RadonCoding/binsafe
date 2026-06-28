@@ -5,10 +5,8 @@ Set Theme "Dracula"
 
 Type "r2 notepad.exe"
 Enter
-Expect "\\[0x"
 Type "aa"
 Enter
-Expect "\\[0x"
 Type "pdf @ entry0"
 Enter
 Sleep 5s
@@ -16,10 +14,8 @@ Type "q"
 Enter
 Type "r2 notepad.protected.exe"
 Enter
-Expect "\\[0x"
 Type "aa"
 Enter
-Expect "\\[0x"
 Type "pdf @ entry0"
 Enter
 Sleep 5s
