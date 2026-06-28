@@ -13,8 +13,8 @@ Enter
 Sleep 5s
 
 Type "q"
-Sleep 1s
 Enter
+Sleep 1s
 
 Type "r2 notepad.protected.exe"
 Enter
