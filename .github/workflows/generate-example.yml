@@ -24,7 +24,7 @@ jobs:
 
       - name: Generate example
         run: |
-          docker run --rm -v $PWD:/vhs ghcr.io/charmbracelet/vhs example.tape
+          docker run --rm -v ${PWD}:/vhs ghcr.io/charmbracelet/vhs example.tape
 
       - name: Commit and push
         uses: EndBug/add-and-commit@v9
