@@ -37,6 +37,7 @@ jobs:
           docker run --rm \
             -v $PWD:/vhs \
             -v $(which r2):/usr/local/bin/r2 \
+            -v /usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu \
             ghcr.io/charmbracelet/vhs example.tape
 
       - name: Commit and push
