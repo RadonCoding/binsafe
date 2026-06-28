@@ -19,7 +19,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y mingw-w64 radare2 wine wine32 wine64
+          sudo apt-get install -y mingw-w64 radare2 wine wine32 wine64 ffmpeg ttyd vhs
 
       - name: Build for Windows
         run: cargo build --bin obfuscator --release --target x86_64-pc-windows-gnu
@@ -33,12 +33,7 @@ jobs:
         run: wine target/x86_64-pc-windows-gnu/release/obfuscator.exe notepad.exe --virtualization --mutation
 
       - name: Generate example
-        run: |
-          docker run --rm \
-            -v $PWD:/vhs \
-            -v $(which r2):/usr/local/bin/r2 \
-            -v /usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu \
-            ghcr.io/charmbracelet/vhs example.tape
+        run: vhs example.tape
 
       - name: Commit and push
         uses: EndBug/add-and-commit@v9
