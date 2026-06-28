@@ -1,0 +1,35 @@
+name: Generate Example
+
+on:
+  push:
+    branches:
+      - readme-upgrade
+jobs:
+  generate-example:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Run build
+        run: cargo build --bin obfuscator --release
+
+      - name: Copy notepad
+        run: copy C:\Windows\System32\notepad.exe notepad.exe
+
+      - name: Run obfuscator
+        run: ./target/release/obfuscator notepad.exe --virtualization --mutation
+
+      - name: Generate example
+        run: |
+          docker run --rm -v $PWD:/vhs ghcr.io/charmbracelet/vhs example.tape
+
+      - name: Commit and push
+        uses: EndBug/add-and-commit@v9
+        with:
+          default_author: github_actions
+          add: "example.gif"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

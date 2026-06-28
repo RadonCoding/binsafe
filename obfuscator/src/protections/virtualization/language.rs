@@ -495,7 +495,7 @@ pub fn load_memory(
     instructions
 }
 
-pub fn store(
+pub fn store_memory(
     base: VMReg,
     index: VMReg,
     scale: u8,
