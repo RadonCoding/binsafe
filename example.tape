@@ -11,8 +11,11 @@ Sleep 1s
 Type "pdf @ entry0"
 Enter
 Sleep 5s
+
 Type "q"
+Sleep 1s
 Enter
+
 Type "r2 notepad.protected.exe"
 Enter
 Type "aa"
