@@ -7,10 +7,7 @@ Code virtualizer for compiled 64-bit portable executables.
 ### 1. Obfuscator
 
 #### Analysis
-- **Disassembly**: the binary's code section is decoded and partitioned into basic blocks by tracing all reachable control flow, including switch tables and exception handler boundaries.
-
-#### Mutation
-- **Substitution**: instructions are substituted with algebraically equivalent sequences using dead-flag analysis to preserve correctness.
+- **Disassembly**: the binary's code section is disassembled and partitioned into basic blocks by tracing all reachable control flow, including switch tables and exception handler boundaries.
 
 #### Virtualization
 - **Lifting**: instructions are translated into a custom stack-machine bytecode that the runtime interprets.
@@ -43,7 +40,7 @@ The `tests` crate spins up an instrumented VM and compares its behavior against 
 - **Permutation**: each instruction sequence's dependency graph is exhaustively enumerated, with every valid ordering executed through the VM and verified.
 
 ## Usage
-`cargo run --release --bin obfuscator -- <filename> --virtualization --mutation`
+`cargo run --release --bin obfuscator -- <filename> --virtualization`
 
 ## Contributing
 1. Fork it
