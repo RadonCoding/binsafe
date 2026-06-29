@@ -9,7 +9,6 @@ use iced_x86::{
     Register,
 };
 use logger::info;
-use rand::Rng;
 use runtime::runtime::Runtime;
 use std::{collections::HashSet, fmt, mem};
 
@@ -353,6 +352,57 @@ impl<'a> Engine<'a> {
         references
     }
 
+    fn collect_excluded_ranges(&self) -> Vec<(u32, u32)> {
+        let mut ranges = Vec::<(u32, u32)>::new();
+
+        for entry in [
+            ImageDirectoryEntry::Export,
+            ImageDirectoryEntry::Import,
+            ImageDirectoryEntry::Resource,
+            ImageDirectoryEntry::Exception,
+            ImageDirectoryEntry::Security,
+            ImageDirectoryEntry::BaseReloc,
+            ImageDirectoryEntry::Debug,
+            ImageDirectoryEntry::TLS,
+            ImageDirectoryEntry::LoadConfig,
+            ImageDirectoryEntry::BoundImport,
+            ImageDirectoryEntry::IAT,
+            ImageDirectoryEntry::DelayImport,
+            ImageDirectoryEntry::COMDescriptor,
+        ] {
+            let Ok(dir) = self.pe.get_data_directory(entry) else {
+                continue;
+            };
+
+            let start = dir.virtual_address.0;
+            let end = start + dir.size;
+
+            ranges.push((start, end));
+
+            let Ok(offset) = self
+                .pe
+                .translate(PETranslation::Memory(dir.virtual_address))
+            else {
+                continue;
+            };
+            let Ok(bytes) = self.pe.get_slice_ref::<u8>(offset, dir.size as usize) else {
+                continue;
+            };
+
+            for chunk in bytes.chunks_exact(4) {
+                let rva = u32::from_le_bytes(chunk.try_into().unwrap());
+
+                if self.pe.get_section_by_rva(RVA(rva)).is_err() {
+                    continue;
+                };
+
+                ranges.push((rva, rva));
+            }
+        }
+
+        ranges
+    }
+
     pub fn scan(&mut self) {
         let entry_point = self.pe.get_entrypoint().unwrap();
         let code_section = self.pe.get_section_by_rva(entry_point).unwrap();
@@ -369,6 +419,36 @@ impl<'a> Engine<'a> {
         let data_references = self.collect_data_references(&code, ip);
         let code_references =
             self.collect_code_references(&code, ip, &code_section, &data_references);
+
+        let excluded = self.collect_excluded_ranges();
+
+        let is_excluded = |rva: u32| excluded.iter().any(|(s, e)| rva >= *s && rva < *e);
+
+        let mut user_data = data_references
+            .iter()
+            .cloned()
+            .filter(|r| !is_excluded(*r))
+            .collect::<Vec<_>>();
+
+        user_data.sort();
+
+        let section_end = code_section.virtual_address.0 + code_section.virtual_size;
+
+        for (i, &rva) in user_data.iter().enumerate() {
+            let next = if i + 1 < user_data.len() {
+                user_data[i + 1]
+            } else {
+                section_end
+            };
+
+            let size = (next - rva) as usize;
+            let offset = self.pe.translate(PETranslation::Memory(RVA(rva))).unwrap();
+            let Ok(bytes) = self.pe.get_slice_ref::<u8>(offset, size) else {
+                continue;
+            };
+
+            info!("data 0x{:08X} size={} bytes={:02X?}", rva, size, bytes);
+        }
 
         let mut code_references = code_references.iter().cloned().collect::<Vec<u32>>();
         code_references.sort();
