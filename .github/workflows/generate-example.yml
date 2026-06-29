@@ -3,7 +3,7 @@ name: Generate Example
 on:
   push:
     branches:
-      - readme-upgrade
+      - main
 jobs:
   generate-example:
     runs-on: ubuntu-latest
