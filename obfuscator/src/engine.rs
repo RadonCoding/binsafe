@@ -93,21 +93,13 @@ impl<'a> Engine<'a> {
         assert!(data.len() <= block.size);
 
         let mut padded = data.to_vec();
-
-        let remaining = block.size - padded.len();
-
-        if remaining > 0 {
-            let mut junk = vec![0u8; remaining];
-            rand::thread_rng().fill(&mut junk[..]);
-
-            padded.extend(junk);
-        }
+        padded.resize_with(block.size, || rand::random::<u8>());
 
         self.pe.write(block.offset, padded).unwrap();
 
         let bytes = self
             .pe
-            .get_slice_ref::<u8>(block.offset, block.size)
+            .get_slice_ref::<u8>(block.offset, data.len())
             .unwrap();
 
         let mut decoder =

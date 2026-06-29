@@ -2,11 +2,7 @@ use clap::Parser;
 use logger::info;
 use std::fs;
 
-use obfuscator::{
-    args::Args,
-    engine::Engine,
-    protections::{mutation::Mutation, virtualization::Virtualization},
-};
+use obfuscator::{args::Args, engine::Engine, protections::virtualization::Virtualization};
 
 fn main() {
     let args = Args::parse();
@@ -16,14 +12,7 @@ fn main() {
     engine.scan();
 
     if args.virtualization {
-        if args.mutation {
-            engine.apply::<Mutation>();
-        }
         engine.apply::<Virtualization>();
-    }
-
-    if args.mutation {
-        engine.apply::<Mutation>();
     }
 
     let protected = engine.execute();
