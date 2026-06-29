@@ -9,7 +9,6 @@ Type "aa"
 Enter
 Type "pdb @ sym.main"
 Enter
-Sleep 5s
 
 Type "q"
 Enter
