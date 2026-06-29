@@ -23,6 +23,6 @@ Type "s 0x140007132"
 Enter
 Type "s `aoj~jump[1]`"
 Enter
-Type "pdb"
+Type "pd 10"
 Enter
 Sleep 5s
