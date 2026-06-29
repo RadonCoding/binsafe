@@ -19,7 +19,7 @@ Type "aa"
 Enter
 Type "pdb @ sym.main"
 Enter
-Type "s 0x140007132"
+Type "s 0x140006adb"
 Enter
 Type "s `aoj~jump[1]`"
 Enter
