@@ -35,7 +35,7 @@ jobs:
           cp ~/.wine/drive_c/windows/system32/notepad.exe .
 
       - name: Run obfuscator
-        run: wine target/x86_64-pc-windows-gnu/release/obfuscator.exe notepad.exe --virtualization --mutation
+        run: wine target/x86_64-pc-windows-gnu/release/obfuscator.exe notepad.exe --virtualization
 
       - name: Generate example
         run: vhs example.tape
