@@ -1,6 +1,6 @@
 ![](example.gif)
 
-Code virtualizer for compiled 64-bit portable executables.
+Obfuscator for compiled 64-bit portable executables.
 
 ## How it works
 
