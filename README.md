@@ -21,8 +21,8 @@ Obfuscator for compiled 64-bit portable executables.
 ### 2. Runtime
 
 #### Bootstrap
-- **Assembly**: the VM is assembled directly into the output binary as x86 machine code, with functions and data shuffled into a randomized layout between builds.
-- **Imports**: the imports are resolved at runtime by walking the PEB, keyed by a nonce-seeded hash of module and export names rather than an import table.
+- **Assembly**: the runtime is assembled directly into the output binary with code and data shuffled into a randomized layout.
+- **Imports**: the imports are resolved at runtime by hashes of module and export names.
 
 #### Execution
 - **Dispatch**: a stub transfers CPU state to the VM, which decrypts and interprets bytecode through indirect dispatch.
