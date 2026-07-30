@@ -7,7 +7,7 @@ Obfuscator for compiled 64-bit portable executables.
 ### 1. Obfuscator
 
 #### Analysis
-- **Disassembly**: the binary's code section is disassembled and partitioned into basic blocks by tracing all reachable control flow, including switch tables and exception handler boundaries.
+- **Disassembly**: the binary's code section is disassembled and partitioned into basic blocks by tracing all reachable control flow.
 
 #### Virtualization
 - **Lifting**: instructions are translated into a custom stack-machine bytecode that the runtime interprets.
