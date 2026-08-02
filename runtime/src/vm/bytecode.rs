@@ -667,8 +667,8 @@ where
     operations = scramble::scramble(mapper, operations);
     snapshots.record(Phase::Scramble, &operations);
 
-    // operations = Mutation.run(mapper, operations);
-    // snapshots.record(Mutation.phase(), &operations);
+    operations = Mutation.run(mapper, operations);
+    snapshots.record(Mutation.phase(), &operations);
 
     operations = Encrypt.run(mapper, operations);
     snapshots.record(Encrypt.phase(), &operations);
