@@ -79,7 +79,7 @@ impl Encode for Jcc {
         -1
     }
 
-    fn branches(&self) -> bool {
+    fn is_branch(&self) -> bool {
         true
     }
 }
@@ -103,6 +103,6 @@ pub fn contradiction() -> VMCondition {
 }
 
 /// Whether `condition` is the canonical [`tautology`] or [`contradiction`] sub-condition.
-pub fn is_canonical(condition: &VMCondition) -> bool {
+pub fn canonical(condition: &VMCondition) -> bool {
     matches!(condition.test, VMTest::EQ | VMTest::NEQ) && condition.lhs == condition.rhs
 }

@@ -74,7 +74,7 @@ impl Encode for Skip {
         self.expansion.iter().map(|op| op.depth()).sum()
     }
 
-    fn branches(&self) -> bool {
+    fn is_branch(&self) -> bool {
         true
     }
 
@@ -86,7 +86,7 @@ impl Encode for Skip {
         Some(&mut self.expansion)
     }
 
-    fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8])) {
+    fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
         let length = self.expansion[1..]
             .iter()
             .map(|op| op.size(mapper))
@@ -101,7 +101,7 @@ impl Encode for Skip {
             )
         };
 
-        transform(&mut source);
+        transform(&mut source, 0);
 
         self.width = width;
         self.source = source;

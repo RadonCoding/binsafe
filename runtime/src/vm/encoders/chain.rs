@@ -94,7 +94,7 @@ impl Encode for Chain {
         Some(&mut self.operations)
     }
 
-    fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8])) {
+    fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
         for jump in &self.jumps {
             let index = self
                 .operations
@@ -122,15 +122,14 @@ impl Encode for Chain {
 
             let offset = i16::try_from(target as isize - after as isize).unwrap();
 
-            let mut bytes = offset.to_le_bytes().to_vec();
-
-            transform(&mut bytes);
+            let mut source = offset.to_le_bytes().to_vec();
+            transform(&mut source, index + 1);
 
             let load = self.operations[index + 1]
                 .as_any_mut()
                 .downcast_mut::<LoadImmediate>()
                 .unwrap();
-            load.source = bytes;
+            load.source = source;
         }
     }
 }

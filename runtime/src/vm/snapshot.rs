@@ -8,6 +8,7 @@ use crate::vm::{
 };
 
 #[cfg(debug_assertions)]
+#[derive(Clone)]
 struct Snapshot {
     phase: Phase,
     operations: Vec<(usize, String)>,
@@ -48,6 +49,7 @@ impl Snapshot {
 }
 
 #[cfg(debug_assertions)]
+#[derive(Clone)]
 pub struct Snapshots {
     snapshots: Vec<Snapshot>,
 }
@@ -134,13 +136,25 @@ impl fmt::Display for Snapshots {
             .map(|(address, _)| *address)
             .collect::<HashSet<usize>>();
 
+        let width = self
+            .snapshots
+            .iter()
+            .flat_map(|snapshot| {
+                snapshot
+                    .operations
+                    .iter()
+                    .map(|(target, _)| self.trace(*target).1.len())
+            })
+            .max()
+            .unwrap_or(0);
+
         let render = |original: Option<usize>, markers: &str, display: &str| {
             let original = match original {
                 Some(value) => format!("{:>3}", value),
                 None => "   ".to_string(),
             };
             let display = display.replace('\n', "\n         ");
-            format!("{} {:<4} {}", original, markers, display)
+            format!("{} {:<width$} {}", original, markers, display)
         };
 
         let mut lines = last
@@ -154,9 +168,9 @@ impl fmt::Display for Snapshots {
 
         let mut latest = HashMap::new();
 
-        for (snapshot_index, snapshot) in self.snapshots.iter().enumerate() {
+        for (index, snapshot) in self.snapshots.iter().enumerate() {
             for (position, (address, content)) in snapshot.operations.iter().enumerate() {
-                latest.insert(*address, (snapshot_index, position, content.clone()));
+                latest.insert(*address, (index, position, content.clone()));
             }
         }
 

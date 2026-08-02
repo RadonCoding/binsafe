@@ -36,14 +36,6 @@ impl Label {
     pub fn id(&self) -> usize {
         self.id
     }
-
-    pub fn is_marker(&self) -> bool {
-        self.kind == LabelKind::Marker
-    }
-
-    pub fn is_target(&self) -> bool {
-        self.kind == LabelKind::Target
-    }
 }
 
 impl Encode for Label {
@@ -57,5 +49,9 @@ impl Encode for Label {
 
     fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {
         vec![]
+    }
+
+    fn is_target(&self) -> bool {
+        self.kind == LabelKind::Target
     }
 }

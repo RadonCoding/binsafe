@@ -10,12 +10,12 @@ Obfuscator for compiled 64-bit portable executables.
 - **Disassembly**: the binary's code section is disassembled and partitioned into basic blocks by tracing all reachable control flow.
 
 #### Virtualization
-- **Lifting**: instructions are translated into a custom stack-machine bytecode that the runtime interprets.
+- **Lifting**: instructions are translated into bytecode that the runtime interprets.
 - **Peephole**: bytecode is scanned in multiple passes to simplify sequences and collapse redundant operations.
 - **Permutation**: operations are reordered through their dependency graph into a semantically equivalent sequence.
 - **Scrambling**: operations are placed in a randomized physical layout connected by jumps that follow their original execution order.
 - **Mutation**: operations are rewritten into logically equivalent forms whose structure varies between builds.
-- **Encryption**: immediate values are masked against a rolling key, with each block's key derived from the ciphertext tail of the previous so tampering silently corrupts all that follow.
+- **Encryption**: immediate values are encrypted using key(s) that evolve in the execution order of the block.
 - **Patching**: virtualized blocks are replaced with dispatch stubs that transfer control to the VM.
 
 ### 2. Runtime
@@ -30,7 +30,7 @@ Obfuscator for compiled 64-bit portable executables.
 - **Exceptions**: a vectored handler catches faults inside the VM and reconstructs the CPU context for external handlers.
 
 #### Protection
-- **Attestation**: anti-debug and integrity checks run as VM bytecode and feed directly into block decryption, silently corrupting execution on tampering or debugging.
+- **Attestation**: anti-debug and integrity checks run as bytecode and feed directly into block decryption, corrupting execution on tampering or debugging.
 
 ## Testing
 

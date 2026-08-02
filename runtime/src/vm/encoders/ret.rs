@@ -34,7 +34,7 @@ impl Encode for Ret {
         -1
     }
 
-    fn branches(&self) -> bool {
+    fn is_branch(&self) -> bool {
         true
     }
 }

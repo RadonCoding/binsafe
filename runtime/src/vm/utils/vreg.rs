@@ -1,8 +1,14 @@
 use crate::{runtime::Runtime, vm::bytecode::VMReg};
 
-use iced_x86::code_asm::{ptr, qword_ptr, AsmRegister32, AsmRegister64};
+use iced_x86::code_asm::{
+    asm_traits::{CodeAsmAdd, CodeAsmCmp, CodeAsmImul2, CodeAsmMov, CodeAsmSub},
+    ptr, qword_ptr, AsmMemoryOperand, AsmRegister32, AsmRegister64, CodeAssembler,
+};
 
-pub fn load_reg(rt: &mut Runtime, base: AsmRegister64, src: VMReg, dst: AsmRegister64) {
+pub fn load_reg<T>(rt: &mut Runtime, base: AsmRegister64, src: VMReg, dst: T)
+where
+    CodeAssembler: CodeAsmMov<T, AsmMemoryOperand>,
+{
     // mov ..., [...]
     rt.asm
         .mov(dst, ptr(base + rt.mapper.index(src) as i32 * 8))
@@ -31,7 +37,10 @@ pub fn load_mem(
     rt.asm.mov(dst, ptr(tmp)).unwrap();
 }
 
-pub fn store_reg(rt: &mut Runtime, base: AsmRegister64, src: AsmRegister64, dst: VMReg) {
+pub fn store_reg<T>(rt: &mut Runtime, base: AsmRegister64, src: T, dst: VMReg)
+where
+    CodeAssembler: CodeAsmMov<AsmMemoryOperand, T>,
+{
     // mov [...], ...
     rt.asm
         .mov(ptr(base + rt.mapper.index(dst) as i32 * 8), src)
@@ -67,7 +76,10 @@ pub fn store_mem(
     rt.asm.mov(ptr(tmp), src).unwrap();
 }
 
-pub fn add_reg(rt: &mut Runtime, base: AsmRegister64, src: AsmRegister64, dst: VMReg) {
+pub fn add_reg<T>(rt: &mut Runtime, base: AsmRegister64, src: T, dst: VMReg)
+where
+    CodeAssembler: CodeAsmAdd<AsmMemoryOperand, T>,
+{
     // add [...], ...
     rt.asm
         .add(ptr(base + rt.mapper.index(dst) as i32 * 8), src)
@@ -81,14 +93,20 @@ pub fn add_imm(rt: &mut Runtime, base: AsmRegister64, src: i32, dst: VMReg) {
         .unwrap();
 }
 
-pub fn reg_add(rt: &mut Runtime, base: AsmRegister64, src: VMReg, dst: AsmRegister64) {
+pub fn reg_add<T>(rt: &mut Runtime, base: AsmRegister64, src: VMReg, dst: T)
+where
+    CodeAssembler: CodeAsmAdd<T, AsmMemoryOperand>,
+{
     // add ..., [...]
     rt.asm
         .add(dst, ptr(base + rt.mapper.index(src) as i32 * 8))
         .unwrap();
 }
 
-pub fn sub_reg(rt: &mut Runtime, base: AsmRegister64, src: AsmRegister64, dst: VMReg) {
+pub fn sub_reg<T>(rt: &mut Runtime, base: AsmRegister64, src: T, dst: VMReg)
+where
+    CodeAssembler: CodeAsmSub<AsmMemoryOperand, T>,
+{
     // sub [...], ...
     rt.asm
         .sub(ptr(base + rt.mapper.index(dst) as i32 * 8), src)
@@ -102,14 +120,20 @@ pub fn sub_imm(rt: &mut Runtime, base: AsmRegister64, src: i32, dst: VMReg) {
         .unwrap();
 }
 
-pub fn reg_sub(rt: &mut Runtime, base: AsmRegister64, src: VMReg, dst: AsmRegister64) {
+pub fn reg_sub<T>(rt: &mut Runtime, base: AsmRegister64, src: VMReg, dst: T)
+where
+    CodeAssembler: CodeAsmSub<T, AsmMemoryOperand>,
+{
     // sub ..., [...]
     rt.asm
         .sub(dst, ptr(base + rt.mapper.index(src) as i32 * 8))
         .unwrap();
 }
 
-pub fn cmp_reg(rt: &mut Runtime, base: AsmRegister64, dst: VMReg, src: AsmRegister64) {
+pub fn cmp_reg<T>(rt: &mut Runtime, base: AsmRegister64, dst: VMReg, src: T)
+where
+    CodeAssembler: CodeAsmCmp<AsmMemoryOperand, T>,
+{
     // cmp [...], ...
     rt.asm
         .cmp(ptr(base + rt.mapper.index(dst) as i32 * 8), src)
@@ -120,6 +144,16 @@ pub fn cmp_imm(rt: &mut Runtime, base: AsmRegister64, dst: VMReg, src: i32) {
     // cmp [...], ...
     rt.asm
         .cmp(qword_ptr(base + rt.mapper.index(dst) as i32 * 8), src)
+        .unwrap();
+}
+
+pub fn reg_imul<T>(rt: &mut Runtime, base: AsmRegister64, src: VMReg, dst: T)
+where
+    CodeAssembler: CodeAsmImul2<T, AsmMemoryOperand>,
+{
+    // imul ..., [...]
+    rt.asm
+        .imul_2(dst, ptr(base + rt.mapper.index(src) as i32 * 8))
         .unwrap();
 }
 

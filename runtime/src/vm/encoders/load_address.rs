@@ -27,7 +27,8 @@ impl Encode for LoadAddress {
         vec![
             Effect::Register(self.source.base),
             Effect::Register(self.source.index),
-            Effect::Register(VMReg::VImm),
+            Effect::Register(VMReg::VImmAdd),
+            Effect::Register(VMReg::VImmMul),
         ]
     }
 

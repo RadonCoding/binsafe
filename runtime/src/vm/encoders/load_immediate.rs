@@ -25,7 +25,10 @@ impl Encode for LoadImmediate {
     }
 
     fn reads(&self) -> Vec<super::Effect> {
-        vec![Effect::Register(VMReg::VImm)]
+        vec![
+            Effect::Register(VMReg::VImmAdd),
+            Effect::Register(VMReg::VImmMul),
+        ]
     }
 
     fn depth(&self) -> i32 {

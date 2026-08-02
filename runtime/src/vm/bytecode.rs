@@ -143,7 +143,8 @@ mapped! {
 
         VImage, // Image Base
 
-        VImm, // Immediate Key
+        VImmAdd, // Immediate Addend
+        VImmMul, // Immediate Multiplier
 
         VStack, // Virtual Stack
         VScratch, // Virtual Scratch
