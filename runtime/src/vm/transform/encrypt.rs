@@ -1,12 +1,15 @@
-use std::any::Any;
+use std::matches;
 
 use rand::Rng;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMReg, VMWidth};
+use crate::vm::encoders::discard::Discard;
+use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::load_register::LoadRegister;
+use crate::vm::encoders::mul::Mul;
 use crate::vm::encoders::rol::Rol;
 use crate::vm::encoders::ror::Ror;
 use crate::vm::encoders::store_register::StoreRegister;
@@ -17,12 +20,11 @@ use crate::vm::transform::{deadzones, Phase, Transform};
 struct Encryptor<'a> {
     mapper: &'a mut Mapper,
     operations: &'a mut Vec<Box<dyn Encode>>,
-    deadzones: Vec<bool>,
-    position: usize,
-    key: u64,
+    addend: u64,
+    multiplier: u64,
 }
 
-/// Encrypts every immediate against a rolling key held in [`VMReg::VImm`], emitting roll sequences between immediates.
+/// Encrypts every immediate against rolling immediates held in [`VMReg::VImmAdd`] and [`VMReg::VImmMul`].
 pub struct Encrypt;
 
 impl Transform for Encrypt {
@@ -33,12 +35,13 @@ impl Transform for Encrypt {
     fn run(&self, mapper: &mut Mapper, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
         let mut operations = operations;
 
-        let key = rand::thread_rng().gen::<u64>();
+        let addend = rand::thread_rng().gen::<u64>();
+        let multiplier = rand::thread_rng().gen::<u64>() | 1;
 
-        let mut encryptor = Encryptor::new(mapper, &mut operations, key);
+        let mut encryptor = Encryptor::new(mapper, &mut operations, addend, multiplier);
 
         encryptor.process();
-        encryptor.prologue(key);
+        encryptor.prologue(addend, multiplier);
 
         operations
     }
@@ -46,234 +49,361 @@ impl Transform for Encrypt {
 
 impl<'a> Encryptor<'a> {
     /// Builds an [`Encryptor`] with a deadzone mask derived from a depth-first flag-effect scan over `operations` and their children.
-    fn new(mapper: &'a mut Mapper, operations: &'a mut Vec<Box<dyn Encode>>, key: u64) -> Self {
-        let deadzones = deadzones(operations, |effect| {
-            matches!(effect, Effect::Register(VMReg::Flags))
-        });
-
+    fn new(
+        mapper: &'a mut Mapper,
+        operations: &'a mut Vec<Box<dyn Encode>>,
+        addend: u64,
+        multiplier: u64,
+    ) -> Self {
         Self {
             mapper,
             operations,
-            deadzones,
-            position: 0,
-            key,
+            addend,
+            multiplier,
         }
     }
 
-    /// Encrypts each operation in execution order, rolling the key after every immediate.
+    /// Encrypts each operation in execution order, rolling both keys after every immediate.
     fn process(&mut self) {
         walk(
             self.mapper,
             self.operations,
-            &mut self.position,
-            &self.deadzones,
-            &mut self.key,
-            true,
+            &mut self.addend,
+            &mut self.multiplier,
+            0,
         );
     }
 
-    /// Emits the seed sequence that initializes [`VMReg::VImm`] to the starting key.
-    fn prologue(&mut self, key: u64) {
+    /// Emits the seed sequence for [`VMReg::VImmAdd`] and [`VMReg::VImmMul`].
+    fn prologue(&mut self, addend: u64, multiplier: u64) {
         self.operations.insert(
             0,
             Box::new(LoadImmediate {
                 width: VMWidth::Lower64,
-                source: key.to_le_bytes().to_vec(),
+                source: addend.to_le_bytes().to_vec(),
             }),
         );
         self.operations.insert(
             1,
+            Box::new(LoadImmediate {
+                width: VMWidth::Lower64,
+                source: invert(multiplier).to_le_bytes().to_vec(),
+            }),
+        );
+        self.operations.insert(
+            2,
             Box::new(StoreRegister {
                 width: VMWidth::Lower64,
-                destination: VMReg::VImm,
+                destination: VMReg::VImmMul,
+            }),
+        );
+        self.operations.insert(
+            3,
+            Box::new(StoreRegister {
+                width: VMWidth::Lower64,
+                destination: VMReg::VImmAdd,
             }),
         );
     }
 }
 
-/// Encrypts each leaf in place at the top level, splicing a roll sequence after every immediate, descending into children without rolling.
+/// Emits a sequence to restore [`VMReg::VImmAdd`]/[`VMReg::VImmMul`] using the current values.
+fn restore(
+    destination_addend: u64,
+    destination_multiplier: u64,
+    source_addend: u64,
+    source_multiplier: u64,
+) -> Vec<Box<dyn Encode>> {
+    let mut sequence = Vec::<Box<dyn Encode>>::new();
+
+    let mut source = destination_addend.to_le_bytes().to_vec();
+    encrypt(&mut source, source_addend, source_multiplier);
+    sequence.push(Box::new(LoadImmediate {
+        width: VMWidth::Lower64,
+        source,
+    }));
+
+    let mut source = invert(destination_multiplier).to_le_bytes().to_vec();
+    encrypt(&mut source, source_addend, source_multiplier);
+    sequence.push(Box::new(LoadImmediate {
+        width: VMWidth::Lower64,
+        source,
+    }));
+
+    sequence.push(Box::new(StoreRegister {
+        width: VMWidth::Lower64,
+        destination: VMReg::VImmMul,
+    }));
+
+    sequence.push(Box::new(StoreRegister {
+        width: VMWidth::Lower64,
+        destination: VMReg::VImmAdd,
+    }));
+
+    sequence
+}
+
+/// Encrypts each leaf in place splicing a roll sequence after every top-level immediate.
 fn walk(
     mapper: &mut Mapper,
     operations: &mut Vec<Box<dyn Encode>>,
-    position: &mut usize,
-    deadzones: &[bool],
-    key: &mut u64,
-    roll: bool,
-) {
+    addend: &mut u64,
+    multiplier: &mut u64,
+    level: i32,
+) -> Vec<(u64, u64)> {
+    let outer_addend = *addend;
+    let outer_multiplier = *multiplier;
+
+    let deadzones = deadzones(operations, |effect| {
+        matches!(effect, Effect::Register(VMReg::Flags))
+    });
+
+    let mut trace = Vec::with_capacity(operations.len());
+
     let mut i = 0;
 
+    let mut position = 0;
+
     while i < operations.len() {
-        let entry = *key;
+        trace.push((*addend, *multiplier));
+
+        if let Some(label) = operations[i].as_any().downcast_ref::<Label>() {
+            if label.is_target() {
+                let sequence = restore(outer_addend, outer_multiplier, *addend, *multiplier);
+
+                *addend = outer_addend;
+                *multiplier = outer_multiplier;
+
+                let length = sequence.len();
+                operations.splice(i + 1..i + 1, sequence);
+
+                for _ in 0..length {
+                    trace.push((*addend, *multiplier));
+                }
+
+                i += length;
+            }
+        }
 
         if let Some(children) = operations[i].children_mut() {
-            nested(mapper, children, position, deadzones, key);
-            operations[i].seal(mapper, &mut |source| {
-                let bytes = entry.to_le_bytes();
+            let mut inner_addend = *addend;
+            let mut inner_multiplier = *multiplier;
 
-                for (i, byte) in source.iter_mut().enumerate() {
-                    *byte ^= bytes[i];
+            let mut inner_trace = walk(
+                mapper,
+                children,
+                &mut inner_addend,
+                &mut inner_multiplier,
+                level + 1,
+            );
+
+            if inner_addend != *addend || inner_multiplier != *multiplier {
+                let sequence = restore(*addend, *multiplier, inner_addend, inner_multiplier);
+                let length = sequence.len();
+                children.extend(sequence);
+
+                for _ in 0..length {
+                    inner_trace.push((inner_addend, inner_multiplier));
                 }
+            }
+
+            operations[i].seal(mapper, &mut |source, index| {
+                let (addend, multiplier) = inner_trace[index];
+                encrypt(source, addend, multiplier);
             });
+
             i += 1;
+
+            position += 1;
+
             continue;
         }
 
-        if leaf(&mut operations[i], *key) {
-            let p = *position;
-
-            *position += 1;
-
-            if roll {
-                let sequence = rolling(key, !deadzones[p]);
+        if leaf(&mut operations[i], *addend, *multiplier) {
+            if level <= 1 {
+                let sequence = transform(addend, multiplier, !deadzones[position]);
                 let length = sequence.len();
                 operations.splice(i + 1..i + 1, sequence);
+
+                for _ in 0..length {
+                    trace.push((*addend, *multiplier));
+                }
+
                 i += length;
             }
-        } else {
-            *position += 1;
         }
 
         i += 1;
+        position += 1;
     }
-}
 
-/// Encrypts each leaf in place inside a children slice without rolling, descending recursively.
-fn nested(
-    mapper: &mut Mapper,
-    operations: &mut [Box<dyn Encode>],
-    position: &mut usize,
-    deadzones: &[bool],
-    key: &mut u64,
-) {
-    for operation in operations.iter_mut() {
-        let entry = *key;
-
-        if let Some(children) = operation.children_mut() {
-            nested(mapper, children, position, deadzones, key);
-
-            operation.seal(mapper, &mut |source| {
-                let bytes = entry.to_le_bytes();
-
-                for (i, byte) in source.iter_mut().enumerate() {
-                    *byte ^= bytes[i];
-                }
-            });
-            continue;
-        }
-
-        leaf(operation, *key);
-
-        *position += 1;
-    }
+    trace
 }
 
 /// Encrypts the leaf in place when it matches [`LoadImmediate`] or [`LoadAddress`], returning whether a match was found.
-fn leaf(operation: &mut Box<dyn Encode>, key: u64) -> bool {
-    let any: &mut dyn Any = operation.as_mut();
-
-    if let Some(load) = any.downcast_mut::<LoadImmediate>() {
-        xor(&mut load.source, load.width, key);
+fn leaf(operation: &mut Box<dyn Encode>, addend: u64, multiplier: u64) -> bool {
+    if let Some(load) = operation.as_any_mut().downcast_mut::<LoadImmediate>() {
+        encrypt(&mut load.source, addend, multiplier);
         return true;
     }
 
-    if let Some(load) = any.downcast_mut::<LoadAddress>() {
-        load.source.displacement ^= (key & 0xFFFF_FFFF) as i32;
+    if let Some(load) = operation.as_any_mut().downcast_mut::<LoadAddress>() {
+        let mut displacement = load.source.displacement.to_le_bytes();
+        encrypt(&mut displacement, addend, multiplier);
+        load.source.displacement = i32::from_le_bytes(displacement);
         return true;
     }
 
     false
 }
 
-/// XORs `source` byte-for-byte against the width-matching slice of `key`.
-fn xor(source: &mut [u8], width: VMWidth, key: u64) {
-    let bytes = key.to_le_bytes();
-    let offset = if width == VMWidth::Higher8 { 1 } else { 0 };
+/// Computes the multiplicative inverse of odd `x` modulo 2^64.
+fn invert(x: u64) -> u64 {
+    let mut inverse = x;
 
-    for (i, byte) in source.iter_mut().enumerate() {
-        *byte ^= bytes[offset + i];
+    for _ in 0..5 {
+        inverse = inverse.wrapping_mul(2u64.wrapping_sub(x.wrapping_mul(inverse)));
     }
+
+    inverse
 }
 
-/// Creates a random transformation sequence for [`VMReg::VImm`] and updates `key` while preserving flags.
-fn rolling(key: &mut u64, preserve: bool) -> Vec<Box<dyn Encode>> {
+/// Encrypts `source` against `addend` and `multiplier`.
+fn encrypt(source: &mut [u8], addend: u64, multiplier: u64) {
+    let mut buffer = [0u8; 8];
+    buffer[..source.len()].copy_from_slice(source);
+
+    let plaintext = u64::from_le_bytes(buffer);
+    let ciphertext = plaintext.wrapping_add(addend).wrapping_mul(multiplier);
+    source.copy_from_slice(&ciphertext.to_le_bytes()[..source.len()]);
+}
+
+/// Creates a random transformation sequence for [`VMReg::VImmAdd`] and [`VMReg::VImmMul`] while preserving flags.
+fn transform(addend: &mut u64, multiplier: &mut u64, preserve: bool) -> Vec<Box<dyn Encode>> {
     let mut rng = rand::thread_rng();
 
-    let mut sequence = Vec::new();
+    let mut sequence = Vec::<Box<dyn Encode>>::new();
 
     if preserve {
         sequence.push(Box::new(LoadRegister {
             width: VMWidth::Lower64,
             source: VMReg::Flags,
-        }) as Box<dyn Encode>);
+        }));
     }
 
-    sequence.push(Box::new(LoadRegister {
-        width: VMWidth::Lower64,
-        source: VMReg::VImm,
-    }) as Box<dyn Encode>);
-
-    match rng.gen_range(0..3) {
+    match rng.gen_range(0..2) {
         0 => {
-            let (width, bytes) = match rng.gen_range(0..16) {
-                0..=9 => (VMWidth::Lower8, 1),
-                10..=13 => (VMWidth::Lower16, 2),
-                14 => (VMWidth::Lower32, 4),
-                _ => (VMWidth::Lower64, 8),
+            let (width, mut source, operation, apply): (
+                VMWidth,
+                Vec<u8>,
+                Box<dyn Encode>,
+                Box<dyn FnOnce(&mut u64)>,
+            ) = match rng.gen_range(0..3) {
+                0 => {
+                    let (width, constant) = match rng.gen_range(0..10) {
+                        0..=4 => (VMWidth::Lower8, rng.gen::<u8>() as u64),
+                        5..=7 => (VMWidth::Lower16, rng.gen::<u16>() as u64),
+                        8 => (VMWidth::Lower32, rng.gen::<u32>() as u64),
+                        _ => (VMWidth::Lower64, rng.gen::<u64>()),
+                    };
+
+                    (
+                        width,
+                        constant.to_le_bytes()[..width.size()].to_vec(),
+                        Box::new(Xor {
+                            width: VMWidth::Lower64,
+                        }),
+                        Box::new(move |addend| *addend ^= constant),
+                    )
+                }
+                1 => {
+                    let count = rng.gen_range(1..64u32);
+
+                    (
+                        VMWidth::Lower8,
+                        vec![count as u8],
+                        Box::new(Rol {
+                            width: VMWidth::Lower64,
+                        }),
+                        Box::new(move |addend| *addend = addend.rotate_left(count)),
+                    )
+                }
+                _ => {
+                    let count = rng.gen_range(1..64u32);
+
+                    (
+                        VMWidth::Lower8,
+                        vec![count as u8],
+                        Box::new(Ror {
+                            width: VMWidth::Lower64,
+                        }),
+                        Box::new(move |addend| *addend = addend.rotate_right(count)),
+                    )
+                }
             };
 
-            let mask = if bytes == 8 {
-                !0u64
-            } else {
-                (1u64 << (bytes * 8)) - 1
-            };
+            encrypt(&mut source, *addend, *multiplier);
 
-            let constant = rng.gen::<u64>() & mask;
-            let cipher = (constant ^ *key) & mask;
-
-            sequence.push(Box::new(LoadImmediate {
-                width,
-                source: cipher.to_le_bytes()[..bytes].to_vec(),
-            }));
-            sequence.push(Box::new(Xor {
+            sequence.push(Box::new(LoadRegister {
                 width: VMWidth::Lower64,
+                source: VMReg::VImmAdd,
             }));
 
-            *key ^= constant;
-        }
-        1 => {
-            let count = rng.gen_range(1..64u32);
-            let cipher = (count as u64 ^ *key) as u8;
+            sequence.push(Box::new(LoadImmediate { width, source }));
 
-            sequence.push(Box::new(LoadImmediate {
-                width: VMWidth::Lower8,
-                source: vec![cipher],
-            }));
-            sequence.push(Box::new(Rol {
+            sequence.push(operation);
+
+            sequence.push(Box::new(StoreRegister {
                 width: VMWidth::Lower64,
+                destination: VMReg::VImmAdd,
             }));
 
-            *key = key.rotate_left(count);
+            apply(addend);
         }
         _ => {
-            let count = rng.gen_range(1..64u32);
-            let cipher = (count as u64 ^ *key) as u8;
+            let (width, factor, mut source): (VMWidth, u64, Vec<u8>) = match rng.gen_range(0..10) {
+                0..=4 => {
+                    let v = rng.gen::<u8>() | 1;
+                    (VMWidth::Lower8, v as u64, v.to_le_bytes().to_vec())
+                }
+                5..=7 => {
+                    let v = rng.gen::<u16>() | 1;
+                    (VMWidth::Lower16, v as u64, v.to_le_bytes().to_vec())
+                }
+                8 => {
+                    let v = rng.gen::<u32>() | 1;
+                    (VMWidth::Lower32, v as u64, v.to_le_bytes().to_vec())
+                }
+                _ => {
+                    let v = rng.gen::<u64>() | 1;
+                    (VMWidth::Lower64, v, v.to_le_bytes().to_vec())
+                }
+            };
 
-            sequence.push(Box::new(LoadImmediate {
-                width: VMWidth::Lower8,
-                source: vec![cipher],
+            let inverse = invert(factor);
+
+            encrypt(&mut source, *addend, *multiplier);
+
+            sequence.push(Box::new(LoadRegister {
+                width: VMWidth::Lower64,
+                source: VMReg::VImmMul,
             }));
-            sequence.push(Box::new(Ror {
+
+            sequence.push(Box::new(LoadImmediate { width, source }));
+            sequence.push(Box::new(Mul {
                 width: VMWidth::Lower64,
             }));
 
-            *key = key.rotate_right(count);
+            sequence.push(Box::new(StoreRegister {
+                width: VMWidth::Lower64,
+                destination: VMReg::VImmMul,
+            }));
+
+            sequence.push(Box::new(Discard));
+
+            *multiplier = multiplier.wrapping_mul(inverse);
         }
     }
-
-    sequence.push(Box::new(StoreRegister {
-        width: VMWidth::Lower64,
-        destination: VMReg::VImm,
-    }));
 
     if preserve {
         sequence.push(Box::new(StoreRegister {

@@ -56,10 +56,10 @@ pub fn build(rt: &mut Runtime) {
     {
         // r8d -> displacement
         utils::bytecode::read_dword(rt, rcx, r8d);
-        // mov r9, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::VImm, r9);
-        // xor r8d, r9d
-        rt.asm.xor(r8d, r9d).unwrap();
+        // imul r8, [r12 + ...]
+        utils::vreg::reg_imul(rt, r12, VMReg::VImmMul, r8);
+        // sub r8, [r12 + ...]
+        utils::vreg::reg_sub(rt, r12, VMReg::VImmAdd, r8);
         // movsxd r8, r8d
         rt.asm.movsxd(r8, r8d).unwrap();
         // add rax, r8

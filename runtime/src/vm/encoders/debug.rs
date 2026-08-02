@@ -15,26 +15,31 @@ impl fmt::Display for dyn Encode {
 }
 
 fn strip_fields(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == ':' && chars.peek() == Some(&' ') {
-            chars.next();
-            while out.ends_with(|c: char| c.is_alphanumeric() || c == '_') {
-                out.pop();
+    let mut output = String::with_capacity(input.len());
+
+    let mut characters = input.chars().peekable();
+
+    while let Some(c) = characters.next() {
+        if c == ':' && characters.peek() == Some(&' ') {
+            characters.next();
+
+            while output.ends_with(|c: char| c.is_alphanumeric() || c == '_') {
+                output.pop();
             }
         } else {
-            out.push(ch);
+            output.push(c);
         }
     }
-    out
+    output
 }
 
 fn hex_bytes(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut chars = input.char_indices().peekable();
-    while let Some((i, ch)) = chars.next() {
-        if ch == '[' {
+    let mut output = String::with_capacity(input.len());
+
+    let mut characters = input.char_indices().peekable();
+
+    while let Some((i, c)) = characters.next() {
+        if c == '[' {
             if let Some(end) = input[i + 1..].find(']') {
                 let bytes = input[i + 1..i + 1 + end]
                     .split(',')
@@ -42,6 +47,14 @@ fn hex_bytes(input: &str) -> String {
                     .collect::<Option<Vec<u8>>>();
                 if let Some(bytes) = bytes {
                     let hex = match bytes.len() {
+                        1 => Some(format!(
+                            "0x{:02X}",
+                            u8::from_le_bytes(bytes.try_into().unwrap())
+                        )),
+                        2 => Some(format!(
+                            "0x{:04X}",
+                            u16::from_le_bytes(bytes.try_into().unwrap())
+                        )),
                         4 => Some(format!(
                             "0x{:08X}",
                             u32::from_le_bytes(bytes.try_into().unwrap())
@@ -53,65 +66,83 @@ fn hex_bytes(input: &str) -> String {
                         _ => None,
                     };
                     if let Some(hex) = hex {
-                        out.push_str(&hex);
-                        chars.nth(end);
+                        output.push_str(&hex);
+                        characters.nth(end);
                         continue;
                     }
                 }
             }
         }
-        out.push(ch);
+        output.push(c);
     }
-    out
+    output
 }
 
 fn hex_decimals(input: &str) -> String {
-    let chars = input.chars().collect::<Vec<char>>();
-    let mut out = String::with_capacity(input.len());
+    let mut output = String::with_capacity(input.len());
+
+    let characters = input.chars().collect::<Vec<char>>();
 
     let mut i = 0;
 
-    while i < chars.len() {
-        let ch = chars[i];
-        if ch == '0' && matches!(chars.get(i + 1), Some('x') | Some('X')) {
-            out.extend(chars[i..i + 2].iter());
+    while i < characters.len() {
+        let c = characters[i];
+
+        if c == '0' && matches!(characters.get(i + 1), Some('x') | Some('X')) {
+            output.extend(characters[i..i + 2].iter());
             i += 2;
-            while matches!(chars.get(i), Some(c) if c.is_ascii_hexdigit()) {
-                out.push(chars[i]);
+            while matches!(characters.get(i), Some(c) if c.is_ascii_hexdigit()) {
+                output.push(characters[i]);
                 i += 1;
             }
             continue;
         }
-        let prev_alnum = i > 0 && (chars[i - 1].is_ascii_alphanumeric() || chars[i - 1] == '_');
-        let (start, negative) = match ch {
-            '-' if !prev_alnum && matches!(chars.get(i + 1), Some(c) if c.is_ascii_digit()) => {
+
+        let previous =
+            i > 0 && (characters[i - 1].is_ascii_alphanumeric() || characters[i - 1] == '_');
+
+        let (start, negative) = match c {
+            '-' if !previous && matches!(characters.get(i + 1), Some(c) if c.is_ascii_digit()) => {
                 (i + 1, true)
             }
-            c if c.is_ascii_digit() && !prev_alnum => (i, false),
+            c if c.is_ascii_digit() && !previous => (i, false),
             _ => {
-                out.push(ch);
+                output.push(c);
                 i += 1;
                 continue;
             }
         };
+
         let mut end = start;
-        while matches!(chars.get(end), Some(c) if c.is_ascii_digit()) {
+
+        while matches!(characters.get(end), Some(c) if c.is_ascii_digit()) {
             end += 1;
         }
-        let digits = chars[start..end].iter().collect::<String>();
+
+        let digits = characters[start..end].iter().collect::<String>();
+
         match digits.parse::<i64>() {
             Ok(value) => {
                 let value = if negative { -value } else { value };
-                out.push_str(&format!("0x{:X}", value));
+
+                if value >= i8::MIN as i64 && value <= i8::MAX as i64 {
+                    output.push_str(&format!("0x{:02X}", value as u8));
+                } else if value >= i16::MIN as i64 && value <= i16::MAX as i64 {
+                    output.push_str(&format!("0x{:04X}", value as u16));
+                } else if value >= i32::MIN as i64 && value <= i32::MAX as i64 {
+                    output.push_str(&format!("0x{:08X}", value as u32));
+                } else {
+                    output.push_str(&format!("0x{:016X}", value as u64));
+                }
             }
             Err(_) => {
                 if negative {
-                    out.push('-');
+                    output.push('-');
                 }
-                out.push_str(&digits);
+                output.push_str(&digits);
             }
         }
         i = end;
     }
-    out
+    output
 }

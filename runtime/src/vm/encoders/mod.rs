@@ -15,7 +15,7 @@ pub enum Effect {
 }
 
 pub fn identity(operation: &Box<dyn Encode>) -> usize {
-    operation as *const Box<dyn Encode> as usize
+    operation.as_ref() as *const dyn Encode as *const () as usize
 }
 
 pub trait Encode: Debug + Any {
@@ -45,7 +45,11 @@ pub trait Encode: Debug + Any {
         0
     }
 
-    fn branches(&self) -> bool {
+    fn is_target(&self) -> bool {
+        false
+    }
+
+    fn is_branch(&self) -> bool {
         false
     }
 
@@ -57,7 +61,7 @@ pub trait Encode: Debug + Any {
         None
     }
 
-    fn seal(&mut self, _mapper: &mut Mapper, _transform: &mut dyn FnMut(&mut [u8])) {}
+    fn seal(&mut self, _mapper: &mut Mapper, _transform: &mut dyn FnMut(&mut [u8], usize)) {}
 }
 
 pub mod add;

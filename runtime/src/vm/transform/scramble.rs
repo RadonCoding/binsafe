@@ -20,7 +20,7 @@ pub fn scramble(mapper: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Ve
 
         let cut = atoms
             .iter()
-            .rposition(|atom| atom.iter().any(|op| op.branches()))
+            .rposition(|atom| atom.iter().any(|op| op.is_branch()))
             .unwrap_or(atoms.len());
 
         let mut tail = atoms.split_off(cut);
@@ -67,9 +67,6 @@ fn chain<R: Rng>(
     let mut operations = Vec::<Box<dyn Encode>>::new();
     let mut anchors = vec![None; count];
     let mut pending = Vec::new();
-
-    let entry = Label::marker();
-    operations.push(Box::new(entry));
 
     let (label, procedure) = placeholder();
 

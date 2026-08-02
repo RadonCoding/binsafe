@@ -150,7 +150,9 @@ pub fn build(rt: &mut Runtime) {
         // mov [r12 + ...], 0x0
         utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
         // mov [r12 + ...], 0x0
-        utils::vreg::store_imm(rt, r12, 0x0, VMReg::VImm);
+        utils::vreg::store_imm(rt, r12, 0x0, VMReg::VImmAdd);
+        // mov [r12 + ...], 0x1
+        utils::vreg::store_imm(rt, r12, 0x1, VMReg::VImmMul);
     }
 
     rt.asm.set_label(&mut execute_loop).unwrap();

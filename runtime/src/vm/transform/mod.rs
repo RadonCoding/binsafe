@@ -66,7 +66,7 @@ pub fn collapse(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
     vec![single]
 }
 
-/// Recursively descends into [`Encode::children`], applying `f` to each level after its children have been processed.
+/// Recursively descends into [`Encode::children_mut`], applying `f` to each level after its children have been processed.
 pub fn descend<F>(operations: &mut Vec<Box<dyn Encode>>, mut f: F)
 where
     F: FnMut(&mut Vec<Box<dyn Encode>>),
@@ -112,20 +112,15 @@ pub fn deadzones(
     deadzones
 }
 
-/// Records each leaf's read/write flags for `effect`, recursing through children.
+/// Records top-level leaf's read/write flags for `effect`.
 fn scan(
     operations: &mut [Box<dyn Encode>],
     events: &mut Vec<(bool, bool)>,
     effect: &impl Fn(&Effect) -> bool,
 ) {
-    for op in operations.iter_mut() {
-        if let Some(children) = op.children_mut() {
-            scan(children, events, effect);
-            continue;
-        }
-
-        let reads = op.reads().iter().any(effect);
-        let writes = op.writes().iter().any(effect);
+    for operations in operations.iter_mut() {
+        let reads = operations.reads().iter().any(effect);
+        let writes = operations.writes().iter().any(effect);
 
         events.push((reads, writes));
     }
@@ -135,7 +130,7 @@ fn scan(
 fn overwritten(operations: &[Box<dyn Encode>], register: VMReg) -> bool {
     for operation in operations {
         // Check if conditional since writes inside are not guaranteed
-        if operation.branches() {
+        if operation.is_branch() {
             if operation
                 .reads()
                 .iter()
@@ -167,5 +162,5 @@ fn overwritten(operations: &[Box<dyn Encode>], register: VMReg) -> bool {
 
 /// Whether the given atom contains a branch.
 fn branches(atom: &Vec<Box<dyn Encode>>) -> bool {
-    atom.iter().any(|op| op.branches())
+    atom.iter().any(|op| op.is_branch())
 }
