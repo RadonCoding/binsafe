@@ -34,7 +34,6 @@ fn facts(operations: &[Box<dyn Encode>]) -> Vec<Vec<(VMFlag, bool)>> {
     for (i, operation) in operations.iter().enumerate() {
         let cancelling = operation.as_any().downcast_ref::<Xor>().is_some()
             || operation.as_any().downcast_ref::<Sub>().is_some();
-
         if cancelling && duplicated(&operations[..i]).is_some() {
             established[i] = Some(vec![
                 (VMFlag::Zero, true),
@@ -49,7 +48,6 @@ fn facts(operations: &[Box<dyn Encode>]) -> Vec<Vec<(VMFlag, bool)>> {
             .writes()
             .iter()
             .any(|effect| matches!(effect, Effect::Register(VMReg::Flags)));
-
         if writes || operation.is_target() || operation.is_branch() {
             current.clear();
         }
@@ -60,7 +58,6 @@ fn facts(operations: &[Box<dyn Encode>]) -> Vec<Vec<(VMFlag, bool)>> {
             current = facts.clone();
         }
     }
-
     live
 }
 
@@ -87,11 +84,10 @@ fn duplicated(prefix: &[Box<dyn Encode>]) -> Option<VMReg> {
         .find_map(|register| b.contains(register).then_some(*register))
 }
 
-/// Rewrites each [`Jcc`] in place, dispatching always-true and always-false branches to [`opaque`], and runtime branches to [`mutated`].
+/// Rewrites each [`Jcc`] in place via [`rewrite`].
 fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
     descend(operations, |operations| {
         let facts = facts(operations);
-
         for i in 0..operations.len() {
             let Some((logic, conditions)) = operations[i]
                 .as_any()
@@ -112,17 +108,20 @@ fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
                 }
             });
 
-            let (or, xor) = match logic {
-                VMLogic::JAND | VMLogic::JOR | VMLogic::JXOR => (VMLogic::JOR, VMLogic::JXOR),
-                VMLogic::CAND | VMLogic::COR | VMLogic::CXOR => (VMLogic::COR, VMLogic::CXOR),
-                VMLogic::SAND | VMLogic::SOR | VMLogic::SXOR => (VMLogic::SOR, VMLogic::SXOR),
+            let (and, or, xor) = match logic {
+                VMLogic::JAND | VMLogic::JOR | VMLogic::JXOR => {
+                    (VMLogic::JAND, VMLogic::JOR, VMLogic::JXOR)
+                }
+                VMLogic::CAND | VMLogic::COR | VMLogic::CXOR => {
+                    (VMLogic::CAND, VMLogic::COR, VMLogic::CXOR)
+                }
+                VMLogic::SAND | VMLogic::SOR | VMLogic::SXOR => {
+                    (VMLogic::SAND, VMLogic::SOR, VMLogic::SXOR)
+                }
             };
 
-            let (logic, conditions) = match polarity {
-                Some(true) => opaque(rng, or, xor, true, &facts[i]),
-                Some(false) => opaque(rng, or, xor, false, &facts[i]),
-                None => (logic, mutated(rng, logic, conditions)),
-            };
+            let (logic, conditions) =
+                rewrite(rng, and, or, xor, logic, polarity, conditions, &facts[i]);
 
             let jcc = operations[i].as_any_mut().downcast_mut::<Jcc>().unwrap();
             jcc.logic = logic;
@@ -131,108 +130,149 @@ fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
     });
 }
 
-/// Expands each AND-family sub-condition through [`rewritten`] and appends a [`condition`] to XOR-family [`Jcc`]s, then shuffles.
-fn mutated<R: Rng>(
+/// Dispatches each [`Jcc`] to opaque or runtime-dependent rewriting, rerolling logic for single-condition branches, and pads to at least two conditions.
+fn rewrite<R: Rng>(
+    rng: &mut R,
+    and: VMLogic,
+    or: VMLogic,
+    xor: VMLogic,
+    logic: VMLogic,
+    polarity: Option<bool>,
+    conditions: Vec<VMCondition>,
+    facts: &[(VMFlag, bool)],
+) -> (VMLogic, Vec<VMCondition>) {
+    let (logic, mut conditions) = match polarity {
+        Some(truth) => {
+            let logic = if !facts.is_empty() {
+                *[and, or, xor].choose(rng).unwrap()
+            } else if truth {
+                *[or, xor].choose(rng).unwrap()
+            } else {
+                xor
+            };
+            let mut conditions = if truth {
+                thruthful(rng, logic, facts)
+            } else {
+                falseful(rng, logic, facts)
+            };
+            pad(rng, logic, truth, &mut conditions, true, facts);
+            (logic, conditions)
+        }
+        None => {
+            let logic = if conditions.len() == 1 {
+                *[and, or, xor].choose(rng).unwrap()
+            } else {
+                logic
+            };
+            let mut conditions = expand(rng, logic, conditions);
+            pad(rng, logic, false, &mut conditions, false, facts);
+            (logic, conditions)
+        }
+    };
+    conditions.shuffle(rng);
+    (logic, conditions)
+}
+
+/// Expands AND-family conditions through [`rewrite`] and duplicates a fresh condition for XOR-family logic.
+fn expand<R: Rng>(
     rng: &mut R,
     logic: VMLogic,
     mut conditions: Vec<VMCondition>,
 ) -> Vec<VMCondition> {
     match logic {
-        VMLogic::JAND | VMLogic::CAND | VMLogic::SAND => {
-            let mut i = 0;
-            while i < conditions.len() {
-                let rewrites = rewritten(&conditions[i]);
-                if !rewrites.is_empty() && rng.gen() {
-                    let chosen = rewrites.choose(rng).cloned().unwrap();
-                    let length = chosen.len();
-                    conditions.splice(i..i + 1, chosen);
-                    i += length;
-                } else {
-                    i += 1;
-                }
-            }
-        }
         VMLogic::JXOR | VMLogic::CXOR | VMLogic::SXOR => {
-            if rng.gen() {
-                let condition = condition(rng);
-                conditions.push(condition);
-                conditions.push(condition);
-            }
+            let condition = condition(rng);
+            conditions.push(condition.clone());
+            conditions.push(condition);
         }
         _ => {}
     }
-    conditions.shuffle(rng);
     conditions
 }
 
-/// Logically equivalent expansions of a sub-condition derived from flag invariants.
-fn rewritten(condition: &VMCondition) -> Vec<Vec<VMCondition>> {
-    let zero = VMFlag::Zero as u8;
-    let parity = VMFlag::Parity as u8;
-    let sign = VMFlag::Sign as u8;
-
-    match (condition.test, condition.lhs, condition.rhs) {
-        (VMTest::CMP, lhs, 1) if lhs == zero => vec![
-            vec![
-                VMCondition {
-                    test: VMTest::CMP,
-                    lhs: sign,
-                    rhs: 0,
-                },
-                VMCondition {
-                    test: VMTest::NEQ,
-                    lhs: zero,
-                    rhs: sign,
-                },
-            ],
-            vec![
-                VMCondition {
-                    test: VMTest::CMP,
-                    lhs: parity,
-                    rhs: 1,
-                },
-                VMCondition {
-                    test: VMTest::EQ,
-                    lhs: zero,
-                    rhs: parity,
-                },
-            ],
-        ],
-        (VMTest::CMP, lhs, 1) if lhs == sign => vec![vec![
-            VMCondition {
-                test: VMTest::CMP,
-                lhs: zero,
-                rhs: 0,
-            },
-            VMCondition {
-                test: VMTest::NEQ,
-                lhs: sign,
-                rhs: zero,
-            },
-        ]],
-        _ => vec![],
+/// Appends truth-preserving conditions until at least two conditions are present.
+fn pad<R: Rng>(
+    rng: &mut R,
+    logic: VMLogic,
+    truth: bool,
+    conditions: &mut Vec<VMCondition>,
+    known: bool,
+    facts: &[(VMFlag, bool)],
+) {
+    while conditions.len() < 2 {
+        match logic {
+            VMLogic::JAND | VMLogic::CAND | VMLogic::SAND => {
+                if known && truth {
+                    if let Some(c) = fact(rng, facts, true) {
+                        conditions.push(c);
+                    } else {
+                        break;
+                    }
+                } else if !known {
+                    if let Some(c) = fact(rng, facts, true) {
+                        conditions.push(c);
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            VMLogic::JOR | VMLogic::COR | VMLogic::SOR => {
+                if known {
+                    if truth {
+                        conditions.push(condition(rng));
+                    } else if let Some(c) = fact(rng, facts, false) {
+                        conditions.push(c);
+                    } else {
+                        break;
+                    }
+                } else if let Some(c) = fact(rng, facts, false) {
+                    conditions.push(c);
+                } else {
+                    break;
+                }
+            }
+            VMLogic::JXOR | VMLogic::CXOR | VMLogic::SXOR => {
+                let c = condition(rng);
+                conditions.push(c.clone());
+                conditions.push(c);
+            }
+        }
     }
 }
 
-/// Builds an always-true or always-false predicate by picking between the OR and XOR families.
-fn opaque<R: Rng>(
-    rng: &mut R,
-    or: VMLogic,
-    xor: VMLogic,
-    polarity: bool,
-    facts: &[(VMFlag, bool)],
-) -> (VMLogic, Vec<VMCondition>) {
-    let base = match fact(rng, facts, polarity).filter(|_| !facts.is_empty()) {
-        Some(condition) => vec![condition],
-        None if polarity => tautology(rng),
-        None => vec![antitautology(rng)],
-    };
+/// Generates a proven true condition.
+fn thruthful<R: Rng>(rng: &mut R, logic: VMLogic, facts: &[(VMFlag, bool)]) -> Vec<VMCondition> {
+    if let Some(c) = fact(rng, facts, true) {
+        return vec![c];
+    }
+    let c = condition(rng);
+    match logic {
+        VMLogic::JOR
+        | VMLogic::COR
+        | VMLogic::SOR
+        | VMLogic::JXOR
+        | VMLogic::CXOR
+        | VMLogic::SXOR => {
+            vec![c.clone(), negate(&c)]
+        }
+        _ => vec![c],
+    }
+}
 
-    let logic = if rng.gen() { or } else { xor };
-    let mut conditions = base;
-    conditions.shuffle(rng);
-
-    (logic, conditions)
+/// Generates a proven false condition.
+fn falseful<R: Rng>(rng: &mut R, logic: VMLogic, facts: &[(VMFlag, bool)]) -> Vec<VMCondition> {
+    if let Some(c) = fact(rng, facts, false) {
+        return vec![c];
+    }
+    let c = condition(rng);
+    match logic {
+        VMLogic::JXOR | VMLogic::CXOR | VMLogic::SXOR => {
+            vec![c.clone(), c]
+        }
+        _ => vec![c],
+    }
 }
 
 /// [`VMCondition`] against a flag proven true or false by a preceding self-cancelling instruction.
@@ -244,80 +284,6 @@ fn fact<R: Rng>(rng: &mut R, facts: &[(VMFlag, bool)], polarity: bool) -> Option
         lhs: flag as u8,
         rhs: value as u8,
     })
-}
-
-/// A flag bit compared for inequality against itself.
-fn antitautology<R: Rng>(rng: &mut R) -> VMCondition {
-    let flag = pick(rng);
-    VMCondition {
-        test: VMTest::NEQ,
-        lhs: flag,
-        rhs: flag,
-    }
-}
-
-/// One or two sub-conditions that always include an odd number of true results.
-fn tautology<R: Rng>(rng: &mut R) -> Vec<VMCondition> {
-    match rng.gen_range(0..3) {
-        0 => cmp_pair(rng).to_vec(),
-        1 => eq_pair(rng).to_vec(),
-        _ => triple_eq(rng).to_vec(),
-    }
-}
-
-/// Two sub-conditions comparing the same flag bit against both possible values, of which one is thruthful.
-fn cmp_pair<R: Rng>(rng: &mut R) -> [VMCondition; 2] {
-    let flag = pick(rng);
-    [
-        VMCondition {
-            test: VMTest::CMP,
-            lhs: flag,
-            rhs: 0,
-        },
-        VMCondition {
-            test: VMTest::CMP,
-            lhs: flag,
-            rhs: 1,
-        },
-    ]
-}
-
-/// Two sub-conditions testing equality and inequality of two distinct flag bits, of which one is thruthful.
-fn eq_pair<R: Rng>(rng: &mut R) -> [VMCondition; 2] {
-    let [a, b] = pick_two(rng);
-    [
-        VMCondition {
-            test: VMTest::EQ,
-            lhs: a,
-            rhs: b,
-        },
-        VMCondition {
-            test: VMTest::NEQ,
-            lhs: a,
-            rhs: b,
-        },
-    ]
-}
-
-/// Three pairwise sub-conditions over three distinct flag bits, of which an odd number are truthful.
-fn triple_eq<R: Rng>(rng: &mut R) -> [VMCondition; 3] {
-    let [a, b, c] = pick_three(rng);
-    let eq = |l, r| VMCondition {
-        test: VMTest::EQ,
-        lhs: l,
-        rhs: r,
-    };
-    let neq = |l, r| VMCondition {
-        test: VMTest::NEQ,
-        lhs: l,
-        rhs: r,
-    };
-    match rng.gen_range(0..4) {
-        0 => [eq(a, b), eq(b, c), eq(a, c)],
-        1 => [eq(a, b), neq(b, c), neq(a, c)],
-        2 => [neq(a, b), eq(b, c), neq(a, c)],
-        _ => [neq(a, b), neq(b, c), eq(a, c)],
-    }
 }
 
 /// Single randomized sub-condition.
@@ -360,9 +326,23 @@ fn pick_two<R: Rng>(rng: &mut R) -> [u8; 2] {
     [flags[0] as u8, flags[1] as u8]
 }
 
-/// Three distinct randomly chosen [`VMFlag`] bits.
-fn pick_three<R: Rng>(rng: &mut R) -> [u8; 3] {
-    let mut flags = VMFlag::iter().collect::<Vec<VMFlag>>();
-    flags.shuffle(rng);
-    [flags[0] as u8, flags[1] as u8, flags[2] as u8]
+/// Complementary [`VMCondition`] with inverted sense.
+fn negate(c: &VMCondition) -> VMCondition {
+    match c.test {
+        VMTest::CMP => VMCondition {
+            test: VMTest::CMP,
+            lhs: c.lhs,
+            rhs: 1 - c.rhs,
+        },
+        VMTest::EQ => VMCondition {
+            test: VMTest::NEQ,
+            lhs: c.lhs,
+            rhs: c.rhs,
+        },
+        VMTest::NEQ => VMCondition {
+            test: VMTest::EQ,
+            lhs: c.lhs,
+            rhs: c.rhs,
+        },
+    }
 }
