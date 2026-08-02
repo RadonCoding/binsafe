@@ -84,7 +84,7 @@ impl Encode for Jcc {
     }
 }
 
-/// Canonical always-true sub-condition: a flag bit compared for equality against itself.
+/// Canonical always-true flag bit compared for equality against itself.
 pub fn tautology() -> VMCondition {
     VMCondition {
         test: VMTest::EQ,
@@ -93,7 +93,7 @@ pub fn tautology() -> VMCondition {
     }
 }
 
-/// Canonical always-false sub-condition: a flag bit compared for inequality against itself.
+/// Canonical always-false flag bit compared for inequality against itself.
 pub fn contradiction() -> VMCondition {
     VMCondition {
         test: VMTest::NEQ,
