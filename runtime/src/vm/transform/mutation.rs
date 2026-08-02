@@ -34,6 +34,7 @@ fn facts(operations: &[Box<dyn Encode>]) -> Vec<Vec<(VMFlag, bool)>> {
     for (i, operation) in operations.iter().enumerate() {
         let cancelling = operation.as_any().downcast_ref::<Xor>().is_some()
             || operation.as_any().downcast_ref::<Sub>().is_some();
+
         if cancelling && duplicated(&operations[..i]).is_some() {
             established[i] = Some(vec![
                 (VMFlag::Zero, true),
@@ -151,9 +152,9 @@ fn rewrite<R: Rng>(
                 xor
             };
             let mut conditions = if truth {
-                thruthful(rng, logic, facts)
+                thruthful(rng, facts)
             } else {
-                falseful(rng, logic, facts)
+                falseful(rng, facts)
             };
             pad(rng, logic, truth, &mut conditions, true, facts);
             (logic, conditions)
@@ -202,35 +203,25 @@ fn pad<R: Rng>(
     while conditions.len() < 2 {
         match logic {
             VMLogic::JAND | VMLogic::CAND | VMLogic::SAND => {
-                if known && truth {
-                    if let Some(c) = fact(rng, facts, true) {
-                        conditions.push(c);
-                    } else {
-                        break;
-                    }
-                } else if !known {
-                    if let Some(c) = fact(rng, facts, true) {
-                        conditions.push(c);
-                    } else {
-                        break;
-                    }
+                let c = if known && !truth {
+                    None
                 } else {
-                    break;
+                    fact(rng, facts, true).or_else(|| conditions.choose(rng).cloned())
+                };
+                match c {
+                    Some(c) => conditions.push(c),
+                    None => break,
                 }
             }
             VMLogic::JOR | VMLogic::COR | VMLogic::SOR => {
-                if known {
-                    if truth {
-                        conditions.push(condition(rng));
-                    } else if let Some(c) = fact(rng, facts, false) {
-                        conditions.push(c);
-                    } else {
-                        break;
-                    }
-                } else if let Some(c) = fact(rng, facts, false) {
-                    conditions.push(c);
+                let c = if known && truth {
+                    Some(condition(rng))
                 } else {
-                    break;
+                    fact(rng, facts, false).or_else(|| conditions.choose(rng).cloned())
+                };
+                match c {
+                    Some(c) => conditions.push(c),
+                    None => break,
                 }
             }
             VMLogic::JXOR | VMLogic::CXOR | VMLogic::SXOR => {
@@ -243,36 +234,21 @@ fn pad<R: Rng>(
 }
 
 /// Generates a proven true condition.
-fn thruthful<R: Rng>(rng: &mut R, logic: VMLogic, facts: &[(VMFlag, bool)]) -> Vec<VMCondition> {
+fn thruthful<R: Rng>(rng: &mut R, facts: &[(VMFlag, bool)]) -> Vec<VMCondition> {
     if let Some(c) = fact(rng, facts, true) {
         return vec![c];
     }
     let c = condition(rng);
-    match logic {
-        VMLogic::JOR
-        | VMLogic::COR
-        | VMLogic::SOR
-        | VMLogic::JXOR
-        | VMLogic::CXOR
-        | VMLogic::SXOR => {
-            vec![c.clone(), negate(&c)]
-        }
-        _ => vec![c],
-    }
+    vec![c.clone(), negate(&c)]
 }
 
 /// Generates a proven false condition.
-fn falseful<R: Rng>(rng: &mut R, logic: VMLogic, facts: &[(VMFlag, bool)]) -> Vec<VMCondition> {
+fn falseful<R: Rng>(rng: &mut R, facts: &[(VMFlag, bool)]) -> Vec<VMCondition> {
     if let Some(c) = fact(rng, facts, false) {
         return vec![c];
     }
     let c = condition(rng);
-    match logic {
-        VMLogic::JXOR | VMLogic::CXOR | VMLogic::SXOR => {
-            vec![c.clone(), c]
-        }
-        _ => vec![c],
-    }
+    vec![c.clone(), c]
 }
 
 /// [`VMCondition`] against a flag proven true or false by a preceding self-cancelling instruction.
