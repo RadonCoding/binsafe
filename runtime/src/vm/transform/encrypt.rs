@@ -147,7 +147,7 @@ fn walk(
     mapper: &mut Mapper,
     operations: &mut Vec<Box<dyn Encode>>,
     addend: &mut u64,
-    multiplier: &mut u64
+    multiplier: &mut u64,
 ) -> Vec<(u64, u64)> {
     let outer_addend = *addend;
     let outer_multiplier = *multiplier;
