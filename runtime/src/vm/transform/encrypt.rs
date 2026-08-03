@@ -69,8 +69,7 @@ impl<'a> Encryptor<'a> {
             self.mapper,
             self.operations,
             &mut self.addend,
-            &mut self.multiplier,
-            0,
+            &mut self.multiplier
         );
     }
 
@@ -148,8 +147,7 @@ fn walk(
     mapper: &mut Mapper,
     operations: &mut Vec<Box<dyn Encode>>,
     addend: &mut u64,
-    multiplier: &mut u64,
-    level: i32,
+    multiplier: &mut u64
 ) -> Vec<(u64, u64)> {
     let outer_addend = *addend;
     let outer_multiplier = *multiplier;
@@ -193,8 +191,7 @@ fn walk(
                 mapper,
                 children,
                 &mut inner_addend,
-                &mut inner_multiplier,
-                level + 1,
+                &mut inner_multiplier
             );
 
             if inner_addend != *addend || inner_multiplier != *multiplier {
@@ -220,20 +217,19 @@ fn walk(
         }
 
         if leaf(&mut operations[i], *addend, *multiplier) {
-            if level <= 1 {
-                let sequence = transform(addend, multiplier, !deadzones[position]);
-                let length = sequence.len();
-                operations.splice(i + 1..i + 1, sequence);
+            let sequence = transform(addend, multiplier, !deadzones[position]);
+            let length = sequence.len();
+            operations.splice(i + 1..i + 1, sequence);
 
-                for _ in 0..length {
-                    trace.push((*addend, *multiplier));
-                }
-
-                i += length;
+            for _ in 0..length {
+                trace.push((*addend, *multiplier));
             }
+
+            i += length;
         }
 
         i += 1;
+        
         position += 1;
     }
 
