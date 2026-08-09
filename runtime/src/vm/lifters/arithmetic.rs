@@ -185,7 +185,7 @@ pub fn binary<O: Encode + 'static>(
             _ => unreachable!(),
         },
         Tail::Discard => {
-            operations.push(Box::new(Discard));
+            operations.push(Box::new(Discard::new()));
         }
     }
     Some(operations)

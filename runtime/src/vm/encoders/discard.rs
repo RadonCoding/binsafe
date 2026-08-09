@@ -2,9 +2,24 @@ use crate::mapper::Mapper;
 use crate::vm::bytecode::VMOp;
 use crate::vm::encoders::Encode;
 use std::any::Any;
+use std::fmt::{Debug, Formatter, Result};
 
-#[derive(Debug)]
-pub struct Discard;
+pub struct Discard {
+    _marker: u8,
+}
+
+impl Discard {
+    pub fn new() -> Self {
+        Self { _marker: 0 }
+    }
+}
+
+impl Debug for Discard {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.debug_struct(self.name()).finish()
+    }
+}
 
 impl Encode for Discard {
     fn as_any(&self) -> &dyn Any {

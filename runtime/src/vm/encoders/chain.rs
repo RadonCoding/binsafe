@@ -1,7 +1,8 @@
 use std::any::Any;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{self};
+use crate::vm::bytecode::{self, VMWidth};
+use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::{Effect, Encode};
@@ -55,6 +56,49 @@ impl Chain {
 
         None
     }
+
+    fn indices(&self, label: usize) -> (usize, usize) {
+        let index = self
+            .operations
+            .iter()
+            .position(|operation| {
+                operation
+                    .as_any()
+                    .downcast_ref::<Label>()
+                    .map_or(false, |l| l.id() == label)
+            })
+            .unwrap();
+
+        let mut stack = Vec::new();
+
+        for i in index + 1..self.operations.len() {
+            let operation = &self.operations[i];
+
+            if operation.as_any().downcast_ref::<Jcc>().is_some() {
+                return (*stack.last().unwrap(), i);
+            }
+
+            let delta = operation.depth();
+
+            if delta > 0 {
+                if operation.as_any().downcast_ref::<LoadImmediate>().is_some() {
+                    for _ in 0..delta {
+                        stack.push(i);
+                    }
+                } else {
+                    for _ in 0..delta {
+                        stack.push(usize::MAX);
+                    }
+                }
+            } else {
+                for _ in 0..(-delta) {
+                    stack.pop();
+                }
+            }
+        }
+
+        unreachable!()
+    }
 }
 
 impl Encode for Chain {
@@ -95,40 +139,93 @@ impl Encode for Chain {
     }
 
     fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
-        for jump in &self.jumps {
-            let index = self
-                .operations
-                .iter()
-                .position(|op| {
-                    op.as_any()
-                        .downcast_ref::<Label>()
-                        .map_or(false, |l| l.id() == jump.source.id())
-                })
-                .unwrap();
+        let mut changed = true;
 
-            let source = self.operations[..index]
+        while changed {
+            changed = false;
+
+            for i in 0..self.jumps.len() {
+                let source_label = self.jumps[i].source.id();
+                let destination_label = match &self.jumps[i].destination {
+                    Target::Label(label) => Some(label.id()),
+                    Target::End => None,
+                };
+
+                let (load_index, branch_index) = self.indices(source_label);
+
+                let destination = if let Some(destination) = destination_label {
+                    self.position(mapper, None, destination).unwrap()
+                } else {
+                    self.size(mapper)
+                };
+
+                let after = self.operations[..=branch_index]
+                    .iter()
+                    .map(|op| op.size(mapper))
+                    .sum::<usize>();
+
+                let offset = destination as isize - after as isize;
+
+                let load = self.operations[load_index]
+                    .as_any_mut()
+                    .downcast_mut::<LoadImmediate>()
+                    .unwrap();
+
+                let width = match load.width {
+                    VMWidth::SLower8 if i8::try_from(offset).is_err() => Some(VMWidth::SLower16),
+                    VMWidth::SLower16 if i16::try_from(offset).is_err() => Some(VMWidth::SLower32),
+                    _ => None,
+                };
+
+                if let Some(width) = width {
+                    load.width = width.clone();
+                    load.source = match width {
+                        VMWidth::SLower8 => vec![0],
+                        VMWidth::SLower16 => vec![0, 0],
+                        VMWidth::SLower32 => vec![0, 0, 0, 0],
+                        _ => unreachable!(),
+                    };
+                    changed = true;
+                }
+            }
+        }
+
+        for i in 0..self.jumps.len() {
+            let source_label = self.jumps[i].source.id();
+            let destination_label = match &self.jumps[i].destination {
+                Target::Label(label) => Some(label.id()),
+                Target::End => None,
+            };
+
+            let (load_index, branch_index) = self.indices(source_label);
+
+            let destination = if let Some(label) = destination_label {
+                self.position(mapper, None, label).unwrap()
+            } else {
+                self.size(mapper)
+            };
+
+            let after = self.operations[..=branch_index]
                 .iter()
                 .map(|op| op.size(mapper))
                 .sum::<usize>();
 
-            let after = source
-                + self.operations[index + 1].size(mapper)
-                + self.operations[index + 2].size(mapper);
+            let offset = destination as isize - after as isize;
 
-            let target = match jump.destination {
-                Target::Label(label) => self.position(mapper, None, label.id()).unwrap(),
-                Target::End => self.size(mapper),
-            };
-
-            let offset = i16::try_from(target as isize - after as isize).unwrap();
-
-            let mut source = offset.to_le_bytes().to_vec();
-            transform(&mut source, index + 1);
-
-            let load = self.operations[index + 1]
+            let load = self.operations[load_index]
                 .as_any_mut()
                 .downcast_mut::<LoadImmediate>()
                 .unwrap();
+
+            let mut source = match load.width {
+                VMWidth::SLower8 => (offset as i8).to_le_bytes().to_vec(),
+                VMWidth::SLower16 => (offset as i16).to_le_bytes().to_vec(),
+                VMWidth::SLower32 => (offset as i32).to_le_bytes().to_vec(),
+                _ => unreachable!(),
+            };
+
+            transform(&mut source, load_index);
+
             load.source = source;
         }
     }

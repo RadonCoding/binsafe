@@ -2,9 +2,24 @@ use crate::mapper::Mapper;
 use crate::vm::bytecode::VMOp;
 use crate::vm::encoders::Encode;
 use std::any::Any;
+use std::fmt::{Debug, Formatter, Result};
 
-#[derive(Debug)]
-pub struct Timestamp;
+pub struct Timestamp {
+    _marker: u8,
+}
+
+impl Timestamp {
+    pub fn new() -> Self {
+        Self { _marker: 0 }
+    }
+}
+
+impl Debug for Timestamp {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.debug_struct(self.name()).finish()
+    }
+}
 
 impl Encode for Timestamp {
     fn as_any(&self) -> &dyn Any {

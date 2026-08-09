@@ -1,6 +1,5 @@
 use iced_x86::{Instruction, OpKind};
 
-
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg};
 use crate::vm::encoders::{
@@ -50,7 +49,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Box<
             operations.push(Box::new(Sub {
                 width: destination_width,
             }));
-            operations.push(Box::new(Discard));
+            operations.push(Box::new(Discard::new()));
 
             operations.push(Box::new(LoadRegister {
                 width: destination_width,

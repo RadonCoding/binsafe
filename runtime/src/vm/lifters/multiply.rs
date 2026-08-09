@@ -1,6 +1,5 @@
 use iced_x86::{Instruction, Mnemonic};
 
-
 use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::{
     discard::Discard, load_immediate::LoadImmediate, load_register::LoadRegister, mul::Mul,
@@ -96,7 +95,7 @@ pub fn narrow(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
         width: destination_width,
         destination: destination_register,
     }));
-    operations.push(Box::new(Discard));
+    operations.push(Box::new(Discard::new()));
 
     Some(operations)
 }

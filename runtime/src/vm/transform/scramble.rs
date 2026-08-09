@@ -3,18 +3,16 @@ use std::mem;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
-use crate::mapper::Mapper;
 use crate::vm::bytecode::VMWidth;
 use crate::vm::encoders::chain::{Chain, Jump, Target};
 use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_immediate::LoadImmediate;
-use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::Encode;
 use crate::vm::transform::{atomize, descend};
 
 /// Shuffles the physical order of atoms by chaining them in execution order through signed-offset [`Jcc`]s inside a [`Skip`] body.
-pub fn scramble(mapper: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+pub fn scramble(mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
     descend(&mut operations, |operations| {
         let mut atoms = atomize(mem::take(operations));
 
@@ -33,7 +31,7 @@ pub fn scramble(mapper: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Ve
 
         let mut rng = rand::thread_rng();
 
-        let mut body = chain(mapper, atoms, &mut rng);
+        let mut body = chain(atoms, &mut rng);
 
         if !tail.is_empty() {
             let branch = tail.remove(0);
@@ -41,7 +39,7 @@ pub fn scramble(mapper: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Ve
             body.extend(branch);
 
             if tail.len() >= 2 {
-                body.extend(chain(mapper, tail, &mut rng));
+                body.extend(chain(tail, &mut rng));
             } else {
                 body.extend(tail.into_iter().flatten());
             }
@@ -54,11 +52,7 @@ pub fn scramble(mapper: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Ve
 }
 
 /// Places atoms in physical order with a top-level jump into a [`Skip`] execution chain.
-fn chain<R: Rng>(
-    mapper: &mut Mapper,
-    mut head: Vec<Vec<Box<dyn Encode>>>,
-    rng: &mut R,
-) -> Vec<Box<dyn Encode>> {
+fn chain<R: Rng>(mut head: Vec<Vec<Box<dyn Encode>>>, rng: &mut R) -> Vec<Box<dyn Encode>> {
     let count = head.len();
 
     let mut shuffle = (1..count).collect::<Vec<usize>>();
@@ -104,12 +98,10 @@ fn chain<R: Rng>(
         .collect();
 
     let chain = Chain::new(operations, jumps);
-    let pass = Jcc::pass();
-    let skip = Skip::new(mapper, pass.logic, pass.conditions, vec![Box::new(chain)]);
 
     let mut result = Vec::new();
     result.extend(head[0].drain(..));
-    result.push(Box::new(skip));
+    result.push(Box::new(chain));
 
     result
 }
@@ -121,8 +113,8 @@ fn placeholder() -> (Label, Vec<Box<dyn Encode>>) {
     let mut procedure = Vec::<Box<dyn Encode>>::new();
     procedure.push(Box::new(label));
     procedure.push(Box::new(LoadImmediate {
-        width: VMWidth::SLower16,
-        source: vec![0, 0],
+        width: VMWidth::SLower8,
+        source: vec![0],
     }));
     procedure.push(Box::new(Jcc::skip()));
 
