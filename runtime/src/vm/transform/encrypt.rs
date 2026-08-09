@@ -75,9 +75,13 @@ impl<'a> Encryptor<'a> {
             self.mapper,
             self.operations,
             &mut self.addend,
+<<<<<<< HEAD
             &mut self.multiplier,
             &snapshots,
             0,
+=======
+            &mut self.multiplier
+>>>>>>> b76e14330923c430b672659e7443bb1dfa759464
         );
     }
 
@@ -158,8 +162,11 @@ fn walk(
     operations: &mut Vec<Box<dyn Encode>>,
     addend: &mut u64,
     multiplier: &mut u64,
+<<<<<<< HEAD
     snapshots: &Snapshots,
     level: i32,
+=======
+>>>>>>> b76e14330923c430b672659e7443bb1dfa759464
 ) -> Vec<(u64, u64)> {
     let outer_addend = *addend;
     let outer_multiplier = *multiplier;
@@ -185,9 +192,13 @@ fn walk(
                 mapper,
                 children,
                 &mut inner_addend,
+<<<<<<< HEAD
                 &mut inner_multiplier,
                 snapshots,
                 level + 1,
+=======
+                &mut inner_multiplier
+>>>>>>> b76e14330923c430b672659e7443bb1dfa759464
             );
 
             if inner_addend != *addend || inner_multiplier != *multiplier {
@@ -212,6 +223,7 @@ fn walk(
             continue;
         }
 
+<<<<<<< HEAD
         if operations[i].is_destination() {
             let sequence = restore(outer_addend, outer_multiplier, *addend, *multiplier);
             let length = sequence.len();
@@ -259,11 +271,26 @@ fn walk(
                 trace.push((*addend, *multiplier));
             }
 
+=======
+        if leaf(&mut operations[i], *addend, *multiplier) {
+            let sequence = transform(addend, multiplier, !deadzones[position]);
+            let length = sequence.len();
+            operations.splice(i + 1..i + 1, sequence);
+
+            for _ in 0..length {
+                trace.push((*addend, *multiplier));
+            }
+
+>>>>>>> b76e14330923c430b672659e7443bb1dfa759464
             i += length;
         }
 
         i += 1;
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> b76e14330923c430b672659e7443bb1dfa759464
         position += 1;
     }
 
