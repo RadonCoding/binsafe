@@ -1,3 +1,4 @@
+mod add;
 mod jcc;
 
 use crate::mapper::Mapper;
@@ -15,7 +16,8 @@ impl Transform for Mutation {
         let mut operations = operations;
         let mut rng = rand::thread_rng();
 
-        jcc::walk(&mut operations, &mut rng);
+        add::mutate(&mut operations, &mut rng);
+        jcc::mutate(&mut operations, &mut rng);
 
         operations
     }

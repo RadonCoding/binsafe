@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMOp, VMReg, VMTest};
+use crate::vm::bytecode::{VMCondition, VMLogic, VMOp, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
