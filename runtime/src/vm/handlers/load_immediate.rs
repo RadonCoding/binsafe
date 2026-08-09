@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{eax, r12, r8, r8b, r8d, r8w, r9, rax, rcx};
+use iced_x86::code_asm::{eax, r12, r8, r8b, r8d, r8w, rax, rcx};
 
 use crate::{
     runtime::Runtime,
@@ -14,9 +14,6 @@ pub fn build(rt: &mut Runtime) {
 
     // eax -> width
     utils::bytecode::read_byte_zx(rt, rcx, eax);
-
-    // mov r9, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VImmMul, r9);
 
     utils::width::dispatch(
         rt,

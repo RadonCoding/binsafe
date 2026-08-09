@@ -8,8 +8,8 @@ static LABEL_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LabelKind {
-    Marker,
-    Target,
+    Source,
+    Destination,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -22,14 +22,14 @@ impl Label {
     pub fn marker() -> Self {
         Self {
             id: LABEL_ID.fetch_add(1, Ordering::Relaxed),
-            kind: LabelKind::Marker,
+            kind: LabelKind::Source,
         }
     }
 
     pub fn target() -> Self {
         Self {
             id: LABEL_ID.fetch_add(1, Ordering::Relaxed),
-            kind: LabelKind::Target,
+            kind: LabelKind::Destination,
         }
     }
 
@@ -51,7 +51,11 @@ impl Encode for Label {
         vec![]
     }
 
-    fn is_target(&self) -> bool {
-        self.kind == LabelKind::Target
+    fn is_source(&self) -> bool {
+        self.kind == LabelKind::Source
+    }
+
+    fn is_destination(&self) -> bool {
+        self.kind == LabelKind::Destination
     }
 }

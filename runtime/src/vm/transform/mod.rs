@@ -34,7 +34,7 @@ pub fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
         if operation
             .as_any()
             .downcast_ref::<Label>()
-            .map_or(false, |l| l.is_target())
+            .map_or(false, |l| l.is_destination())
         {
             label = true;
         }

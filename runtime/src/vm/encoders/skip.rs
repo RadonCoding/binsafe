@@ -8,8 +8,6 @@ use std::any::Any;
 #[derive(Debug)]
 pub struct Skip {
     expansion: Vec<Box<dyn Encode>>,
-    width: VMWidth,
-    source: Vec<u8>,
 }
 
 impl Skip {
@@ -19,15 +17,15 @@ impl Skip {
         conditions: Vec<VMCondition>,
         body: Vec<Box<dyn Encode>>,
     ) -> Self {
-        let mut expansion = Vec::with_capacity(1 + body.len());
+        let mut expansion = Vec::with_capacity(2 + body.len());
+        expansion.push(Box::new(LoadImmediate {
+            width: VMWidth::Lower8,
+            source: vec![0],
+        }) as Box<dyn Encode>);
         expansion.push(Box::new(Jcc { logic, conditions }) as Box<dyn Encode>);
         expansion.extend(body);
 
-        Self {
-            expansion,
-            width: VMWidth::Lower8,
-            source: vec![0],
-        }
+        Self { expansion }
     }
 }
 
@@ -41,25 +39,11 @@ impl Encode for Skip {
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        let header = LoadImmediate {
-            width: self.width,
-            source: self.source.clone(),
-        };
-        let mut bytes = header.encode(mapper);
-        bytes.extend(bytecode::assemble(mapper, &self.expansion));
-        bytes
+        bytecode::assemble(mapper, &self.expansion)
     }
 
     fn size(&self, mapper: &mut Mapper) -> usize {
-        let body = self.expansion[1..]
-            .iter()
-            .map(|op| op.size(mapper))
-            .sum::<usize>();
-        let header = LoadImmediate {
-            width: self.width,
-            source: self.source.clone(),
-        };
-        header.size(mapper) + self.expansion[0].size(mapper) + body
+        self.expansion.iter().map(|op| op.size(mapper)).sum()
     }
 
     fn reads(&self) -> Vec<Effect> {
@@ -74,10 +58,6 @@ impl Encode for Skip {
         self.expansion.iter().map(|op| op.depth()).sum()
     }
 
-    fn is_branch(&self) -> bool {
-        true
-    }
-
     fn children_ref(&self) -> Option<&[Box<dyn Encode>]> {
         Some(&self.expansion)
     }
@@ -87,23 +67,35 @@ impl Encode for Skip {
     }
 
     fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
-        let length = self.expansion[1..]
+        let index = self
+            .expansion
+            .iter()
+            .position(|op| op.as_any().downcast_ref::<Jcc>().is_some())
+            .unwrap();
+
+        let length = self.expansion[index + 1..]
             .iter()
             .map(|op| op.size(mapper))
             .sum::<usize>();
 
-        let (width, mut source) = if length <= u8::MAX as usize {
-            (VMWidth::Lower8, vec![length as u8])
+        let (width, mut source) = if let Ok(value) = u8::try_from(length) {
+            (VMWidth::Lower8, value.to_le_bytes().to_vec())
+        } else if let Ok(value) = u16::try_from(length) {
+            (VMWidth::Lower16, value.to_le_bytes().to_vec())
         } else {
             (
-                VMWidth::Lower16,
-                u16::try_from(length).unwrap().to_le_bytes().to_vec(),
+                VMWidth::Lower32,
+                u32::try_from(length).unwrap().to_le_bytes().to_vec(),
             )
         };
 
         transform(&mut source, 0);
 
-        self.width = width;
-        self.source = source;
+        let load = self.expansion[0]
+            .as_any_mut()
+            .downcast_mut::<LoadImmediate>()
+            .unwrap();
+        load.width = width;
+        load.source = source;
     }
 }

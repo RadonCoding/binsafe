@@ -23,21 +23,10 @@ impl Jcc {
         Self::always(VMLogic::SAND)
     }
 
-    pub fn pass() -> Self {
-        Self::never(VMLogic::SAND)
-    }
-
     fn always(logic: VMLogic) -> Self {
         Self {
             logic,
             conditions: vec![tautology()],
-        }
-    }
-
-    fn never(logic: VMLogic) -> Self {
-        Self {
-            logic,
-            conditions: vec![contradiction()],
         }
     }
 }

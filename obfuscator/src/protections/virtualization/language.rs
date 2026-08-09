@@ -56,7 +56,7 @@ pub fn skip<F: FnOnce(&mut Engine) -> Vec<Box<dyn Encode>>>(
     instructions.push(Box::new(And {
         width: VMWidth::Lower64,
     }));
-    instructions.push(Box::new(Discard));
+    instructions.push(Box::new(Discard::new()));
     instructions.push(Box::new(Skip::new(
         &mut engine.rt.mapper,
         VMLogic::SAND,
@@ -102,7 +102,7 @@ pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
     operations.push(Box::new(Sub {
         width: VMWidth::Lower64,
     }));
-    operations.push(Box::new(Discard));
+    operations.push(Box::new(Discard::new()));
 
     let source = Label::marker();
 
@@ -165,7 +165,7 @@ pub fn load_absolute(engine: &mut Engine, def: DataDef, register: VMReg) -> Vec<
 
 pub fn timestamp() -> Vec<Box<dyn Encode>> {
     vec![
-        Box::new(Timestamp),
+        Box::new(Timestamp::new()),
         Box::new(LoadImmediate {
             width: VMWidth::Lower64,
             source: 0x20u64.to_le_bytes().to_vec(),
@@ -417,7 +417,7 @@ pub fn mul(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     instructions.push(Box::new(Mul {
         width: VMWidth::Lower64,
     }));
-    instructions.push(Box::new(Discard));
+    instructions.push(Box::new(Discard::new()));
     instructions
 }
 

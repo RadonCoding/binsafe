@@ -1,20 +1,24 @@
+use std::collections::HashSet;
 use std::matches;
+use std::sync::Mutex;
 
 use rand::Rng;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMReg, VMWidth};
+use crate::vm::encoders::chain::Chain;
 use crate::vm::encoders::discard::Discard;
-use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::mul::Mul;
 use crate::vm::encoders::rol::Rol;
 use crate::vm::encoders::ror::Ror;
+use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::xor::Xor;
-use crate::vm::encoders::{Effect, Encode};
+use crate::vm::encoders::{identity, Effect, Encode};
+use crate::vm::snapshot::Snapshots;
 use crate::vm::transform::{deadzones, Phase, Transform};
 
 struct Encryptor<'a> {
@@ -65,11 +69,14 @@ impl<'a> Encryptor<'a> {
 
     /// Encrypts each operation in execution order, rolling both keys after every immediate.
     fn process(&mut self) {
+        let mut snapshots = Snapshots::new();
+        snapshots.record(Phase::Lift, self.operations);
         walk(
             self.mapper,
             self.operations,
             &mut self.addend,
             &mut self.multiplier,
+            &snapshots,
             0,
         );
     }
@@ -143,12 +150,15 @@ fn restore(
     sequence
 }
 
+static PRINTED: Mutex<Option<HashSet<usize>>> = Mutex::new(None);
+
 /// Encrypts each leaf in place splicing a roll sequence after every top-level immediate.
 fn walk(
     mapper: &mut Mapper,
     operations: &mut Vec<Box<dyn Encode>>,
     addend: &mut u64,
     multiplier: &mut u64,
+    snapshots: &Snapshots,
     level: i32,
 ) -> Vec<(u64, u64)> {
     let outer_addend = *addend;
@@ -167,24 +177,6 @@ fn walk(
     while i < operations.len() {
         trace.push((*addend, *multiplier));
 
-        if let Some(label) = operations[i].as_any().downcast_ref::<Label>() {
-            if label.is_target() {
-                let sequence = restore(outer_addend, outer_multiplier, *addend, *multiplier);
-
-                *addend = outer_addend;
-                *multiplier = outer_multiplier;
-
-                let length = sequence.len();
-                operations.splice(i + 1..i + 1, sequence);
-
-                for _ in 0..length {
-                    trace.push((*addend, *multiplier));
-                }
-
-                i += length;
-            }
-        }
-
         if let Some(children) = operations[i].children_mut() {
             let mut inner_addend = *addend;
             let mut inner_multiplier = *multiplier;
@@ -194,6 +186,7 @@ fn walk(
                 children,
                 &mut inner_addend,
                 &mut inner_multiplier,
+                snapshots,
                 level + 1,
             );
 
@@ -203,11 +196,11 @@ fn walk(
                 children.extend(sequence);
 
                 for _ in 0..length {
-                    inner_trace.push((inner_addend, inner_multiplier));
+                    inner_trace.push((*addend, *multiplier));
                 }
             }
 
-            operations[i].seal(mapper, &mut |source, index| {
+            operations[i].seal(mapper, &mut |source: &mut [u8], index| {
                 let (addend, multiplier) = inner_trace[index];
                 encrypt(source, addend, multiplier);
             });
@@ -219,21 +212,58 @@ fn walk(
             continue;
         }
 
-        if leaf(&mut operations[i], *addend, *multiplier) {
-            if level <= 1 {
-                let sequence = transform(addend, multiplier, !deadzones[position]);
-                let length = sequence.len();
-                operations.splice(i + 1..i + 1, sequence);
+        if operations[i].is_destination() {
+            let sequence = restore(outer_addend, outer_multiplier, *addend, *multiplier);
+            let length = sequence.len();
+            operations.splice(i..i, sequence);
 
-                for _ in 0..length {
-                    trace.push((*addend, *multiplier));
-                }
+            *addend = outer_addend;
+            *multiplier = outer_multiplier;
 
-                i += length;
+            for j in 0..length {
+                trace.insert(i + j, (*addend, *multiplier));
             }
+
+            i += length + 1;
+
+            position += 1;
+
+            continue;
+        }
+
+        if operations[i].is_branch() {
+            let sequence = restore(outer_addend, outer_multiplier, *addend, *multiplier);
+            let length = sequence.len();
+            operations.splice(i..i, sequence);
+
+            *addend = outer_addend;
+            *multiplier = outer_multiplier;
+
+            for j in 0..length {
+                trace.insert(i + j, (*addend, *multiplier));
+            }
+
+            i += length + 1;
+
+            position += 1;
+
+            continue;
+        }
+
+        if leaf(&mut operations[i], *addend, *multiplier) {
+            let sequence = transform(addend, multiplier, !deadzones[position]);
+            let length = sequence.len();
+            operations.splice(i + 1..i + 1, sequence);
+
+            for _ in 0..length {
+                trace.push((*addend, *multiplier));
+            }
+
+            i += length;
         }
 
         i += 1;
+
         position += 1;
     }
 
@@ -399,7 +429,7 @@ fn transform(addend: &mut u64, multiplier: &mut u64, preserve: bool) -> Vec<Box<
                 destination: VMReg::VImmMul,
             }));
 
-            sequence.push(Box::new(Discard));
+            sequence.push(Box::new(Discard::new()));
 
             *multiplier = multiplier.wrapping_mul(inverse);
         }

@@ -45,7 +45,11 @@ pub trait Encode: Debug + Any {
         0
     }
 
-    fn is_target(&self) -> bool {
+    fn is_source(&self) -> bool {
+        false
+    }
+
+    fn is_destination(&self) -> bool {
         false
     }
 
