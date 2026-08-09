@@ -15,7 +15,7 @@ impl Transform for Mutation {
         let mut operations = operations;
         let mut rng = rand::thread_rng();
 
-        jcc::walk(&mut operations, &mut rng);
+        // jcc::walk(&mut operations, &mut rng);
 
         operations
     }
