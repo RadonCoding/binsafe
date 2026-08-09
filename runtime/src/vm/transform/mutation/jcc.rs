@@ -7,10 +7,10 @@ use rand::Rng;
 use strum::IntoEnumIterator;
 
 /// Rewrites each [`Jcc`] in place via randomized, semantics-preserving conditions.
-pub fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
+pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
     descend(operations, |operations| {
-        for index in 0..operations.len() {
-            let Some((logic, conditions)) = operations[index]
+        for i in 0..operations.len() {
+            let Some((logic, conditions)) = operations[i]
                 .as_any()
                 .downcast_ref::<Jcc>()
                 .map(|jcc| (jcc.logic, jcc.conditions.clone()))
@@ -32,10 +32,7 @@ pub fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
 
             let flags = VMFlag::iter().collect::<Vec<VMFlag>>();
 
-            let jcc = operations[index]
-                .as_any_mut()
-                .downcast_mut::<Jcc>()
-                .unwrap();
+            let jcc = operations[i].as_any_mut().downcast_mut::<Jcc>().unwrap();
 
             if conditions.is_empty() {
                 let lhs = *flags.choose(rng).unwrap();
@@ -102,8 +99,8 @@ pub fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
                         jcc.conditions.push(y);
                     }
 
-                    jcc.conditions.shuffle(rng);
                     jcc.logic = xor;
+                    jcc.conditions.shuffle(rng);
                 }
 
                 VMLogic::JAND | VMLogic::CAND | VMLogic::SAND => {
@@ -115,8 +112,8 @@ pub fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
                         jcc.conditions.push(VMCondition::eq(flag, flag));
                     }
 
-                    jcc.conditions.shuffle(rng);
                     jcc.logic = and;
+                    jcc.conditions.shuffle(rng);
                 }
 
                 VMLogic::JOR | VMLogic::COR | VMLogic::SOR => {
@@ -125,20 +122,11 @@ pub fn walk<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
 
                     for _ in 0..count {
                         let flag = *flags.choose(rng).unwrap();
-
-                        let rhs = match rng.gen_range(0..5) {
-                            0 => 2,
-                            1 => 3,
-                            2 => 4,
-                            3 => 0x7f,
-                            _ => 0xff,
-                        };
-
-                        jcc.conditions.push(VMCondition::cmp(flag, rhs));
+                        jcc.conditions.push(VMCondition::cmp(flag, 1));
                     }
 
-                    jcc.conditions.shuffle(rng);
                     jcc.logic = or;
+                    jcc.conditions.shuffle(rng);
                 }
             }
         }

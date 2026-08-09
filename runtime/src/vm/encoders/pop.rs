@@ -2,9 +2,24 @@ use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMOp, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
+use std::fmt::{Debug, Formatter, Result};
 
-#[derive(Debug)]
-pub struct Pop;
+pub struct Pop {
+    _marker: u8,
+}
+
+impl Pop {
+    pub fn new() -> Self {
+        Self { _marker: 0 }
+    }
+}
+
+impl Debug for Pop {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        f.debug_struct(self.name()).finish()
+    }
+}
 
 impl Encode for Pop {
     fn as_any(&self) -> &dyn Any {

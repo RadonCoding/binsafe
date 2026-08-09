@@ -1,6 +1,5 @@
 use iced_x86::{Instruction, Mnemonic, OpKind};
 
-
 use crate::vm::bytecode::{VMMem, VMReg, VMWidth};
 use crate::vm::encoders::{
     load_address::LoadAddress, load_immediate::LoadImmediate, load_memory::LoadMemory,
@@ -49,7 +48,7 @@ fn push(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
         _ => unreachable!(),
     }
 
-    operations.push(Box::new(Push));
+    operations.push(Box::new(Push::new()));
 
     Some(operations)
 }
@@ -57,7 +56,7 @@ fn push(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
 fn pop(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let mut operations = Vec::<Box<dyn Encode>>::new();
 
-    operations.push(Box::new(Pop));
+    operations.push(Box::new(Pop::new()));
 
     match instruction.op0_kind() {
         OpKind::Register => {
