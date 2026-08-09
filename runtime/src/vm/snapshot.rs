@@ -1,20 +1,19 @@
-#[cfg(debug_assertions)]
-use std::fmt;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
-#[cfg(debug_assertions)]
 use crate::vm::{
     bytecode::Phase,
     encoders::{identity, Encode},
 };
 
-#[cfg(debug_assertions)]
 #[derive(Clone)]
 struct Snapshot {
     phase: Phase,
     operations: Vec<(usize, String)>,
 }
 
-#[cfg(debug_assertions)]
 impl Snapshot {
     fn new(phase: Phase, operations: &[Box<dyn Encode>]) -> Self {
         let mut flattened = Vec::new();
@@ -48,13 +47,11 @@ impl Snapshot {
     }
 }
 
-#[cfg(debug_assertions)]
 #[derive(Clone)]
 pub struct Snapshots {
     snapshots: Vec<Snapshot>,
 }
 
-#[cfg(debug_assertions)]
 impl Snapshots {
     pub fn new() -> Self {
         Self {
@@ -67,7 +64,6 @@ impl Snapshots {
     }
 }
 
-#[cfg(debug_assertions)]
 impl Snapshots {
     fn trace(&self, target: usize) -> (Option<usize>, String) {
         let mut original = None;
@@ -113,9 +109,41 @@ impl Snapshots {
 
         (original, markers)
     }
+
+    fn before(&self, remover: usize, address: usize) -> Option<usize> {
+        if remover == 0 {
+            return None;
+        }
+
+        self.snapshots[remover - 1]
+            .operations
+            .iter()
+            .position(|(other, _)| *other == address)
+    }
+
+    fn born(&self, remover: usize) -> Vec<usize> {
+        if remover >= self.snapshots.len() {
+            return Vec::new();
+        }
+
+        let seen = |address: usize| {
+            self.snapshots[..remover].iter().any(|snapshot| {
+                snapshot
+                    .operations
+                    .iter()
+                    .any(|(other, _)| *other == address)
+            })
+        };
+
+        self.snapshots[remover]
+            .operations
+            .iter()
+            .map(|(address, _)| *address)
+            .filter(|&address| !seen(address))
+            .collect::<Vec<usize>>()
+    }
 }
 
-#[cfg(debug_assertions)]
 fn letter(phase: Phase) -> [char; 2] {
     let mut chars = phase.identifier().chars();
     [
@@ -124,11 +152,8 @@ fn letter(phase: Phase) -> [char; 2] {
     ]
 }
 
-#[cfg(debug_assertions)]
 impl fmt::Display for Snapshots {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use std::collections::{HashMap, HashSet};
-
         let last = self.snapshots.last().unwrap();
         let surviving = last
             .operations
@@ -186,7 +211,13 @@ impl fmt::Display for Snapshots {
 
         removed.sort_by_key(|(remover, position, _, _)| (*remover, *position));
 
-        for (_, _, address, content) in &removed {
+        for (remover, position, address, content) in &removed {
+            let before = self.before(*remover, *address);
+
+            if before == Some(*position) && !self.born(*remover).is_empty() {
+                continue;
+            }
+
             let (original, markers) = self.trace(*address);
             lines.push(render(original, &markers, content));
         }

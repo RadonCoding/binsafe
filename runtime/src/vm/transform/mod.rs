@@ -1,8 +1,10 @@
+use std::collections::HashSet;
 use std::mem;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::VMReg;
+use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::label::Label;
+use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::{
     bytecode::Phase,
     encoders::{Effect, Encode},
@@ -163,4 +165,74 @@ fn overwritten(operations: &[Box<dyn Encode>], register: VMReg) -> bool {
 /// Whether the given atom contains a branch.
 fn branches(atom: &Vec<Box<dyn Encode>>) -> bool {
     atom.iter().any(|op| op.is_branch())
+}
+
+/// Extracts register read and write sets for an atom.
+fn effects(atom: &Vec<Box<dyn Encode>>) -> (HashSet<VMReg>, HashSet<VMReg>) {
+    let mut reads = HashSet::new();
+    let mut writes = HashSet::new();
+
+    for op in atom {
+        for effect in op.reads() {
+            if let Effect::Register(r) = effect {
+                if r != VMReg::None {
+                    reads.insert(r);
+                }
+            }
+        }
+
+        for effect in op.writes() {
+            if let Effect::Register(r) = effect {
+                if r != VMReg::None {
+                    writes.insert(r);
+                }
+            }
+        }
+    }
+
+    (reads, writes)
+}
+
+/// Finds [`VMReg`]s in future atoms available to store intermediate state without conflicts.
+pub fn vacant(
+    atoms: &[Vec<Box<dyn Encode>>],
+    pair: usize,
+    count: usize,
+    live: &HashSet<VMReg>,
+) -> Option<Vec<VMReg>> {
+    let (taken, _) = effects(&atoms[pair]);
+    let mut result = Vec::with_capacity(count);
+    let mut scanned = HashSet::new();
+
+    for j in (pair + 1)..atoms.len() {
+        let (reads, _) = effects(&atoms[j]);
+
+        for operation in &atoms[j] {
+            let Some(store) = operation.as_any().downcast_ref::<StoreRegister>() else {
+                continue;
+            };
+
+            let register = store.destination;
+
+            let full = matches!(store.width, VMWidth::Lower64 | VMWidth::Lower32);
+
+            if full
+                && !taken.contains(&register)
+                && !reads.contains(&register)
+                && !scanned.contains(&register)
+                && !result.contains(&register)
+                && live.contains(&register)
+            {
+                result.push(register);
+
+                if result.len() == count {
+                    return Some(result);
+                }
+            }
+        }
+
+        scanned.extend(reads);
+    }
+
+    None
 }

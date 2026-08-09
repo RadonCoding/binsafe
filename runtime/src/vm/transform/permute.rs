@@ -10,7 +10,7 @@ use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{identity, Effect, Encode};
-use crate::vm::transform::{branches, collapse, descend};
+use crate::vm::transform::{branches, collapse, descend, effects, vacant};
 
 struct Access {
     memory: VMMem,
@@ -143,49 +143,6 @@ fn cuts(atom: &Vec<Box<dyn Encode>>) -> Vec<usize> {
     points
 }
 
-/// Finds [`VMReg`]s in future atoms available to store intermediate state without conflicts.
-fn vacant(
-    atoms: &[Vec<Box<dyn Encode>>],
-    pair: usize,
-    count: usize,
-    live: &HashSet<VMReg>,
-) -> Option<Vec<VMReg>> {
-    let (taken, _) = effects(&atoms[pair]);
-    let mut result = Vec::with_capacity(count);
-    let mut scanned = HashSet::new();
-
-    for j in (pair + 1)..atoms.len() {
-        let (reads, _) = effects(&atoms[j]);
-
-        for operation in &atoms[j] {
-            let Some(store) = (&**operation as &dyn Any).downcast_ref::<StoreRegister>() else {
-                continue;
-            };
-
-            let register = store.destination;
-            let full = matches!(store.width, VMWidth::Lower64 | VMWidth::Lower32);
-
-            if full
-                && !taken.contains(&register)
-                && !reads.contains(&register)
-                && !scanned.contains(&register)
-                && !result.contains(&register)
-                && live.contains(&register)
-            {
-                result.push(register);
-
-                if result.len() == count {
-                    return Some(result);
-                }
-            }
-        }
-
-        scanned.extend(reads);
-    }
-
-    None
-}
-
 /// Partitions `atom` at `cuts`, inserting [`LoadRegister`] and [`StoreRegister`] pairs to persist state.
 fn split(
     atom: Vec<Box<dyn Encode>>,
@@ -254,32 +211,6 @@ fn split(
     result.push(last);
 
     result
-}
-
-/// Extracts register read and write sets for an atom.
-fn effects(atom: &Vec<Box<dyn Encode>>) -> (HashSet<VMReg>, HashSet<VMReg>) {
-    let mut reads = HashSet::new();
-    let mut writes = HashSet::new();
-
-    for op in atom {
-        for effect in op.reads() {
-            if let Effect::Register(r) = effect {
-                if r != VMReg::None {
-                    reads.insert(r);
-                }
-            }
-        }
-
-        for effect in op.writes() {
-            if let Effect::Register(r) = effect {
-                if r != VMReg::None {
-                    writes.insert(r);
-                }
-            }
-        }
-    }
-
-    (reads, writes)
 }
 
 /// Builds a dependency graph and calculates indegrees for atoms.
