@@ -1,12 +1,9 @@
-use std::collections::HashSet;
 use std::matches;
-use std::sync::Mutex;
 
 use rand::Rng;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMReg, VMWidth};
-use crate::vm::encoders::chain::Chain;
 use crate::vm::encoders::discard::Discard;
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_immediate::LoadImmediate;
@@ -14,11 +11,9 @@ use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::mul::Mul;
 use crate::vm::encoders::rol::Rol;
 use crate::vm::encoders::ror::Ror;
-use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::xor::Xor;
-use crate::vm::encoders::{identity, Effect, Encode};
-use crate::vm::snapshot::Snapshots;
+use crate::vm::encoders::{Effect, Encode};
 use crate::vm::transform::{deadzones, Phase, Transform};
 
 struct Encryptor<'a> {
@@ -69,19 +64,11 @@ impl<'a> Encryptor<'a> {
 
     /// Encrypts each operation in execution order, rolling both keys after every immediate.
     fn process(&mut self) {
-        let mut snapshots = Snapshots::new();
-        snapshots.record(Phase::Lift, self.operations);
         walk(
             self.mapper,
             self.operations,
             &mut self.addend,
-<<<<<<< HEAD
             &mut self.multiplier,
-            &snapshots,
-            0,
-=======
-            &mut self.multiplier
->>>>>>> b76e14330923c430b672659e7443bb1dfa759464
         );
     }
 
@@ -154,19 +141,12 @@ fn restore(
     sequence
 }
 
-static PRINTED: Mutex<Option<HashSet<usize>>> = Mutex::new(None);
-
 /// Encrypts each leaf in place splicing a roll sequence after every top-level immediate.
 fn walk(
     mapper: &mut Mapper,
     operations: &mut Vec<Box<dyn Encode>>,
     addend: &mut u64,
     multiplier: &mut u64,
-<<<<<<< HEAD
-    snapshots: &Snapshots,
-    level: i32,
-=======
->>>>>>> b76e14330923c430b672659e7443bb1dfa759464
 ) -> Vec<(u64, u64)> {
     let outer_addend = *addend;
     let outer_multiplier = *multiplier;
@@ -188,18 +168,7 @@ fn walk(
             let mut inner_addend = *addend;
             let mut inner_multiplier = *multiplier;
 
-            let mut inner_trace = walk(
-                mapper,
-                children,
-                &mut inner_addend,
-<<<<<<< HEAD
-                &mut inner_multiplier,
-                snapshots,
-                level + 1,
-=======
-                &mut inner_multiplier
->>>>>>> b76e14330923c430b672659e7443bb1dfa759464
-            );
+            let mut inner_trace = walk(mapper, children, &mut inner_addend, &mut inner_multiplier);
 
             if inner_addend != *addend || inner_multiplier != *multiplier {
                 let sequence = restore(*addend, *multiplier, inner_addend, inner_multiplier);
@@ -223,7 +192,6 @@ fn walk(
             continue;
         }
 
-<<<<<<< HEAD
         if operations[i].is_destination() {
             let sequence = restore(outer_addend, outer_multiplier, *addend, *multiplier);
             let length = sequence.len();
@@ -271,26 +239,10 @@ fn walk(
                 trace.push((*addend, *multiplier));
             }
 
-=======
-        if leaf(&mut operations[i], *addend, *multiplier) {
-            let sequence = transform(addend, multiplier, !deadzones[position]);
-            let length = sequence.len();
-            operations.splice(i + 1..i + 1, sequence);
-
-            for _ in 0..length {
-                trace.push((*addend, *multiplier));
-            }
-
->>>>>>> b76e14330923c430b672659e7443bb1dfa759464
             i += length;
         }
 
         i += 1;
-<<<<<<< HEAD
-
-=======
-        
->>>>>>> b76e14330923c430b672659e7443bb1dfa759464
         position += 1;
     }
 
