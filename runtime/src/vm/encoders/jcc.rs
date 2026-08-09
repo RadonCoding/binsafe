@@ -26,7 +26,7 @@ impl Jcc {
     fn always(logic: VMLogic) -> Self {
         Self {
             logic,
-            conditions: vec![tautology()],
+            conditions: vec![],
         }
     }
 }
@@ -71,27 +71,4 @@ impl Encode for Jcc {
     fn is_branch(&self) -> bool {
         true
     }
-}
-
-/// Canonical always-true flag bit compared for equality against itself.
-pub fn tautology() -> VMCondition {
-    VMCondition {
-        test: VMTest::EQ,
-        lhs: VMFlag::Zero as u8,
-        rhs: VMFlag::Zero as u8,
-    }
-}
-
-/// Canonical always-false flag bit compared for inequality against itself.
-pub fn contradiction() -> VMCondition {
-    VMCondition {
-        test: VMTest::NEQ,
-        lhs: VMFlag::Zero as u8,
-        rhs: VMFlag::Zero as u8,
-    }
-}
-
-/// Whether `condition` is the canonical [`tautology`] or [`contradiction`] sub-condition.
-pub fn canonical(condition: &VMCondition) -> bool {
-    matches!(condition.test, VMTest::EQ | VMTest::NEQ) && condition.lhs == condition.rhs
 }
