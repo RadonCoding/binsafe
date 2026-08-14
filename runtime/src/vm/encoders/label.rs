@@ -12,21 +12,21 @@ pub enum LabelKind {
     Destination,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Label {
     id: usize,
     kind: LabelKind,
 }
 
 impl Label {
-    pub fn marker() -> Self {
+    pub fn source() -> Self {
         Self {
             id: LABEL_ID.fetch_add(1, Ordering::Relaxed),
             kind: LabelKind::Source,
         }
     }
 
-    pub fn target() -> Self {
+    pub fn destination() -> Self {
         Self {
             id: LABEL_ID.fetch_add(1, Ordering::Relaxed),
             kind: LabelKind::Destination,

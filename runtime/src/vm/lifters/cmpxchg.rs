@@ -1,14 +1,14 @@
 use iced_x86::{Instruction, OpKind};
 
-use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg};
+use crate::vm::encoders::block::Block;
 use crate::vm::encoders::{
     compare_exchange::CompareExchange, discard::Discard, load_address::LoadAddress,
-    load_register::LoadRegister, skip::Skip, store_register::StoreRegister, sub::Sub, Encode,
+    load_register::LoadRegister, store_register::StoreRegister, sub::Sub, Encode,
 };
 use crate::vm::lifters::operation_width;
 
-pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let destination_width = operation_width(instruction, 0);
     let source_register = VMReg::from(instruction.op1_register());
 
@@ -70,8 +70,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Box<
                     destination: destination_register,
                 }),
             ];
-            operations.push(Box::new(Skip::new(
-                mapper,
+            operations.push(Box::new(Block::skip(
                 VMLogic::SAND,
                 vec![VMCondition::cmp(VMFlag::Zero, 0)],
                 body,

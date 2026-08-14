@@ -40,7 +40,7 @@ fn check_with_memory(state: State, instruction: Instruction, memory: &mut [u8]) 
     memory.copy_from_slice(&baseline);
 
     let mut executor = Executor::new();
-    let lifted = bytecode::lift(&mut executor.rt.mapper, &[instruction])
+    let lifted = bytecode::lift(&[instruction])
         .unwrap_or_else(|| panic!("{instruction} is not implemented"));
     let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |_| 0);
 

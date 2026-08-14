@@ -3,7 +3,7 @@ use runtime::runtime::{DataDef, FnDef, ImportDef};
 use runtime::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMVec, VMWidth};
 use runtime::vm::encoders::add::Add;
 use runtime::vm::encoders::and::And;
-use runtime::vm::encoders::chain::{Chain, Jump, Target};
+use runtime::vm::encoders::block::{Block, Jump, Target};
 use runtime::vm::encoders::discard::Discard;
 use runtime::vm::encoders::jcc::Jcc;
 use runtime::vm::encoders::label::Label;
@@ -16,7 +16,6 @@ use runtime::vm::encoders::mul::Mul;
 use runtime::vm::encoders::or::Or;
 use runtime::vm::encoders::shl::Shl;
 use runtime::vm::encoders::shr::Shr;
-use runtime::vm::encoders::skip::Skip;
 use runtime::vm::encoders::store_memory::StoreMemory;
 use runtime::vm::encoders::store_merge::StoreMerge;
 use runtime::vm::encoders::store_register::StoreRegister;
@@ -57,12 +56,7 @@ pub fn skip<F: FnOnce(&mut Engine) -> Vec<Box<dyn Encode>>>(
         width: VMWidth::Lower64,
     }));
     instructions.push(Box::new(Discard::new()));
-    instructions.push(Box::new(Skip::new(
-        &mut engine.rt.mapper,
-        VMLogic::SAND,
-        vec![condition],
-        body,
-    )));
+    instructions.push(Box::new(Block::skip(VMLogic::SAND, vec![condition], body)));
     instructions
 }
 
@@ -78,7 +72,7 @@ pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
 
     operations.extend(set_register(counter, 0));
 
-    let destination = Label::target();
+    let destination = Label::destination();
 
     operations.push(Box::new(destination));
 
@@ -104,7 +98,7 @@ pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
     }));
     operations.push(Box::new(Discard::new()));
 
-    let source = Label::marker();
+    let source = Label::source();
 
     operations.push(Box::new(source));
 
@@ -122,7 +116,7 @@ pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
         destination: Target::Label(destination),
     });
 
-    vec![Box::new(Chain::new(operations, jumps))]
+    vec![Box::new(Block::new(operations, jumps))]
 }
 
 pub fn compute_data(engine: &mut Engine, def: DataDef) -> Vec<Box<dyn Encode>> {
