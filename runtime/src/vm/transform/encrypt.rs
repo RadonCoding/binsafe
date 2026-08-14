@@ -192,26 +192,7 @@ fn walk(
             continue;
         }
 
-        if operations[i].is_destination() {
-            let sequence = restore(outer_addend, outer_multiplier, *addend, *multiplier);
-            let length = sequence.len();
-            operations.splice(i..i, sequence);
-
-            *addend = outer_addend;
-            *multiplier = outer_multiplier;
-
-            for j in 0..length {
-                trace.insert(i + j, (*addend, *multiplier));
-            }
-
-            i += length + 1;
-
-            position += 1;
-
-            continue;
-        }
-
-        if operations[i].is_branch() {
+        if operations[i].is_destination() || operations[i].is_branch() {
             let sequence = restore(outer_addend, outer_multiplier, *addend, *multiplier);
             let length = sequence.len();
             operations.splice(i..i, sequence);
