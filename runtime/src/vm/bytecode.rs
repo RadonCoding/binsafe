@@ -633,13 +633,13 @@ where
 {
     let mut operations = operations;
 
-    // operations = Peephole.run(mapper, operations);
+    operations = Peephole.run(mapper, operations);
     operations = permute::permute(operations, &mut picker);
-    // operations = scramble::scramble(operations);
-    // operations = Mutation.run(mapper, operations);
+    operations = scramble::scramble(operations);
+    operations = Mutation.run(mapper, operations);
     operations = Encrypt.run(mapper, operations);
-    // operations = permute::permute(operations, &mut picker);
-    // operations = Peephole.run(mapper, operations);
+    operations = permute::permute(operations, &mut picker);
+    operations = Peephole.run(mapper, operations);
 
     operations
 }

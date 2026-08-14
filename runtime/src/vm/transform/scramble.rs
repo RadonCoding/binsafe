@@ -116,6 +116,12 @@ fn chain(atoms: &mut Vec<Vec<Box<dyn Encode>>>) -> Vec<Jump> {
 
         atoms[k].extend(procedure);
 
+        let successor = if fallthrough {
+            Some(rng.gen_range(0..count))
+        } else {
+            successor
+        };
+
         pending.push((source, successor));
     }
 
