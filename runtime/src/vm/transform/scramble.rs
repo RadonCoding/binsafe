@@ -13,24 +13,32 @@ use crate::vm::transform::atomize;
 
 /// Shuffles the physical order of atoms by chaining them in execution order through signed-offset [`Jcc`]s.
 pub fn scramble(mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
-    walk(&mut operations);
+    walk(&mut operations, true);
 
     operations
 }
 
-/// Recurses into children, scrambling any [`Block`] found along the way before wrapping its own level.
-fn walk(operations: &mut Vec<Box<dyn Encode>>) {
+/// Recurses into existing blocks and scrambles the current level.
+fn walk(operations: &mut Vec<Box<dyn Encode>>, wrap: bool) {
     for operation in operations.iter_mut() {
-        if let Some(block) = operation.as_any_mut().downcast_mut::<Block>() {
+        let block = operation.as_any_mut().downcast_mut::<Block>();
+
+        let wrap = block.is_none();
+
+        if let Some(block) = block {
             reorder(block);
-        } else if let Some(children) = operation.children_mut() {
-            walk(children);
+        }
+
+        if let Some(children) = operation.children_mut() {
+            walk(children, wrap);
         }
     }
 
-    let mut block = Block::new(mem::take(operations), vec![]);
-    reorder(&mut block);
-    operations.push(Box::new(block));
+    if wrap {
+        let mut block = Block::new(mem::take(operations), vec![]);
+        reorder(&mut block);
+        operations.push(Box::new(block));
+    }
 }
 
 /// Atomizes and chains a [`Block`]'s children, rewriting it in place.
