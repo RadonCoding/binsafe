@@ -387,7 +387,7 @@ mapped! {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VMCondition {
     pub test: VMTest,
     pub lhs: u8,
@@ -457,7 +457,7 @@ impl Phase {
     }
 }
 
-pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
+pub fn lift(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
     let mut output: Vec<Box<dyn Encode>> = Vec::new();
 
     for instruction in instructions {
@@ -496,7 +496,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Box
             | Mnemonic::Cmovns
             | Mnemonic::Cmovo
             | Mnemonic::Cmovp
-            | Mnemonic::Cmovs => cmov::encode(mapper, instruction)?,
+            | Mnemonic::Cmovs => cmov::encode(instruction)?,
             Mnemonic::Add
             | Mnemonic::Sub
             | Mnemonic::Adc
@@ -570,7 +570,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Box
             }
             Mnemonic::Xchg => xchg::encode(instruction)?,
             Mnemonic::Xadd => xadd::encode(instruction)?,
-            Mnemonic::Cmpxchg => cmpxchg::encode(mapper, instruction)?,
+            Mnemonic::Cmpxchg => cmpxchg::encode(instruction)?,
             Mnemonic::Lea => lea::encode(instruction)?,
             Mnemonic::Mov
             | Mnemonic::Movaps
@@ -600,7 +600,7 @@ pub fn lift(mapper: &mut Mapper, instructions: &[Instruction]) -> Option<Vec<Box
             | Mnemonic::Setns
             | Mnemonic::Seto
             | Mnemonic::Setp
-            | Mnemonic::Sets => set::encode(mapper, instruction)?,
+            | Mnemonic::Sets => set::encode(instruction)?,
             Mnemonic::Rdtsc => rdtsc::encode(instruction)?,
             Mnemonic::Nop | Mnemonic::Int | Mnemonic::Int3 | Mnemonic::Ud2 | Mnemonic::Pause => {
                 continue

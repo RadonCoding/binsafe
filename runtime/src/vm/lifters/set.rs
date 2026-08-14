@@ -1,16 +1,14 @@
 use iced_x86::{Code, Instruction, OpKind};
 
-
-use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMWidth};
+use crate::vm::encoders::block::Block;
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_immediate::LoadImmediate;
-use crate::vm::encoders::skip::Skip;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::Encode;
 
-pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let code = instruction.code();
 
     let (logic, conditions) = match code {
@@ -134,7 +132,7 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Box<
         _ => unreachable!(),
     }
 
-    operations.push(Box::new(Skip::new(mapper, logic, conditions, body)));
+    operations.push(Box::new(Block::skip(logic, conditions, body)));
 
     Some(operations)
 }

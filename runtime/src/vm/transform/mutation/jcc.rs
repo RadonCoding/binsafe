@@ -10,15 +10,11 @@ use strum::IntoEnumIterator;
 pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
     descend(operations, |operations| {
         for i in 0..operations.len() {
-            let Some((logic, conditions)) = operations[i]
-                .as_any()
-                .downcast_ref::<Jcc>()
-                .map(|jcc| (jcc.logic, jcc.conditions.clone()))
-            else {
+            let Some(jcc) = operations[i].as_any_mut().downcast_mut::<Jcc>() else {
                 continue;
             };
 
-            let (and, or, xor) = match logic {
+            let (and, or, xor) = match jcc.logic {
                 VMLogic::JAND | VMLogic::JOR | VMLogic::JXOR => {
                     (VMLogic::JAND, VMLogic::JOR, VMLogic::JXOR)
                 }
@@ -32,9 +28,16 @@ pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
 
             let flags = VMFlag::iter().collect::<Vec<VMFlag>>();
 
-            let jcc = operations[i].as_any_mut().downcast_mut::<Jcc>().unwrap();
+            let is_always_true = jcc.conditions.len() == 1
+                && flags
+                    .iter()
+                    .any(|&f| jcc.conditions[0] == VMCondition::eq(f, f));
+            let is_always_false = jcc.conditions.len() == 1
+                && flags
+                    .iter()
+                    .any(|&f| jcc.conditions[0] == VMCondition::neq(f, f));
 
-            if conditions.is_empty() {
+            if is_always_true {
                 let lhs = *flags.choose(rng).unwrap();
                 let rhs = *flags.choose(rng).unwrap();
 
@@ -86,23 +89,30 @@ pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
                 continue;
             }
 
-            let remaining = 4usize.saturating_sub(jcc.conditions.len());
+            if is_always_false {
+                let lhs = *flags.choose(rng).unwrap();
+                let rhs = *flags.choose(rng).unwrap();
 
-            match logic {
-                VMLogic::JXOR | VMLogic::CXOR | VMLogic::SXOR => {
-                    // X XOR Y XOR Y == X.
-                    let pairs = rng.gen_range(0..=(remaining / 2));
+                let x = VMCondition::eq(lhs, rhs);
+                let not_x = VMCondition::neq(lhs, rhs);
 
-                    for _ in 0..pairs {
-                        let y = random(&flags, rng);
-                        jcc.conditions.push(y);
-                        jcc.conditions.push(y);
-                    }
+                jcc.logic = and;
+                jcc.conditions = vec![x, not_x];
 
-                    jcc.logic = xor;
-                    jcc.conditions.shuffle(rng);
+                let count = rng.gen_range(0..=2);
+
+                for _ in 0..count {
+                    let flag = *flags.choose(rng).unwrap();
+                    jcc.conditions.push(VMCondition::eq(flag, flag));
                 }
 
+                jcc.conditions.shuffle(rng);
+                continue;
+            }
+
+            let remaining = 4usize.saturating_sub(jcc.conditions.len());
+
+            match jcc.logic {
                 VMLogic::JAND | VMLogic::CAND | VMLogic::SAND => {
                     // X AND 1 == X.
                     let count = rng.gen_range(0..=remaining);
@@ -115,7 +125,6 @@ pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
                     jcc.logic = and;
                     jcc.conditions.shuffle(rng);
                 }
-
                 VMLogic::JOR | VMLogic::COR | VMLogic::SOR => {
                     // X OR 0 == X.
                     let count = rng.gen_range(0..=remaining);
@@ -126,6 +135,19 @@ pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
                     }
 
                     jcc.logic = or;
+                    jcc.conditions.shuffle(rng);
+                }
+                VMLogic::JXOR | VMLogic::CXOR | VMLogic::SXOR => {
+                    // X XOR Y XOR Y == X.
+                    let pairs = rng.gen_range(0..=(remaining / 2));
+
+                    for _ in 0..pairs {
+                        let y = random(&flags, rng);
+                        jcc.conditions.push(y);
+                        jcc.conditions.push(y);
+                    }
+
+                    jcc.logic = xor;
                     jcc.conditions.shuffle(rng);
                 }
             }

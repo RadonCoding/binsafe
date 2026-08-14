@@ -1,16 +1,16 @@
 use std::any::Any;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{self, VMWidth};
+use crate::vm::bytecode::{self, VMCondition, VMLogic, VMWidth};
 use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
-pub struct Chain {
-    operations: Vec<Box<dyn Encode>>,
-    jumps: Vec<Jump>,
+pub struct Block {
+    body: Vec<Box<dyn Encode>>,
+    pub jumps: Vec<Jump>,
 }
 
 #[derive(Debug)]
@@ -25,9 +25,34 @@ pub enum Target {
     End,
 }
 
-impl Chain {
-    pub fn new(operations: Vec<Box<dyn Encode>>, jumps: Vec<Jump>) -> Self {
-        Self { operations, jumps }
+impl Block {
+    pub fn new(body: Vec<Box<dyn Encode>>, jumps: Vec<Jump>) -> Self {
+        Self { body, jumps }
+    }
+
+    pub fn skip(
+        logic: VMLogic,
+        conditions: Vec<VMCondition>,
+        mut body: Vec<Box<dyn Encode>>,
+    ) -> Block {
+        let source = Label::source();
+
+        body.insert(0, Box::new(source));
+        body.insert(
+            1,
+            Box::new(LoadImmediate {
+                width: VMWidth::SLower8,
+                source: vec![0],
+            }),
+        );
+        body.insert(2, Box::new(Jcc { logic, conditions }));
+
+        let jumps = vec![Jump {
+            source,
+            destination: Target::End,
+        }];
+
+        Self::new(body, jumps)
     }
 
     fn position(
@@ -38,16 +63,10 @@ impl Chain {
     ) -> Option<usize> {
         let mut offset = 0;
 
-        for operation in operations.unwrap_or(&self.operations) {
+        for operation in operations.unwrap_or(&self.body) {
             if let Some(target) = operation.as_any().downcast_ref::<Label>() {
                 if target.id() == label {
                     return Some(offset);
-                }
-            }
-
-            if let Some(children) = operation.children_ref() {
-                if let Some(position) = self.position(mapper, Some(children), label) {
-                    return Some(offset + position);
                 }
             }
 
@@ -57,38 +76,30 @@ impl Chain {
         None
     }
 
-    fn indices(&self, label: usize) -> (usize, usize) {
-        let index = self
-            .operations
-            .iter()
-            .position(|operation| {
-                operation
-                    .as_any()
-                    .downcast_ref::<Label>()
-                    .map_or(false, |l| l.id() == label)
-            })
-            .unwrap();
+    fn indices(&self, label: usize) -> Option<(usize, usize)> {
+        let index = self.body.iter().position(|operation| {
+            operation
+                .as_any()
+                .downcast_ref::<Label>()
+                .map_or(false, |l| l.id() == label)
+        })?;
 
         let mut stack = Vec::new();
 
-        for i in index + 1..self.operations.len() {
-            let operation = &self.operations[i];
+        for i in index + 1..self.body.len() {
+            let operation = &self.body[i];
 
             if operation.as_any().downcast_ref::<Jcc>().is_some() {
-                return (*stack.last().unwrap(), i);
+                if stack.len() == 1 {
+                    return Some((stack[0], i));
+                }
             }
 
             let delta = operation.depth();
 
             if delta > 0 {
-                if operation.as_any().downcast_ref::<LoadImmediate>().is_some() {
-                    for _ in 0..delta {
-                        stack.push(i);
-                    }
-                } else {
-                    for _ in 0..delta {
-                        stack.push(usize::MAX);
-                    }
+                for _ in 0..delta {
+                    stack.push(i);
                 }
             } else {
                 for _ in 0..(-delta) {
@@ -101,7 +112,7 @@ impl Chain {
     }
 }
 
-impl Encode for Chain {
+impl Encode for Block {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -111,31 +122,31 @@ impl Encode for Chain {
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        bytecode::assemble(mapper, &self.operations)
+        bytecode::assemble(mapper, &self.body)
     }
 
     fn size(&self, mapper: &mut Mapper) -> usize {
-        self.operations.iter().map(|op| op.size(mapper)).sum()
+        self.body.iter().map(|op| op.size(mapper)).sum()
     }
 
     fn reads(&self) -> Vec<Effect> {
-        self.operations.iter().flat_map(|op| op.reads()).collect()
+        self.body.iter().flat_map(|op| op.reads()).collect()
     }
 
     fn writes(&self) -> Vec<Effect> {
-        self.operations.iter().flat_map(|op| op.writes()).collect()
+        self.body.iter().flat_map(|op| op.writes()).collect()
     }
 
     fn depth(&self) -> i32 {
-        self.operations.iter().map(|op| op.depth()).sum()
+        self.body.iter().map(|op| op.depth()).sum()
     }
 
     fn children_ref(&self) -> Option<&[Box<dyn Encode>]> {
-        Some(&self.operations)
+        Some(&self.body)
     }
 
     fn children_mut(&mut self) -> Option<&mut Vec<Box<dyn Encode>>> {
-        Some(&mut self.operations)
+        Some(&mut self.body)
     }
 
     fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
@@ -151,7 +162,9 @@ impl Encode for Chain {
                     Target::End => None,
                 };
 
-                let (load_index, branch_index) = self.indices(source_label);
+                let Some((load_index, branch_index)) = self.indices(source_label) else {
+                    continue;
+                };
 
                 let destination = if let Some(destination) = destination_label {
                     self.position(mapper, None, destination).unwrap()
@@ -159,14 +172,14 @@ impl Encode for Chain {
                     self.size(mapper)
                 };
 
-                let after = self.operations[..=branch_index]
+                let after = self.body[..=branch_index]
                     .iter()
                     .map(|op| op.size(mapper))
                     .sum::<usize>();
 
                 let offset = destination as isize - after as isize;
 
-                let load = self.operations[load_index]
+                let load = self.body[load_index]
                     .as_any_mut()
                     .downcast_mut::<LoadImmediate>()
                     .unwrap();
@@ -197,7 +210,9 @@ impl Encode for Chain {
                 Target::End => None,
             };
 
-            let (load_index, branch_index) = self.indices(source_label);
+            let Some((load_index, branch_index)) = self.indices(source_label) else {
+                continue;
+            };
 
             let destination = if let Some(label) = destination_label {
                 self.position(mapper, None, label).unwrap()
@@ -205,14 +220,14 @@ impl Encode for Chain {
                 self.size(mapper)
             };
 
-            let after = self.operations[..=branch_index]
+            let after = self.body[..=branch_index]
                 .iter()
                 .map(|op| op.size(mapper))
                 .sum::<usize>();
 
             let offset = destination as isize - after as isize;
 
-            let load = self.operations[load_index]
+            let load = self.body[load_index]
                 .as_any_mut()
                 .downcast_mut::<LoadImmediate>()
                 .unwrap();

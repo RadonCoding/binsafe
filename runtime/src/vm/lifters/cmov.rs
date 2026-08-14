@@ -1,13 +1,11 @@
 use iced_x86::{Code, Instruction};
 
-
-use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic};
-use crate::vm::encoders::skip::Skip;
+use crate::vm::encoders::block::Block;
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::transfer;
 
-pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
+pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let code = instruction.code();
 
     let (logic, conditions) = match code {
@@ -82,5 +80,5 @@ pub fn encode(mapper: &mut Mapper, instruction: &Instruction) -> Option<Vec<Box<
 
     let body = transfer::encode(instruction)?;
 
-    Some(vec![Box::new(Skip::new(mapper, logic, conditions, body))])
+    Some(vec![Box::new(Block::skip(logic, conditions, body))])
 }

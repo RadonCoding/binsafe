@@ -69,9 +69,7 @@ struct Run {
 }
 
 fn exhaust(instructions: &[Instruction], state: State, memory: &mut [u64]) {
-    let mut executor = Executor::new();
-
-    let lifted = bytecode::lift(&mut executor.rt.mapper, instructions).unwrap();
+    let lifted = bytecode::lift(instructions).unwrap();
 
     let input = dump(&lifted);
 
@@ -86,7 +84,7 @@ fn exhaust(instructions: &[Instruction], state: State, memory: &mut [u64]) {
 
         let mut executor = Executor::new();
 
-        let lifted = bytecode::lift(&mut executor.rt.mapper, instructions).unwrap();
+        let lifted = bytecode::lift(instructions).unwrap();
 
         let permuted = permute::permute(lifted, &mut |ready| enumerator.pick(ready));
 

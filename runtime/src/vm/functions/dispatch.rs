@@ -170,6 +170,17 @@ pub fn build(rt: &mut Runtime) {
         // r8d -> operation
         utils::bytecode::read_byte_zx(rt, r13, r8d);
 
+        // println!(
+        //     "{}",
+        //     VMOp::VARIANTS
+        //         .iter()
+        //         .map(|op| format!("{:?}={:016X}", op, rt.mapper.index(*op)))
+        //         .collect::<Vec<String>>()
+        //         .join("\n")
+        // );
+
+        // crate::debug::print_thread_message(rt, "Executing", Some(r8), None);
+
         // mov rcx, r13
         rt.asm.mov(rcx, r13).unwrap();
 

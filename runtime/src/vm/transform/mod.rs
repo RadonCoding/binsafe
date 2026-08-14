@@ -3,7 +3,6 @@ use std::mem;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMReg, VMWidth};
-use crate::vm::encoders::label::Label;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::{
     bytecode::Phase,
@@ -25,21 +24,11 @@ pub trait Transform {
 /// Groups operations into depth-balanced atoms, appending any trailing unbalanced run as a final atom.
 pub fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
     let mut atoms = Vec::new();
-
     let mut current = Vec::new();
-
     let mut depth = 0;
 
-    let mut label = false;
-
     for operation in operations {
-        if operation
-            .as_any()
-            .downcast_ref::<Label>()
-            .map_or(false, |l| l.is_destination())
-        {
-            label = true;
-        }
+        let label = operation.is_source() || operation.is_destination();
 
         depth += operation.depth();
 
@@ -47,7 +36,6 @@ pub fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
 
         if depth == 0 && !label {
             atoms.push(mem::take(&mut current));
-            label = false;
         }
     }
 

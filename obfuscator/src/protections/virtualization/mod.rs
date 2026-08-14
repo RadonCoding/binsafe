@@ -127,7 +127,7 @@ impl Protection for Virtualization {
                 continue;
             }
 
-            let lifted = match bytecode::lift(&mut engine.rt.mapper, &block.instructions) {
+            let lifted = match bytecode::lift(&block.instructions) {
                 Some(ops) if !ops.is_empty() => ops,
                 _ => {
                     self.blocked += 1;
@@ -141,9 +141,7 @@ impl Protection for Virtualization {
                             continue;
                         }
 
-                        if bytecode::lift(&mut engine.rt.mapper, slice::from_ref(instruction))
-                            .is_none()
-                        {
+                        if bytecode::lift(slice::from_ref(instruction)).is_none() {
                             *self.missing.entry(mnemonic).or_default() += 1;
                         }
                     }
