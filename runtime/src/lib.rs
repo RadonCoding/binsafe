@@ -2,6 +2,7 @@
 pub mod debug;
 pub mod functions;
 pub mod mapper;
+mod obfuscator;
 pub mod runtime;
 pub mod vm;
 

@@ -4,7 +4,7 @@ use crate::engine::Engine;
 use crate::protections::virtualization::{crypt, language::*};
 use rand::Rng;
 use runtime::runtime::DataDef;
-use runtime::vm::bytecode::{VMCondition, VMFlag, VMPrecision, VMReg, VMSeg, VMWidth};
+use runtime::vm::bytecode::{Flag, VMCondition, VMPrecision, VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::vector_add::VectorAdd;
 use runtime::vm::encoders::vector_sub::VectorSub;
 use runtime::vm::encoders::vector_xor::VectorXor;
@@ -73,7 +73,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
     block.extend(skip(
         engine,
         VMReg::Rax,
-        VMCondition::cmp(VMFlag::Zero, 1),
+        VMCondition::cmp(Flag::Zero, 1),
         |engine| {
             let mut b = Vec::<Box<dyn Encode>>::new();
 
@@ -113,7 +113,7 @@ fn correct(
     instructions.extend(skip(
         engine,
         VMReg::Rdx,
-        VMCondition::cmp(VMFlag::Zero, 0),
+        VMCondition::cmp(Flag::Zero, 0),
         |_| {
             let mut b = Vec::new();
 
@@ -151,7 +151,7 @@ fn correct(
     instructions.extend(skip(
         engine,
         VMReg::Rdx,
-        VMCondition::cmp(VMFlag::Zero, 1),
+        VMCondition::cmp(Flag::Zero, 1),
         |_| {
             load_memory(
                 VMReg::Vg0,

@@ -1,6 +1,6 @@
 use iced_x86::{Code, Instruction, OpKind};
 
-use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMWidth};
+use crate::vm::bytecode::{Flag, VMCondition, VMLogic, VMMem, VMReg, VMWidth};
 use crate::vm::encoders::block::Block;
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_immediate::LoadImmediate;
@@ -13,67 +13,67 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
 
     let (logic, conditions) = match code {
         // SETE = ZF=1
-        Code::Sete_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(VMFlag::Zero, 0)]),
+        Code::Sete_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(Flag::Zero, 0)]),
         // SETNE = ZF=0
-        Code::Setne_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(VMFlag::Zero, 1)]),
+        Code::Setne_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(Flag::Zero, 1)]),
         // SETA = CF=0 AND ZF=0
         Code::Seta_rm8 => (
             VMLogic::SOR,
             vec![
-                VMCondition::cmp(VMFlag::Carry, 1),
-                VMCondition::cmp(VMFlag::Zero, 1),
+                VMCondition::cmp(Flag::Carry, 1),
+                VMCondition::cmp(Flag::Zero, 1),
             ],
         ),
         // SETAE = CF=0
-        Code::Setae_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(VMFlag::Carry, 1)]),
+        Code::Setae_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(Flag::Carry, 1)]),
         // SETB = CF=1
-        Code::Setb_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(VMFlag::Carry, 0)]),
+        Code::Setb_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(Flag::Carry, 0)]),
         // SETBE = CF=1 OR ZF=1
         Code::Setbe_rm8 => (
             VMLogic::SAND,
             vec![
-                VMCondition::cmp(VMFlag::Carry, 0),
-                VMCondition::cmp(VMFlag::Zero, 0),
+                VMCondition::cmp(Flag::Carry, 0),
+                VMCondition::cmp(Flag::Zero, 0),
             ],
         ),
         // SETG = ZF=0 AND SF=OF
         Code::Setg_rm8 => (
             VMLogic::SOR,
             vec![
-                VMCondition::cmp(VMFlag::Zero, 1),
-                VMCondition::neq(VMFlag::Sign, VMFlag::Overflow),
+                VMCondition::cmp(Flag::Zero, 1),
+                VMCondition::neq(Flag::Sign, Flag::Overflow),
             ],
         ),
         // SETGE = SF=OF
         Code::Setge_rm8 => (
             VMLogic::SAND,
-            vec![VMCondition::neq(VMFlag::Sign, VMFlag::Overflow)],
+            vec![VMCondition::neq(Flag::Sign, Flag::Overflow)],
         ),
         // SETL = SF<>OF
         Code::Setl_rm8 => (
             VMLogic::SAND,
-            vec![VMCondition::eq(VMFlag::Sign, VMFlag::Overflow)],
+            vec![VMCondition::eq(Flag::Sign, Flag::Overflow)],
         ),
         // SETLE = ZF=1 OR SF<>OF
         Code::Setle_rm8 => (
             VMLogic::SAND,
             vec![
-                VMCondition::cmp(VMFlag::Zero, 0),
-                VMCondition::eq(VMFlag::Sign, VMFlag::Overflow),
+                VMCondition::cmp(Flag::Zero, 0),
+                VMCondition::eq(Flag::Sign, Flag::Overflow),
             ],
         ),
         // SETNO = OF=0
-        Code::Setno_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(VMFlag::Overflow, 1)]),
+        Code::Setno_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(Flag::Overflow, 1)]),
         // SETNP = PF=0
-        Code::Setnp_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(VMFlag::Parity, 1)]),
+        Code::Setnp_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(Flag::Parity, 1)]),
         // SETNS = SF=0
-        Code::Setns_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(VMFlag::Sign, 1)]),
+        Code::Setns_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(Flag::Sign, 1)]),
         // SETO = OF=1
-        Code::Seto_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(VMFlag::Overflow, 0)]),
+        Code::Seto_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(Flag::Overflow, 0)]),
         // SETP = PF=1
-        Code::Setp_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(VMFlag::Parity, 0)]),
+        Code::Setp_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(Flag::Parity, 0)]),
         // SETS = SF=1
-        Code::Sets_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(VMFlag::Sign, 0)]),
+        Code::Sets_rm8 => (VMLogic::SAND, vec![VMCondition::cmp(Flag::Sign, 0)]),
         _ => panic!("unsupported code: {:?}", instruction.code()),
     };
 

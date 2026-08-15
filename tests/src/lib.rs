@@ -26,7 +26,7 @@ use runtime::{
     mapper::Mappable,
     runtime::{BoolDef, DataDef, FnDef, Runtime},
     vm::{
-        bytecode::{VMFlag, VMReg, VMVec},
+        bytecode::{Flag, VMReg, VMVec},
         utils,
     },
 };
@@ -411,7 +411,7 @@ impl Executor {
         for (&register, &value) in &state.registers {
             write_register(context, register, value);
         }
-        context.EFlags |= VMFlag::Trap.bit32();
+        context.EFlags |= Flag::Trap.bit32();
 
         unsafe { write_vectors(context, &state.vectors) };
 
@@ -433,7 +433,7 @@ impl Executor {
 
         NATIVE_REGISTRY.lock().unwrap().remove(&thread_id);
 
-        context.EFlags &= !(VMFlag::Interrupt.bit32() | VMFlag::Reserved1.bit32());
+        context.EFlags &= !(Flag::Interrupt.bit32() | Flag::Reserved1.bit32());
 
         let registers = REGISTERS
             .iter()

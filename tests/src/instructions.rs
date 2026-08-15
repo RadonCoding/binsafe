@@ -3,7 +3,7 @@ use std::slice;
 use iced_x86::MemoryOperand;
 use iced_x86::Register::{AL, CL, EAX, RAX, RBX, RCX, XMM0, XMM1, XMM2};
 use iced_x86::{Instruction, RflagsBits};
-use runtime::vm::bytecode::{self, VMFlag, VMReg};
+use runtime::vm::bytecode::{self, Flag, VMReg};
 
 use crate::constants::{
     baseline, gpr, simd, IMM128_B, IMM128_C, IMM32_A, IMM64_A, IMM64_B, IMM8_A, SIMM32_A, SIMM8_A,
@@ -60,12 +60,12 @@ fn normalize_and_compare(native: &mut State, emulated: &mut State, instruction: 
             let mask = instruction.rflags_written()
                 | instruction.rflags_cleared()
                 | instruction.rflags_set();
-            *flags &= ((mask & RflagsBits::CF != 0) as u64 * VMFlag::Carry.bit64())
-                | ((mask & RflagsBits::PF != 0) as u64 * VMFlag::Parity.bit64())
-                | ((mask & RflagsBits::AF != 0) as u64 * VMFlag::Auxiliary.bit64())
-                | ((mask & RflagsBits::ZF != 0) as u64 * VMFlag::Zero.bit64())
-                | ((mask & RflagsBits::SF != 0) as u64 * VMFlag::Sign.bit64())
-                | ((mask & RflagsBits::OF != 0) as u64 * VMFlag::Overflow.bit64());
+            *flags &= ((mask & RflagsBits::CF != 0) as u64 * Flag::Carry.bit64())
+                | ((mask & RflagsBits::PF != 0) as u64 * Flag::Parity.bit64())
+                | ((mask & RflagsBits::AF != 0) as u64 * Flag::Auxiliary.bit64())
+                | ((mask & RflagsBits::ZF != 0) as u64 * Flag::Zero.bit64())
+                | ((mask & RflagsBits::SF != 0) as u64 * Flag::Sign.bit64())
+                | ((mask & RflagsBits::OF != 0) as u64 * Flag::Overflow.bit64());
         }
     };
 

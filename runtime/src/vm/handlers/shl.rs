@@ -1,10 +1,10 @@
 crate::vm::handlers::arithmetic!(
     shl,
     shift,
-    crate::vm::bytecode::VMFlag::Carry.bit64()
-        | crate::vm::bytecode::VMFlag::Overflow.bit64()
-        | crate::vm::bytecode::VMFlag::Sign.bit64()
-        | crate::vm::bytecode::VMFlag::Auxiliary.bit64()
-        | crate::vm::bytecode::VMFlag::Zero.bit64()
-        | crate::vm::bytecode::VMFlag::Parity.bit64()
+    crate::vm::bytecode::Flag::Carry.bit64()
+        | crate::vm::bytecode::Flag::Overflow.bit64()
+        | crate::vm::bytecode::Flag::Sign.bit64()
+        | crate::vm::bytecode::Flag::Auxiliary.bit64()
+        | crate::vm::bytecode::Flag::Zero.bit64()
+        | crate::vm::bytecode::Flag::Parity.bit64()
 );

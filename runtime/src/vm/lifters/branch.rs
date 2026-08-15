@@ -1,6 +1,6 @@
 use iced_x86::{Code, Instruction, OpKind};
 
-use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMWidth};
+use crate::vm::bytecode::{VMCondition, Flag, VMLogic, VMMem, VMReg, VMSeg, VMWidth};
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::load_memory::LoadMemory;
@@ -121,83 +121,83 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 Code::Ja_rel32_64 | Code::Ja_rel8_64 => (
                     VMLogic::JAND,
                     vec![
-                        VMCondition::cmp(VMFlag::Carry, 0),
-                        VMCondition::cmp(VMFlag::Zero, 0),
+                        VMCondition::cmp(Flag::Carry, 0),
+                        VMCondition::cmp(Flag::Zero, 0),
                     ],
                 ),
                 // JAE = CF=0
                 Code::Jae_rel32_64 | Code::Jae_rel8_64 => {
-                    (VMLogic::JAND, vec![VMCondition::cmp(VMFlag::Carry, 0)])
+                    (VMLogic::JAND, vec![VMCondition::cmp(Flag::Carry, 0)])
                 }
                 // JB = CF=1
                 Code::Jb_rel32_64 | Code::Jb_rel8_64 => {
-                    (VMLogic::JAND, vec![VMCondition::cmp(VMFlag::Carry, 1)])
+                    (VMLogic::JAND, vec![VMCondition::cmp(Flag::Carry, 1)])
                 }
                 // JBE = CF=1 OR ZF=1
                 Code::Jbe_rel32_64 | Code::Jbe_rel8_64 => (
                     VMLogic::JOR,
                     vec![
-                        VMCondition::cmp(VMFlag::Carry, 1),
-                        VMCondition::cmp(VMFlag::Zero, 1),
+                        VMCondition::cmp(Flag::Carry, 1),
+                        VMCondition::cmp(Flag::Zero, 1),
                     ],
                 ),
                 // JE = ZF=1
                 Code::Je_rel32_64 | Code::Je_rel8_64 => {
-                    (VMLogic::JAND, vec![VMCondition::cmp(VMFlag::Zero, 1)])
+                    (VMLogic::JAND, vec![VMCondition::cmp(Flag::Zero, 1)])
                 }
                 // JG = ZF=0 AND SF=OF
                 Code::Jg_rel32_64 | Code::Jg_rel8_64 => (
                     VMLogic::JAND,
                     vec![
-                        VMCondition::cmp(VMFlag::Zero, 0),
-                        VMCondition::eq(VMFlag::Sign, VMFlag::Overflow),
+                        VMCondition::cmp(Flag::Zero, 0),
+                        VMCondition::eq(Flag::Sign, Flag::Overflow),
                     ],
                 ),
                 // JGE = SF=OF
                 Code::Jge_rel32_64 | Code::Jge_rel8_64 => (
                     VMLogic::JAND,
-                    vec![VMCondition::eq(VMFlag::Sign, VMFlag::Overflow)],
+                    vec![VMCondition::eq(Flag::Sign, Flag::Overflow)],
                 ),
                 // JL = SF<>OF
                 Code::Jl_rel32_64 | Code::Jl_rel8_64 => (
                     VMLogic::JAND,
-                    vec![VMCondition::neq(VMFlag::Sign, VMFlag::Overflow)],
+                    vec![VMCondition::neq(Flag::Sign, Flag::Overflow)],
                 ),
                 // JLE = ZF=1 OR SF<>OF
                 Code::Jle_rel32_64 | Code::Jle_rel8_64 => (
                     VMLogic::JOR,
                     vec![
-                        VMCondition::cmp(VMFlag::Zero, 1),
-                        VMCondition::neq(VMFlag::Sign, VMFlag::Overflow),
+                        VMCondition::cmp(Flag::Zero, 1),
+                        VMCondition::neq(Flag::Sign, Flag::Overflow),
                     ],
                 ),
                 // JNE = ZF=0
                 Code::Jne_rel32_64 | Code::Jne_rel8_64 => {
-                    (VMLogic::JAND, vec![VMCondition::cmp(VMFlag::Zero, 0)])
+                    (VMLogic::JAND, vec![VMCondition::cmp(Flag::Zero, 0)])
                 }
                 // JNO = OF=0
                 Code::Jno_rel32_64 | Code::Jno_rel8_64 => {
-                    (VMLogic::JAND, vec![VMCondition::cmp(VMFlag::Overflow, 0)])
+                    (VMLogic::JAND, vec![VMCondition::cmp(Flag::Overflow, 0)])
                 }
                 // JNP = PF=0
                 Code::Jnp_rel32_64 | Code::Jnp_rel8_64 => {
-                    (VMLogic::JAND, vec![VMCondition::cmp(VMFlag::Parity, 0)])
+                    (VMLogic::JAND, vec![VMCondition::cmp(Flag::Parity, 0)])
                 }
                 // JNS = SF=0
                 Code::Jns_rel32_64 | Code::Jns_rel8_64 => {
-                    (VMLogic::JAND, vec![VMCondition::cmp(VMFlag::Sign, 0)])
+                    (VMLogic::JAND, vec![VMCondition::cmp(Flag::Sign, 0)])
                 }
                 // JO = OF=1
                 Code::Jo_rel32_64 | Code::Jo_rel8_64 => {
-                    (VMLogic::JAND, vec![VMCondition::cmp(VMFlag::Overflow, 1)])
+                    (VMLogic::JAND, vec![VMCondition::cmp(Flag::Overflow, 1)])
                 }
                 // JP = PF=1
                 Code::Jp_rel32_64 | Code::Jp_rel8_64 => {
-                    (VMLogic::JAND, vec![VMCondition::cmp(VMFlag::Parity, 1)])
+                    (VMLogic::JAND, vec![VMCondition::cmp(Flag::Parity, 1)])
                 }
                 // JS = SF=1
                 Code::Js_rel32_64 | Code::Js_rel8_64 => {
-                    (VMLogic::JAND, vec![VMCondition::cmp(VMFlag::Sign, 1)])
+                    (VMLogic::JAND, vec![VMCondition::cmp(Flag::Sign, 1)])
                 }
                 _ => panic!("unsupported code: {code:?}"),
             };

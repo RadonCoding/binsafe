@@ -1,6 +1,6 @@
 use iced_x86::{Instruction, Mnemonic, OpKind};
 
-use crate::vm::bytecode::{VMFlag, VMMem, VMPrecision, VMReg, VMVec, VMWidth};
+use crate::vm::bytecode::{Flag, VMMem, VMPrecision, VMReg, VMVec, VMWidth};
 use crate::vm::encoders::vector_div::VectorDiv;
 use crate::vm::encoders::vector_mul::VectorMul;
 use crate::vm::encoders::{
@@ -196,6 +196,7 @@ pub fn carry<O: Encode + 'static>(
     make: impl Fn(VMWidth) -> O,
 ) -> Option<Vec<Box<dyn Encode>>> {
     let mut operations = Vec::<Box<dyn Encode>>::new();
+
     let width = operation_width(instruction, 0);
 
     source(&mut operations, instruction, 0, width);
@@ -207,7 +208,7 @@ pub fn carry<O: Encode + 'static>(
     }));
     operations.push(Box::new(LoadImmediate {
         width: VMWidth::Lower64,
-        source: VMFlag::Carry.bit64().to_le_bytes().to_vec(),
+        source: Flag::Carry.bit64().to_le_bytes().to_vec(),
     }));
     operations.push(Box::new(And {
         width: VMWidth::Lower64,

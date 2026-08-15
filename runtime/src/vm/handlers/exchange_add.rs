@@ -3,7 +3,7 @@ use iced_x86::code_asm::{eax, ptr, r12, r13, r8, r9, r9b, r9d, r9w, rax, rcx};
 use crate::{
     runtime::{FnDef, Runtime},
     vm::{
-        bytecode::VMFlag,
+        bytecode::Flag,
         utils::{self, scratch},
     },
 };
@@ -61,12 +61,12 @@ pub fn build(rt: &mut Runtime) {
         rt.asm
             .mov(
                 rcx,
-                VMFlag::Carry.bit64()
-                    | VMFlag::Parity.bit64()
-                    | VMFlag::Auxiliary.bit64()
-                    | VMFlag::Zero.bit64()
-                    | VMFlag::Sign.bit64()
-                    | VMFlag::Overflow.bit64(),
+                Flag::Carry.bit64()
+                    | Flag::Parity.bit64()
+                    | Flag::Auxiliary.bit64()
+                    | Flag::Zero.bit64()
+                    | Flag::Sign.bit64()
+                    | Flag::Overflow.bit64(),
             )
             .unwrap();
         // pushfq

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ffi::c_void, ptr};
 
 use crate::{constants::VECTORS, NATIVE_REGISTRY, VIRTUAL_REGISTRY, XSTATE_AVX};
-use runtime::vm::bytecode::{VMFlag, VMReg, VMVec};
+use runtime::vm::bytecode::{Flag, VMReg, VMVec};
 use windows::Win32::{
     Foundation::EXCEPTION_SINGLE_STEP,
     System::{
@@ -37,7 +37,7 @@ pub unsafe extern "system" fn native_handler(info: *mut EXCEPTION_POINTERS) -> i
             let rip = (*(*info).ContextRecord).Rip as usize;
 
             if rip < limit {
-                (*(*info).ContextRecord).EFlags |= VMFlag::Trap.bit32();
+                (*(*info).ContextRecord).EFlags |= Flag::Trap.bit32();
                 return EXCEPTION_CONTINUE_EXECUTION;
             }
 
