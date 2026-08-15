@@ -210,10 +210,18 @@ pub fn print_thread_message(
     stack!(colon_string, offset, COLON.len() + 1);
     stack!(newline_string, offset, NEWLINE.len() + 1);
 
-    let (variable_value, variable_string) = if variable.is_some() || memory.is_some() {
-        stack!(cycles_value, offset, 8);
-        stack!(cycles_string, offset, 16 + 1);
-        (cycles_value, cycles_string)
+    let (variable_value, variable_string) = if variable.is_some() {
+        stack!(variable_value, offset, 8);
+        stack!(variable_string, offset, 16 + 1);
+        (variable_value, variable_string)
+    } else {
+        (0, 0)
+    };
+
+    let (memory_value, memory_string) = if memory.is_some() {
+        stack!(memory_value, offset, 8);
+        stack!(memory_string, offset, 16 + 1);
+        (memory_value, memory_string)
     } else {
         (0, 0)
     };
@@ -225,13 +233,15 @@ pub fn print_thread_message(
 
     if let Some(variable) = variable {
         save_register(rt, variable, variable_value);
-    } else if let Some(memory) = memory {
+    }
+
+    if let Some(memory) = memory {
         // movzx rax, [...]
         rt.asm.movzx(rax, memory).unwrap_or_else(|_| {
             // mov rax, [...]
             rt.asm.mov(rax, memory).unwrap();
         });
-        save_register(rt, rax, variable_value);
+        save_register(rt, rax, memory_value);
     }
 
     // mov rax, gs:[0x48] -> HANDLE TEB->ClientId->UniqueThread
@@ -245,7 +255,18 @@ pub fn print_thread_message(
 
     if variable.is_some() || memory.is_some() {
         write_string(rt, COLON, colon_string);
-        write_register(rt, variable_value, variable_string);
+
+        if variable.is_some() {
+            write_register(rt, variable_value, variable_string);
+        }
+
+        if variable.is_some() && memory.is_some() {
+            write_string(rt, PIPE, pipe_string);
+        }
+
+        if memory.is_some() {
+            write_register(rt, memory_value, memory_string);
+        }
     }
 
     write_string(rt, NEWLINE, newline_string);
@@ -273,10 +294,26 @@ pub fn print_thread_message(
         // call ...
         rt.asm.call(rt.function_labels[&FnDef::Print]).unwrap();
 
-        // lea rcx, [rsp + ...]
-        rt.asm.lea(rcx, ptr(rsp + variable_string)).unwrap();
-        // call ...
-        rt.asm.call(rt.function_labels[&FnDef::Print]).unwrap();
+        if variable.is_some() {
+            // lea rcx, [rsp + ...]
+            rt.asm.lea(rcx, ptr(rsp + variable_string)).unwrap();
+            // call ...
+            rt.asm.call(rt.function_labels[&FnDef::Print]).unwrap();
+        }
+
+        if variable.is_some() && memory.is_some() {
+            // lea rcx, [rsp + ...]
+            rt.asm.lea(rcx, ptr(rsp + pipe_string)).unwrap();
+            // call ...
+            rt.asm.call(rt.function_labels[&FnDef::Print]).unwrap();
+        }
+
+        if memory.is_some() {
+            // lea rcx, [rsp + ...]
+            rt.asm.lea(rcx, ptr(rsp + memory_string)).unwrap();
+            // call ...
+            rt.asm.call(rt.function_labels[&FnDef::Print]).unwrap();
+        }
     }
 
     // lea rcx, [rsp + ...]
