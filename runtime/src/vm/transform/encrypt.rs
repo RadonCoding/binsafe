@@ -151,7 +151,7 @@ fn walk(
     let outer_addend = *addend;
     let outer_multiplier = *multiplier;
 
-    let deadzones = deadzones(operations, |effect| {
+    let flags = deadzones(operations, |effect| {
         matches!(effect, Effect::Register(VMReg::Flags))
     });
 
@@ -160,6 +160,10 @@ fn walk(
     let mut i = 0;
 
     let mut position = 0;
+
+    let mut rng = rand::thread_rng();
+
+    let mut skip = rng.gen_range(0..=8);
 
     while i < operations.len() {
         trace.push((*addend, *multiplier));
@@ -193,18 +197,22 @@ fn walk(
         }
 
         if operations[i].is_destination() || operations[i].is_branch() {
-            let sequence = restore(outer_addend, outer_multiplier, *addend, *multiplier);
-            let length = sequence.len();
-            operations.splice(i..i, sequence);
+            if *addend != outer_addend || *multiplier != outer_multiplier {
+                let sequence = restore(outer_addend, outer_multiplier, *addend, *multiplier);
+                let length = sequence.len();
+                operations.splice(i..i, sequence);
 
-            *addend = outer_addend;
-            *multiplier = outer_multiplier;
+                *addend = outer_addend;
+                *multiplier = outer_multiplier;
 
-            for j in 0..length {
-                trace.insert(i + j, (*addend, *multiplier));
+                for j in 0..length {
+                    trace.insert(i + j, (*addend, *multiplier));
+                }
+
+                i += length;
             }
 
-            i += length + 1;
+            i += 1;
 
             position += 1;
 
@@ -212,15 +220,21 @@ fn walk(
         }
 
         if leaf(&mut operations[i], *addend, *multiplier) {
-            let sequence = transform(addend, multiplier, !deadzones[position]);
-            let length = sequence.len();
-            operations.splice(i + 1..i + 1, sequence);
+            skip -= 1;
 
-            for _ in 0..length {
-                trace.push((*addend, *multiplier));
+            if skip == 0 {
+                let sequence = transform(addend, multiplier, !flags[position]);
+                let length = sequence.len();
+                operations.splice(i + 1..i + 1, sequence);
+
+                for _ in 0..length {
+                    trace.push((*addend, *multiplier));
+                }
+
+                i += length;
+
+                skip = rng.gen_range(0..=8);
             }
-
-            i += length;
         }
 
         i += 1;

@@ -80,7 +80,6 @@ pub fn deadzones(
     effect: impl Fn(&Effect) -> bool,
 ) -> Vec<bool> {
     let mut events = Vec::new();
-
     scan(operations, &mut events, &effect);
 
     let mut deadzones = vec![false; events.len()];
@@ -111,7 +110,6 @@ fn scan(
     for operations in operations.iter_mut() {
         let reads = operations.reads().iter().any(effect);
         let writes = operations.writes().iter().any(effect);
-
         events.push((reads, writes));
     }
 }

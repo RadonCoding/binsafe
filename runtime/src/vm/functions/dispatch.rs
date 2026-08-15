@@ -252,19 +252,6 @@ pub fn build(rt: &mut Runtime) {
         #[cfg(feature = "profile")]
         stop_profiling(rt, "vm_crypt_encrypt");
 
-        // Point block pointer at the next block:
-        // mov rax, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BLength, rax);
-        // not rax
-        rt.asm.not(rax).unwrap();
-        // and rax, 0x7
-        rt.asm.and(rax, 0x7).unwrap();
-        // +8 for integrity +1 for state +1 for lock:
-        // lea rax, [r13 + rax + 0x8 + 0x1 + 0x1]
-        rt.asm.lea(rax, ptr(r13 + rax + 0x8 + 0x1 + 0x1)).unwrap();
-        // mov [r12 + ...], rax
-        utils::vreg::store_reg(rt, r12, rax, VMReg::BPointer);
-
         // If there's no branch target, advance to next block:
         // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NExit, rax);
