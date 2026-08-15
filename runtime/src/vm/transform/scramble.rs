@@ -65,7 +65,7 @@ fn chain(atoms: &mut Vec<Vec<Box<dyn Encode>>>) -> Vec<Jump> {
     for i in 0..count {
         group.push(i);
 
-        if i + 1 == count || rng.gen_bool(0.5) {
+        if i + 1 == count || rng.gen() {
             groups.push(mem::take(&mut group));
         }
     }
