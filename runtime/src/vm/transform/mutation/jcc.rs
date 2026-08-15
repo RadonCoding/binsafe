@@ -1,4 +1,4 @@
-use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic};
+use crate::vm::bytecode::{Flag, VMCondition, VMLogic};
 use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::Encode;
 use crate::vm::transform::descend;
@@ -26,7 +26,7 @@ pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
                 }
             };
 
-            let flags = VMFlag::iter().collect::<Vec<VMFlag>>();
+            let flags = Flag::iter().collect::<Vec<Flag>>();
 
             let is_always_true = jcc.conditions.len() == 1
                 && flags
@@ -156,7 +156,7 @@ pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
 }
 
 /// Generates a randomized [`VMCondition`].
-fn random<R: Rng>(flags: &[VMFlag], rng: &mut R) -> VMCondition {
+fn random<R: Rng>(flags: &[Flag], rng: &mut R) -> VMCondition {
     let lhs = *flags.choose(rng).unwrap();
     let rhs = *flags.choose(rng).unwrap();
 

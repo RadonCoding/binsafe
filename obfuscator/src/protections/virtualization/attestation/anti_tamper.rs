@@ -6,7 +6,7 @@ use exe::{Buffer, PE, RVA};
 use rand::Rng;
 use runtime::mapper::Mappable;
 use runtime::runtime::{DataDef, FnDef};
-use runtime::vm::bytecode::{VMReg, VMSeg, VMVec, VMWidth};
+use runtime::vm::bytecode::{Flag, VMReg, VMSeg, VMVec, VMWidth};
 use runtime::vm::encoders::Encode;
 
 const ACCUMULATOR: VMVec = VMVec::Ymm6;
@@ -105,7 +105,7 @@ pub fn generate(
         outer.extend(skip(
             engine,
             VMReg::R8,
-            VMCondition::cmp(VMFlag::Zero, 1),
+            VMCondition::cmp(Flag::Zero, 1),
             |_| {
                 foreach(VMReg::R9, Bound::Register(VMReg::R8), 1, || {
                     let mut inner = Vec::<Box<dyn Encode>>::new();

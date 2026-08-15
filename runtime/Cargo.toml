@@ -7,6 +7,7 @@ edition = "2021"
 profile = []
 
 [dependencies]
+logger = { path = "../logger" }
 iced-x86 = { version = "1.21.0", features = ["code_asm"] }
 rand = "0.8.5"
 strum = "0.27.2"

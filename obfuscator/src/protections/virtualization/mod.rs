@@ -419,7 +419,7 @@ impl Protection for Virtualization {
             causes.sort_by(|a, b| b.1.cmp(a.1));
 
             for (mnemonic, count) in causes {
-                info!("    {} x {:?}", count, mnemonic);
+                info!("{}{} x {:?}", " ".repeat(4), count, mnemonic);
             }
         }
     }

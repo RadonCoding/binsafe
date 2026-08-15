@@ -1,6 +1,6 @@
 use crate::engine::Engine;
 use runtime::runtime::{DataDef, FnDef, ImportDef};
-use runtime::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMMem, VMReg, VMSeg, VMVec, VMWidth};
+use runtime::vm::bytecode::{VMCondition, Flag, VMLogic, VMMem, VMReg, VMSeg, VMVec, VMWidth};
 use runtime::vm::encoders::add::Add;
 use runtime::vm::encoders::and::And;
 use runtime::vm::encoders::block::{Block, Jump, Target};
@@ -108,7 +108,7 @@ pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
     }));
     operations.push(Box::new(Jcc {
         logic: VMLogic::SAND,
-        conditions: vec![VMCondition::cmp(VMFlag::Carry, 1)],
+        conditions: vec![VMCondition::cmp(Flag::Carry, 1)],
     }));
 
     jumps.push(Jump {

@@ -2,7 +2,7 @@ use std::any::Any;
 use std::fmt::Debug;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMCondition, VMFlag, VMLogic, VMOp, VMReg};
+use crate::vm::bytecode::{Flag, VMCondition, VMLogic, VMOp, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
@@ -31,14 +31,14 @@ impl Jcc {
     fn always(logic: VMLogic) -> Self {
         Self {
             logic,
-            conditions: vec![VMCondition::eq(VMFlag::Zero, VMFlag::Zero)],
+            conditions: vec![VMCondition::eq(Flag::Zero, Flag::Zero)],
         }
     }
 
     fn never(logic: VMLogic) -> Self {
         Self {
             logic,
-            conditions: vec![VMCondition::neq(VMFlag::Zero, VMFlag::Zero)],
+            conditions: vec![VMCondition::neq(Flag::Zero, Flag::Zero)],
         }
     }
 }

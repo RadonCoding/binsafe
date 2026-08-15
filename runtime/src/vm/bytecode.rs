@@ -78,7 +78,7 @@ mapped! {
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
-pub enum VMFlag {
+pub enum Flag {
     Carry = 0,      // CF
     Reserved1 = 1,  //
     Parity = 2,     // PF
@@ -91,7 +91,7 @@ pub enum VMFlag {
     Overflow = 11,  // OF
 }
 
-impl VMFlag {
+impl Flag {
     pub const fn bit32(self) -> u32 {
         1 << self as u32
     }
@@ -395,7 +395,7 @@ pub struct VMCondition {
 }
 
 impl VMCondition {
-    pub fn cmp(lhs: VMFlag, rhs: u8) -> VMCondition {
+    pub fn cmp(lhs: Flag, rhs: u8) -> VMCondition {
         VMCondition {
             test: VMTest::CMP,
             lhs: lhs as u8,
@@ -403,7 +403,7 @@ impl VMCondition {
         }
     }
 
-    pub fn eq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
+    pub fn eq(lhs: Flag, rhs: Flag) -> VMCondition {
         VMCondition {
             test: VMTest::EQ,
             lhs: lhs as u8,
@@ -411,7 +411,7 @@ impl VMCondition {
         }
     }
 
-    pub fn neq(lhs: VMFlag, rhs: VMFlag) -> VMCondition {
+    pub fn neq(lhs: Flag, rhs: Flag) -> VMCondition {
         VMCondition {
             test: VMTest::NEQ,
             lhs: lhs as u8,

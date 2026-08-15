@@ -9,6 +9,7 @@ use rand::{seq::SliceRandom, Rng};
 use crate::{
     functions,
     mapper::{mapped, Mappable, Mapper},
+    obfuscator,
     vm::{
         self,
         bytecode::{VMReg, VMVec},
@@ -823,10 +824,24 @@ impl Runtime {
 
         self.emit(&[EmissionTask::Data(DataDef::VehEnd)]);
 
-        let result = self
+        let instructions = self.asm.take_instructions();
+
+        let (obfuscated, map) = obfuscator::obfuscate(&instructions);
+
+        for instruction in obfuscated {
+            self.asm.add_instruction(instruction).unwrap();
+        }
+
+        let mut result = self
             .asm
             .assemble_options(ip, BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS)
             .unwrap();
+
+        let offsets = result.inner.new_instruction_offsets.clone();
+
+        for (original, new) in map.iter().enumerate() {
+            result.inner.new_instruction_offsets[original] = offsets[*new];
+        }
 
         let labels = self
             .function_labels
