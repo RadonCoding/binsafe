@@ -42,11 +42,6 @@ pub unsafe extern "system" fn native_handler(info: *mut EXCEPTION_POINTERS) -> i
             }
 
             ptr::copy_nonoverlapping((*info).ContextRecord, context as *mut CONTEXT, 1);
-        } else {
-            eprintln!(
-                "EXCEPTION: 0x{:08X}",
-                (*(*info).ExceptionRecord).ExceptionCode.0
-            );
         }
 
         TerminateThread(GetCurrentThread(), 0).unwrap();

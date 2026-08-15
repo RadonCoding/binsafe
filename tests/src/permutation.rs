@@ -126,7 +126,7 @@ fn exhaust(instructions: &[Instruction], state: State, memory: &mut [u64]) {
                 {
                     if expected != received {
                         differences.push(format!(
-                            "mem[{}]: expected=0x{:X} received=0x{:X}",
+                            "memory[{}]: expected=0x{:X} received=0x{:X}",
                             i, expected, received,
                         ));
                     }
