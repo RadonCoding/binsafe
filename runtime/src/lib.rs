@@ -14,8 +14,9 @@ macro_rules! stack {
 
 pub(crate) use stack;
 
-pub const VM_STACK_SIZE: u64 = 0x100000;
-pub const VM_SCRATCH_SIZE: u64 = 0x1000;
+pub const VM_STACK_BUFFER: u64 = 0x100000;
+pub const VM_SCRATCH_BUFFER: u64 = 0x1000;
+pub const VM_BLOCK_BUFFER: u64 = 0x100000;
 #[cfg(debug_assertions)]
 pub const VM_DEBUG_SIZE: u64 = 0x100;
 

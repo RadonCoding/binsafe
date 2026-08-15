@@ -1,6 +1,4 @@
-use iced_x86::code_asm::{
-    al, byte_ptr, cl, eax, ecx, ptr, qword_ptr, r12, r13, r14, r15, rax, rbx, rcx, rdx, word_ptr,
-};
+use iced_x86::code_asm::{byte_ptr, ptr, r12, r13, r14, r15, rax, rbx, rcx, rdx, word_ptr};
 
 use crate::{
     runtime::{DataDef, FnDef, Runtime},
@@ -12,25 +10,12 @@ use crate::{
 
 // void (bool)
 pub fn build(rt: &mut Runtime) {
-    let mut spin_current_decrypt = rt.asm.create_label();
-    let mut acquire_current_decrypt = rt.asm.create_label();
-
-    let mut spin_current_encrypt = rt.asm.create_label();
-    let mut acquire_current_encrypt = rt.asm.create_label();
-
     let mut check_key = rt.asm.create_label();
-
-    let mut spin_previous = rt.asm.create_label();
-    let mut acquire_previous = rt.asm.create_label();
 
     let mut derive_key = rt.asm.create_label();
     let mut start_key = rt.asm.create_label();
-    let mut save_key = rt.asm.create_label();
     let mut crypt_loop = rt.asm.create_label();
     let mut continue_loop = rt.asm.create_label();
-    let mut unlock = rt.asm.create_label();
-    let mut finish_encrypt = rt.asm.create_label();
-    let mut finish_decrypt = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
 
     // push r13
@@ -50,8 +35,10 @@ pub fn build(rt: &mut Runtime) {
     // mov r15, [r12 + ...]
     utils::vreg::load_reg(rt, r12, VMReg::BLength, r15);
 
-    // lea rbx, [r14 + 0x2]
-    rt.asm.lea(rbx, ptr(r14 + 0x2)).unwrap();
+    // mov rbx, [r12 + ...]
+    utils::vreg::load_reg(rt, r12, VMReg::VBlock, rbx);
+    // add rbx, 0x2
+    rt.asm.add(rbx, 0x2).unwrap();
 
     // +8 for integrity +7 for alignment:
     // add r15, 0x8 + 0x7
@@ -69,102 +56,17 @@ pub fn build(rt: &mut Runtime) {
 
     // test r13, r13
     rt.asm.test(r13, r13).unwrap();
+    // NOTE: TEMPORARY
+    rt.asm.jz(epilogue).unwrap();
     // jnz ...
-    rt.asm.jnz(spin_current_decrypt).unwrap();
+    rt.asm.jnz(check_key).unwrap();
 
     // ENCRYPTION
-    {
-        // mov ecx, [...]
-        rt.asm
-            .mov(ecx, ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]))
-            .unwrap();
-        // cmp gs:[0x1480 + rcx * 8], 0x0
-        rt.asm.cmp(qword_ptr(0x1480 + rcx * 8).gs(), 0x0).unwrap();
-        // jne ...
-        rt.asm.jne(spin_current_encrypt).unwrap();
-
-        // lock dec [r15 + 0x1]
-        rt.asm.lock().dec(byte_ptr(r15 + 0x1)).unwrap();
-
-        // jmp ...
-        rt.asm.jmp(epilogue).unwrap();
-
-        rt.asm.set_label(&mut spin_current_encrypt).unwrap();
-        {
-            // cmp [r15 + 0x1], 0x1
-            rt.asm.cmp(byte_ptr(r15 + 0x1), 0x1).unwrap();
-            // pause
-            rt.asm.pause().unwrap();
-            // jne ...
-            rt.asm.jne(spin_current_encrypt).unwrap();
-        }
-
-        rt.asm.set_label(&mut acquire_current_encrypt).unwrap();
-        {
-            // mov al, 0x1
-            rt.asm.mov(al, 0x1).unwrap();
-            // mov cl, 0xff
-            rt.asm.mov(cl, 0xff).unwrap();
-            // lock cmpxchg [r15 + 0x1], cl
-            rt.asm.lock().cmpxchg(byte_ptr(r15 + 0x1), cl).unwrap();
-            // jne ...
-            rt.asm.jne(spin_current_encrypt).unwrap();
-        }
-
-        // mov ecx, [...]
-        rt.asm
-            .mov(ecx, ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]))
-            .unwrap();
-        // mov rcx, gs:[0x1480 + rcx * 8]
-        rt.asm.mov(rcx, ptr(0x1480 + rcx * 8).gs()).unwrap();
-
-        // jmp ...
-        rt.asm.jmp(crypt_loop).unwrap();
-    }
+    // {
+    // }
 
     // DECRYPTION
     {
-        rt.asm.set_label(&mut spin_current_decrypt).unwrap();
-        {
-            // cmp [r15 + 0x1], 0xff
-            rt.asm.cmp(byte_ptr(r15 + 0x1), 0xff).unwrap();
-            // pause
-            rt.asm.pause().unwrap();
-            // je ...
-            rt.asm.je(spin_current_decrypt).unwrap();
-        }
-
-        rt.asm.set_label(&mut acquire_current_decrypt).unwrap();
-        {
-            // mov al, 0x00
-            rt.asm.mov(al, 0x00).unwrap();
-            // mov cl, 0xff
-            rt.asm.mov(cl, 0xff).unwrap();
-            // lock cmpxchg [r15 + 0x1], cl
-            rt.asm.lock().cmpxchg(byte_ptr(r15 + 0x1), cl).unwrap();
-
-            // je ...
-            rt.asm.je(check_key).unwrap();
-
-            // cmp al, 0xff
-            rt.asm.cmp(al, 0xff).unwrap();
-            // je ...
-            rt.asm.je(spin_current_decrypt).unwrap();
-
-            // mov cl, al
-            rt.asm.mov(cl, al).unwrap();
-            // inc cl
-            rt.asm.inc(cl).unwrap();
-            // lock cmpxchg [r15 + 0x1], cl
-            rt.asm.lock().cmpxchg(byte_ptr(r15 + 0x1), cl).unwrap();
-
-            // jne ...
-            rt.asm.jne(spin_current_decrypt).unwrap();
-
-            // jmp ...
-            rt.asm.jmp(epilogue).unwrap();
-        }
-
         rt.asm.set_label(&mut check_key).unwrap();
         {
             // lea rax, [...]
@@ -185,28 +87,6 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.cmp(word_ptr(r14 - 0x2), 0x0001).unwrap();
             // je ...
             rt.asm.je(derive_key).unwrap();
-        }
-
-        rt.asm.set_label(&mut spin_previous).unwrap();
-        {
-            // cmp byte [r14 - 0x1], 0x0
-            rt.asm.cmp(byte_ptr(r14 - 0x1), 0x0).unwrap();
-            // pause
-            rt.asm.pause().unwrap();
-            // jne ...
-            rt.asm.jne(spin_previous).unwrap();
-        }
-
-        rt.asm.set_label(&mut acquire_previous).unwrap();
-        {
-            // mov al, 0x00
-            rt.asm.mov(al, 0x00).unwrap();
-            // mov cl, 0xff
-            rt.asm.mov(cl, 0xff).unwrap();
-            // lock cmpxchg [r14 - 0x1], cl
-            rt.asm.lock().cmpxchg(byte_ptr(r14 - 0x1), cl).unwrap();
-            // jne ...
-            rt.asm.jne(spin_previous).unwrap();
         }
 
         rt.asm.set_label(&mut derive_key).unwrap();
@@ -230,14 +110,14 @@ pub fn build(rt: &mut Runtime) {
             // cmp [r14 - 0x2], 0x0001
             rt.asm.cmp(word_ptr(r14 - 0x2), 0x0001).unwrap();
             // je ...
-            rt.asm.je(save_key).unwrap();
+            rt.asm.je(crypt_loop).unwrap();
 
             // Release lock on the previous block:
             // mov [r14 - 0x1], 0x0
             rt.asm.mov(byte_ptr(r14 - 0x1), 0x0).unwrap();
 
             // jmp ...
-            rt.asm.jmp(save_key).unwrap();
+            rt.asm.jmp(crypt_loop).unwrap();
         }
 
         rt.asm.set_label(&mut start_key).unwrap();
@@ -247,16 +127,6 @@ pub fn build(rt: &mut Runtime) {
                 .mov(rcx, ptr(rt.data_labels[&DataDef::VmKeySeed]))
                 .unwrap();
         }
-
-        rt.asm.set_label(&mut save_key).unwrap();
-        {
-            // mov eax, [...]
-            rt.asm
-                .mov(eax, ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]))
-                .unwrap();
-            // mov gs:[0x1480 + rax * 8], rcx
-            rt.asm.mov(ptr(0x1480 + rax * 8).gs(), rcx).unwrap();
-        }
     }
 
     rt.asm.set_label(&mut crypt_loop).unwrap();
@@ -264,7 +134,7 @@ pub fn build(rt: &mut Runtime) {
         // cmp rbx, r15
         rt.asm.cmp(rbx, r15).unwrap();
         // je ...
-        rt.asm.je(unlock).unwrap();
+        rt.asm.je(epilogue).unwrap();
 
         // mov rax, [rbx]
         rt.asm.mov(rax, ptr(rbx)).unwrap();
@@ -302,38 +172,6 @@ pub fn build(rt: &mut Runtime) {
             // jmp ...
             rt.asm.jmp(crypt_loop).unwrap();
         }
-    }
-
-    rt.asm.set_label(&mut unlock).unwrap();
-    {
-        // test r13, r13
-        rt.asm.test(r13, r13).unwrap();
-        // jnz ...
-        rt.asm.jnz(finish_decrypt).unwrap();
-    }
-
-    rt.asm.set_label(&mut finish_encrypt).unwrap();
-    {
-        // Release reference on the current block and mark as encrypted:
-        // mov [r15], 0x0
-        rt.asm.mov(word_ptr(r15), 0x0).unwrap();
-
-        // mov ecx, [...]
-        rt.asm
-            .mov(ecx, ptr(rt.data_labels[&DataDef::VmKeyTlsIndex]))
-            .unwrap();
-        // mov gs:[0x1480 + rcx * 8], 0x0
-        rt.asm.mov(qword_ptr(0x1480 + rcx * 8).gs(), 0x0).unwrap();
-
-        // jmp ...
-        rt.asm.jmp(epilogue).unwrap();
-    }
-
-    rt.asm.set_label(&mut finish_decrypt).unwrap();
-    {
-        // Acquire reference on the current block and mark as decrypted:
-        // mov [r15], 0x0101
-        rt.asm.mov(word_ptr(r15), 0x0101).unwrap();
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();

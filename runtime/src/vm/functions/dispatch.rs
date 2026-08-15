@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, dword_ptr, eax, edx, ptr, r12, r13, r14, r8, r8d, r9, r9d, rax, rcx, rdx, rsp,
-    CodeLabel,
+    al, ax, byte_ptr, cx, dword_ptr, eax, ecx, edx, ptr, r12, r13, r14, r8, r8d, r9, r9d, rax, rcx,
+    rdi, rdx, rsi, rsp, word_ptr, CodeLabel,
 };
 
 use crate::{
@@ -68,6 +68,7 @@ const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
 
 pub fn build(rt: &mut Runtime) {
     let mut setup_block = rt.asm.create_label();
+    let mut initialize_block = rt.asm.create_label();
     let mut resume_block = rt.asm.create_label();
     let mut decrypt_block = rt.asm.create_label();
     let mut start_block = rt.asm.create_label();
@@ -84,15 +85,58 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.push(r13).unwrap();
     // push r14
     rt.asm.push(r14).unwrap();
+    // push rsi
+    rt.asm.push(rsi).unwrap();
+    // push rdi
+    rt.asm.push(rdi).unwrap();
 
     // sub rsp, 0x28
     rt.asm.sub(rsp, 0x28).unwrap();
 
     rt.asm.set_label(&mut setup_block).unwrap();
     {
+        // mov rsi, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::BPointer, rsi);
+        // mov rdi, [r12 + ...]
+        utils::vreg::load_reg(rt, r12, VMReg::VBlock, rdi);
+
+        // Copy the header:
+        // movzx ecx, word ptr [rsi]
+        rt.asm.movzx(ecx, word_ptr(rsi)).unwrap();
+        // mov [rdi], cx
+        rt.asm.mov(word_ptr(rdi), cx).unwrap();
+
+        // add rsi, 0x2
+        rt.asm.add(rsi, 0x2).unwrap();
+        // add rdi, 0x2
+        rt.asm.add(rdi, 0x2).unwrap();
+
+        // Calculate the payload:
+        // add rcx, 0x8 + 0x7
+        rt.asm.add(rcx, 0x8 + 0x7).unwrap();
+        // and rcx, -0x8
+        rt.asm.and(rcx, -0x8).unwrap();
+        // shr rcx, 0x3
+        rt.asm.shr(rcx, 0x3).unwrap();
+
+        // cld
+        rt.asm.cld().unwrap();
+
+        // rep movsq
+        rt.asm.rep().movsq().unwrap();
+
+        // Copy the trailer:
+        // mov ax, [rsi]
+        rt.asm.mov(ax, word_ptr(rsi)).unwrap();
+        // mov [rdi], ax
+        rt.asm.mov(word_ptr(rdi), ax).unwrap();
+    }
+
+    rt.asm.set_label(&mut initialize_block).unwrap();
+    {
         // Initialize block pointer and block length:
         // mov r13, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
+        utils::vreg::load_reg(rt, r12, VMReg::VBlock, r13);
         // eax = length
         utils::bytecode::read_word_zx(rt, r13, eax);
         // mov [r12 + ...], rax
@@ -216,7 +260,7 @@ pub fn build(rt: &mut Runtime) {
 
         // Native branch points to the native entry so re-execute the block:
         // mov r13, [...]
-        utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
+        utils::vreg::load_reg(rt, r12, VMReg::VBlock, r13);
         // eax = length
         utils::bytecode::read_word_zx(rt, r13, eax);
         // mov [r12 + ...], rax
@@ -251,19 +295,6 @@ pub fn build(rt: &mut Runtime) {
 
         #[cfg(feature = "profile")]
         stop_profiling(rt, "vm_crypt_encrypt");
-
-        // Point block pointer at the next block:
-        // mov rax, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BLength, rax);
-        // not rax
-        rt.asm.not(rax).unwrap();
-        // and rax, 0x7
-        rt.asm.and(rax, 0x7).unwrap();
-        // +8 for integrity +1 for state +1 for lock:
-        // lea rax, [r13 + rax + 0x8 + 0x1 + 0x1]
-        rt.asm.lea(rax, ptr(r13 + rax + 0x8 + 0x1 + 0x1)).unwrap();
-        // mov [r12 + ...], rax
-        utils::vreg::store_reg(rt, r12, rax, VMReg::BPointer);
 
         // If there's no branch target, advance to next block:
         // mov rax, [r12 + ...]
@@ -369,6 +400,10 @@ pub fn build(rt: &mut Runtime) {
         // add rsp, 0x28
         rt.asm.add(rsp, 0x28).unwrap();
 
+        // pop rdi
+        rt.asm.pop(rdi).unwrap();
+        // pop rsi
+        rt.asm.pop(rsi).unwrap();
         // pop r14
         rt.asm.pop(r14).unwrap();
         // pop r13

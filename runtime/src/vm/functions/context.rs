@@ -7,7 +7,7 @@ use crate::{
         bytecode::{VMReg, VMVec},
         utils,
     },
-    VM_SCRATCH_SIZE, VM_STACK_SIZE,
+    VM_BLOCK_BUFFER, VM_SCRATCH_BUFFER, VM_STACK_BUFFER,
 };
 
 pub fn create(rt: &mut Runtime) {
@@ -49,22 +49,11 @@ pub fn create(rt: &mut Runtime) {
     // mov rdx, 0x00000008 -> HEAP_ZERO_MEMORY
     rt.asm.mov(rdx, 0x00000008u64).unwrap();
     // mov r8, ...
-    rt.asm.mov(r8, (VMVec::COUNT * 32) as u64).unwrap();
-    // call r13
-    rt.asm.call(r13).unwrap();
-    // mov [r14 + ...], rax
-    utils::vreg::store_reg(rt, r14, rax, VMReg::VVector);
-
-    // mov rcx, r12
-    rt.asm.mov(rcx, r12).unwrap();
-    // mov rdx, 0x00000008 -> HEAP_ZERO_MEMORY
-    rt.asm.mov(rdx, 0x00000008u64).unwrap();
-    // mov r8, ...
-    rt.asm.mov(r8, VM_STACK_SIZE).unwrap();
+    rt.asm.mov(r8, VM_STACK_BUFFER).unwrap();
     // call r13
     rt.asm.call(r13).unwrap();
     // add rax, ...
-    rt.asm.add(rax, VM_STACK_SIZE as i32).unwrap();
+    rt.asm.add(rax, VM_STACK_BUFFER as i32).unwrap();
     // mov [r14 + ...], rax
     utils::vreg::store_reg(rt, r14, rax, VMReg::VStack);
 
@@ -73,13 +62,35 @@ pub fn create(rt: &mut Runtime) {
     // mov rdx, 0x00000008 -> HEAP_ZERO_MEMORY
     rt.asm.mov(rdx, 0x00000008u64).unwrap();
     // mov r8, ...
-    rt.asm.mov(r8, VM_SCRATCH_SIZE).unwrap();
+    rt.asm.mov(r8, VM_SCRATCH_BUFFER).unwrap();
     // call r13
     rt.asm.call(r13).unwrap();
     // add rax, ...
-    rt.asm.add(rax, VM_SCRATCH_SIZE as i32).unwrap();
+    rt.asm.add(rax, VM_SCRATCH_BUFFER as i32).unwrap();
     // mov [r14 + ...], rax
     utils::vreg::store_reg(rt, r14, rax, VMReg::VScratch);
+
+    // mov rcx, r12
+    rt.asm.mov(rcx, r12).unwrap();
+    // mov rdx, 0x00000008 -> HEAP_ZERO_MEMORY
+    rt.asm.mov(rdx, 0x00000008u64).unwrap();
+    // mov r8, ...
+    rt.asm.mov(r8, VM_BLOCK_BUFFER).unwrap();
+    // call r13
+    rt.asm.call(r13).unwrap();
+    // mov [r14 + ...], rax
+    utils::vreg::store_reg(rt, r14, rax, VMReg::VBlock);
+
+    // mov rcx, r12
+    rt.asm.mov(rcx, r12).unwrap();
+    // mov rdx, 0x00000008 -> HEAP_ZERO_MEMORY
+    rt.asm.mov(rdx, 0x00000008u64).unwrap();
+    // mov r8, ...
+    rt.asm.mov(r8, (VMVec::COUNT * 32) as u64).unwrap();
+    // call r13
+    rt.asm.call(r13).unwrap();
+    // mov [r14 + ...], rax
+    utils::vreg::store_reg(rt, r14, rax, VMReg::VVector);
 
     // mov rax, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
     rt.asm.mov(rax, ptr(0x60).gs()).unwrap();
@@ -137,7 +148,7 @@ pub fn delete(rt: &mut Runtime) {
     // mov r8, [r12 + ...]
     utils::vreg::load_reg(rt, r12, VMReg::VStack, r8);
     // sub r8, ...
-    rt.asm.sub(r8, VM_STACK_SIZE as i32).unwrap();
+    rt.asm.sub(r8, VM_STACK_BUFFER as i32).unwrap();
     // call r14
     rt.asm.call(r14).unwrap();
 
@@ -148,7 +159,16 @@ pub fn delete(rt: &mut Runtime) {
     // mov r8, [r12 + ...]
     utils::vreg::load_reg(rt, r12, VMReg::VScratch, r8);
     // sub r8, ...
-    rt.asm.sub(r8, VM_SCRATCH_SIZE as i32).unwrap();
+    rt.asm.sub(r8, VM_SCRATCH_BUFFER as i32).unwrap();
+    // call r14
+    rt.asm.call(r14).unwrap();
+
+    // mov rcx, r13
+    rt.asm.mov(rcx, r13).unwrap();
+    // xor rdx, rdx
+    rt.asm.xor(rdx, rdx).unwrap();
+    // mov r8, [r12 + ...]
+    utils::vreg::load_reg(rt, r12, VMReg::VBlock, r8);
     // call r14
     rt.asm.call(r14).unwrap();
 

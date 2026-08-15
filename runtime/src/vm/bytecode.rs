@@ -148,6 +148,7 @@ mapped! {
 
         VStack, // Virtual Stack
         VScratch, // Virtual Scratch
+        VBlock, // Virtual Block
         VVector, // Virtual Vectors
     }
 }
