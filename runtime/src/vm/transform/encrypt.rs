@@ -1,10 +1,11 @@
-use std::matches;
+use std::{matches, slice};
 
 use rand::Rng;
 
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::discard::Discard;
+use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::load_register::LoadRegister;
@@ -211,29 +212,25 @@ fn walk(
 
                 i += length;
             }
-
-            i += 1;
-
-            position += 1;
-
-            continue;
         }
 
         if leaf(&mut operations[i], *addend, *multiplier) {
             skip -= 1;
 
-            if skip == 0 {
-                let sequence = transform(addend, multiplier, !flags[position]);
-                let length = sequence.len();
-                operations.splice(i + 1..i + 1, sequence);
+            if !operations[i].is_branch() {
+                if skip == 0 {
+                    let sequence = transform(addend, multiplier, !flags[position]);
+                    let length = sequence.len();
+                    operations.splice(i + 1..i + 1, sequence);
 
-                for _ in 0..length {
-                    trace.push((*addend, *multiplier));
+                    for _ in 0..length {
+                        trace.push((*addend, *multiplier));
+                    }
+
+                    i += length;
+
+                    skip = rng.gen_range(0..=8);
                 }
-
-                i += length;
-
-                skip = rng.gen_range(0..=8);
             }
         }
 
@@ -255,6 +252,14 @@ fn leaf(operation: &mut Box<dyn Encode>, addend: u64, multiplier: u64) -> bool {
         let mut displacement = load.source.displacement.to_le_bytes();
         encrypt(&mut displacement, addend, multiplier);
         load.source.displacement = i32::from_le_bytes(displacement);
+        return true;
+    }
+
+    if let Some(jcc) = operation.as_any_mut().downcast_mut::<Jcc>() {
+        for condition in &mut jcc.conditions {
+            encrypt(slice::from_mut(&mut condition.lhs), addend, multiplier);
+            encrypt(slice::from_mut(&mut condition.rhs), addend, multiplier);
+        }
         return true;
     }
 
