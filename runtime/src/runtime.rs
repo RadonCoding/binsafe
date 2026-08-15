@@ -839,8 +839,8 @@ impl Runtime {
 
         let offsets = result.inner.new_instruction_offsets.clone();
 
-        for (original, new) in map.iter().enumerate() {
-            result.inner.new_instruction_offsets[original] = offsets[*new];
+        for (old, new) in map.iter().enumerate() {
+            result.inner.new_instruction_offsets[old] = offsets[*new];
         }
 
         let labels = self
