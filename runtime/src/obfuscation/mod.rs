@@ -35,7 +35,7 @@ pub struct Flags {
 pub fn obfuscate(asm: &mut CodeAssembler, ip: u64) -> (Vec<Instruction>, CodeAssemblerResult) {
     let mut rng = rand::thread_rng();
 
-    let instructions = asm.take_instructions();
+    let mut instructions = asm.take_instructions();
 
     let mut chunks = Vec::with_capacity(instructions.len());
 
@@ -47,6 +47,7 @@ pub fn obfuscate(asm: &mut CodeAssembler, ip: u64) -> (Vec<Instruction>, CodeAss
         let mut asm = CodeAssembler::new(64).unwrap();
 
         let ip = instructions[i].ip();
+        instructions[i].set_ip(0);
 
         let consumed =
             None.or_else(|| immediate::obfuscate(&instructions[i..], &mut asm, &mut rng));
