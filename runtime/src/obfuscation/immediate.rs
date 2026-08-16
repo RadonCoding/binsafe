@@ -20,7 +20,7 @@ enum Condition {
 
 pub fn obfuscate<R: Rng>(
     instructions: &[Instruction],
-    assembler: &mut CodeAssembler,
+    asm: &mut CodeAssembler,
     rng: &mut R,
 ) -> Option<usize> {
     let instruction = &instructions[0];
@@ -110,39 +110,39 @@ pub fn obfuscate<R: Rng>(
     let dead = deadflags(instructions);
 
     if preserve1 {
-        assembler.push(get_gpr64(register1).unwrap()).unwrap();
+        asm.push(get_gpr64(register1).unwrap()).unwrap();
     }
 
     if preserve2 {
-        assembler.push(get_gpr64(register2).unwrap()).unwrap();
+        asm.push(get_gpr64(register2).unwrap()).unwrap();
     }
 
     if !writes && !dead {
-        assembler.pushfq().unwrap();
+        asm.pushfq().unwrap();
     }
 
     if reads {
-        assembler.pushfq().unwrap();
+        asm.pushfq().unwrap();
     }
 
-    reconstruct(value, size, register1, register2, assembler, rng);
+    reconstruct(value, size, register1, register2, asm, rng);
 
     if reads {
-        assembler.popfq().unwrap();
+        asm.popfq().unwrap();
     }
 
-    assembler.add_instruction(rewritten).unwrap();
+    asm.add_instruction(rewritten).unwrap();
 
     if !writes && !dead {
-        assembler.popfq().unwrap();
+        asm.popfq().unwrap();
     }
 
     if preserve2 {
-        assembler.pop(get_gpr64(register2).unwrap()).unwrap();
+        asm.pop(get_gpr64(register2).unwrap()).unwrap();
     }
 
     if preserve1 {
-        assembler.pop(get_gpr64(register1).unwrap()).unwrap();
+        asm.pop(get_gpr64(register1).unwrap()).unwrap();
     }
 
     Some(1)
@@ -308,9 +308,13 @@ fn reconstruct(
 
     let &(condition, flag) = &options[generator.gen_range(0..options.len())];
 
-    let state = 0u64.wrapping_sub(flag);
-    let xor1 = generator.gen::<i32>() as i64 as u64;
-    let xor2 = (immediate & limit) ^ state ^ xor1;
+    let arithmetic_result = match operation {
+        Operation::Add => first.wrapping_add(second) & 0xFFFF_FFFF,
+        Operation::Sub => first.wrapping_sub(second) & 0xFFFF_FFFF,
+        Operation::Xor => (first ^ second) & 0xFFFF_FFFF,
+    };
+
+    let state = (arithmetic_result & 0xFFFF_FF00) | flag;
 
     assembler.mov(r1_32, first as i32).unwrap();
 
@@ -322,16 +326,23 @@ fn reconstruct(
     .unwrap();
 
     setcc(assembler, r1_8, condition);
-    assembler.movzx(r1_64, r1_8).unwrap();
-    assembler.neg(r1_64).unwrap();
 
     if size == 8 {
+        let xor1 = generator.gen::<u64>();
+        let noise = generator.gen::<u64>() as u64;
+        let xor2 = immediate ^ state ^ xor1 ^ noise;
+        let xor3 = noise;
         assembler.mov(r2_64, xor1 as i64).unwrap();
         assembler.xor(r1_64, r2_64).unwrap();
         assembler.mov(r2_64, xor2 as i64).unwrap();
         assembler.xor(r1_64, r2_64).unwrap();
+        assembler.mov(r2_64, xor3 as i64).unwrap();
+        assembler.xor(r1_64, r2_64).unwrap();
     } else {
-        assembler.xor(r1_64, xor1 as i32).unwrap();
-        assembler.xor(r1_64, xor2 as i32).unwrap();
+        let xor1 = generator.gen::<u32>();
+        let xor2 = ((immediate & limit) as u32) ^ (state as u32) ^ xor1;
+
+        assembler.xor(r1_32, xor1 as i32).unwrap();
+        assembler.xor(r1_32, xor2 as i32).unwrap();
     }
 }
