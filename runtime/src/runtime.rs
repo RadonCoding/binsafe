@@ -9,7 +9,7 @@ use rand::{seq::SliceRandom, Rng};
 use crate::{
     functions,
     mapper::{mapped, Mappable, Mapper},
-    obfuscator,
+    obfuscation,
     vm::{
         self,
         bytecode::{VMReg, VMVec},
@@ -826,7 +826,7 @@ impl Runtime {
 
         let instructions = self.asm.take_instructions();
 
-        let (obfuscated, map) = obfuscator::obfuscate(&instructions);
+        let (obfuscated, map) = obfuscation::obfuscate(&instructions);
 
         for instruction in obfuscated {
             self.asm.add_instruction(instruction).unwrap();
