@@ -83,7 +83,7 @@ pub fn obfuscate<R: Rng>(
     let mut excluded = registers.clone();
     excluded.push(Register::RSP);
 
-    let (register1, preserve1) = match deadregister(instructions, &excluded) {
+    let (register1, preserve1) = match dead_register(instructions, &excluded) {
         Some(register) => (register, false),
         None => (scratch(&excluded, rng), true),
     };
@@ -91,7 +91,7 @@ pub fn obfuscate<R: Rng>(
     excluded.push(register1);
 
     let (register2, preserve2) = if size == 8 {
-        match deadregister(instructions, &excluded) {
+        match dead_register(instructions, &excluded) {
             Some(register) => (register, false),
             None => (scratch(&excluded, rng), true),
         }
@@ -107,7 +107,7 @@ pub fn obfuscate<R: Rng>(
 
     let reads = instruction.rflags_read() != RflagsBits::NONE;
     let writes = instruction.rflags_written() != RflagsBits::NONE;
-    let dead = deadflags(instructions);
+    let dead = dead_flags(instructions);
 
     if preserve1 {
         asm.push(get_gpr64(register1).unwrap()).unwrap();
@@ -148,7 +148,7 @@ pub fn obfuscate<R: Rng>(
     Some(1)
 }
 
-fn deadregister(instructions: &[Instruction], excluded: &[Register]) -> Option<Register> {
+fn dead_register(instructions: &[Instruction], excluded: &[Register]) -> Option<Register> {
     let mut factory = InstructionInfoFactory::new();
     let mut reads = HashSet::new();
 
@@ -192,7 +192,7 @@ fn deadregister(instructions: &[Instruction], excluded: &[Register]) -> Option<R
     None
 }
 
-fn deadflags(instructions: &[Instruction]) -> bool {
+fn dead_flags(instructions: &[Instruction]) -> bool {
     // This is a potentially unsafe implementation which assumes that after branches the flags are dead.
     for instruction in instructions.iter().skip(1) {
         if instruction.rflags_read() != RflagsBits::NONE {
@@ -233,8 +233,6 @@ fn rewrite_immediate(instruction: &Instruction, scratch: Register) -> Option<Ins
 
 fn rewrite_memory(instruction: &Instruction, scratch: Register) -> Option<Instruction> {
     let mut rewritten = instruction.clone();
-
-    rewritten.set_ip(0);
 
     rewritten.set_memory_index(sized(scratch, 8)?);
     rewritten.set_memory_index_scale(1);
