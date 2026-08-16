@@ -1,4 +1,7 @@
-use iced_x86::{code_asm::CodeAssembler, Instruction, Register};
+use iced_x86::{
+    code_asm::{CodeAssembler, CodeAssemblerResult},
+    BlockEncoderOptions, Instruction, Register,
+};
 use logger::debug;
 use rand::{seq::SliceRandom, Rng};
 
@@ -29,10 +32,12 @@ pub struct Flags {
     pub parity: u64,
 }
 
-pub fn obfuscate(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<usize>) {
+pub fn obfuscate(asm: &mut CodeAssembler, ip: u64) -> (Vec<Instruction>, CodeAssemblerResult) {
     let mut rng = rand::thread_rng();
 
-    let mut chunks: Vec<(usize, Vec<Instruction>)> = Vec::with_capacity(instructions.len());
+    let instructions = asm.take_instructions();
+
+    let mut chunks = Vec::with_capacity(instructions.len());
 
     let mut i = instructions.len();
 
@@ -76,11 +81,24 @@ pub fn obfuscate(instructions: &[Instruction]) -> (Vec<Instruction>, Vec<usize>)
 
     for (i, chunk) in chunks {
         map[i] = obfuscated.len();
-
         obfuscated.extend(chunk);
     }
 
-    (obfuscated, map)
+    let mut asm = CodeAssembler::new(64).unwrap();
+
+    for &instruction in &obfuscated {
+        asm.add_instruction(instruction).unwrap();
+    }
+
+    let mut result = asm
+        .assemble_options(ip, BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS)
+        .unwrap();
+
+    let offsets = result.inner.new_instruction_offsets.clone();
+
+    result.inner.new_instruction_offsets = map.iter().map(|&slot| offsets[slot]).collect();
+
+    (obfuscated, result)
 }
 
 pub fn flags(operation: Operation, left: u64, right: u64, size: usize) -> Flags {
