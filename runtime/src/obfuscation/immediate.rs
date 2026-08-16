@@ -5,7 +5,7 @@ use iced_x86::{
     Code, FlowControl, Instruction, InstructionInfoFactory, OpAccess, OpCodeOperandKind, OpKind,
     Register, RflagsBits,
 };
-use rand::Rng;
+use rand::{seq::SliceRandom, Rng};
 
 use crate::obfuscation::{flags, scratch, sized, Operation};
 
@@ -275,7 +275,7 @@ fn reconstruct(
     register1: Register,
     register2: Register,
     assembler: &mut CodeAssembler,
-    generator: &mut impl Rng,
+    rng: &mut impl Rng,
 ) {
     let r1_8 = get_gpr8(sized(register1, 1).unwrap()).unwrap();
     let r1_32 = get_gpr32(sized(register1, 4).unwrap()).unwrap();
@@ -283,7 +283,7 @@ fn reconstruct(
 
     let r2_64 = get_gpr64(sized(register2, 8).unwrap()).unwrap();
 
-    let operation = Operation::random(generator);
+    let operation = Operation::random(rng);
 
     let limit = match size {
         1 => 0xFF,
@@ -293,8 +293,8 @@ fn reconstruct(
         _ => unreachable!(),
     };
 
-    let first = generator.gen::<u32>() as u64;
-    let second = generator.gen::<u32>() as u64;
+    let first = rng.gen::<u32>() as u64;
+    let second = rng.gen::<u32>() as u64;
 
     let flags = flags(operation, first, second, 4);
 
@@ -306,7 +306,7 @@ fn reconstruct(
         (Condition::Parity, flags.parity),
     ];
 
-    let &(condition, flag) = &options[generator.gen_range(0..options.len())];
+    let &(condition, flag) = options.choose(rng).unwrap();
 
     let arithmetic = match operation {
         Operation::Add => first.wrapping_add(second) & 0xFFFF_FFFF,
@@ -332,8 +332,8 @@ fn reconstruct(
     if size == 8 {
         assembler.imul_2(r1_64, r1_64).unwrap();
 
-        let xor1 = generator.gen::<u64>();
-        let noise = generator.gen::<u64>();
+        let xor1 = rng.gen::<u64>();
+        let noise = rng.gen::<u64>();
         let xor2 = immediate ^ state ^ xor1 ^ noise;
         let xor3 = noise;
 
@@ -346,7 +346,7 @@ fn reconstruct(
     } else {
         assembler.imul_2(r1_32, r1_32).unwrap();
 
-        let xor1 = generator.gen::<u32>();
+        let xor1 = rng.gen::<u32>();
         let xor2 = ((immediate & limit) as u32) ^ (state as u32) ^ xor1;
 
         assembler.xor(r1_32, xor1 as i32).unwrap();
