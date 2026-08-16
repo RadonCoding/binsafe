@@ -280,11 +280,8 @@ fn reconstruct(
     let r1_8 = get_gpr8(sized(register1, 1).unwrap()).unwrap();
     let r1_32 = get_gpr32(sized(register1, 4).unwrap()).unwrap();
     let r1_64 = get_gpr64(sized(register1, 8).unwrap()).unwrap();
-
     let r2_64 = get_gpr64(sized(register2, 8).unwrap()).unwrap();
-
     let operation = Operation::random(generator);
-
     let limit = match size {
         1 => 0xFF,
         2 => 0xFFFF,
@@ -292,12 +289,9 @@ fn reconstruct(
         8 => u64::MAX,
         _ => unreachable!(),
     };
-
     let first = generator.gen::<u32>() as u64;
     let second = generator.gen::<u32>() as u64;
-
     let flags = flags(operation, first, second, 4);
-
     let options = [
         (Condition::Carry, flags.carry),
         (Condition::Overflow, flags.overflow),
@@ -305,44 +299,28 @@ fn reconstruct(
         (Condition::Zero, flags.zero),
         (Condition::Parity, flags.parity),
     ];
-
     let &(condition, flag) = &options[generator.gen_range(0..options.len())];
-
-    let arithmetic_result = match operation {
-        Operation::Add => first.wrapping_add(second) & 0xFFFF_FFFF,
-        Operation::Sub => first.wrapping_sub(second) & 0xFFFF_FFFF,
-        Operation::Xor => (first ^ second) & 0xFFFF_FFFF,
-    };
-
-    let state = (arithmetic_result & 0xFFFF_FF00) | flag;
-
+    let factor = generator.gen::<u32>() as u64 | 1;
+    let state = flag.wrapping_mul(factor);
+    let xor1 = generator.gen::<u64>();
+    let xor2 = (immediate & limit) ^ state ^ xor1;
     assembler.mov(r1_32, first as i32).unwrap();
-
     match operation {
         Operation::Add => assembler.add(r1_32, second as i32),
         Operation::Sub => assembler.sub(r1_32, second as i32),
         Operation::Xor => assembler.xor(r1_32, second as i32),
     }
     .unwrap();
-
     setcc(assembler, r1_8, condition);
-
+    assembler.movzx(r1_64, r1_8).unwrap();
+    assembler.imul_2(r1_64, factor as i32).unwrap();
     if size == 8 {
-        let xor1 = generator.gen::<u64>();
-        let noise = generator.gen::<u64>() as u64;
-        let xor2 = immediate ^ state ^ xor1 ^ noise;
-        let xor3 = noise;
         assembler.mov(r2_64, xor1 as i64).unwrap();
         assembler.xor(r1_64, r2_64).unwrap();
         assembler.mov(r2_64, xor2 as i64).unwrap();
         assembler.xor(r1_64, r2_64).unwrap();
-        assembler.mov(r2_64, xor3 as i64).unwrap();
-        assembler.xor(r1_64, r2_64).unwrap();
     } else {
-        let xor1 = generator.gen::<u32>();
-        let xor2 = ((immediate & limit) as u32) ^ (state as u32) ^ xor1;
-
-        assembler.xor(r1_32, xor1 as i32).unwrap();
-        assembler.xor(r1_32, xor2 as i32).unwrap();
+        assembler.xor(r1_64, xor1 as i32).unwrap();
+        assembler.xor(r1_64, xor2 as i32).unwrap();
     }
 }
