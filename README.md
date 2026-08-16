@@ -21,6 +21,7 @@ Obfuscator for compiled 64-bit portable executables.
 ### 2. Runtime
 
 #### Bootstrap
+- **Obfuscation**: the runtime code is transformed through passes to resist static analysis.
 - **Assembly**: the runtime is assembled directly into the output binary with code and data shuffled into a randomized layout.
 - **Imports**: the imports are resolved at runtime by hashes of module and export names.
 
