@@ -1,0 +1,28 @@
+name: Generate Templates
+
+on:
+  push:
+    branches:
+      - main
+jobs:
+  generate-templates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate templates
+        env:
+          OUTPUT_DIRECTORY: api/generated
+          TEMPLATES_DIRECTORY: api/templates
+        run: cargo build --package markers
+
+      - name: Commit and push
+        uses: EndBug/add-and-commit@v9
+        with:
+          default_author: github_actions
+          add: "api/generated"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,88 @@
+name: Validate Examples
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize]
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      examples: ${{ steps.discover.outputs.examples }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: discover
+        run: |
+          examples=$(find examples -mindepth 2 -maxdepth 2 -type d | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "examples=$examples" >> $GITHUB_OUTPUT
+
+  validate:
+    needs: [discover]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: ${{ fromJson(needs.discover.outputs.examples) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: x86_64-pc-windows-gnu
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 wine wine32 wine64
+
+      - name: Generate templates
+        env:
+          OUTPUT_DIRECTORY: api/generated
+          TEMPLATES_DIRECTORY: api/templates
+        run: cargo build --package markers
+
+      - name: Build obfuscator
+        run: cargo build --bin obfuscator --release --target x86_64-pc-windows-gnu
+
+      - name: Build example
+        run: |
+          language=$(echo "${{ matrix.example }}" | cut -d/ -f2)
+          case $language in
+            rust) cargo build --manifest-path ${{ matrix.example }}/Cargo.toml --release --target x86_64-pc-windows-gnu ;;
+            cpp)  x86_64-w64-mingw32-g++ ${{ matrix.example }}/main.cpp -o ${{ matrix.example }}/example.exe ;;
+          esac
+
+      - name: Obfuscate example
+        run: |
+          language=$(echo "${{ matrix.example }}" | cut -d/ -f2)
+          case $language in
+            rust)
+              name=$(cargo metadata --manifest-path ${{ matrix.example }}/Cargo.toml --no-deps --format-version 1 | jq -r '.packages[0].name')
+              wine target/x86_64-pc-windows-gnu/release/obfuscator.exe ${{ matrix.example }}/target/x86_64-pc-windows-gnu/release/$name.exe --virtualization
+              ;;
+            cpp)
+              wine target/x86_64-pc-windows-gnu/release/obfuscator.exe ${{ matrix.example }}/example.exe --virtualization
+              ;;
+          esac
+
+      - name: Validate example
+        run: |
+          language=$(echo "${{ matrix.example }}" | cut -d/ -f2)
+          case $language in
+            rust)
+              name=$(cargo metadata --manifest-path ${{ matrix.example }}/Cargo.toml --no-deps --format-version 1 | jq -r '.packages[0].name')
+              wine ${{ matrix.example }}/target/x86_64-pc-windows-gnu/release/$name.exe
+              ;;
+            cpp)
+              wine ${{ matrix.example }}/example.exe
+              ;;
+          esac

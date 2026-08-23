@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use iced_x86::{
-    code_asm::{get_gpr32, get_gpr64, get_gpr8, AsmRegister8, CodeAssembler},
+    code_asm::{get_gpr16, get_gpr32, get_gpr64, get_gpr8, AsmRegister8, CodeAssembler},
     Code, FlowControl, Instruction, InstructionInfoFactory, OpAccess, OpCodeOperandKind, OpKind,
     Register, RflagsBits,
 };
@@ -276,6 +276,7 @@ fn reconstruct(
     rng: &mut impl Rng,
 ) {
     let r1_8 = get_gpr8(sized(register1, 1).unwrap()).unwrap();
+    let r1_16 = get_gpr16(sized(register1, 2).unwrap()).unwrap();
     let r1_32 = get_gpr32(sized(register1, 4).unwrap()).unwrap();
     let r1_64 = get_gpr64(sized(register1, 8).unwrap()).unwrap();
 
@@ -312,9 +313,10 @@ fn reconstruct(
         Operation::Xor => (first ^ second) & 0xFFFF_FFFF,
     };
 
-    let state = (arithmetic & 0xFFFF_FF00) | flag;
+    let shift = rng.gen_range(0..16u32);
 
-    let state = state.wrapping_mul(state);
+    let state = ((arithmetic as u16 as u64) | ((flag as u64) << shift))
+        .wrapping_mul((arithmetic as u16 as u64) | ((flag as u64) << shift));
 
     assembler.mov(r1_32, first as i32).unwrap();
 
@@ -326,6 +328,13 @@ fn reconstruct(
     .unwrap();
 
     setcc(assembler, r1_8, condition);
+    assembler.movzx(r1_32, r1_8).unwrap();
+
+    if shift > 0 {
+        assembler.shl(r1_16, shift as i32).unwrap();
+    }
+
+    assembler.or(r1_16, arithmetic as u16 as i32).unwrap();
 
     if size == 8 {
         assembler.imul_2(r1_64, r1_64).unwrap();

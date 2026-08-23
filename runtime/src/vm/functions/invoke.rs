@@ -1,7 +1,7 @@
-use iced_x86::code_asm::{ptr, r12, r13, r13d, r14, r15, rax, rbp, rbx, rcx, rdi, rdx, rsi, rsp};
+use iced_x86::code_asm::{ptr, r12, r13, r14, r15, rax, rbp, rbx, rcx, rdi, rdx, rsi, rsp};
 
 use crate::{
-    runtime::{DataDef, FnDef, Runtime},
+    runtime::{FnDef, Runtime},
     vm::{
         bytecode::VMReg,
         utils::{self, scratch},
@@ -80,15 +80,8 @@ pub fn build(rt: &mut Runtime) {
 
     rt.asm.set_label(&mut execute_loop).unwrap();
     {
-        // mov r13d, [...]
-        rt.asm
-            .mov(r13d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
-            .unwrap();
-        // mov r13, gs:[0x1480 + r13*8]
-        rt.asm.mov(r13, ptr(0x1480 + r13 * 8).gs()).unwrap();
-
         // store rsp
-        scratch::store(rt, r13, rsp);
+        scratch::store(rt, r12, rsp);
 
         // call ...
         rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
@@ -98,25 +91,19 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut execute_continue).unwrap();
 
+        // mov [r12 + ...], rsp
+        utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
+
+        // load rsp
+        scratch::load(rt, r12, rsp);
+
         // call ...
         rt.asm
             .call(rt.function_labels[&FnDef::VmRegistersCaptureVolatile])
             .unwrap();
-        // mov [r12 + ...], rsp
-        utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
-
-        // mov r13d, [...]
-        rt.asm
-            .mov(r13d, ptr(rt.data_labels[&DataDef::VmRegistersTlsIndex]))
-            .unwrap();
-        // mov r13, gs:[0x1480 + r13*8]
-        rt.asm.mov(r13, ptr(0x1480 + r13 * 8).gs()).unwrap();
-
-        // load rsp
-        scratch::load(rt, r13, rsp);
 
         // cmp [r12 + ...], 0x0
-        utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
+        utils::vreg::cmp_imm(rt, r12, VMReg::BResume, 0x0);
         // jne ...
         rt.asm.jne(execute_loop).unwrap();
     }

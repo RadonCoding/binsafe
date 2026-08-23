@@ -252,7 +252,7 @@ pub fn build(rt: &mut Runtime) {
         #[cfg(feature = "profile")]
         stop_profiling(rt, "vm_crypt_encrypt");
 
-        // If there's no branch target, advance to next block:
+        // Skip if there is no branch:
         // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NExit, rax);
         // mov rcx, [r12 + ...]

@@ -21,6 +21,7 @@ pub fn capture_volatile(rt: &mut Runtime) {
         // mov [r12 + ...], ...
         utils::vreg::store_reg(rt, r12, src, dst);
     }
+    // ret
     rt.asm.ret().unwrap();
 }
 
