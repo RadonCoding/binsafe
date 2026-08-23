@@ -50,18 +50,18 @@ jobs:
           TEMPLATES_DIRECTORY: ${{ github.workspace }}/api/templates
         run: cargo build --package markers
 
-      - name: Build obfuscator
+      - name: Build for Windows
         run: cargo build --bin obfuscator --release --target x86_64-pc-windows-gnu
 
-      - name: Build example
+      - name: Build examples
         run: |
           language=$(echo "${{ matrix.example }}" | cut -d/ -f2)
           case $language in
             rust) cargo build --manifest-path ${{ matrix.example }}/Cargo.toml --release --target x86_64-pc-windows-gnu ;;
-            cpp)  x86_64-w64-mingw32-g++ ${{ matrix.example }}/main.cpp -o ${{ matrix.example }}/example.exe ;;
+            cpp)  x86_64-w64-mingw32-g++ ${{ matrix.example }}/main.cpp -o ${{ matrix.example }}/example.exe -static-libgcc -static-libstdc++ ;;
           esac
 
-      - name: Obfuscate example
+      - name: Obfuscate examples
         run: |
           language=$(echo "${{ matrix.example }}" | cut -d/ -f2)
           case $language in
@@ -74,7 +74,7 @@ jobs:
               ;;
           esac
 
-      - name: Validate example
+      - name: Validate examples
         run: |
           language=$(echo "${{ matrix.example }}" | cut -d/ -f2)
           case $language in
