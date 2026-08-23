@@ -7,7 +7,7 @@ Type "r2 example.exe"
 Enter
 Type "aa"
 Enter
-Type "pdb @ sym.main"
+Type "pdf @ sym.main"
 Enter
 
 Type "q"
@@ -17,11 +17,7 @@ Type "r2 example.protected.exe"
 Enter
 Type "aa"
 Enter
-Type "pdb @ sym.main"
-Enter
-Type "s 0x140006adb"
-Enter
-Type "s `aoj~jump[1]`"
+Type "pdf @ sym.main"
 Enter
 Type "pd 10"
 Enter

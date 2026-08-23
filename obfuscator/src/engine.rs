@@ -57,7 +57,7 @@ pub struct Engine<'a> {
 
 impl<'a> Engine<'a> {
     pub fn new(args: &'a Args) -> Self {
-        let mut pe = VecPE::from_disk_file(&args.input).unwrap();
+        let pe = VecPE::from_disk_file(&args.input).unwrap();
 
         let bitness = match pe.get_arch().unwrap() {
             Arch::X64 => 64,
@@ -69,26 +69,6 @@ impl<'a> Engine<'a> {
             bitness,
             pe.len() as f64 / 1_000_000.0,
         );
-
-        let magic = pe.get_nt_magic().unwrap();
-
-        // Clear COFF symbol table pointer and symbol count in file headers
-        if magic == HDR32_MAGIC {
-            let h32 = pe.get_mut_nt_headers_32_ref().unwrap();
-            h32.file_header.pointer_to_symbol_table = Offset(0);
-            h32.file_header.number_of_symbols = 0;
-        } else if magic == HDR64_MAGIC {
-            let h64 = pe.get_mut_nt_headers_64_ref().unwrap();
-            h64.file_header.pointer_to_symbol_table = Offset(0);
-            h64.file_header.number_of_symbols = 0;
-        }
-
-        // Truncate binary at the end of the sections to strip the COFF symbol table
-        let sections = pe.get_section_table().unwrap();
-        let end_section = sections[sections.len() - 1];
-        let end_of_sections =
-            end_section.pointer_to_raw_data.0 as usize + end_section.size_of_raw_data as usize;
-        pe.truncate(end_of_sections);
 
         Self {
             pe,
@@ -210,7 +190,7 @@ impl<'a> Engine<'a> {
             self.blocks.push(block);
         };
 
-        for (start, end) in markers {
+        for &(start, end) in &markers {
             let rva = ip as u32 + start as u32;
             let mut decoder = Decoder::with_ip(
                 self.bitness,
@@ -242,6 +222,20 @@ impl<'a> Engine<'a> {
             if !block.is_empty() {
                 capture(&mut block, ip as u32 + end as u32);
             }
+        }
+
+        for (start, end) in markers {
+            let start = self
+                .pe
+                .translate(PETranslation::Memory(RVA(ip as u32 + start as u32)))
+                .unwrap();
+            let end = self
+                .pe
+                .translate(PETranslation::Memory(RVA(ip as u32 + end as u32)))
+                .unwrap();
+
+            self.nop(start - MARKER_SIZE, MARKER_SIZE);
+            self.nop(end, MARKER_SIZE);
         }
 
         info!("Found {} blocks", self.blocks.len());
@@ -586,7 +580,6 @@ impl<'a> Engine<'a> {
         characteristics: SectionCharacteristics,
     ) -> ImageSectionHeader {
         let size = content.len() as u32;
-
         let virtual_size = self.pe.align_to_section(RVA(size)).unwrap().0;
         let raw_size = self.pe.align_to_file(Offset(size)).unwrap().0;
 
@@ -596,14 +589,56 @@ impl<'a> Engine<'a> {
         section.size_of_raw_data = raw_size;
         section.characteristics = characteristics;
 
-        let section = self.pe.append_section(&section).unwrap();
+        let magic = self.pe.get_nt_magic().unwrap();
 
+        let (pointer_to_symbol_table, number_of_symbols) = if magic == HDR32_MAGIC {
+            let h32 = self.pe.get_nt_headers_32().unwrap();
+            (
+                h32.file_header.pointer_to_symbol_table.0,
+                h32.file_header.number_of_symbols,
+            )
+        } else {
+            let h64 = self.pe.get_nt_headers_64().unwrap();
+            (
+                h64.file_header.pointer_to_symbol_table.0,
+                h64.file_header.number_of_symbols,
+            )
+        };
+
+        let symbol_table = if pointer_to_symbol_table != 0 && number_of_symbols != 0 {
+            let symbol_table = self
+                .pe
+                .get_slice_ref::<u8>(
+                    pointer_to_symbol_table as usize,
+                    self.pe.len() - pointer_to_symbol_table as usize,
+                )
+                .unwrap()
+                .to_vec();
+            self.pe.truncate(pointer_to_symbol_table as usize);
+            Some(symbol_table)
+        } else {
+            None
+        };
+
+        let section = self.pe.append_section(&section).unwrap();
         self.pe.append(content);
         self.pe.pad_to_alignment().unwrap();
 
-        let size_of_image = self.pe.calculate_memory_size().unwrap() as u32;
+        if let Some(symbol_table) = symbol_table {
+            let pointer_to_symbol_table = self.pe.len() as u32;
 
-        let magic = self.pe.get_nt_magic().unwrap();
+            self.pe.append(&symbol_table);
+
+            if magic == HDR32_MAGIC {
+                let h32 = self.pe.get_mut_nt_headers_32_ref().unwrap();
+                h32.file_header.pointer_to_symbol_table = Offset(pointer_to_symbol_table);
+            } else if magic == HDR64_MAGIC {
+                let h64 = self.pe.get_mut_nt_headers_64_ref().unwrap();
+                h64.file_header.pointer_to_symbol_table = Offset(pointer_to_symbol_table);
+            }
+        }
+
+        let size_of_image = self.pe.calculate_memory_size().unwrap() as u32;
 
         if magic == HDR32_MAGIC {
             let h32 = self.pe.get_mut_nt_headers_32_ref().unwrap();
