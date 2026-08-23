@@ -7,7 +7,7 @@ Obfuscator for compiled 64-bit portable executables.
 ### 1. Obfuscator
 
 #### Analysis
-- **Disassembly**: the binary's code section is disassembled and partitioned into basic blocks by tracing all reachable control flow.
+- **Disassembly**: the binary's code section is disassembled and partitioned into basic blocks by tracing all reachable control flow or by scanning for explicit inline markers as shown in the [examples](https://github.com/RadonCoding/binsafe/tree/main/examples).
 
 #### Virtualization
 - **Lifting**: instructions are translated into bytecode that the runtime interprets.
