@@ -35,6 +35,9 @@ jobs:
       - name: Run obfuscator
         run: wine target/x86_64-pc-windows-gnu/release/obfuscator.exe example.exe --virtualization
 
+      - name: Configure radare2
+        run: echo 'eco catppuccin' >> ~/.radare2rc
+
       - name: Generate example
         run: vhs example.tape
 
