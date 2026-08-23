@@ -7,7 +7,9 @@ Type "r2 example.exe"
 Enter
 Type "eco zenburn"
 Enter
-Type "pdR @ sym.main"
+Type "aa"
+Enter
+Type "pdf @ sym.main"
 Enter
 
 Type "q"
@@ -17,6 +19,8 @@ Type "r2 example.protected.exe"
 Enter
 Type "eco zenburn"
 Enter
-Type "pdR @ sym.main"
+Type "aa"
+Enter
+Type "pdf @ sym.main"
 Enter
 Sleep 5s
