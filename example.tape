@@ -7,7 +7,7 @@ Type "r2 example.exe"
 Enter
 Type "aa"
 Enter
-Type "pdf @ sym.main"
+Type "pdR @ sym.main"
 Enter
 
 Type "q"
@@ -17,6 +17,6 @@ Type "r2 example.protected.exe"
 Enter
 Type "aa"
 Enter
-Type "pdf @ sym.main"
+Type "pdR @ sym.main"
 Enter
 Sleep 5s
