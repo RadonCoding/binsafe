@@ -13,7 +13,6 @@ fn bytes_to_csv(bytes: &[u8]) -> String {
 fn main() {
     println!("cargo:rerun-if-env-changed=OUTPUT_DIRECTORY");
     println!("cargo:rerun-if-env-changed=TEMPLATES_DIRECTORY");
-    println!("cargo:rerun-if-changed=api/templates");
 
     let (Ok(output), Ok(templates)) = (
         env::var("OUTPUT_DIRECTORY"),
