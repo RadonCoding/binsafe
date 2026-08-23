@@ -29,13 +29,11 @@ jobs:
       - name: Build for Windows
         run: cargo build --bin obfuscator --release --target x86_64-pc-windows-gnu
 
-      - name: Get notepad.exe
-        run: |
-          wineboot -u
-          cp ~/.wine/drive_c/windows/system32/notepad.exe .
+      - name: Build C++ example
+        run: x86_64-w64-mingw32-g++ examples/cpp/hello/main.cpp -o example.exe
 
       - name: Run obfuscator
-        run: wine target/x86_64-pc-windows-gnu/release/obfuscator.exe notepad.exe --virtualization
+        run: wine target/x86_64-pc-windows-gnu/release/obfuscator.exe example.exe --virtualization
 
       - name: Generate example
         run: vhs example.tape

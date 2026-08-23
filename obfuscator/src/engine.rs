@@ -3,12 +3,9 @@ use exe::{
     PETranslation, RelocationDirectory, RelocationValue, SectionCharacteristics, ThunkData,
     ThunkFunctions, VecPE, HDR32_MAGIC, HDR64_MAGIC, PE, RVA,
 };
-use iced_x86::{
-    Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter,
-    OpKind::{self},
-    Register,
-};
+use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};
 use logger::info;
+use markers::{MARKER_BEGIN, MARKER_END, MARKER_SIZE};
 use runtime::runtime::Runtime;
 use std::{collections::HashSet, fmt, mem};
 
@@ -34,6 +31,7 @@ impl fmt::Display for Block {
 
         for instruction in &self.instructions {
             output.clear();
+
             formatter.format(instruction, &mut output);
 
             let rva = instruction.ip() as u32;
@@ -59,7 +57,7 @@ pub struct Engine<'a> {
 
 impl<'a> Engine<'a> {
     pub fn new(args: &'a Args) -> Self {
-        let pe = VecPE::from_disk_file(&args.input).unwrap();
+        let mut pe = VecPE::from_disk_file(&args.input).unwrap();
 
         let bitness = match pe.get_arch().unwrap() {
             Arch::X64 => 64,
@@ -71,6 +69,26 @@ impl<'a> Engine<'a> {
             bitness,
             pe.len() as f64 / 1_000_000.0,
         );
+
+        let magic = pe.get_nt_magic().unwrap();
+
+        // Clear COFF symbol table pointer and symbol count in file headers
+        if magic == HDR32_MAGIC {
+            let h32 = pe.get_mut_nt_headers_32_ref().unwrap();
+            h32.file_header.pointer_to_symbol_table = Offset(0);
+            h32.file_header.number_of_symbols = 0;
+        } else if magic == HDR64_MAGIC {
+            let h64 = pe.get_mut_nt_headers_64_ref().unwrap();
+            h64.file_header.pointer_to_symbol_table = Offset(0);
+            h64.file_header.number_of_symbols = 0;
+        }
+
+        // Truncate binary at the end of the sections to strip the COFF symbol table
+        let sections = pe.get_section_table().unwrap();
+        let end_section = sections[sections.len() - 1];
+        let end_of_sections =
+            end_section.pointer_to_raw_data.0 as usize + end_section.size_of_raw_data as usize;
+        pe.truncate(end_of_sections);
 
         Self {
             pe,
@@ -86,24 +104,31 @@ impl<'a> Engine<'a> {
         self.protections.push(Box::<T>::default());
     }
 
+    pub fn junk(&mut self, offset: usize, size: usize) {
+        let bytes = (0..size).map(|_| rand::random()).collect::<Vec<u8>>();
+        self.pe.write(offset, &bytes).unwrap();
+    }
+
+    pub fn nop(&mut self, offset: usize, size: usize) {
+        self.pe.write(offset, &vec![0x90; size]).unwrap();
+    }
+
     pub fn replace(&mut self, index: usize, data: &[u8]) {
+        let (offset, size, rva) = {
+            let block = &self.blocks[index];
+            assert!(data.len() <= block.size);
+            (block.offset, block.size, block.rva)
+        };
+
+        self.pe.write(offset, data).unwrap();
+
+        self.junk(offset + data.len(), size - data.len());
+
+        let bytes = self.pe.get_slice_ref::<u8>(offset, data.len()).unwrap();
+
+        let mut decoder = Decoder::with_ip(self.bitness, bytes, rva as u64, DecoderOptions::NONE);
+
         let block = &mut self.blocks[index];
-
-        assert!(data.len() <= block.size);
-
-        let mut padded = data.to_vec();
-        padded.resize_with(block.size, || rand::random::<u8>());
-
-        self.pe.write(block.offset, padded).unwrap();
-
-        let bytes = self
-            .pe
-            .get_slice_ref::<u8>(block.offset, data.len())
-            .unwrap();
-
-        let mut decoder =
-            Decoder::with_ip(self.bitness, bytes, block.rva as u64, DecoderOptions::NONE);
-
         block.instructions.clear();
 
         while decoder.can_decode() {
@@ -117,104 +142,205 @@ impl<'a> Engine<'a> {
         }
     }
 
-    fn switch(&self, block: &[Instruction], data_references: &HashSet<u32>) -> Vec<u32> {
-        let indirect = block.last().unwrap();
+    pub fn scan(&mut self) {
+        let entry_point = self.pe.get_entrypoint().unwrap();
+        let code_section = self.pe.get_section_by_rva(entry_point).unwrap();
 
-        if indirect.op0_kind() != OpKind::Register {
-            return Vec::new();
+        info!(
+            "Section VA: 0x{:X}, file offset: 0x{:X}",
+            code_section.virtual_address.0, code_section.pointer_to_raw_data.0
+        );
+        info!(
+            "Protecting section '{}' at 0x{:08X}",
+            Self::get_section_name(&code_section),
+            code_section.virtual_address.0
+        );
+
+        let ip = code_section.virtual_address.0 as u64;
+        let code = code_section.read(&self.pe).unwrap().to_vec();
+
+        if self.scan_markers(ip, &code) {
+            return;
         }
 
-        let source_section = self
-            .pe
-            .get_section_by_rva(RVA(indirect.ip() as u32))
-            .unwrap();
+        self.scan_blocks(ip, &code, &code_section);
+    }
 
-        let mut registers = Vec::new();
-        registers.push(indirect.op0_register());
+    fn scan_markers(&mut self, ip: u64, code: &[u8]) -> bool {
+        let mut markers = Vec::new();
+        let mut begin = None;
+        let mut cursor = 0;
 
-        for instruction in block.iter().rev() {
-            for register in registers.clone() {
-                if instruction.op0_register() != register {
-                    continue;
+        while cursor + MARKER_SIZE <= code.len() {
+            if code[cursor..cursor + MARKER_SIZE] == MARKER_BEGIN {
+                begin = Some(cursor + MARKER_SIZE);
+                cursor += MARKER_SIZE;
+                continue;
+            }
+            if code[cursor..cursor + MARKER_SIZE] == MARKER_END {
+                if let Some(start) = begin.take() {
+                    markers.push((start, cursor));
+                }
+                cursor += MARKER_SIZE;
+                continue;
+            }
+            cursor += 1;
+        }
+
+        if markers.is_empty() {
+            return false;
+        }
+
+        info!("Found {} marked regions", markers.len());
+
+        let mut capture = |block: &mut Vec<Instruction>, end: u32| {
+            if block.is_empty() {
+                return;
+            }
+            let rva = block[0].ip() as u32;
+            let offset = self.pe.translate(PETranslation::Memory(RVA(rva))).unwrap();
+            let size = (end - rva) as usize;
+            let block = Block {
+                rva,
+                offset,
+                size,
+                instructions: mem::take(block),
+            };
+            info!("{block}");
+            self.blocks.push(block);
+        };
+
+        for (start, end) in markers {
+            let rva = ip as u32 + start as u32;
+            let mut decoder = Decoder::with_ip(
+                self.bitness,
+                &code[start..end],
+                rva as u64,
+                DecoderOptions::NONE,
+            );
+
+            let mut instruction = Instruction::default();
+            let mut block = Vec::new();
+
+            while decoder.can_decode() {
+                decoder.decode_out(&mut instruction);
+
+                if instruction.is_invalid() {
+                    if !block.is_empty() {
+                        capture(&mut block, instruction.ip() as u32);
+                    }
+                    break;
                 }
 
-                for i in 1..instruction.op_count() {
-                    if instruction.op_kind(i) == OpKind::Register {
-                        let source = instruction.op_register(i);
+                block.push(instruction);
 
-                        if !registers.contains(&source) {
-                            registers.push(source);
-                        }
-                    }
-
-                    if instruction.memory_base() != Register::RIP {
-                        continue;
-                    }
-
-                    if instruction.op_kind(i) != OpKind::Memory {
-                        continue;
-                    }
-
-                    let table_rva = instruction.ip_rel_memory_address() as u32;
-
-                    let destination_section = match self.pe.get_section_by_rva(RVA(table_rva)) {
-                        Ok(s) => s,
-                        Err(_) => continue,
-                    };
-
-                    let destination_data = match destination_section.read(&self.pe) {
-                        Ok(d) => d,
-                        Err(_) => continue,
-                    };
-
-                    let offset = (table_rva - destination_section.virtual_address.0) as usize;
-
-                    let mut targets = Vec::new();
-
-                    let mut cursor = offset;
-
-                    while cursor + size_of::<i32>() <= destination_data.len() {
-                        let current_rva = table_rva + (cursor - offset) as u32;
-
-                        if current_rva != table_rva && data_references.contains(&current_rva) {
-                            break;
-                        }
-
-                        let displacement = i32::from_le_bytes(
-                            destination_data[cursor..cursor + size_of::<i32>()]
-                                .try_into()
-                                .unwrap(),
-                        );
-
-                        let target_rva = (table_rva as i32 + displacement as i32) as u32;
-
-                        if target_rva < indirect.ip() as u32 {
-                            cursor += size_of::<i32>();
-                            continue;
-                        }
-
-                        if !source_section.has_rva(RVA(target_rva)) {
-                            break;
-                        }
-
-                        targets.push(target_rva);
-
-                        cursor += size_of::<i32>();
-                    }
-
-                    if !targets.is_empty() {
-                        return targets;
-                    }
+                if !matches!(instruction.flow_control(), FlowControl::Next) {
+                    capture(&mut block, instruction.next_ip() as u32);
                 }
+            }
+
+            if !block.is_empty() {
+                capture(&mut block, ip as u32 + end as u32);
             }
         }
 
-        Vec::new()
+        info!("Found {} blocks", self.blocks.len());
+
+        true
+    }
+
+    fn scan_blocks(&mut self, ip: u64, code: &[u8], code_section: &ImageSectionHeader) {
+        let data_references = self.collect_data_references(code, ip);
+
+        let mut code_references = self
+            .collect_code_references(code, ip, code_section, &data_references)
+            .into_iter()
+            .collect::<Vec<u32>>();
+        code_references.sort();
+
+        let mut capture = |block: &mut Vec<Instruction>, end: u32| {
+            if block.is_empty() {
+                return;
+            }
+            let rva = block[0].ip() as u32;
+            let offset = self.pe.translate(PETranslation::Memory(RVA(rva))).unwrap();
+            let size = (end - rva) as usize;
+            self.blocks.push(Block {
+                rva,
+                offset,
+                size,
+                instructions: mem::take(block),
+            });
+        };
+
+        let mut decoder = Decoder::with_ip(self.bitness, code, ip, DecoderOptions::NONE);
+        let mut instruction = Instruction::default();
+        let mut block = Vec::new();
+        let mut inblock = false;
+
+        while decoder.can_decode() {
+            let rva = decoder.ip() as u32;
+
+            if code_references.binary_search(&rva).is_ok() {
+                if inblock {
+                    capture(&mut block, rva);
+                }
+                inblock = true;
+            }
+
+            if !inblock {
+                decoder.decode_out(&mut instruction);
+                continue;
+            }
+
+            decoder.decode_out(&mut instruction);
+
+            if instruction.is_invalid() {
+                inblock = false;
+                continue;
+            }
+
+            let start = instruction.ip() as u32;
+            let end = instruction.next_ip() as u32;
+            let position = code_references.binary_search(&end).unwrap_or_else(|e| e);
+            let overlaps = position > 0
+                && code_references[position - 1] > start
+                && code_references[position - 1] < end;
+
+            if overlaps {
+                capture(&mut block, start);
+                inblock = false;
+                continue;
+            }
+
+            block.push(instruction);
+
+            if !matches!(instruction.flow_control(), FlowControl::Next) {
+                capture(&mut block, instruction.next_ip() as u32);
+                inblock = false;
+            }
+        }
+
+        info!("Found {} blocks", self.blocks.len());
+
+        // let start = 1230;
+        // let end = 1335;
+        // let middle = start + (end - start) / 2;
+
+        // self.blocks.drain(end..);
+        // self.blocks.drain(..start);
+
+        // info!("{} to {} (middle: {})", start, end, middle);
+
+        // println!(
+        //     "0x{:016X} {}",
+        //     self.pe.get_image_base().unwrap() + self.blocks[0].rva as u64,
+        //     self.blocks[0]
+        // );
     }
 
     fn collect_data_references(&self, code: &[u8], ip: u64) -> HashSet<u32> {
         let mut data_references = HashSet::new();
-
         let mut decoder = Decoder::with_ip(self.bitness, code, ip, DecoderOptions::NONE);
         let mut instruction = Instruction::default();
 
@@ -238,7 +364,6 @@ impl<'a> Engine<'a> {
         let entry_point = self.pe.get_entrypoint().unwrap();
 
         let mut references = HashSet::new();
-
         references.insert(entry_point.0);
 
         for handler in exceptions::get_exception_handlers(&self.pe) {
@@ -272,7 +397,6 @@ impl<'a> Engine<'a> {
                         RelocationValue::Relocation64(v) => v,
                         _ => continue,
                     };
-
                     let target_rva = (target_va - image_base) as u32;
 
                     if code_section.has_rva(RVA(target_rva)) {
@@ -293,14 +417,12 @@ impl<'a> Engine<'a> {
         data_references: &HashSet<u32>,
     ) -> HashSet<u32> {
         let mut references = self.collect_static_references(code_section);
-
         let mut decoder = Decoder::with_ip(self.bitness, code, ip, DecoderOptions::NONE);
         let mut instruction = Instruction::default();
         let mut previous = Vec::new();
 
         while decoder.can_decode() {
             decoder.decode_out(&mut instruction);
-
             if instruction.is_invalid() {
                 previous.clear();
                 continue;
@@ -326,7 +448,6 @@ impl<'a> Engine<'a> {
             }
 
             let flow = instruction.flow_control();
-
             previous.push(instruction);
 
             if !matches!(
@@ -339,7 +460,7 @@ impl<'a> Engine<'a> {
             }
 
             if flow == FlowControl::IndirectBranch {
-                let targets = self.switch(&previous, data_references);
+                let targets = self.collect_switch_table(&previous, data_references);
 
                 for target in targets {
                     references.insert(target);
@@ -352,127 +473,101 @@ impl<'a> Engine<'a> {
         references
     }
 
-    pub fn scan(&mut self) {
-        let entry_point = self.pe.get_entrypoint().unwrap();
-        let code_section = self.pe.get_section_by_rva(entry_point).unwrap();
+    fn collect_switch_table(
+        &self,
+        block: &[Instruction],
+        data_references: &HashSet<u32>,
+    ) -> Vec<u32> {
+        use iced_x86::{OpKind, Register};
 
-        info!(
-            "Protecting section '{}' at 0x{:08X}",
-            Self::get_section_name(&code_section),
-            code_section.virtual_address.0
-        );
+        let indirect = block.last().unwrap();
+        if indirect.op0_kind() != OpKind::Register {
+            return Vec::new();
+        }
 
-        let ip = code_section.virtual_address.0 as u64;
-        let code = code_section.read(&self.pe).unwrap();
+        let source_section = self
+            .pe
+            .get_section_by_rva(RVA(indirect.ip() as u32))
+            .unwrap();
 
-        let data_references = self.collect_data_references(&code, ip);
-        let code_references =
-            self.collect_code_references(&code, ip, &code_section, &data_references);
+        let mut registers = Vec::new();
+        registers.push(indirect.op0_register());
 
-        let mut code_references = code_references.iter().cloned().collect::<Vec<u32>>();
-        code_references.sort();
-
-        let mut capture = |block: &mut Vec<Instruction>, end: u32| {
-            if block.is_empty() {
-                return;
-            }
-            let rva = block[0].ip() as u32;
-            let offset = self
-                .pe
-                .translate(PETranslation::Memory(RVA(rva as u32)))
-                .unwrap();
-            let size = (end - rva) as usize;
-            self.blocks.push(Block {
-                rva,
-                offset,
-                size,
-                instructions: mem::take(block),
-            });
-        };
-
-        let mut decoder = Decoder::with_ip(self.bitness, &code, ip, DecoderOptions::NONE);
-        let mut instruction = Instruction::default();
-        let mut block = Vec::new();
-        let mut inblock = false;
-
-        while decoder.can_decode() {
-            let rva = decoder.ip() as u32;
-
-            if code_references.binary_search(&rva).is_ok() {
-                if inblock {
-                    capture(&mut block, rva);
+        for instruction in block.iter().rev() {
+            for register in registers.clone() {
+                if instruction.op0_register() != register {
+                    continue;
                 }
-                inblock = true;
-            }
 
-            if !inblock {
-                decoder.decode_out(&mut instruction);
-                continue;
-            }
+                for i in 1..instruction.op_count() {
+                    if instruction.op_kind(i) == OpKind::Register {
+                        let source = instruction.op_register(i);
+                        if !registers.contains(&source) {
+                            registers.push(source);
+                        }
+                    }
 
-            decoder.decode_out(&mut instruction);
+                    if instruction.memory_base() != Register::RIP {
+                        continue;
+                    }
+                    if instruction.op_kind(i) != OpKind::Memory {
+                        continue;
+                    }
 
-            if instruction.is_invalid() {
-                inblock = false;
-                continue;
-            }
+                    let table_rva = instruction.ip_rel_memory_address() as u32;
+                    let destination_section = match self.pe.get_section_by_rva(RVA(table_rva)) {
+                        Ok(s) => s,
+                        Err(_) => continue,
+                    };
+                    let destination_data = match destination_section.read(&self.pe) {
+                        Ok(d) => d,
+                        Err(_) => continue,
+                    };
 
-            let start = instruction.ip() as u32;
-            let end = instruction.next_ip() as u32;
+                    let offset = (table_rva - destination_section.virtual_address.0) as usize;
+                    let mut targets = Vec::new();
+                    let mut cursor = offset;
 
-            let position = code_references.binary_search(&end).unwrap_or_else(|e| e);
+                    while cursor + size_of::<i32>() <= destination_data.len() {
+                        let current_rva = table_rva + (cursor - offset) as u32;
+                        if current_rva != table_rva && data_references.contains(&current_rva) {
+                            break;
+                        }
 
-            let overlaps = if position > 0
-                && code_references[position - 1] > start
-                && code_references[position - 1] < end
-            {
-                true
-            } else {
-                false
-            };
+                        let displacement = i32::from_le_bytes(
+                            destination_data[cursor..cursor + size_of::<i32>()]
+                                .try_into()
+                                .unwrap(),
+                        );
+                        let target_rva = (table_rva as i32 + displacement as i32) as u32;
 
-            if overlaps {
-                capture(&mut block, start);
-                inblock = false;
-                continue;
-            }
+                        if target_rva < indirect.ip() as u32 {
+                            cursor += size_of::<i32>();
+                            continue;
+                        }
+                        if !source_section.has_rva(RVA(target_rva)) {
+                            break;
+                        }
 
-            block.push(instruction);
+                        targets.push(target_rva);
+                        cursor += size_of::<i32>();
+                    }
 
-            let flow = instruction.flow_control();
-
-            if !matches!(flow, FlowControl::Next) {
-                let next = instruction.next_ip() as u32;
-                capture(&mut block, next);
-                inblock = false;
+                    if !targets.is_empty() {
+                        return targets;
+                    }
+                }
             }
         }
 
-        info!("Found {} blocks", self.blocks.len());
-
-        // let start = 96731;
-        // let end = 96732;
-        // let middle = start + (end - start) / 2;
-
-        // self.blocks.drain(end..);
-        // self.blocks.drain(..start);
-
-        // info!("{} to {} (middle: {})", start, end, middle);
-
-        // println!(
-        //     "0x{:016X} {}",
-        //     self.pe.get_image_base().unwrap() + self.blocks[0].rva as u64,
-        //     self.blocks[0]
-        // );
+        Vec::new()
     }
 
     pub fn get_end_of_sections(&self) -> u32 {
         let sections = self.pe.get_section_table().unwrap();
-        let last_section = sections[sections.len() - 1];
+        let end_section = sections[sections.len() - 1];
         self.pe
-            .align_to_section(RVA(
-                last_section.virtual_address.0 + last_section.virtual_size
-            ))
+            .align_to_section(RVA(end_section.virtual_address.0 + end_section.virtual_size))
             .unwrap()
             .0
     }

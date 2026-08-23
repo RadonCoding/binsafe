@@ -2,7 +2,6 @@ use iced_x86::{
     code_asm::{CodeAssembler, CodeAssemblerResult},
     BlockEncoderOptions, Instruction, Register,
 };
-use logger::debug;
 use rand::{seq::SliceRandom, Rng};
 
 mod immediate;
@@ -57,12 +56,6 @@ pub fn obfuscate(asm: &mut CodeAssembler, ip: u64) -> (Vec<Instruction>, CodeAss
 
             if let Some(instruction) = chunk.first_mut() {
                 instruction.set_ip(ip);
-            }
-
-            debug!("OBFUSCATED: {}", instructions[i]);
-
-            for instruction in &chunk {
-                debug!("{}{instruction}", " ".repeat(4));
             }
 
             chunks.push((i, chunk));

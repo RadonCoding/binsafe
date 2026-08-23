@@ -1,6 +1,6 @@
 use clap::Parser;
 use logger::info;
-use std::fs;
+use std::{fs, path};
 
 use obfuscator::{args::Args, engine::Engine, protections::virtualization::Virtualization};
 
@@ -31,6 +31,8 @@ fn main() {
         ));
         output
     };
+
+    let output = path::absolute(&output).unwrap();
 
     fs::write(&output, protected).unwrap();
 

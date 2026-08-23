@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 logger = { path = "../logger" }
 runtime = { path = "../runtime" }
+markers = { path = "../markers" }
 iced-x86 = { version = "1.21.0", features = ["code_asm"] }
 rand = "0.8.5"
 clap = { version = "4.5.53", features = ["derive"] }

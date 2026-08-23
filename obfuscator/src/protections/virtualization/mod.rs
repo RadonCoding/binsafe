@@ -344,6 +344,7 @@ impl Protection for Virtualization {
                 asm.push((vtable_index as i32 | 0x10000000) ^ return_address)
                     .unwrap();
                 asm.call(ventry_rva).unwrap();
+
                 let dispatch2 = asm.assemble(rva as u64).unwrap();
 
                 assert_eq!(dispatch1.len(), dispatch2.len());

@@ -51,7 +51,6 @@ use windows::Win32::{
 mod constants;
 mod instructions;
 mod instrumentation;
-mod permutation;
 
 static FAKE_BRANCH_MAPPED: OnceLock<()> = OnceLock::new();
 
@@ -122,7 +121,7 @@ impl Executor {
     pub const TEST_KEY_MUL: u64 = 0x1234567890ABCDEF;
     pub const TEST_KEY_ADD: u64 = 0x1234567890ABCDEF;
 
-    pub const SIZE: usize = 0x10000;
+    pub const SIZE: usize = 0x100000;
 
     pub fn new() -> Self {
         FAKE_BRANCH_MAPPED.get_or_init(|| unsafe {

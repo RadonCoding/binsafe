@@ -131,7 +131,7 @@ pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
 
                     for _ in 0..count {
                         let flag = *flags.choose(rng).unwrap();
-                        jcc.conditions.push(VMCondition::cmp(flag, 1));
+                        jcc.conditions.push(VMCondition::neq(flag, flag));
                     }
 
                     jcc.logic = or;
