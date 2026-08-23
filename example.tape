@@ -19,6 +19,4 @@ Type "aa"
 Enter
 Type "pdf @ sym.main"
 Enter
-Type "pd 10"
-Enter
 Sleep 5s
