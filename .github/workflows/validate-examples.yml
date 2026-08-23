@@ -46,8 +46,8 @@ jobs:
 
       - name: Generate templates
         env:
-          OUTPUT_DIRECTORY: api/generated
-          TEMPLATES_DIRECTORY: api/templates
+          OUTPUT_DIRECTORY: ${{ github.workspace }}/api/generated
+          TEMPLATES_DIRECTORY: ${{ github.workspace }}/api/templates
         run: cargo build --package markers
 
       - name: Build obfuscator
