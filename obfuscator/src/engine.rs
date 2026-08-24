@@ -324,9 +324,9 @@ impl<'a> Engine<'a> {
         // self.blocks.drain(end..);
         // self.blocks.drain(..start);
 
-        // info!("{} to {} (middle: {})", start, end, middle);
+        // debug!("{} to {} (middle: {})", start, end, middle);
 
-        // println!(
+        // debug!(
         //     "0x{:016X} {}",
         //     self.pe.get_image_base().unwrap() + self.blocks[0].rva as u64,
         //     self.blocks[0]
