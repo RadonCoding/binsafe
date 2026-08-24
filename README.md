@@ -38,7 +38,6 @@ Obfuscator for compiled 64-bit portable executables.
 The `tests` crate spins up an instrumented VM and compares its behavior against the CPU.
 
 - **Instructions**: each instruction is executed through the VM and the resulting register and vector state is compared against native execution.
-- **Permutation**: each instruction sequence's dependency graph is exhaustively enumerated, with every valid ordering executed through the VM and verified.
 
 ## Usage
 `cargo run --release --bin obfuscator -- <filename> --virtualization`
