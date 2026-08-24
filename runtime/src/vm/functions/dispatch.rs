@@ -252,7 +252,7 @@ pub fn build(rt: &mut Runtime) {
         #[cfg(feature = "profile")]
         stop_profiling(rt, "vm_crypt_encrypt");
 
-        // Skip if there is no branch:
+        // Compute the address where execution will continue:
         // mov rax, [r12 + ...]
         utils::vreg::load_reg(rt, r12, VMReg::NExit, rax);
         // mov rcx, [r12 + ...]
