@@ -53,10 +53,14 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
     block.extend(timestamp());
     block.extend(mask(None, !((1u64 << WINDOW) - 1)));
 
-    block.extend(load_data(engine, DataDef::VmKeyMul, VMWidth::Lower64));
+    block.extend(load_data(
+        engine,
+        DataDef::VmKeyMultiplier,
+        VMWidth::Lower64,
+    ));
     block.extend(mul(None, None));
 
-    block.extend(load_data(engine, DataDef::VmKeyAdd, VMWidth::Lower64));
+    block.extend(load_data(engine, DataDef::VmKeyAddend, VMWidth::Lower64));
     block.extend(add(None, None));
 
     block.extend(reload_register(VMReg::Vt0));

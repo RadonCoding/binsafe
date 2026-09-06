@@ -1,7 +1,7 @@
 use std::slice;
 
 use iced_x86::MemoryOperand;
-use iced_x86::Register::{AL, CL, EAX, RAX, RBX, RCX, XMM0, XMM1, XMM2};
+use iced_x86::Register::{AL, AX, CL, CX, EAX, ECX, RAX, RBX, RCX, XMM0, XMM1, XMM2};
 use iced_x86::{Instruction, RflagsBits};
 use runtime::vm::bytecode::{self, Flag, VMReg};
 
@@ -103,6 +103,29 @@ macro_rules! testing {
         #[test]
         fn $name() {
             check($state, $instruction);
+        }
+    };
+}
+
+macro_rules! testing_widths {
+    ($name:ident, $ins64:ident, $ins32:ident, $ins16:ident, $ins8:ident) => {
+        paste::paste! {
+            #[test]
+            fn [<$name _64>]() {
+                check(gpr(), instruction!($ins64, RAX, RCX));
+            }
+            #[test]
+            fn [<$name _32>]() {
+                check(gpr(), instruction!($ins32, EAX, ECX));
+            }
+            #[test]
+            fn [<$name _16>]() {
+                check(gpr(), instruction!($ins16, AX, CX));
+            }
+            #[test]
+            fn [<$name _8>]() {
+                check(gpr(), instruction!($ins8, AL, CL));
+            }
         }
     };
 }
@@ -228,7 +251,13 @@ testing_memory!(
     instruction!(Movsxd_r64_rm32, RCX, MemoryOperand::with_base(RAX))
 );
 
-testing!(test_add, gpr(), instruction!(Add_rm64_r64, RAX, RCX));
+testing_widths!(
+    test_add,
+    Add_rm64_r64,
+    Add_rm32_r32,
+    Add_rm16_r16,
+    Add_rm8_r8
+);
 testing_memory!(
     test_add_load,
     buf = [IMM64_B],
@@ -256,7 +285,13 @@ testing!(
     instruction!(Add_rm64_imm8, RAX, SIMM8_A)
 );
 
-testing!(test_sub, gpr(), instruction!(Sub_rm64_r64, RAX, RCX));
+testing_widths!(
+    test_sub,
+    Sub_rm64_r64,
+    Sub_rm32_r32,
+    Sub_rm16_r16,
+    Sub_rm8_r8
+);
 testing_memory!(
     test_sub_load,
     buf = [IMM64_B],
@@ -284,10 +319,12 @@ testing!(
     instruction!(Sub_rm64_imm8, RAX, SIMM8_A)
 );
 
-testing!(
+testing_widths!(
     test_adc,
-    gpr().with(VMReg::Flags, 0b0000000000000001u64),
-    instruction!(Adc_rm64_r64, RAX, RCX)
+    Adc_rm64_r64,
+    Adc_rm32_r32,
+    Adc_rm16_r16,
+    Adc_rm8_r8
 );
 testing_memory!(
     test_adc_load,
@@ -318,10 +355,12 @@ testing!(
     instruction!(Adc_rm64_imm8, RAX, SIMM8_A)
 );
 
-testing!(
+testing_widths!(
     test_sbb,
-    gpr().with(VMReg::Flags, 0b0000000000000001u64),
-    instruction!(Sbb_rm64_r64, RAX, RCX)
+    Sbb_rm64_r64,
+    Sbb_rm32_r32,
+    Sbb_rm16_r16,
+    Sbb_rm8_r8
 );
 testing_memory!(
     test_sbb_load,
@@ -352,7 +391,13 @@ testing!(
     instruction!(Sbb_rm64_imm8, RAX, SIMM8_A)
 );
 
-testing!(test_cmp, gpr(), instruction!(Cmp_rm64_r64, RAX, RCX));
+testing_widths!(
+    test_cmp,
+    Cmp_rm64_r64,
+    Cmp_rm32_r32,
+    Cmp_rm16_r16,
+    Cmp_rm8_r8
+);
 testing_memory!(
     test_cmp_load,
     buf = [IMM64_B],
@@ -380,7 +425,13 @@ testing!(
     instruction!(Cmp_rm64_imm8, RAX, SIMM8_A)
 );
 
-testing!(test_test, gpr(), instruction!(Test_rm64_r64, RAX, RCX));
+testing_widths!(
+    test_test,
+    Test_rm64_r64,
+    Test_rm32_r32,
+    Test_rm16_r16,
+    Test_rm8_r8
+);
 testing_memory!(
     test_test_store,
     buf = [IMM64_A],
@@ -395,7 +446,13 @@ testing!(
     instruction!(Test_rm64_imm32, RAX, SIMM32_A)
 );
 
-testing!(test_and, gpr(), instruction!(And_rm64_r64, RAX, RCX));
+testing_widths!(
+    test_and,
+    And_rm64_r64,
+    And_rm32_r32,
+    And_rm16_r16,
+    And_rm8_r8
+);
 testing_memory!(
     test_and_load,
     buf = [IMM64_B],
@@ -423,7 +480,7 @@ testing!(
     instruction!(And_rm64_imm8, RAX, SIMM8_A)
 );
 
-testing!(test_or, gpr(), instruction!(Or_rm64_r64, RAX, RCX));
+testing_widths!(test_or, Or_rm64_r64, Or_rm32_r32, Or_rm16_r16, Or_rm8_r8);
 testing_memory!(
     test_or_load,
     buf = [IMM64_B],
@@ -451,7 +508,13 @@ testing!(
     instruction!(Or_rm64_imm8, RAX, SIMM8_A)
 );
 
-testing!(test_xor, gpr(), instruction!(Xor_rm64_r64, RAX, RCX));
+testing_widths!(
+    test_xor,
+    Xor_rm64_r64,
+    Xor_rm32_r32,
+    Xor_rm16_r16,
+    Xor_rm8_r8
+);
 testing_memory!(
     test_xor_load,
     buf = [IMM64_B],
@@ -1374,16 +1437,6 @@ testing_simd_load!(
     [IMM128_B, 0u128],
     instruction!(Pmullw_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
 );
-// testing!(
-//     test_pmulhw,
-//     simd(),
-//     instruction!(Pmulhw_xmm_xmmm128, XMM0, XMM1)
-// );
-// testing_simd_load!(
-//     test_pmulhw_load,
-//     [IMM128_B, 0u128],
-//     instruction!(Pmulhw_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-// );
 testing!(
     test_pmulld,
     simd(),

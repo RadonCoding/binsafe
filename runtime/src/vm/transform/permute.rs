@@ -1,8 +1,9 @@
 use std::any::Any;
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::mem;
 
-use crate::mapper::Mappable;
+use crate::mapper::{Mappable, Mapper};
 use crate::vm::bytecode::{VMMem, VMReg, VMVec, VMWidth};
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_memory::LoadMemory;
@@ -10,7 +11,7 @@ use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::{identity, Effect, Encode};
-use crate::vm::transform::{branches, collapse, descend, effects, vacant};
+use crate::vm::transform::{branches, collapse, descend, effects, vacant, Phase, Transform};
 
 struct Access {
     memory: VMMem,
@@ -29,41 +30,54 @@ struct Profile {
 }
 
 /// Shuffles `operations` into a semantically equivalent sequence by using `picker` to select among available atomic blocks.
-pub fn permute<F>(mut operations: Vec<Box<dyn Encode>>, picker: &mut F) -> Vec<Box<dyn Encode>>
-where
-    F: FnMut(&[usize]) -> usize,
-{
-    descend(&mut operations, |operations| {
-        let atoms = collapse(mem::take(operations));
+pub struct Permute<'a> {
+    pub picker: &'a RefCell<&'a mut dyn FnMut(&[usize]) -> usize>,
+}
 
-        let live = atoms
-            .iter()
-            .flat_map(|atom| effects(atom).0)
-            .collect::<HashSet<VMReg>>();
-        let (atoms, parked) = decouple(atoms, &live);
-        let (successors, mut indegree) = dependencies(&atoms);
+impl<'a> Transform for Permute<'a> {
+    fn phase(&self) -> Phase {
+        Phase::Permute
+    }
 
-        let n = successors.len();
-        let mut ready = (0..n).filter(|&i| indegree[i] == 0).collect::<Vec<usize>>();
-        let mut order = Vec::with_capacity(n);
+    fn run(
+        &self,
+        _mapper: &mut Mapper,
+        mut operations: Vec<Box<dyn Encode>>,
+    ) -> Vec<Box<dyn Encode>> {
+        let mut picker = self.picker.borrow_mut();
 
-        while !ready.is_empty() {
-            let chosen = ready.swap_remove(picker(&ready));
-            order.push(chosen);
-            for &next in &successors[chosen] {
-                indegree[next] -= 1;
-                if indegree[next] == 0 {
-                    ready.push(next);
+        descend(&mut operations, |operations| {
+            let atoms = collapse(mem::take(operations));
+
+            let live = atoms
+                .iter()
+                .flat_map(|atom| effects(atom).0)
+                .collect::<HashSet<VMReg>>();
+            let (atoms, parked) = decouple(atoms, &live);
+            let (successors, mut indegree) = dependencies(&atoms);
+
+            let n = successors.len();
+            let mut ready = (0..n).filter(|&i| indegree[i] == 0).collect::<Vec<usize>>();
+            let mut order = Vec::with_capacity(n);
+
+            while !ready.is_empty() {
+                let chosen = ready.swap_remove(picker(&ready));
+                order.push(chosen);
+                for &next in &successors[chosen] {
+                    indegree[next] -= 1;
+                    if indegree[next] == 0 {
+                        ready.push(next);
+                    }
                 }
             }
-        }
 
-        let mut permutated = schedule(atoms, &order);
-        cleanup(&mut permutated, &parked);
-        *operations = permutated;
-    });
+            let mut permutated = schedule(atoms, &order);
+            cleanup(&mut permutated, &parked);
+            *operations = permutated;
+        });
 
-    operations
+        operations
+    }
 }
 
 /// Removes adjacent [`StoreRegister`]/[`LoadRegister`] pairs created by incomplete scheduling.

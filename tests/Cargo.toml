@@ -16,3 +16,4 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Memory",
     "Win32_System_Threading",
 ] }
+paste = "1.0.15"

@@ -114,9 +114,9 @@ mapped! {
         VmCode,
         VmAttestation,
         VmTrampolines,
-        VmKeySeed,
-        VmKeyMul,
-        VmKeyAdd,
+        VmKeyInitializer,
+        VmKeyMultiplier,
+        VmKeyAddend,
         VehEnd,
         ImportAddresses,
         ImportNames,
@@ -253,10 +253,32 @@ impl Dispatch {
     }
 }
 
+pub struct Keys {
+    pub initializer: u64,
+    pub multiplier: u64,
+    pub addend: u64,
+    pub secret: u64,
+}
+
+impl Default for Keys {
+    fn default() -> Self {
+        let mut rng = rand::thread_rng();
+
+        Self {
+            initializer: rng.gen::<u64>(),
+            multiplier: rng.gen::<u64>(),
+            addend: rng.gen::<u64>(),
+            secret: rng.gen::<u64>(),
+        }
+    }
+}
+
 pub struct Runtime {
     pub asm: CodeAssembler,
 
     pub nonce: u64,
+
+    pub keys: Keys,
 
     pub function_labels: HashMap<FnDef, CodeLabel>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
@@ -327,6 +349,8 @@ impl Runtime {
             asm,
 
             nonce,
+
+            keys: Keys::default(),
 
             function_labels,
             data_labels,
@@ -704,6 +728,10 @@ impl Runtime {
         self.define_data_bytes(DataDef::ImportNames, &vec![0u8; self.imports.len() * 16]);
 
         self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
+
+        self.define_data_qword(DataDef::VmKeyInitializer, self.keys.initializer);
+        self.define_data_qword(DataDef::VmKeyAddend, self.keys.addend);
+        self.define_data_qword(DataDef::VmKeyMultiplier, self.keys.multiplier);
 
         self.define_bool(BoolDef::IsLocked, false);
         self.define_bool(BoolDef::HasAvx, false);

@@ -7,7 +7,10 @@ use iced_x86::{
 };
 use rand::{seq::SliceRandom, Rng};
 
-use crate::obfuscation::{flags, scratch, sized, Operation};
+use crate::{
+    obfuscation::{flags, scratch, Operation},
+    register,
+};
 
 #[derive(Clone, Copy)]
 enum Condition {
@@ -226,7 +229,7 @@ fn rewrite_immediate(instruction: &Instruction, scratch: Register) -> Option<Ins
         info.mnemonic() == mnemonic && info.op_count() == count && info.op_kind(index) == kind
     })?;
 
-    let scratch = sized(scratch, destination.size())?;
+    let scratch = register::sized(scratch, destination.size())?;
 
     Instruction::with2(code, destination, scratch).ok()
 }
@@ -234,7 +237,7 @@ fn rewrite_immediate(instruction: &Instruction, scratch: Register) -> Option<Ins
 fn rewrite_memory(instruction: &Instruction, scratch: Register) -> Option<Instruction> {
     let mut rewritten = instruction.clone();
 
-    rewritten.set_memory_index(sized(scratch, 8)?);
+    rewritten.set_memory_index(register::sized(scratch, 8)?);
     rewritten.set_memory_index_scale(1);
     rewritten.set_memory_displacement64(0);
     rewritten.set_memory_displ_size(0);
@@ -275,12 +278,12 @@ fn reconstruct(
     assembler: &mut CodeAssembler,
     rng: &mut impl Rng,
 ) {
-    let r1_8 = get_gpr8(sized(register1, 1).unwrap()).unwrap();
-    let r1_16 = get_gpr16(sized(register1, 2).unwrap()).unwrap();
-    let r1_32 = get_gpr32(sized(register1, 4).unwrap()).unwrap();
-    let r1_64 = get_gpr64(sized(register1, 8).unwrap()).unwrap();
+    let r1_8 = get_gpr8(register::sized(register1, 1).unwrap()).unwrap();
+    let r1_16 = get_gpr16(register::sized(register1, 2).unwrap()).unwrap();
+    let r1_32 = get_gpr32(register::sized(register1, 4).unwrap()).unwrap();
+    let r1_64 = get_gpr64(register::sized(register1, 8).unwrap()).unwrap();
 
-    let r2_64 = get_gpr64(sized(register2, 8).unwrap()).unwrap();
+    let r2_64 = get_gpr64(register::sized(register2, 8).unwrap()).unwrap();
 
     let operation = Operation::random(rng);
 
