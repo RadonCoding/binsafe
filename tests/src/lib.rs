@@ -135,9 +135,9 @@ impl Executor {
 
         let mut rt = Runtime::new(64);
 
-        rt.define_data_qword(DataDef::VmKeySeed, Self::TEST_KEY_SEED);
-        rt.define_data_qword(DataDef::VmKeyMul, Self::TEST_KEY_MUL);
-        rt.define_data_qword(DataDef::VmKeyAdd, Self::TEST_KEY_ADD);
+        rt.define_data_qword(DataDef::VmKeyInitializer, Self::TEST_KEY_SEED);
+        rt.define_data_qword(DataDef::VmKeyMultiplier, Self::TEST_KEY_MUL);
+        rt.define_data_qword(DataDef::VmKeyAddend, Self::TEST_KEY_ADD);
 
         rt.define_bool(BoolDef::HasVeh, true);
 

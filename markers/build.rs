@@ -24,6 +24,8 @@ fn main() {
     let output = PathBuf::from(output);
     let templates = PathBuf::from(templates);
 
+    println!("cargo:rerun-if-changed={}", templates.display());
+
     let begin = bytes_to_csv(&MARKER_BEGIN);
     let end = bytes_to_csv(&MARKER_END);
 

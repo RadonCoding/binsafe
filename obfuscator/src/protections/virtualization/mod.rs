@@ -20,29 +20,8 @@ mod attestation;
 pub mod crypt;
 mod language;
 
-struct Keys {
-    seed: u64,
-    mul: u64,
-    add: u64,
-    att: u64,
-}
-
-impl Default for Keys {
-    fn default() -> Self {
-        let mut rng = rand::thread_rng();
-
-        Self {
-            seed: rng.gen::<u64>(),
-            mul: rng.gen::<u64>(),
-            add: rng.gen::<u64>(),
-            att: rng.gen::<u64>(),
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct Virtualization {
-    keys: Keys,
     programs: Vec<Vec<Box<dyn Encode>>>,
     groups: Vec<Vec<u32>>,
     virtualized: HashMap<u32, usize>,
@@ -59,7 +38,7 @@ impl Virtualization {
         #[cfg(debug_assertions)]
         let mut log = Vec::new();
 
-        let blocks = attestation::generate(engine, self.keys.att);
+        let blocks = attestation::generate(engine, engine.rt.keys.secret);
 
         for (_index, operations) in blocks.into_iter().enumerate() {
             let mut rng = rand::thread_rng();
@@ -84,13 +63,25 @@ impl Virtualization {
             let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
 
             let key = if vcode.is_empty() {
-                self.keys.seed
+                engine.rt.keys.initializer
             } else {
                 crypt::derive_key(&vcode)
             };
 
-            crypt::encrypt_block(&mut bytes, key, self.keys.mul, self.keys.add, 0);
-            crypt::decrypt_payload(&mut bytes, key, self.keys.mul, self.keys.add, 0);
+            crypt::encrypt_block(
+                &mut bytes,
+                key,
+                engine.rt.keys.multiplier,
+                engine.rt.keys.addend,
+                0,
+            );
+            crypt::decrypt_payload(
+                &mut bytes,
+                key,
+                engine.rt.keys.multiplier,
+                engine.rt.keys.addend,
+                0,
+            );
 
             vcode.extend_from_slice(&bytes);
         }
@@ -101,7 +92,7 @@ impl Virtualization {
 
             debug!(
                 "ATTESTATION @ 0x{:016X}:\n{}",
-                self.keys.att,
+                engine.rt.keys.secret,
                 log.join("\n")
             );
         }
@@ -229,13 +220,13 @@ impl Protection for Virtualization {
 
         engine
             .rt
-            .define_data_qword(DataDef::VmKeySeed, self.keys.seed);
+            .define_data_qword(DataDef::VmKeyInitializer, engine.rt.keys.initializer);
         engine
             .rt
-            .define_data_qword(DataDef::VmKeyMul, self.keys.mul);
+            .define_data_qword(DataDef::VmKeyMultiplier, engine.rt.keys.multiplier);
         engine
             .rt
-            .define_data_qword(DataDef::VmKeyAdd, self.keys.add);
+            .define_data_qword(DataDef::VmKeyAddend, engine.rt.keys.addend);
     }
 
     fn apply(&self, engine: &mut Engine) {
@@ -257,7 +248,13 @@ impl Protection for Virtualization {
                 crypt::derive_key(&vcode)
             };
 
-            crypt::encrypt_block(&mut bytes, key, self.keys.mul, self.keys.add, self.keys.att);
+            crypt::encrypt_block(
+                &mut bytes,
+                key,
+                engine.rt.keys.multiplier,
+                engine.rt.keys.addend,
+                engine.rt.keys.secret,
+            );
 
             let offset = TryInto::<u32>::try_into(vcode.len()).unwrap();
             vcode.extend_from_slice(&bytes);

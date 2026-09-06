@@ -19,14 +19,15 @@ cargo build --bin obfuscator
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 switch ($language) {
-    "rust" {
+"rust" {
         cargo build --manifest-path "$Example/Cargo.toml"
 
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         $metadata = cargo metadata --manifest-path "$Example/Cargo.toml" --format-version 1 --no-deps | ConvertFrom-Json
 
-        $package = $metadata.packages[0]
+        $manifest = (Resolve-Path "$Example/Cargo.toml").Path
+        $package = $metadata.packages | Where-Object { (Resolve-Path $_.manifest_path).Path -eq $manifest }
         $target = $package.targets | Where-Object { $_.kind -contains "bin" } | Select-Object -First 1
 
         $source = Join-Path $metadata.target_directory "debug\$($target.name).exe"

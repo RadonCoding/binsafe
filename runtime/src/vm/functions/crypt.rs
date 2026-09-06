@@ -244,7 +244,7 @@ pub fn build(rt: &mut Runtime) {
         {
             // mov rcx, [...]
             rt.asm
-                .mov(rcx, ptr(rt.data_labels[&DataDef::VmKeySeed]))
+                .mov(rcx, ptr(rt.data_labels[&DataDef::VmKeyInitializer]))
                 .unwrap();
         }
 
@@ -286,13 +286,13 @@ pub fn build(rt: &mut Runtime) {
 
             // mov rax, [...]
             rt.asm
-                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyMul]))
+                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyMultiplier]))
                 .unwrap();
             // imul rcx, rax
             rt.asm.imul_2(rcx, rax).unwrap();
             // mov rax, [...]
             rt.asm
-                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyAdd]))
+                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyAddend]))
                 .unwrap();
             // add rcx, rax
             rt.asm.add(rcx, rax).unwrap();

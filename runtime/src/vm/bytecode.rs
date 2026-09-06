@@ -1,5 +1,7 @@
 use core::panic;
 use std::any::Any;
+#[cfg(debug_assertions)]
+use std::cell::RefCell;
 
 use iced_x86::{Instruction, Mnemonic, Register};
 use strum_macros::EnumIter;
@@ -10,12 +12,13 @@ use crate::vm::lifters::{
     arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, div, extend, integer, lea, multiply,
     pcmpeqb, pmovskb, rdtsc, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
-#[cfg(debug_assertions)]
 use crate::vm::snapshot::Snapshots;
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
 use crate::vm::transform::peephole::Peephole;
-use crate::vm::transform::{permute, scramble, Transform};
+use crate::vm::transform::permute::Permute;
+use crate::vm::transform::scramble::Scramble;
+use crate::vm::transform::Transform;
 
 mapped! {
     VMOp {
@@ -270,6 +273,16 @@ impl VMWidth {
             VMWidth::Lower32 | VMWidth::SLower32 => VMWidth::SLower32,
             VMWidth::Lower64 | VMWidth::SLower64 => VMWidth::SLower64,
             other => other,
+        }
+    }
+
+    pub fn mask(self) -> u64 {
+        let bits = (self.size() * 8).min(64);
+
+        if bits == 64 {
+            u64::MAX
+        } else {
+            (1u64 << bits) - 1
         }
     }
 }
@@ -633,13 +646,20 @@ where
 {
     let mut operations = operations;
 
-    operations = Peephole.run(mapper, operations);
-    operations = permute::permute(operations, &mut picker);
-    operations = scramble::scramble(operations);
-    operations = Mutation.run(mapper, operations);
-    operations = Encrypt.run(mapper, operations);
-    operations = permute::permute(operations, &mut picker);
-    operations = Peephole.run(mapper, operations);
+    let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
+
+    let mut transforms = Vec::<Box<dyn Transform>>::new();
+    transforms.push(Box::new(Peephole));
+    transforms.push(Box::new(Permute { picker: &picker }));
+    transforms.push(Box::new(Scramble));
+    transforms.push(Box::new(Mutation));
+    transforms.push(Box::new(Encrypt));
+    transforms.push(Box::new(Permute { picker: &picker }));
+    transforms.push(Box::new(Peephole));
+
+    for transform in transforms {
+        operations = transform.run(mapper, operations);
+    }
 
     operations
 }
@@ -658,26 +678,21 @@ where
     let mut snapshots = Snapshots::new();
     snapshots.record(Phase::Lift, &operations);
 
-    operations = Peephole.run(mapper, operations);
-    snapshots.record(Phase::Peephole, &operations);
+    let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
 
-    operations = permute::permute(operations, &mut picker);
-    snapshots.record(Phase::Permute, &operations);
+    let mut transforms = Vec::<Box<dyn Transform>>::new();
+    transforms.push(Box::new(Peephole));
+    transforms.push(Box::new(Permute { picker: &picker }));
+    transforms.push(Box::new(Scramble));
+    transforms.push(Box::new(Mutation));
+    transforms.push(Box::new(Encrypt));
+    transforms.push(Box::new(Permute { picker: &picker }));
+    transforms.push(Box::new(Peephole));
 
-    operations = scramble::scramble(operations);
-    snapshots.record(Phase::Scramble, &operations);
-
-    operations = Mutation.run(mapper, operations);
-    snapshots.record(Mutation.phase(), &operations);
-
-    operations = Encrypt.run(mapper, operations);
-    snapshots.record(Encrypt.phase(), &operations);
-
-    operations = permute::permute(operations, &mut picker);
-    snapshots.record(Phase::Permute, &operations);
-
-    operations = Peephole.run(mapper, operations);
-    snapshots.record(Phase::Peephole, &operations);
+    for transform in transforms {
+        operations = transform.run(mapper, operations);
+        snapshots.record(transform.phase(), &operations);
+    }
 
     (operations, snapshots)
 }
