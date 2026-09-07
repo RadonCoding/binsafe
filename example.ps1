@@ -33,11 +33,11 @@ switch ($language) {
         $source = Join-Path $metadata.target_directory "debug\$($target.name).exe"
     }
     "cpp" {
-        g++ "$Example/main.cpp"
+        g++ "$Example/main.cpp" -o "$Example.exe"
         
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-        $source = Join-Path $PWD "a.exe"
+        $source = Join-Path $PWD "$Example.exe"
     }
 }
 

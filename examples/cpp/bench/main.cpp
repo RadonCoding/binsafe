@@ -57,8 +57,8 @@ int main() {
     std::chrono::duration<double, std::milli> elapsed_virtualized = end_virtualized - start_virtualized;
 
     std::cout << "Native: " << elapsed_native.count() << " ms" << std::endl;
-    std::cout << "Virtualized:   " << elapsed_virtualized.count() << " ms" << std::endl;
-    std::cout << "Overhead:    " << (elapsed_virtualized.count() / elapsed_native.count()) << "x" << std::endl;
+    std::cout << "Virtualized: " << elapsed_virtualized.count() << " ms" << std::endl;
+    std::cout << "Overhead: " << (elapsed_virtualized.count() / elapsed_native.count()) << "x" << std::endl;
 
     return 0;
 }
