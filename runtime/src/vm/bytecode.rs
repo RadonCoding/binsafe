@@ -1,17 +1,10 @@
-use core::panic;
-use std::any::Any;
-#[cfg(debug_assertions)]
-use std::cell::RefCell;
-
-use iced_x86::{Instruction, Mnemonic, Register};
-use strum_macros::EnumIter;
-
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
     arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, div, extend, integer, lea, multiply,
     pcmpeqb, pmovskb, rdtsc, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
+#[cfg(debug_assertions)]
 use crate::vm::snapshot::Snapshots;
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::mutation::Mutation;
@@ -19,6 +12,11 @@ use crate::vm::transform::peephole::Peephole;
 use crate::vm::transform::permute::Permute;
 use crate::vm::transform::scramble::Scramble;
 use crate::vm::transform::Transform;
+use core::panic;
+use iced_x86::{Instruction, Mnemonic, Register};
+use std::any::Any;
+use std::cell::RefCell;
+use strum_macros::EnumIter;
 
 mapped! {
     VMOp {

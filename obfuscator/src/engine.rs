@@ -139,14 +139,14 @@ impl<'a> Engine<'a> {
         let ip = code_section.virtual_address.0 as u64;
         let code = code_section.read(&self.pe).unwrap().to_vec();
 
-        if self.scan_markers(ip, &code) {
+        if self.scan_markers(ip, &code, &code_section) {
             return;
         }
 
         self.scan_blocks(ip, &code, &code_section);
     }
 
-    fn scan_markers(&mut self, ip: u64, code: &[u8]) -> bool {
+    fn scan_markers(&mut self, ip: u64, code: &[u8], code_section: &ImageSectionHeader) -> bool {
         let mut markers = Vec::new();
         let mut begin = None;
         let mut cursor = 0;
@@ -173,6 +173,13 @@ impl<'a> Engine<'a> {
 
         info!("Found {} marked regions", markers.len());
 
+        let data_references = self.collect_data_references(code, ip);
+        let mut code_references = self
+            .collect_code_references(code, ip, code_section, &data_references)
+            .into_iter()
+            .collect::<Vec<u32>>();
+        code_references.sort();
+
         let mut capture = |block: &mut Vec<Instruction>, end: u32| {
             if block.is_empty() {
                 return;
@@ -191,11 +198,12 @@ impl<'a> Engine<'a> {
         };
 
         for &(start, end) in &markers {
-            let rva = ip as u32 + start as u32;
+            let ip = ip as u32 + start as u32;
+
             let mut decoder = Decoder::with_ip(
                 self.bitness,
                 &code[start..end],
-                rva as u64,
+                ip as u64,
                 DecoderOptions::NONE,
             );
 
@@ -203,6 +211,12 @@ impl<'a> Engine<'a> {
             let mut block = Vec::new();
 
             while decoder.can_decode() {
+                let rva = decoder.ip() as u32;
+
+                if !block.is_empty() && code_references.binary_search(&rva).is_ok() {
+                    capture(&mut block, rva);
+                }
+
                 decoder.decode_out(&mut instruction);
 
                 if instruction.is_invalid() {
@@ -316,21 +330,6 @@ impl<'a> Engine<'a> {
         }
 
         info!("Found {} blocks", self.blocks.len());
-
-        // let start = 1230;
-        // let end = 1335;
-        // let middle = start + (end - start) / 2;
-
-        // self.blocks.drain(end..);
-        // self.blocks.drain(..start);
-
-        // info!("{} to {} (middle: {})", start, end, middle);
-
-        // println!(
-        //     "0x{:016X} {}",
-        //     self.pe.get_image_base().unwrap() + self.blocks[0].rva as u64,
-        //     self.blocks[0]
-        // );
     }
 
     fn collect_data_references(&self, code: &[u8], ip: u64) -> HashSet<u32> {
