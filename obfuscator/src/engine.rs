@@ -213,8 +213,10 @@ impl<'a> Engine<'a> {
             while decoder.can_decode() {
                 let rva = decoder.ip() as u32;
 
-                if !block.is_empty() && code_references.binary_search(&rva).is_ok() {
-                    capture(&mut block, rva);
+                if code_references.binary_search(&rva).is_ok() {
+                    if !block.is_empty() {
+                        capture(&mut block, rva);
+                    }
                 }
 
                 decoder.decode_out(&mut instruction);
