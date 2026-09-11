@@ -139,14 +139,84 @@ impl<'a> Engine<'a> {
         let ip = code_section.virtual_address.0 as u64;
         let code = code_section.read(&self.pe).unwrap().to_vec();
 
-        if self.scan_markers(ip, &code, &code_section) {
+        let data_references = self.collect_data_references(&code, ip);
+        let code_references =
+            self.collect_code_references(&code, ip, &code_section, &data_references);
+
+        if self.scan_markers(ip, &code, &code_references) {
             return;
         }
 
-        self.scan_blocks(ip, &code, &code_section);
+        self.scan_blocks(ip, &code, &code_references);
     }
 
-    fn scan_markers(&mut self, ip: u64, code: &[u8], code_section: &ImageSectionHeader) -> bool {
+    fn capture_block(&mut self, block: &mut Vec<Instruction>, end: u32) {
+        if block.is_empty() {
+            return;
+        }
+        let rva = block[0].ip() as u32;
+        let offset = self.pe.translate(PETranslation::Memory(RVA(rva))).unwrap();
+        let size = (end - rva) as usize;
+        self.blocks.push(Block {
+            rva,
+            offset,
+            size,
+            instructions: mem::take(block),
+        });
+        info!("{}", self.blocks[self.blocks.len() - 1])
+    }
+
+    fn collect_blocks(&mut self, code: &[u8], ip: u64, code_references: &[u32]) {
+        let mut decoder = Decoder::with_ip(self.bitness, code, ip, DecoderOptions::NONE);
+        let mut instruction = Instruction::default();
+        let mut block: Vec<Instruction> = Vec::new();
+        let mut inblock = false;
+
+        while decoder.can_decode() {
+            let rva = decoder.ip() as u32;
+
+            if code_references.binary_search(&rva).is_ok() {
+                if inblock {
+                    self.capture_block(&mut block, rva);
+                }
+                inblock = true;
+            }
+
+            if !inblock {
+                decoder.decode_out(&mut instruction);
+                continue;
+            }
+
+            decoder.decode_out(&mut instruction);
+
+            if instruction.is_invalid() {
+                inblock = false;
+                continue;
+            }
+
+            let start = instruction.ip() as u32;
+            let end = instruction.next_ip() as u32;
+            let position = code_references.binary_search(&end).unwrap_or_else(|e| e);
+            let overlaps = position > 0
+                && code_references[position - 1] > start
+                && code_references[position - 1] < end;
+
+            if overlaps {
+                self.capture_block(&mut block, start);
+                inblock = false;
+                continue;
+            }
+
+            block.push(instruction);
+
+            if !matches!(instruction.flow_control(), FlowControl::Next) {
+                self.capture_block(&mut block, instruction.next_ip() as u32);
+                inblock = false;
+            }
+        }
+    }
+
+    fn scan_markers(&mut self, ip: u64, code: &[u8], code_references: &HashSet<u32>) -> bool {
         let mut markers = Vec::new();
         let mut begin = None;
         let mut cursor = 0;
@@ -173,85 +243,25 @@ impl<'a> Engine<'a> {
 
         info!("Found {} marked regions", markers.len());
 
-        let data_references = self.collect_data_references(code, ip);
-        let mut code_references = self
-            .collect_code_references(code, ip, code_section, &data_references)
-            .into_iter()
-            .collect::<Vec<u32>>();
-        code_references.sort();
-
-        let mut capture = |block: &mut Vec<Instruction>, end: u32| {
-            if block.is_empty() {
-                return;
-            }
-            let rva = block[0].ip() as u32;
-            let offset = self.pe.translate(PETranslation::Memory(RVA(rva))).unwrap();
-            let size = (end - rva) as usize;
-            let block = Block {
-                rva,
-                offset,
-                size,
-                instructions: mem::take(block),
-            };
-            info!("{block}");
-            self.blocks.push(block);
-        };
+        let mut sorted_code_references = code_references.iter().copied().collect::<Vec<u32>>();
+        sorted_code_references.sort();
 
         for &(start, end) in &markers {
-            let ip = ip as u32 + start as u32;
-
-            let mut decoder = Decoder::with_ip(
-                self.bitness,
-                &code[start..end],
-                ip as u64,
-                DecoderOptions::NONE,
-            );
-
-            let mut instruction = Instruction::default();
-            let mut block = Vec::new();
-
-            while decoder.can_decode() {
-                let rva = decoder.ip() as u32;
-
-                if code_references.binary_search(&rva).is_ok() {
-                    if !block.is_empty() {
-                        capture(&mut block, rva);
-                    }
-                }
-
-                decoder.decode_out(&mut instruction);
-
-                if instruction.is_invalid() {
-                    if !block.is_empty() {
-                        capture(&mut block, instruction.ip() as u32);
-                    }
-                    break;
-                }
-
-                block.push(instruction);
-
-                if !matches!(instruction.flow_control(), FlowControl::Next) {
-                    capture(&mut block, instruction.next_ip() as u32);
-                }
-            }
-
-            if !block.is_empty() {
-                capture(&mut block, ip as u32 + end as u32);
-            }
+            self.collect_blocks(&code[start..end], ip, &sorted_code_references);
         }
 
         for (start, end) in markers {
-            let start = self
+            let start_offset = self
                 .pe
                 .translate(PETranslation::Memory(RVA(ip as u32 + start as u32)))
                 .unwrap();
-            let end = self
+            let end_offset = self
                 .pe
                 .translate(PETranslation::Memory(RVA(ip as u32 + end as u32)))
                 .unwrap();
 
-            self.nop(start - MARKER_SIZE, MARKER_SIZE);
-            self.nop(end, MARKER_SIZE);
+            self.nop(start_offset - MARKER_SIZE, MARKER_SIZE);
+            self.nop(end_offset, MARKER_SIZE);
         }
 
         info!("Found {} blocks", self.blocks.len());
@@ -259,77 +269,11 @@ impl<'a> Engine<'a> {
         true
     }
 
-    fn scan_blocks(&mut self, ip: u64, code: &[u8], code_section: &ImageSectionHeader) {
-        let data_references = self.collect_data_references(code, ip);
+    fn scan_blocks(&mut self, ip: u64, code: &[u8], code_references: &HashSet<u32>) {
+        let mut sorted_code_references = code_references.iter().copied().collect::<Vec<u32>>();
+        sorted_code_references.sort();
 
-        let mut code_references = self
-            .collect_code_references(code, ip, code_section, &data_references)
-            .into_iter()
-            .collect::<Vec<u32>>();
-        code_references.sort();
-
-        let mut capture = |block: &mut Vec<Instruction>, end: u32| {
-            if block.is_empty() {
-                return;
-            }
-            let rva = block[0].ip() as u32;
-            let offset = self.pe.translate(PETranslation::Memory(RVA(rva))).unwrap();
-            let size = (end - rva) as usize;
-            self.blocks.push(Block {
-                rva,
-                offset,
-                size,
-                instructions: mem::take(block),
-            });
-        };
-
-        let mut decoder = Decoder::with_ip(self.bitness, code, ip, DecoderOptions::NONE);
-        let mut instruction = Instruction::default();
-        let mut block = Vec::new();
-        let mut inblock = false;
-
-        while decoder.can_decode() {
-            let rva = decoder.ip() as u32;
-
-            if code_references.binary_search(&rva).is_ok() {
-                if inblock {
-                    capture(&mut block, rva);
-                }
-                inblock = true;
-            }
-
-            if !inblock {
-                decoder.decode_out(&mut instruction);
-                continue;
-            }
-
-            decoder.decode_out(&mut instruction);
-
-            if instruction.is_invalid() {
-                inblock = false;
-                continue;
-            }
-
-            let start = instruction.ip() as u32;
-            let end = instruction.next_ip() as u32;
-            let position = code_references.binary_search(&end).unwrap_or_else(|e| e);
-            let overlaps = position > 0
-                && code_references[position - 1] > start
-                && code_references[position - 1] < end;
-
-            if overlaps {
-                capture(&mut block, start);
-                inblock = false;
-                continue;
-            }
-
-            block.push(instruction);
-
-            if !matches!(instruction.flow_control(), FlowControl::Next) {
-                capture(&mut block, instruction.next_ip() as u32);
-                inblock = false;
-            }
-        }
+        self.collect_blocks(code, ip, &sorted_code_references);
 
         info!("Found {} blocks", self.blocks.len());
     }
