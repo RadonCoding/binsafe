@@ -43,6 +43,8 @@ impl Operation {
     }
 }
 
+// TODO: Harden and centralize the LCG logic!
+
 pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
     let mut rng = rand::thread_rng();
 

@@ -117,6 +117,8 @@ struct Context {
     result: AsmRegister64,
 }
 
+// TODO: Implement a mixed-boolean-arithmetic engine!
+
 pub fn build(rt: &mut Runtime, operation: &Operation) {
     let mut epilogue = rt.asm.create_label();
 

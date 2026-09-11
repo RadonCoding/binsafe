@@ -35,30 +35,30 @@ impl Virtualization {
     fn attestation(&self, engine: &mut Engine) -> Vec<u8> {
         let mut vcode = Vec::new();
 
-        #[cfg(debug_assertions)]
-        let mut log = Vec::new();
+        // #[cfg(debug_assertions)]
+        // let mut log = Vec::new();
 
         let blocks = attestation::generate(engine, engine.rt.keys.secret);
 
         for (_index, operations) in blocks.into_iter().enumerate() {
             let mut rng = rand::thread_rng();
 
-            #[cfg(debug_assertions)]
-            let (transformed, snapshots) =
-                bytecode::transform_with_snapshots(&mut engine.rt.mapper, operations, |ready| {
-                    rng.gen_range(0..ready.len())
-                });
+            // #[cfg(debug_assertions)]
+            // let (transformed, snapshots) =
+            //     bytecode::transform_with_snapshots(&mut engine.rt.mapper, operations, |ready| {
+            //         rng.gen_range(0..ready.len())
+            //     });
 
-            #[cfg(not(debug_assertions))]
+            // #[cfg(not(debug_assertions))]
             let transformed = bytecode::transform(&mut engine.rt.mapper, operations, |ready| {
                 rng.gen_range(0..ready.len())
             });
 
-            #[cfg(debug_assertions)]
-            {
-                let index = _index;
-                log.push(format!("  BLOCK {}:\n{}", index, snapshots));
-            }
+            // #[cfg(debug_assertions)]
+            // {
+            //     let index = _index;
+            //     log.push(format!("  BLOCK {}:\n{}", index, snapshots));
+            // }
 
             let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
 
@@ -86,16 +86,16 @@ impl Virtualization {
             vcode.extend_from_slice(&bytes);
         }
 
-        #[cfg(debug_assertions)]
-        {
-            use logger::debug;
+        // #[cfg(debug_assertions)]
+        // {
+        //     use logger::debug;
 
-            debug!(
-                "ATTESTATION @ 0x{:016X}:\n{}",
-                engine.rt.keys.secret,
-                log.join("\n")
-            );
-        }
+        //     debug!(
+        //         "ATTESTATION @ 0x{:016X}:\n{}",
+        //         engine.rt.keys.secret,
+        //         log.join("\n")
+        //     );
+        // }
 
         vcode
     }

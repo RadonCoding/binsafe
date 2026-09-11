@@ -14,7 +14,7 @@ int main() {
     uint32_t v0_nat = data_native[0];
     uint32_t v1_nat = data_native[1];
 
-    for (int i = 0; i < 200000; ++i) {
+    for (int i = 0; i < 20000; ++i) {
         uint32_t sum = 0;
         for (uint32_t r = 0; r < 32; r++) {
             v0_nat += (((v1_nat << 4) ^ (v1_nat >> 5)) + v1_nat) ^ (sum + key[sum & 3]);
@@ -34,11 +34,12 @@ int main() {
 
     auto start_virtualized = std::chrono::high_resolution_clock::now();
 
+    BINSAFE_BEGIN();
 
     uint32_t v0_virtualized = data_virtualized[0];
     uint32_t v1_virtualized = data_virtualized[1];
 
-    for (int i = 0; i < 200000; ++i) {
+    for (int i = 0; i < 20000; ++i) {
         uint32_t sum = 0;
         
         for (uint32_t r = 0; r < 32; r++) {
@@ -51,6 +52,7 @@ int main() {
     data_virtualized[0] = v0_virtualized;
     data_virtualized[1] = v1_virtualized;
 
+    BINSAFE_END();
 
     auto end_virtualized = std::chrono::high_resolution_clock::now();
 
