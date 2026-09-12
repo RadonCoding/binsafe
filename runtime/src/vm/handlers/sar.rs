@@ -2,7 +2,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{Flag, VMWidth},
-        handlers::semantic::{self, Compare, Effect, Expression, FlagDef, Operand, Operation},
+        handlers::semantic::{self, Compare, Condition, Effect, Expression, Operand, Operation},
     },
 };
 
@@ -11,47 +11,47 @@ pub fn build(rt: &mut Runtime) {
         rt,
         &Operation {
             effects: vec![Effect::Sar(
-                Expression::Operand(Operand::A),
-                Expression::Operand(Operand::B),
+                Expression::Operand(Operand::InputA),
+                Expression::Operand(Operand::InputB),
             )],
             flags: vec![
                 (
                     Flag::Carry,
-                    FlagDef::Compare(Compare::BitSet(
-                        Expression::Operand(Operand::A),
+                    Condition::Compare(Compare::BitSet(
+                        Expression::Operand(Operand::InputA),
                         Expression::Sub(
-                            Box::new(Expression::Operand(Operand::B)),
+                            Box::new(Expression::Operand(Operand::InputB)),
                             Box::new(Expression::Constant(1)),
                         ),
                     )),
                 ),
                 (
                     Flag::Overflow,
-                    FlagDef::Compare(Compare::Equal(
+                    Condition::Compare(Compare::Equal(
                         Expression::Constant(1),
                         Expression::Constant(0),
                     )),
                 ),
                 (
                     Flag::Sign,
-                    FlagDef::Compare(Compare::BitSet(
-                        Expression::Operand(Operand::Result),
-                        Expression::SignBit
+                    Condition::Compare(Compare::BitSet(
+                        Expression::Operand(Operand::OutputA),
+                        Expression::SignBit,
                     )),
                 ),
                 (
                     Flag::Zero,
-                    FlagDef::Compare(Compare::Equal(
-                        Expression::Operand(Operand::Result),
+                    Condition::Compare(Compare::Equal(
+                        Expression::Operand(Operand::OutputA),
                         Expression::Constant(0),
                     )),
                 ),
                 (
                     Flag::Parity,
-                    FlagDef::Parity(Expression::Operand(Operand::Result)),
+                    Condition::Parity(Expression::Operand(Operand::OutputA)),
                 ),
             ],
-            store: None,
+            stores: None,
             widths: &[
                 VMWidth::Lower64,
                 VMWidth::Lower32,

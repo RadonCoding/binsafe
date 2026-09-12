@@ -17,11 +17,19 @@ impl Encode for Div {
         self
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::Div), mapper.index(self.width)]
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::Div)
     }
 
-    fn depth(&self) -> i32 {
-        -1
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+        vec![mapper.index(self.width)]
+    }
+
+    fn consumes(&self) -> i32 {
+        3
+    }
+
+    fn produces(&self) -> i32 {
+        2
     }
 }

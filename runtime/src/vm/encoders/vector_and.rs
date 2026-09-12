@@ -17,11 +17,20 @@ impl Encode for VectorAnd {
         self
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::VectorAnd), mapper.index(self.width)]
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::VectorAnd)
     }
 
-    fn depth(&self) -> i32 {
-        -self.width.slots()
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+        vec![mapper.index(self.width)]
     }
+
+    fn consumes(&self) -> i32 {
+        2
+    }
+
+    fn produces(&self) -> i32 {
+        1
+    }
+
 }

@@ -1,4 +1,7 @@
-use crate::{mapper::Mapper, vm::encoders::Encode};
+use crate::{
+    mapper::Mapper,
+    vm::{bytecode::VMOp, encoders::Encode},
+};
 use std::{
     any::Any,
     sync::atomic::{AtomicUsize, Ordering},
@@ -45,6 +48,10 @@ impl Encode for Label {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn op(&self) -> Option<VMOp> {
+        None
     }
 
     fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {

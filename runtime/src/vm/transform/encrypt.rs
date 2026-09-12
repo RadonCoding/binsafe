@@ -278,7 +278,7 @@ fn invert(x: u64) -> u64 {
 }
 
 /// Encrypts `source` against `addend` and `multiplier`.
-fn encrypt(source: &mut [u8], addend: u64, multiplier: u64) {
+pub fn encrypt(source: &mut [u8], addend: u64, multiplier: u64) {
     let mut buffer = [0u8; 8];
     buffer[..source.len()].copy_from_slice(source);
 

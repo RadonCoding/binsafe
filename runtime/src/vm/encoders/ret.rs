@@ -15,8 +15,12 @@ impl Encode for Ret {
         self
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::Ret)]
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::Ret)
+    }
+
+    fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {
+        vec![]
     }
 
     fn reads(&self) -> Vec<Effect> {
@@ -30,8 +34,12 @@ impl Encode for Ret {
         ]
     }
 
-    fn depth(&self) -> i32 {
-        -1
+    fn consumes(&self) -> i32 {
+        1
+    }
+
+    fn produces(&self) -> i32 {
+        0
     }
 
     fn is_branch(&self) -> bool {

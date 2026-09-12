@@ -18,19 +18,23 @@ impl Encode for LoadRegister {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::LoadRegister)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![
-            mapper.index(VMOp::LoadRegister),
-            mapper.index(self.width),
-            mapper.index(self.source),
-        ]
+        vec![mapper.index(self.width), mapper.index(self.source)]
     }
 
     fn reads(&self) -> Vec<super::Effect> {
         vec![Effect::Register(self.source)]
     }
 
-    fn depth(&self) -> i32 {
+    fn consumes(&self) -> i32 {
+        0
+    }
+
+    fn produces(&self) -> i32 {
         1
     }
 }

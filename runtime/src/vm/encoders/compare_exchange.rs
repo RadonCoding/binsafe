@@ -17,18 +17,23 @@ impl Encode for CompareExchange {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::CompareExchange)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![
-            mapper.index(VMOp::CompareExchange),
-            mapper.index(self.width),
-        ]
+        vec![mapper.index(self.width)]
     }
 
     fn writes(&self) -> Vec<super::Effect> {
         vec![Effect::Memory, Effect::Register(VMReg::Flags)]
     }
 
-    fn depth(&self) -> i32 {
-        -2
+    fn consumes(&self) -> i32 {
+        3
+    }
+
+    fn produces(&self) -> i32 {
+        1
     }
 }

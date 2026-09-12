@@ -2,7 +2,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{Flag, VMWidth},
-        handlers::semantic::{self, Compare, Effect, Expression, FlagDef, Operand, Operation},
+        handlers::semantic::{self, Compare, Effect, Expression, Condition, Operand, Operation},
     },
 };
 
@@ -11,42 +11,42 @@ pub fn build(rt: &mut Runtime) {
         rt,
         &Operation {
             effects: vec![Effect::Sub(
-                Expression::Operand(Operand::A),
-                Expression::Operand(Operand::B),
+                Expression::Operand(Operand::InputA),
+                Expression::Operand(Operand::InputB),
             )],
             flags: vec![
                 (
                     Flag::Zero,
-                    FlagDef::Compare(Compare::Equal(
-                        Expression::Operand(Operand::Result),
+                    Condition::Compare(Compare::Equal(
+                        Expression::Operand(Operand::OutputA),
                         Expression::Constant(0),
                     )),
                 ),
                 (
                     Flag::Sign,
-                    FlagDef::Compare(Compare::BitSet(
-                        Expression::Operand(Operand::Result),
+                    Condition::Compare(Compare::BitSet(
+                        Expression::Operand(Operand::OutputA),
                         Expression::SignBit,
                     )),
                 ),
                 (
                     Flag::Carry,
-                    FlagDef::Compare(Compare::LessThan(
-                        Expression::Operand(Operand::A),
-                        Expression::Operand(Operand::B),
+                    Condition::Compare(Compare::LessThan(
+                        Expression::Operand(Operand::InputA),
+                        Expression::Operand(Operand::InputB),
                     )),
                 ),
                 (
                     Flag::Overflow,
-                    FlagDef::Compare(Compare::BitSet(
+                    Condition::Compare(Compare::BitSet(
                         Expression::BitAnd(
                             Box::new(Expression::BitXor(
-                                Box::new(Expression::Operand(Operand::A)),
-                                Box::new(Expression::Operand(Operand::B)),
+                                Box::new(Expression::Operand(Operand::InputA)),
+                                Box::new(Expression::Operand(Operand::InputB)),
                             )),
                             Box::new(Expression::BitXor(
-                                Box::new(Expression::Operand(Operand::A)),
-                                Box::new(Expression::Operand(Operand::Result)),
+                                Box::new(Expression::Operand(Operand::InputA)),
+                                Box::new(Expression::Operand(Operand::OutputA)),
                             )),
                         ),
                         Expression::SignBit,
@@ -54,23 +54,23 @@ pub fn build(rt: &mut Runtime) {
                 ),
                 (
                     Flag::Parity,
-                    FlagDef::Parity(Expression::Operand(Operand::Result)),
+                    Condition::Parity(Expression::Operand(Operand::OutputA)),
                 ),
                 (
                     Flag::Auxiliary,
-                    FlagDef::Compare(Compare::BitSet(
+                    Condition::Compare(Compare::BitSet(
                         Expression::BitXor(
                             Box::new(Expression::BitXor(
-                                Box::new(Expression::Operand(Operand::A)),
-                                Box::new(Expression::Operand(Operand::B)),
+                                Box::new(Expression::Operand(Operand::InputA)),
+                                Box::new(Expression::Operand(Operand::InputB)),
                             )),
-                            Box::new(Expression::Operand(Operand::Result)),
+                            Box::new(Expression::Operand(Operand::OutputA)),
                         ),
                         Expression::Constant(4),
                     )),
                 ),
             ],
-            store: None,
+            stores: None,
             widths: &[
                 VMWidth::Lower64,
                 VMWidth::Lower32,

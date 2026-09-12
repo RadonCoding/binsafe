@@ -28,7 +28,6 @@ pub fn generate(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
-    mix: Operation,
 ) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
@@ -41,10 +40,8 @@ pub fn generate(
     instructions.extend(set_hide_from_debugger(engine, rng, expected));
     instructions.extend(query_hide_from_debbuger(engine, rng, expected));
 
-    instructions.extend(spill_register(ACCUMULATOR));
-    instructions.extend(spill_register(VMReg::Vt0));
-    instructions.extend(register_operation(mix));
-    instructions.extend(reload_register(VMReg::Vp0));
+    instructions.extend(load_register(ACCUMULATOR));
+    instructions.extend(store_register(VMReg::Vp0));
 
     instructions.extend(release(0x30));
 
@@ -66,7 +63,13 @@ fn query_kd_debugger_enabled(
         VMSeg::None,
         VMWidth::Lower8,
     ));
-    b.extend(accumulate(rng, ACCUMULATOR, None, 0, &mut *expected));
+    b.extend(accumulate_immediate(
+        rng,
+        ACCUMULATOR,
+        None,
+        0,
+        &mut *expected,
+    ));
 
     b.extend(import(engine, ImportDef::NtQuerySystemInformation));
     b.extend(accumulate_prologue(
@@ -87,7 +90,7 @@ fn query_kd_debugger_enabled(
         VMSeg::None,
     ));
     // SystemInformation -> RDX
-    b.extend(reload_register(VMReg::Rdx));
+    b.extend(store_register(VMReg::Rdx));
     // SystemInformationLength -> R8
     b.extend(set_register(VMReg::R8, 0x2));
     // ReturnLength -> R9
@@ -95,7 +98,7 @@ fn query_kd_debugger_enabled(
     // NtQuerySystemInformation
     b.extend(invoke(VMReg::Rax));
 
-    b.extend(accumulate(
+    b.extend(accumulate_immediate(
         rng,
         ACCUMULATOR,
         Some(VMReg::Rax),
@@ -145,7 +148,7 @@ fn query_process_debug_object_handle(
         VMSeg::None,
     ));
     // ProcessInformation -> R8
-    b.extend(reload_register(VMReg::R8));
+    b.extend(store_register(VMReg::R8));
     // ProcessInformationLength -> R9
     b.extend(set_register(VMReg::R9, 8));
     // ReturnLength -> [RSP + ...]
@@ -153,7 +156,7 @@ fn query_process_debug_object_handle(
     // NtQueryInformationProcess
     b.extend(invoke(VMReg::Rax));
 
-    b.extend(accumulate(
+    b.extend(accumulate_immediate(
         rng,
         ACCUMULATOR,
         Some(VMReg::Rax),
@@ -201,7 +204,7 @@ fn set_hide_from_debugger(
     // NtSetInformationThread
     b.extend(invoke(VMReg::Rax));
 
-    b.extend(accumulate(
+    b.extend(accumulate_immediate(
         rng,
         ACCUMULATOR,
         Some(VMReg::Rax),
@@ -241,7 +244,7 @@ fn query_hide_from_debbuger(
         VMSeg::None,
     ));
     // ThreadInformation -> R8
-    b.extend(reload_register(VMReg::R8));
+    b.extend(store_register(VMReg::R8));
     // ThreadInformationLength -> R9
     b.extend(set_register(VMReg::R9, 1));
     // ReturnLength -> [RSP + ...]
@@ -249,7 +252,7 @@ fn query_hide_from_debbuger(
     // NtQueryInformationThread
     b.extend(invoke(VMReg::Rax));
 
-    b.extend(accumulate(
+    b.extend(accumulate_immediate(
         rng,
         ACCUMULATOR,
         Some(VMReg::Rax),

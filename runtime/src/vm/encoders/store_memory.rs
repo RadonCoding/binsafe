@@ -17,15 +17,23 @@ impl Encode for StoreMemory {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::StoreMemory)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::StoreMemory), mapper.index(self.width)]
+        vec![mapper.index(self.width)]
     }
 
     fn writes(&self) -> Vec<Effect> {
         vec![Effect::Memory]
     }
 
-    fn depth(&self) -> i32 {
-        -(self.width.slots() + 1)
+    fn consumes(&self) -> i32 {
+        2
+    }
+
+    fn produces(&self) -> i32 {
+        0
     }
 }

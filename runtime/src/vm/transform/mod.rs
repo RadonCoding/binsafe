@@ -4,12 +4,14 @@ use std::mem;
 use crate::mapper::Mapper;
 use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::store_register::StoreRegister;
+use crate::vm::encoders::Depth;
 use crate::vm::{
     bytecode::Phase,
     encoders::{Effect, Encode},
 };
 
 pub mod encrypt;
+pub mod indirect;
 pub mod mutation;
 pub mod peephole;
 pub mod permute;
@@ -49,10 +51,13 @@ pub fn atomize(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
 /// Atomizes `operations` into depth-balanced atoms, collapsing into one if the sequence is unbalanced.
 pub fn collapse(operations: Vec<Box<dyn Encode>>) -> Vec<Vec<Box<dyn Encode>>> {
     let mut atoms = atomize(operations);
+
     if atoms.len() <= 1 {
         return atoms;
     }
+
     let single = atoms.drain(..).flatten().collect();
+
     vec![single]
 }
 

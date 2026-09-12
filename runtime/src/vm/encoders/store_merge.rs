@@ -18,19 +18,23 @@ impl Encode for StoreMerge {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::StoreMerge)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![
-            mapper.index(VMOp::StoreMerge),
-            mapper.index(self.width),
-            mapper.index(self.destination),
-        ]
+        vec![mapper.index(self.width), mapper.index(self.destination)]
     }
 
     fn writes(&self) -> Vec<super::Effect> {
         vec![Effect::Vector(self.destination)]
     }
 
-    fn depth(&self) -> i32 {
-        -self.width.slots()
+    fn consumes(&self) -> i32 {
+        2
+    }
+
+    fn produces(&self) -> i32 {
+        0
     }
 }

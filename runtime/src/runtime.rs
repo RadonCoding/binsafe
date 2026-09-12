@@ -85,6 +85,7 @@ mapped! {
         VmHandlerVectorMul,
         VmHandlerVectorDiv,
         VmHandlerTimestamp,
+        VmHandlerDispatch,
         /* VM VEH */
         VmVehInitialize,
         VmVehHandler,
@@ -700,6 +701,7 @@ impl Runtime {
             (FnDef::VmHandlerVectorMul, vm::handlers::vector_mul::build),
             (FnDef::VmHandlerVectorDiv, vm::handlers::vector_div::build),
             (FnDef::VmHandlerTimestamp, vm::handlers::timestamp::build),
+            (FnDef::VmHandlerDispatch, vm::handlers::dispatch::build),
             (FnDef::VmFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (FnDef::Hash, functions::hash::build),

@@ -2,7 +2,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{Flag, VMWidth},
-        handlers::semantic::{self, Compare, Expression, FlagDef, Operand, Operation},
+        handlers::semantic::{self, Compare, Condition, Expression, Operand, Operation},
     },
 };
 
@@ -13,12 +13,12 @@ pub fn build(rt: &mut Runtime) {
             effects: vec![],
             flags: vec![(
                 Flag::Carry,
-                FlagDef::Compare(Compare::BitSet(
-                    Expression::Operand(Operand::A),
-                    Expression::Operand(Operand::B),
+                Condition::Compare(Compare::BitSet(
+                    Expression::Operand(Operand::InputA),
+                    Expression::Operand(Operand::InputB),
                 )),
             )],
-            store: Some(Expression::Operand(Operand::A)),
+            stores: Some(vec![Expression::Operand(Operand::InputA)]),
             widths: &[
                 VMWidth::Lower64,
                 VMWidth::Lower32,

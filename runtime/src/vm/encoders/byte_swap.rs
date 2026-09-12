@@ -17,7 +17,19 @@ impl Encode for ByteSwap {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::ByteSwap)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::ByteSwap), mapper.index(self.width)]
+        vec![mapper.index(self.width)]
+    }
+
+    fn consumes(&self) -> i32 {
+        1
+    }
+
+    fn produces(&self) -> i32 {
+        1
     }
 }

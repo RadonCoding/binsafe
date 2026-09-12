@@ -16,7 +16,7 @@ use crate::{
 #[cfg(feature = "profile")]
 use crate::debug::{start_profiling, stop_profiling};
 
-const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
+pub const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::Jcc, FnDef::VmHandlerJcc),
     (VMOp::Ret, FnDef::VmHandlerRet),
     (VMOp::LoadImmediate, FnDef::VmHandlerLoadImmediate),
@@ -64,6 +64,7 @@ const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::VectorMul, FnDef::VmHandlerVectorMul),
     (VMOp::VectorDiv, FnDef::VmHandlerVectorDiv),
     (VMOp::Timestamp, FnDef::VmHandlerTimestamp),
+    (VMOp::Dispatch, FnDef::VmHandlerDispatch),
 ];
 
 pub fn build(rt: &mut Runtime) {
