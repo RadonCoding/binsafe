@@ -18,15 +18,20 @@ impl Encode for VectorDiv {
         self
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![
-            mapper.index(VMOp::VectorDiv),
-            mapper.index(self.width),
-            mapper.index(self.stride),
-        ]
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::VectorDiv)
     }
 
-    fn depth(&self) -> i32 {
-        -self.width.slots()
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+        vec![mapper.index(self.width), mapper.index(self.stride)]
     }
+
+    fn consumes(&self) -> i32 {
+        2
+    }
+
+    fn produces(&self) -> i32 {
+        1
+    }
+
 }

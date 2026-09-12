@@ -18,19 +18,23 @@ impl Encode for LoadVector {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::LoadVector)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![
-            mapper.index(VMOp::LoadVector),
-            mapper.index(self.width),
-            mapper.index(self.source),
-        ]
+        vec![mapper.index(self.width), mapper.index(self.source)]
     }
 
     fn reads(&self) -> Vec<super::Effect> {
         vec![Effect::Vector(self.source)]
     }
 
-    fn depth(&self) -> i32 {
-        self.width.slots()
+    fn consumes(&self) -> i32 {
+        1
+    }
+
+    fn produces(&self) -> i32 {
+        1
     }
 }

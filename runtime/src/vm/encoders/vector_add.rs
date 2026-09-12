@@ -19,16 +19,24 @@ impl Encode for VectorAdd {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::VectorAdd)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![
-            mapper.index(VMOp::VectorAdd),
             mapper.index(self.width),
             mapper.index(self.stride),
             mapper.index(self.precision),
         ]
     }
 
-    fn depth(&self) -> i32 {
-        -self.width.slots()
+    fn consumes(&self) -> i32 {
+        2
     }
+
+    fn produces(&self) -> i32 {
+        1
+    }
+
 }

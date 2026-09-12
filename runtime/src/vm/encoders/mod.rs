@@ -2,7 +2,7 @@ use std::any::{type_name, Any};
 use std::fmt::Debug;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMReg, VMVec};
+use crate::vm::bytecode::{VMOp, VMReg, VMVec};
 
 #[cfg(debug_assertions)]
 mod debug;
@@ -18,6 +18,16 @@ pub fn identity(operation: &Box<dyn Encode>) -> usize {
     operation.as_ref() as *const dyn Encode as *const () as usize
 }
 
+pub trait Depth {
+    fn depth(&self) -> i32;
+}
+
+impl<T: Encode + ?Sized> Depth for T {
+    fn depth(&self) -> i32 {
+        self.produces() - self.consumes()
+    }
+}
+
 pub trait Encode: Debug + Any {
     fn as_any(&self) -> &dyn Any;
 
@@ -27,10 +37,12 @@ pub trait Encode: Debug + Any {
         type_name::<Self>().rsplit("::").next().unwrap()
     }
 
+    fn op(&self) -> Option<VMOp>;
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8>;
 
     fn size(&self, mapper: &mut Mapper) -> usize {
-        self.encode(mapper).len()
+        self.op().map_or(0, |_| 1) + self.encode(mapper).len()
     }
 
     fn reads(&self) -> Vec<Effect> {
@@ -41,7 +53,11 @@ pub trait Encode: Debug + Any {
         vec![]
     }
 
-    fn depth(&self) -> i32 {
+    fn consumes(&self) -> i32 {
+        0
+    }
+
+    fn produces(&self) -> i32 {
         0
     }
 
@@ -79,6 +95,7 @@ pub mod block;
 pub mod byte_swap;
 pub mod compare_exchange;
 pub mod discard;
+pub mod dispatch;
 pub mod div;
 pub mod exchange;
 pub mod exchange_add;

@@ -15,7 +15,6 @@ pub fn generate(
     engine: &mut Engine,
     rng: &mut impl Rng,
     expected: &mut u64,
-    mix: Operation,
 ) -> Vec<Box<dyn Encode>> {
     let operation = Operation::random(rng);
 
@@ -64,22 +63,22 @@ pub fn generate(
             VMSeg::None,
             VMWidth::Lower64,
         ));
-        outer.extend(reload_register(VMReg::Rcx));
+        outer.extend(store_register(VMReg::Rcx));
 
-        outer.extend(spill_register(VMReg::Rcx));
+        outer.extend(load_register(VMReg::Rcx));
         outer.extend(immediate(0x20));
         outer.extend(shr(None, None));
-        outer.extend(reload_register(VMReg::Rdx));
+        outer.extend(store_register(VMReg::Rdx));
 
         outer.extend(mask(Some(VMReg::Rcx), 0xFFFF_FFFF));
-        outer.extend(spill_register(VMReg::VImage));
+        outer.extend(load_register(VMReg::VImage));
         outer.extend(add(None, None));
-        outer.extend(reload_register(VMReg::Rcx));
+        outer.extend(store_register(VMReg::Rcx));
 
         outer.extend(mask(Some(VMReg::Rdx), 15));
-        outer.extend(reload_register(VMReg::R8));
+        outer.extend(store_register(VMReg::R8));
         outer.extend(sub(Some(VMReg::Rdx), Some(VMReg::R8)));
-        outer.extend(reload_register(VMReg::R9));
+        outer.extend(store_register(VMReg::R9));
 
         outer.extend(foreach(VMReg::R10, Bound::Register(VMReg::R9), 16, || {
             let mut inner = Vec::<Box<dyn Encode>>::new();
@@ -100,7 +99,7 @@ pub fn generate(
         }));
 
         outer.extend(compute_memory(VMReg::Rcx, VMReg::R10, 1, 0, VMSeg::None));
-        outer.extend(reload_register(VMReg::Rdx));
+        outer.extend(store_register(VMReg::Rdx));
 
         outer.extend(skip(
             engine,
@@ -132,9 +131,7 @@ pub fn generate(
 
     instructions.extend(spill_vector(ACCUMULATOR, VMWidth::Lower128));
     instructions.extend(xor(None, None));
-    instructions.extend(spill_register(VMReg::Vt0));
-    instructions.extend(register_operation(mix));
-    instructions.extend(reload_register(VMReg::Vp1));
+    instructions.extend(store_register(VMReg::Vp1));
 
     instructions
 }

@@ -17,10 +17,12 @@ impl Encode for LoadAddress {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::LoadAddress)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        let mut bytes = vec![mapper.index(VMOp::LoadAddress)];
-        bytes.extend(self.source.encode(mapper));
-        bytes
+        self.source.encode(mapper)
     }
 
     fn reads(&self) -> Vec<Effect> {
@@ -32,7 +34,11 @@ impl Encode for LoadAddress {
         ]
     }
 
-    fn depth(&self) -> i32 {
+    fn consumes(&self) -> i32 {
+        0
+    }
+
+    fn produces(&self) -> i32 {
         1
     }
 }

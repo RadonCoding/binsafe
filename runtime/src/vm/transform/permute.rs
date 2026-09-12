@@ -10,7 +10,7 @@ use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::store_memory::StoreMemory;
 use crate::vm::encoders::store_register::StoreRegister;
-use crate::vm::encoders::{identity, Effect, Encode};
+use crate::vm::encoders::{identity, Depth, Effect, Encode};
 use crate::vm::transform::{branches, collapse, descend, effects, vacant, Phase, Transform};
 
 struct Access {
@@ -39,11 +39,7 @@ impl<'a> Transform for Permute<'a> {
         Phase::Permute
     }
 
-    fn run(
-        &self,
-        _mapper: &mut Mapper,
-        mut operations: Vec<Box<dyn Encode>>,
-    ) -> Vec<Box<dyn Encode>> {
+    fn run(&self, _rt: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
         let mut picker = self.picker.borrow_mut();
 
         descend(&mut operations, |operations| {

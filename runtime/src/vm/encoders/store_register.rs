@@ -18,19 +18,24 @@ impl Encode for StoreRegister {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::StoreRegister)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![
-            mapper.index(VMOp::StoreRegister),
-            mapper.index(self.width),
-            mapper.index(self.destination),
-        ]
+        vec![mapper.index(self.width), mapper.index(self.destination)]
     }
 
     fn writes(&self) -> Vec<super::Effect> {
         vec![Effect::Register(self.destination)]
     }
 
-    fn depth(&self) -> i32 {
-        -1
+    fn consumes(&self) -> i32 {
+        1
     }
+
+    fn produces(&self) -> i32 {
+        0
+    }
+
 }

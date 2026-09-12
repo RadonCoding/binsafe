@@ -19,16 +19,24 @@ impl Encode for VectorMul {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::VectorMul)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![
-            mapper.index(VMOp::VectorMul),
             mapper.index(self.width),
             mapper.index(self.stride),
             mapper.index(self.precision),
         ]
     }
 
-    fn depth(&self) -> i32 {
-        -self.width.slots()
+    fn consumes(&self) -> i32 {
+        2
     }
+
+    fn produces(&self) -> i32 {
+        1
+    }
+
 }

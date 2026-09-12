@@ -7,6 +7,7 @@ use crate::vm::lifters::{
 #[cfg(debug_assertions)]
 use crate::vm::snapshot::Snapshots;
 use crate::vm::transform::encrypt::Encrypt;
+use crate::vm::transform::indirect::Indirect;
 use crate::vm::transform::mutation::Mutation;
 use crate::vm::transform::peephole::Peephole;
 use crate::vm::transform::permute::Permute;
@@ -73,7 +74,8 @@ mapped! {
         VectorMul,
         VectorDiv,
         // Special
-        Timestamp
+        Timestamp,
+        Dispatch
     }
 }
 
@@ -343,6 +345,10 @@ impl Encode for VMMem {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        None
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.push(mapper.index(self.base));
@@ -440,6 +446,10 @@ impl Encode for VMCondition {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        None
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(self.test), self.lhs, self.rhs]
     }
@@ -453,6 +463,7 @@ pub enum Phase {
     Scramble,
     Encrypt,
     Peephole,
+    Indirect,
 }
 
 impl Phase {
@@ -464,6 +475,7 @@ impl Phase {
             Self::Scramble => "scramble",
             Self::Encrypt => "encrypt",
             Self::Peephole => "peephole",
+            Self::Indirect => "indirect",
         }
     }
 }
@@ -629,33 +641,40 @@ pub fn assemble(mapper: &mut Mapper, operations: &[Box<dyn Encode>]) -> Vec<u8> 
     let mut bytes = Vec::new();
 
     for operation in operations {
+        if let Some(op) = operation.op() {
+            bytes.push(mapper.index(op));
+        }
         bytes.extend(operation.encode(mapper));
     }
     bytes
 }
 
+fn transforms<'a>(
+    picker: &'a RefCell<&'a mut dyn FnMut(&[usize]) -> usize>,
+) -> Vec<Box<dyn Transform + 'a>> {
+    vec![
+        Box::new(Peephole),
+        Box::new(Permute { picker }),
+        Box::new(Scramble),
+        Box::new(Mutation),
+        Box::new(Indirect),
+        Box::new(Encrypt),
+        Box::new(Permute { picker }),
+        Box::new(Peephole),
+    ]
+}
+
 pub fn transform<F>(
     mapper: &mut Mapper,
-    operations: Vec<Box<dyn Encode>>,
+    mut operations: Vec<Box<dyn Encode>>,
     mut picker: F,
 ) -> Vec<Box<dyn Encode>>
 where
     F: FnMut(&[usize]) -> usize,
 {
-    let mut operations = operations;
-
     let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
 
-    let mut transforms = Vec::<Box<dyn Transform>>::new();
-    transforms.push(Box::new(Peephole));
-    transforms.push(Box::new(Permute { picker: &picker }));
-    transforms.push(Box::new(Scramble));
-    transforms.push(Box::new(Mutation));
-    transforms.push(Box::new(Encrypt));
-    transforms.push(Box::new(Permute { picker: &picker }));
-    transforms.push(Box::new(Peephole));
-
-    for transform in transforms {
+    for transform in &transforms(&picker) {
         operations = transform.run(mapper, operations);
     }
 
@@ -665,30 +684,20 @@ where
 #[cfg(debug_assertions)]
 pub fn transform_with_snapshots<F>(
     mapper: &mut Mapper,
-    operations: Vec<Box<dyn Encode>>,
+    mut operations: Vec<Box<dyn Encode>>,
     mut picker: F,
 ) -> (Vec<Box<dyn Encode>>, Snapshots)
 where
     F: FnMut(&[usize]) -> usize,
 {
-    let mut operations = operations;
+    let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
 
     let mut snapshots = Snapshots::new();
     snapshots.record(Phase::Lift, &operations);
 
-    let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
-
-    let mut transforms = Vec::<Box<dyn Transform>>::new();
-    transforms.push(Box::new(Peephole));
-    transforms.push(Box::new(Permute { picker: &picker }));
-    transforms.push(Box::new(Scramble));
-    transforms.push(Box::new(Mutation));
-    transforms.push(Box::new(Encrypt));
-    transforms.push(Box::new(Permute { picker: &picker }));
-    transforms.push(Box::new(Peephole));
-
-    for transform in transforms {
+    for transform in &transforms(&picker) {
         operations = transform.run(mapper, operations);
+
         snapshots.record(transform.phase(), &operations);
     }
 

@@ -139,15 +139,52 @@ impl<'a> Engine<'a> {
         let ip = code_section.virtual_address.0 as u64;
         let code = code_section.read(&self.pe).unwrap().to_vec();
 
-        let data_references = self.collect_data_references(&code, ip);
-        let code_references =
-            self.collect_code_references(&code, ip, &code_section, &data_references);
+        let markers = self.find_markers(&code);
 
-        if self.scan_markers(ip, &code, &code_references) {
+        let data_references = self.collect_data_references(&code, ip, &markers);
+        let mut code_references =
+            self.collect_code_references(&code, ip, &code_section, &data_references, &markers);
+
+        for &(start, _) in &markers {
+            code_references.insert(ip as u32 + start as u32);
+        }
+
+        if self.scan_markers(ip, &code, &code_references, &markers) {
             return;
         }
 
         self.scan_blocks(ip, &code, &code_references);
+    }
+
+    fn find_markers(&self, code: &[u8]) -> Vec<(usize, usize)> {
+        let mut markers = Vec::new();
+        let mut begin = None;
+        let mut cursor = 0;
+
+        while cursor + MARKER_SIZE <= code.len() {
+            if code[cursor..cursor + MARKER_SIZE] == MARKER_BEGIN {
+                begin = Some(cursor + MARKER_SIZE);
+                cursor += MARKER_SIZE;
+                continue;
+            }
+            if code[cursor..cursor + MARKER_SIZE] == MARKER_END {
+                if let Some(start) = begin.take() {
+                    markers.push((start, cursor));
+                }
+                cursor += MARKER_SIZE;
+                continue;
+            }
+            cursor += 1;
+        }
+
+        markers
+    }
+
+    fn is_marker(&self, offset: usize, markers: &[(usize, usize)]) -> bool {
+        markers.iter().any(|&(s, e)| {
+            (offset >= s.saturating_sub(MARKER_SIZE) && offset < s)
+                || (offset >= e && offset < e + MARKER_SIZE)
+        })
     }
 
     fn capture_block(&mut self, block: &mut Vec<Instruction>, end: u32) {
@@ -216,27 +253,13 @@ impl<'a> Engine<'a> {
         }
     }
 
-    fn scan_markers(&mut self, ip: u64, code: &[u8], code_references: &HashSet<u32>) -> bool {
-        let mut markers = Vec::new();
-        let mut begin = None;
-        let mut cursor = 0;
-
-        while cursor + MARKER_SIZE <= code.len() {
-            if code[cursor..cursor + MARKER_SIZE] == MARKER_BEGIN {
-                begin = Some(cursor + MARKER_SIZE);
-                cursor += MARKER_SIZE;
-                continue;
-            }
-            if code[cursor..cursor + MARKER_SIZE] == MARKER_END {
-                if let Some(start) = begin.take() {
-                    markers.push((start, cursor));
-                }
-                cursor += MARKER_SIZE;
-                continue;
-            }
-            cursor += 1;
-        }
-
+    fn scan_markers(
+        &mut self,
+        ip: u64,
+        code: &[u8],
+        code_references: &HashSet<u32>,
+        markers: &[(usize, usize)],
+    ) -> bool {
         if markers.is_empty() {
             return false;
         }
@@ -246,11 +269,15 @@ impl<'a> Engine<'a> {
         let mut sorted_code_references = code_references.iter().copied().collect::<Vec<u32>>();
         sorted_code_references.sort();
 
-        for &(start, end) in &markers {
-            self.collect_blocks(&code[start..end], ip, &sorted_code_references);
+        for &(start, end) in markers {
+            self.collect_blocks(
+                &code[start..end],
+                ip + start as u64,
+                &sorted_code_references,
+            );
         }
 
-        for (start, end) in markers {
+        for &(start, end) in markers {
             let start_offset = self
                 .pe
                 .translate(PETranslation::Memory(RVA(ip as u32 + start as u32)))
@@ -278,21 +305,40 @@ impl<'a> Engine<'a> {
         info!("Found {} blocks", self.blocks.len());
     }
 
-    fn collect_data_references(&self, code: &[u8], ip: u64) -> HashSet<u32> {
+    fn collect_data_references(
+        &self,
+        code: &[u8],
+        ip: u64,
+        markers: &[(usize, usize)],
+    ) -> HashSet<u32> {
         let mut data_references = HashSet::new();
-        let mut decoder = Decoder::with_ip(self.bitness, code, ip, DecoderOptions::NONE);
-        let mut instruction = Instruction::default();
+        let mut cursor = 0;
 
-        while decoder.can_decode() {
+        while cursor < code.len() {
+            if self.is_marker(cursor, markers) {
+                cursor += MARKER_SIZE;
+                continue;
+            }
+
+            let mut decoder = Decoder::with_ip(
+                self.bitness,
+                &code[cursor..],
+                ip + cursor as u64,
+                DecoderOptions::NONE,
+            );
+            let mut instruction = Instruction::default();
             decoder.decode_out(&mut instruction);
 
             if instruction.is_invalid() {
+                cursor += 1;
                 continue;
             }
 
             if instruction.is_ip_rel_memory_operand() {
                 data_references.insert(instruction.ip_rel_memory_address() as u32);
             }
+
+            cursor += instruction.len();
         }
 
         data_references
@@ -354,15 +400,30 @@ impl<'a> Engine<'a> {
         ip: u64,
         code_section: &ImageSectionHeader,
         data_references: &HashSet<u32>,
+        markers: &[(usize, usize)],
     ) -> HashSet<u32> {
         let mut references = self.collect_static_references(code_section);
-        let mut decoder = Decoder::with_ip(self.bitness, code, ip, DecoderOptions::NONE);
-        let mut instruction = Instruction::default();
+        let mut cursor = 0;
         let mut previous = Vec::new();
 
-        while decoder.can_decode() {
+        while cursor < code.len() {
+            if self.is_marker(cursor, markers) {
+                cursor += MARKER_SIZE;
+                previous.clear();
+                continue;
+            }
+
+            let mut decoder = Decoder::with_ip(
+                self.bitness,
+                &code[cursor..],
+                ip + cursor as u64,
+                DecoderOptions::NONE,
+            );
+            let mut instruction = Instruction::default();
             decoder.decode_out(&mut instruction);
+
             if instruction.is_invalid() {
+                cursor += 1;
                 previous.clear();
                 continue;
             }
@@ -395,6 +456,7 @@ impl<'a> Engine<'a> {
                     | FlowControl::UnconditionalBranch
                     | FlowControl::Return
             ) {
+                cursor += instruction.len();
                 continue;
             }
 
@@ -407,6 +469,7 @@ impl<'a> Engine<'a> {
             }
 
             previous.clear();
+            cursor += instruction.len();
         }
 
         references

@@ -8,6 +8,7 @@ pub mod bit_test_set;
 pub mod byte_swap;
 pub mod compare_exchange;
 pub mod discard;
+pub mod dispatch;
 pub mod div;
 pub mod exchange;
 pub mod exchange_add;
