@@ -11,17 +11,17 @@ pub fn build(rt: &mut Runtime) {
         rt,
         &Operation {
             effects: vec![Effect::Xor(
-                Expression::Operand(Operand::InputA),
+                Expression::Operand(Operand::Input(0)),
                 Expression::BitShl(
                     Box::new(Expression::Constant(1)),
-                    Box::new(Expression::Operand(Operand::InputB)),
+                    Box::new(Expression::Operand(Operand::Input(1))),
                 ),
             )],
             flags: vec![(
                 Flag::Carry,
                 Condition::Compare(Compare::BitSet(
-                    Expression::Operand(Operand::InputA),
-                    Expression::Operand(Operand::InputB),
+                    Expression::Operand(Operand::Input(0)),
+                    Expression::Operand(Operand::Input(1)),
                 )),
             )],
             stores: None,
@@ -31,7 +31,6 @@ pub fn build(rt: &mut Runtime) {
                 VMWidth::Lower16,
                 VMWidth::Lower8,
             ],
-            operands: 2,
         },
     );
 }

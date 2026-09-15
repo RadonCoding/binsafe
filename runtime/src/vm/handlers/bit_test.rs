@@ -14,18 +14,17 @@ pub fn build(rt: &mut Runtime) {
             flags: vec![(
                 Flag::Carry,
                 Condition::Compare(Compare::BitSet(
-                    Expression::Operand(Operand::InputA),
-                    Expression::Operand(Operand::InputB),
+                    Expression::Operand(Operand::Input(0)),
+                    Expression::Operand(Operand::Input(1)),
                 )),
             )],
-            stores: Some(vec![Expression::Operand(Operand::InputA)]),
+            stores: Some(vec![Expression::Operand(Operand::Input(0))]),
             widths: &[
                 VMWidth::Lower64,
                 VMWidth::Lower32,
                 VMWidth::Lower16,
                 VMWidth::Lower8,
             ],
-            operands: 2,
         },
     );
 }
