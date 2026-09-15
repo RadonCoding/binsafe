@@ -10,19 +10,19 @@ pub fn build(rt: &mut Runtime) {
     semantic::build(
         rt,
         &Operation {
-            effects: vec![Effect::Tzcnt(Expression::Operand(Operand::InputA))],
+            effects: vec![Effect::Tzcnt(Expression::Operand(Operand::Input(0)))],
             flags: vec![
                 (
                     Flag::Carry,
                     Condition::Compare(Compare::Equal(
-                        Expression::Operand(Operand::InputA),
+                        Expression::Operand(Operand::Input(0)),
                         Expression::Constant(0),
                     )),
                 ),
                 (
                     Flag::Zero,
                     Condition::Compare(Compare::Equal(
-                        Expression::Operand(Operand::OutputA),
+                        Expression::Operand(Operand::Output(0)),
                         Expression::Constant(0),
                     )),
                 ),
@@ -34,7 +34,6 @@ pub fn build(rt: &mut Runtime) {
                 VMWidth::Lower16,
                 VMWidth::Lower8,
             ],
-            operands: 1,
         },
     );
 }

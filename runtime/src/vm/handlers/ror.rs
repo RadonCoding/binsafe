@@ -11,14 +11,14 @@ pub fn build(rt: &mut Runtime) {
         rt,
         &Operation {
             effects: vec![Effect::Ror(
-                Expression::Operand(Operand::InputA),
-                Expression::Operand(Operand::InputB),
+                Expression::Operand(Operand::Input(0)),
+                Expression::Operand(Operand::Input(1)),
             )],
             flags: vec![
                 (
                     Flag::Carry,
                     Condition::Compare(Compare::BitSet(
-                        Expression::Operand(Operand::OutputA),
+                        Expression::Operand(Operand::Output(0)),
                         Expression::SignBit,
                     )),
                 ),
@@ -37,7 +37,6 @@ pub fn build(rt: &mut Runtime) {
                 VMWidth::Lower16,
                 VMWidth::Lower8,
             ],
-            operands: 2,
         },
     );
 }

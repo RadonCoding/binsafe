@@ -11,16 +11,16 @@ pub fn build(rt: &mut Runtime) {
         rt,
         &Operation {
             effects: vec![Effect::Shr(
-                Expression::Operand(Operand::InputA),
-                Expression::Operand(Operand::InputB),
+                Expression::Operand(Operand::Input(0)),
+                Expression::Operand(Operand::Input(1)),
             )],
             flags: vec![
                 (
                     Flag::Carry,
                     Condition::Compare(Compare::BitSet(
-                        Expression::Operand(Operand::InputA),
+                        Expression::Operand(Operand::Input(0)),
                         Expression::Sub(
-                            Box::new(Expression::Operand(Operand::InputB)),
+                            Box::new(Expression::Operand(Operand::Input(1))),
                             Box::new(Expression::Constant(1)),
                         ),
                     )),
@@ -35,20 +35,20 @@ pub fn build(rt: &mut Runtime) {
                 (
                     Flag::Sign,
                     Condition::Compare(Compare::BitSet(
-                        Expression::Operand(Operand::OutputA),
+                        Expression::Operand(Operand::Output(0)),
                         Expression::SignBit,
                     )),
                 ),
                 (
                     Flag::Zero,
                     Condition::Compare(Compare::Equal(
-                        Expression::Operand(Operand::OutputA),
+                        Expression::Operand(Operand::Output(0)),
                         Expression::Constant(0),
                     )),
                 ),
                 (
                     Flag::Parity,
-                    Condition::Parity(Expression::Operand(Operand::OutputA)),
+                    Condition::Parity(Expression::Operand(Operand::Output(0))),
                 ),
             ],
             stores: None,
@@ -58,7 +58,6 @@ pub fn build(rt: &mut Runtime) {
                 VMWidth::Lower16,
                 VMWidth::Lower8,
             ],
-            operands: 2,
         },
     );
 }

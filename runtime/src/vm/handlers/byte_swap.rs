@@ -13,76 +13,76 @@ pub fn build(rt: &mut Runtime) {
             effects: vec![
                 Effect::Assign(Expression::BitAnd(
                     Box::new(Expression::BitShr(
-                        Box::new(Expression::Operand(Operand::InputA)),
+                        Box::new(Expression::Operand(Operand::Input(0))),
                         Box::new(Expression::Constant(56)),
                     )),
                     Box::new(Expression::Constant(0xFF)),
                 )),
                 Effect::Or(
-                    Expression::Operand(Operand::OutputA),
+                    Expression::Operand(Operand::Output(0)),
                     Expression::BitAnd(
                         Box::new(Expression::BitShr(
-                            Box::new(Expression::Operand(Operand::InputA)),
+                            Box::new(Expression::Operand(Operand::Input(0))),
                             Box::new(Expression::Constant(40)),
                         )),
                         Box::new(Expression::Constant(0xFF00)),
                     ),
                 ),
                 Effect::Or(
-                    Expression::Operand(Operand::OutputA),
+                    Expression::Operand(Operand::Output(0)),
                     Expression::BitAnd(
                         Box::new(Expression::BitShr(
-                            Box::new(Expression::Operand(Operand::InputA)),
+                            Box::new(Expression::Operand(Operand::Input(0))),
                             Box::new(Expression::Constant(24)),
                         )),
                         Box::new(Expression::Constant(0xFF_0000)),
                     ),
                 ),
                 Effect::Or(
-                    Expression::Operand(Operand::OutputA),
+                    Expression::Operand(Operand::Output(0)),
                     Expression::BitAnd(
                         Box::new(Expression::BitShr(
-                            Box::new(Expression::Operand(Operand::InputA)),
+                            Box::new(Expression::Operand(Operand::Input(0))),
                             Box::new(Expression::Constant(8)),
                         )),
                         Box::new(Expression::Constant(0xFF_000000)),
                     ),
                 ),
                 Effect::Or(
-                    Expression::Operand(Operand::OutputA),
+                    Expression::Operand(Operand::Output(0)),
                     Expression::BitAnd(
                         Box::new(Expression::BitShl(
-                            Box::new(Expression::Operand(Operand::InputA)),
+                            Box::new(Expression::Operand(Operand::Input(0))),
                             Box::new(Expression::Constant(8)),
                         )),
                         Box::new(Expression::Constant(0xFF_00000000)),
                     ),
                 ),
                 Effect::Or(
-                    Expression::Operand(Operand::OutputA),
+                    Expression::Operand(Operand::Output(0)),
                     Expression::BitAnd(
                         Box::new(Expression::BitShl(
-                            Box::new(Expression::Operand(Operand::InputA)),
+                            Box::new(Expression::Operand(Operand::Input(0))),
                             Box::new(Expression::Constant(24)),
                         )),
                         Box::new(Expression::Constant(0xFF_0000000000)),
                     ),
                 ),
                 Effect::Or(
-                    Expression::Operand(Operand::OutputA),
+                    Expression::Operand(Operand::Output(0)),
                     Expression::BitAnd(
                         Box::new(Expression::BitShl(
-                            Box::new(Expression::Operand(Operand::InputA)),
+                            Box::new(Expression::Operand(Operand::Input(0))),
                             Box::new(Expression::Constant(40)),
                         )),
                         Box::new(Expression::Constant(0xFF_000000000000)),
                     ),
                 ),
                 Effect::Or(
-                    Expression::Operand(Operand::OutputA),
+                    Expression::Operand(Operand::Output(0)),
                     Expression::BitAnd(
                         Box::new(Expression::BitShl(
-                            Box::new(Expression::Operand(Operand::InputA)),
+                            Box::new(Expression::Operand(Operand::Input(0))),
                             Box::new(Expression::Constant(56)),
                         )),
                         Box::new(Expression::Constant(0xFF_00000000000000)),
@@ -92,7 +92,6 @@ pub fn build(rt: &mut Runtime) {
             flags: vec![],
             stores: None,
             widths: &[VMWidth::Lower64, VMWidth::Lower32],
-            operands: 1,
         },
     );
 }

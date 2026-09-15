@@ -2,7 +2,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{Flag, VMWidth},
-        handlers::semantic::{self, Compare, Effect, Expression, Condition, Operand, Operation},
+        handlers::semantic::{self, Compare, Condition, Effect, Expression, Operand, Operation},
     },
 };
 
@@ -11,29 +11,29 @@ pub fn build(rt: &mut Runtime) {
         rt,
         &Operation {
             effects: vec![Effect::Sub(
-                Expression::Operand(Operand::InputA),
-                Expression::Operand(Operand::InputB),
+                Expression::Operand(Operand::Input(0)),
+                Expression::Operand(Operand::Input(1)),
             )],
             flags: vec![
                 (
                     Flag::Zero,
                     Condition::Compare(Compare::Equal(
-                        Expression::Operand(Operand::OutputA),
+                        Expression::Operand(Operand::Output(0)),
                         Expression::Constant(0),
                     )),
                 ),
                 (
                     Flag::Sign,
                     Condition::Compare(Compare::BitSet(
-                        Expression::Operand(Operand::OutputA),
+                        Expression::Operand(Operand::Output(0)),
                         Expression::SignBit,
                     )),
                 ),
                 (
                     Flag::Carry,
                     Condition::Compare(Compare::LessThan(
-                        Expression::Operand(Operand::InputA),
-                        Expression::Operand(Operand::InputB),
+                        Expression::Operand(Operand::Input(0)),
+                        Expression::Operand(Operand::Input(1)),
                     )),
                 ),
                 (
@@ -41,12 +41,12 @@ pub fn build(rt: &mut Runtime) {
                     Condition::Compare(Compare::BitSet(
                         Expression::BitAnd(
                             Box::new(Expression::BitXor(
-                                Box::new(Expression::Operand(Operand::InputA)),
-                                Box::new(Expression::Operand(Operand::InputB)),
+                                Box::new(Expression::Operand(Operand::Input(0))),
+                                Box::new(Expression::Operand(Operand::Input(1))),
                             )),
                             Box::new(Expression::BitXor(
-                                Box::new(Expression::Operand(Operand::InputA)),
-                                Box::new(Expression::Operand(Operand::OutputA)),
+                                Box::new(Expression::Operand(Operand::Input(0))),
+                                Box::new(Expression::Operand(Operand::Output(0))),
                             )),
                         ),
                         Expression::SignBit,
@@ -54,17 +54,17 @@ pub fn build(rt: &mut Runtime) {
                 ),
                 (
                     Flag::Parity,
-                    Condition::Parity(Expression::Operand(Operand::OutputA)),
+                    Condition::Parity(Expression::Operand(Operand::Output(0))),
                 ),
                 (
                     Flag::Auxiliary,
                     Condition::Compare(Compare::BitSet(
                         Expression::BitXor(
                             Box::new(Expression::BitXor(
-                                Box::new(Expression::Operand(Operand::InputA)),
-                                Box::new(Expression::Operand(Operand::InputB)),
+                                Box::new(Expression::Operand(Operand::Input(0))),
+                                Box::new(Expression::Operand(Operand::Input(1))),
                             )),
-                            Box::new(Expression::Operand(Operand::OutputA)),
+                            Box::new(Expression::Operand(Operand::Output(0))),
                         ),
                         Expression::Constant(4),
                     )),
@@ -77,7 +77,6 @@ pub fn build(rt: &mut Runtime) {
                 VMWidth::Lower16,
                 VMWidth::Lower8,
             ],
-            operands: 2,
         },
     );
 }
