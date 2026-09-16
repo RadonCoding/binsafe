@@ -66,7 +66,10 @@ pub fn obfuscate<R: Rng>(
             return None;
         }
 
-        let displacement = instruction.memory_displacement64();
+        let displacement = match instruction.memory_base().size() {
+            4 => instruction.memory_displacement32() as i32 as i64 as u64,
+            _ => instruction.memory_displacement64(),
+        };
 
         let size = if displacement <= 0xFF {
             1
@@ -206,6 +209,7 @@ fn dead_flags(instructions: &[Instruction]) -> bool {
             return true;
         }
     }
+
     true
 }
 

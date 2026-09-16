@@ -272,7 +272,7 @@ impl VMWidth {
             VMWidth::Lower16 | VMWidth::SLower16 => VMWidth::SLower16,
             VMWidth::Lower32 | VMWidth::SLower32 => VMWidth::SLower32,
             VMWidth::Lower64 | VMWidth::SLower64 => VMWidth::SLower64,
-            other => other,
+            _ => unreachable!(),
         }
     }
 
