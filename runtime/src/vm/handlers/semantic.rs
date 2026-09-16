@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{
-    cl, get_gpr8, qword_ptr, r12, r13, r14, r14d, r8, r9, rax, rbp, rcx, rdx, rsp, AsmRegister64,
-    CodeLabel,
+    cl, get_gpr16, get_gpr32, get_gpr8, qword_ptr, r12, r13, r14, r14d, r8, r9, rax, rbp, rcx, rdx,
+    rsp, AsmRegister64, CodeLabel,
 };
 
 use std::collections::HashSet;
@@ -16,8 +16,8 @@ use crate::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operand {
-    Input(u8),
-    Output(u8),
+    Input(usize),
+    Output(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -77,11 +77,10 @@ pub struct Operation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Value {
-    InputA,
-    InputB,
-    OutputA,
+    Input(usize),
+    Output(usize),
     Flags,
-    Temporary(u32),
+    Temporary(usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,19 +93,23 @@ enum ValueRef {
 struct Allocator {
     tracked: Vec<(AsmRegister64, Value)>,
     dirty: HashSet<Value>,
-    temporary: u32,
-    slots: u32,
+    temporary: usize,
+    inputs: usize,
+    outputs: usize,
+    flags: bool,
 }
 
 impl Allocator {
     const REGISTERS: [AsmRegister64; 5] = [rax, rcx, rdx, r8, r9];
 
-    fn new(slots: u32) -> Self {
+    fn new(inputs: usize, outputs: usize, flags: bool) -> Self {
         Self {
             tracked: Vec::new(),
             dirty: HashSet::new(),
             temporary: 0,
-            slots,
+            inputs,
+            outputs,
+            flags,
         }
     }
 
@@ -149,46 +152,41 @@ impl Allocator {
             .map(|(_, v)| *v)
     }
 
-    fn mark_dirty(&mut self, value: Value) {
-        self.dirty.insert(value);
-    }
-
-    fn temp(&mut self) -> Value {
+    fn temporary(&mut self) -> Value {
         let value = Value::Temporary(self.temporary);
         self.temporary += 1;
-        assert!(
-            self.temporary <= self.slots,
-            "allocator ran out of temporary slots"
-        );
         value
     }
 
-    fn offset(value: Value) -> i32 {
+    fn offset(inputs: usize, outputs: usize, flags: bool, value: Value) -> i32 {
+        let flags = flags as usize;
         let slot = match value {
-            Value::InputA => 0,
-            Value::InputB => 1,
-            Value::OutputA => 2,
-            Value::Flags => 3,
-            Value::Temporary(index) => 4 + index,
+            Value::Input(index) => index,
+            Value::Output(index) => inputs + index,
+            Value::Flags => inputs + outputs,
+            Value::Temporary(index) => inputs + outputs + flags + index,
         };
         (slot as i32 + 1) * 8
     }
 
-    fn spill_register(&mut self, rt: &mut Runtime, register: AsmRegister64) {
+    fn spill(&mut self, rt: &mut Runtime, register: AsmRegister64) {
         let Some(value) = self.tracked_value(register) else {
             return;
         };
 
         if self.dirty.remove(&value) {
             rt.asm
-                .mov(qword_ptr(rbp - Self::offset(value)), register)
+                .mov(
+                    qword_ptr(rbp - Self::offset(self.inputs, self.outputs, self.flags, value)),
+                    register,
+                )
                 .unwrap();
         }
 
         self.untrack(register);
     }
 
-    fn spill_registers(&mut self, rt: &mut Runtime) {
+    fn dump(&mut self, rt: &mut Runtime) {
         let registers = self
             .tracked
             .iter()
@@ -196,7 +194,7 @@ impl Allocator {
             .collect::<Vec<AsmRegister64>>();
 
         for register in registers {
-            self.spill_register(rt, register);
+            self.spill(rt, register);
         }
     }
 
@@ -224,7 +222,7 @@ impl Allocator {
                 None => true,
             }
         }) {
-            self.spill_register(rt, register);
+            self.spill(rt, register);
             return register;
         }
 
@@ -233,12 +231,12 @@ impl Allocator {
             .copied()
             .find(|register| !avoid.contains(register))
             .expect("allocator has no usable register");
-        self.spill_register(rt, register);
+        self.spill(rt, register);
         register
     }
 
-    fn copy_to_register(&mut self, rt: &mut Runtime, value: ValueRef, register: AsmRegister64) {
-        self.spill_register(rt, register);
+    fn copy(&mut self, rt: &mut Runtime, value: ValueRef, register: AsmRegister64) {
+        self.spill(rt, register);
 
         match value {
             ValueRef::Immediate(value) => {
@@ -249,14 +247,19 @@ impl Allocator {
                     rt.asm.mov(register, source).unwrap();
                 } else {
                     rt.asm
-                        .mov(register, qword_ptr(rbp - Self::offset(value)))
+                        .mov(
+                            register,
+                            qword_ptr(
+                                rbp - Self::offset(self.inputs, self.outputs, self.flags, value),
+                            ),
+                        )
                         .unwrap();
                 }
             }
         }
     }
 
-    fn load_mutable(
+    fn mutable(
         &mut self,
         rt: &mut Runtime,
         value: Value,
@@ -270,7 +273,10 @@ impl Allocator {
 
         let register = self.acquire(rt, &[], avoid);
         rt.asm
-            .mov(register, qword_ptr(rbp - Self::offset(value)))
+            .mov(
+                register,
+                qword_ptr(rbp - Self::offset(self.inputs, self.outputs, self.flags, value)),
+            )
             .unwrap();
         self.track(register, value, false);
         register
@@ -304,34 +310,76 @@ impl Allocator {
     }
 }
 
-#[derive(Clone, Copy)]
-struct Context {
-    input_a: Value,
-    input_b: Value,
-    output_a: Value,
-}
-
 // TODO: Implement a mixed-boolean-arithmetic engine!
 
-fn operands(effects: &[Effect], flags: &[(Flag, Condition)]) -> u8 {
-    let mut value = 0;
+impl Operation {
+    fn operands(&self) -> usize {
+        let mut value = 0;
 
-    for effect in effects {
-        effect.operands(&mut value);
+        for effect in &self.effects {
+            effect.operands(&mut value);
+        }
+
+        for (_, condition) in &self.flags {
+            condition.operands(&mut value);
+        }
+
+        if let Some(stores) = &self.stores {
+            for store in stores {
+                store.operands(&mut value);
+            }
+        }
+
+        value
     }
 
-    for (_, condition) in flags {
-        condition.operands(&mut value);
+    fn outputs(&self) -> usize {
+        let mut value = 0;
+
+        for effect in &self.effects {
+            effect.outputs(&mut value);
+        }
+
+        for (_, condition) in &self.flags {
+            condition.outputs(&mut value);
+        }
+
+        match &self.stores {
+            Some(stores) => {
+                value = value.max(stores.len());
+                for store in stores {
+                    store.outputs(&mut value);
+                }
+            }
+            None if !self.effects.is_empty() => value = value.max(1),
+            None => {}
+        }
+
+        value
     }
 
-    value
+    fn temporaries(&self) -> usize {
+        let effects = self.effects.iter().map(Effect::temporary).sum::<usize>();
+        let flags = self
+            .flags
+            .iter()
+            .map(|(_, condition)| condition.temporary())
+            .sum::<usize>();
+        let stores = self
+            .stores
+            .as_ref()
+            .map(|stores| stores.iter().map(Expression::temporary).sum::<usize>())
+            .unwrap_or(0);
+
+        effects + flags + stores
+    }
 }
 
 impl Expression {
-    fn operands(&self, value: &mut u8) {
+    fn operands(&self, value: &mut usize) {
         match self {
             Expression::Operand(Operand::Input(n)) => {
-                *value = (*value).max(n + 1);
+                *value = (*value).max(*n + 1);
             }
             Expression::Operand(Operand::Output(_))
             | Expression::Constant(_)
@@ -351,7 +399,30 @@ impl Expression {
         }
     }
 
-    fn temporary(&self) -> u32 {
+    fn outputs(&self, value: &mut usize) {
+        match self {
+            Expression::Operand(Operand::Output(index)) => {
+                *value = (*value).max(*index + 1);
+            }
+            Expression::Operand(Operand::Input(_))
+            | Expression::Constant(_)
+            | Expression::SignBit => {}
+            Expression::BitAnd(first, second)
+            | Expression::BitOr(first, second)
+            | Expression::BitXor(first, second)
+            | Expression::BitShr(first, second)
+            | Expression::BitShl(first, second)
+            | Expression::Sub(first, second) => {
+                first.outputs(value);
+                second.outputs(value);
+            }
+            Expression::BitNot(inner) | Expression::LowByte(inner) => {
+                inner.outputs(value);
+            }
+        }
+    }
+
+    fn temporary(&self) -> usize {
         match self {
             Expression::Operand(_) | Expression::Constant(_) | Expression::SignBit => 0,
             Expression::BitAnd(first, second)
@@ -366,7 +437,7 @@ impl Expression {
 }
 
 impl Effect {
-    fn operands(&self, value: &mut u8) {
+    fn operands(&self, value: &mut usize) {
         match self {
             Effect::Add(first, second)
             | Effect::Sub(first, second)
@@ -388,7 +459,29 @@ impl Effect {
         }
     }
 
-    fn temporary(&self) -> u32 {
+    fn outputs(&self, value: &mut usize) {
+        match self {
+            Effect::Add(first, second)
+            | Effect::Sub(first, second)
+            | Effect::And(first, second)
+            | Effect::Or(first, second)
+            | Effect::Xor(first, second)
+            | Effect::Shr(first, second)
+            | Effect::Shl(first, second)
+            | Effect::Ror(first, second)
+            | Effect::Rol(first, second)
+            | Effect::Mul(first, second)
+            | Effect::Sar(first, second) => {
+                first.outputs(value);
+                second.outputs(value);
+            }
+            Effect::Assign(expression) | Effect::Bsr(expression) | Effect::Tzcnt(expression) => {
+                expression.outputs(value);
+            }
+        }
+    }
+
+    fn temporary(&self) -> usize {
         match self {
             Effect::Add(first, second)
             | Effect::Sub(first, second)
@@ -409,14 +502,21 @@ impl Effect {
 }
 
 impl Condition {
-    fn operands(&self, value: &mut u8) {
+    fn operands(&self, value: &mut usize) {
         match self {
             Condition::Compare(compare) => compare.operands(value),
             Condition::Parity(expression) => expression.operands(value),
         }
     }
 
-    fn temporary(&self) -> u32 {
+    fn outputs(&self, value: &mut usize) {
+        match self {
+            Condition::Compare(compare) => compare.outputs(value),
+            Condition::Parity(expression) => expression.outputs(value),
+        }
+    }
+
+    fn temporary(&self) -> usize {
         match self {
             Condition::Compare(compare) => compare.temporary(),
             Condition::Parity(expression) => expression.temporary(),
@@ -425,7 +525,7 @@ impl Condition {
 }
 
 impl Compare {
-    fn operands(&self, value: &mut u8) {
+    fn operands(&self, value: &mut usize) {
         match self {
             Compare::Equal(first, second)
             | Compare::LessThan(first, second)
@@ -437,7 +537,19 @@ impl Compare {
         }
     }
 
-    fn temporary(&self) -> u32 {
+    fn outputs(&self, value: &mut usize) {
+        match self {
+            Compare::Equal(first, second)
+            | Compare::LessThan(first, second)
+            | Compare::GreaterThan(first, second)
+            | Compare::BitSet(first, second) => {
+                first.outputs(value);
+                second.outputs(value);
+            }
+        }
+    }
+
+    fn temporary(&self) -> usize {
         match self {
             Compare::Equal(first, second)
             | Compare::LessThan(first, second)
@@ -447,27 +559,13 @@ impl Compare {
     }
 }
 
-fn temporaries(operation: &Operation) -> u32 {
-    let effects = operation.effects.iter().map(Effect::temporary).sum::<u32>();
-    let flags = operation
-        .flags
-        .iter()
-        .map(|(_, condition)| condition.temporary())
-        .sum::<u32>();
-    let stores = operation
-        .stores
-        .as_ref()
-        .map(|stores| stores.iter().map(Expression::temporary).sum::<u32>())
-        .unwrap_or(0);
-
-    effects + flags + stores
-}
-
 pub fn build(rt: &mut Runtime, operation: &Operation) {
     let mut epilogue = rt.asm.create_label();
-    let operand_count = operands(&operation.effects, &operation.flags);
-    let temporaries = temporaries(operation);
-    let slots = 4 + temporaries;
+    let operands = operation.operands();
+    let outputs = operation.outputs();
+    let flags = !operation.flags.is_empty();
+    let temporaries = operation.temporaries();
+    let slots = operands + outputs + flags as usize + temporaries;
     let size = ((slots as i32 * 8) + 15) & !15;
 
     rt.asm.push(r13).unwrap();
@@ -480,25 +578,16 @@ pub fn build(rt: &mut Runtime, operation: &Operation) {
 
     bytecode::read_byte_zx(rt, r13, r14d);
 
-    let context = Context {
-        input_a: Value::InputA,
-        input_b: Value::InputB,
-        output_a: Value::OutputA,
-    };
-
-    if operand_count > 1 {
+    for index in (0..operands).rev() {
         scratch::load(rt, r12, rax);
 
         rt.asm
-            .mov(qword_ptr(rbp - Allocator::offset(Value::InputB)), rax)
+            .mov(
+                qword_ptr(rbp - Allocator::offset(operands, outputs, flags, Value::Input(index))),
+                rax,
+            )
             .unwrap();
     }
-
-    scratch::load(rt, r12, rax);
-
-    rt.asm
-        .mov(qword_ptr(rbp - Allocator::offset(Value::InputA)), rax)
-        .unwrap();
 
     let handlers = operation
         .widths
@@ -509,18 +598,23 @@ pub fn build(rt: &mut Runtime, operation: &Operation) {
             (
                 width,
                 Box::new(move |rt: &mut Runtime, allocator: &mut Allocator| {
-                    compile_effects(rt, allocator, &context, &actions, width);
+                    compile_effects(rt, allocator, &actions, width);
 
-                    let output = allocator.load_mutable(rt, context.output_a, &[]);
-                    let mask = allocator.acquire(rt, &[context.output_a], &[output]);
+                    for index in 0..outputs {
+                        let output = Value::Output(index);
+                        let register = allocator.mutable(rt, output, &[]);
+                        let mask = allocator.acquire(rt, &[output], &[register]);
 
-                    rt.asm.mov(mask, width.mask() as i64).unwrap();
-                    rt.asm.and(output, mask).unwrap();
+                        rt.asm.mov(mask, width.mask() as i64).unwrap();
+                        rt.asm.and(register, mask).unwrap();
 
-                    allocator.spill_register(rt, mask);
-                    allocator.mark_dirty(context.output_a);
+                        allocator.spill(rt, mask);
+                        allocator.dirty.insert(output);
+                    }
 
-                    compile_flags(rt, allocator, &context, &rules, width);
+                    if !rules.is_empty() {
+                        compile_flags(rt, allocator, &rules, width);
+                    }
                 }) as Box<dyn FnOnce(&mut Runtime, &mut Allocator)>,
             )
         })
@@ -546,11 +640,11 @@ pub fn build(rt: &mut Runtime, operation: &Operation) {
     for ((_key, mut label), (_width, handler)) in cases.into_iter().zip(handlers.into_iter()) {
         rt.asm.set_label(&mut label).unwrap();
 
-        let mut local = Allocator::new(temporaries);
+        let mut local = Allocator::new(operands, outputs, flags);
 
         handler(rt, &mut local);
 
-        local.spill_registers(rt);
+        local.dump(rt);
 
         rt.asm.jmp(epilogue).unwrap();
     }
@@ -559,27 +653,27 @@ pub fn build(rt: &mut Runtime, operation: &Operation) {
 
     match &operation.stores {
         Some(stores) => {
-            let mut allocator = Allocator::new(temporaries);
+            let mut allocator = Allocator::new(operands, outputs, flags);
             for expression in stores {
-                let result =
-                    compile_expression(rt, &mut allocator, &context, expression, VMWidth::Lower64);
+                let result = compile_expression(rt, &mut allocator, expression, VMWidth::Lower64);
                 let register = allocator.acquire(rt, &[], &[]);
 
-                allocator.copy_to_register(rt, result, register);
+                allocator.copy(rt, result, register);
                 scratch::store(rt, r12, register);
 
-                allocator.spill_register(rt, register);
+                allocator.spill(rt, register);
                 allocator.consume(result);
             }
         }
         None => {
-            let mut allocator = Allocator::new(temporaries);
-            let register = allocator.acquire(rt, &[], &[]);
+            let mut allocator = Allocator::new(operands, outputs, flags);
 
-            allocator.copy_to_register(rt, ValueRef::Value(context.output_a), register);
-            scratch::store(rt, r12, register);
-
-            allocator.spill_register(rt, register);
+            for index in (0..outputs).rev() {
+                let output = allocator.acquire(rt, &[], &[]);
+                allocator.copy(rt, ValueRef::Value(Value::Output(index)), output);
+                scratch::store(rt, r12, output);
+                allocator.spill(rt, output);
+            }
         }
     }
 
@@ -595,19 +689,17 @@ pub fn build(rt: &mut Runtime, operation: &Operation) {
 fn compile_effects(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    context: &Context,
     effects: &[Effect],
     width: VMWidth,
 ) {
     for effect in effects {
-        compile_effect(rt, allocator, context, effect, width);
+        compile_effect(rt, allocator, effect, width);
     }
 }
 
 fn compile_binary<F>(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    context: &Context,
     first: &Expression,
     second: &Expression,
     width: VMWidth,
@@ -615,8 +707,8 @@ fn compile_binary<F>(
 ) where
     F: FnOnce(&mut Runtime, AsmRegister64, AsmRegister64),
 {
-    let first = compile_expression(rt, allocator, context, first, width);
-    let second = compile_expression(rt, allocator, context, second, width);
+    let first = compile_expression(rt, allocator, first, width);
+    let second = compile_expression(rt, allocator, second, width);
 
     let pinned = [first, second]
         .into_iter()
@@ -627,31 +719,27 @@ fn compile_binary<F>(
         .collect::<Vec<Value>>();
 
     let result = allocator.acquire(rt, &pinned, &[]);
-    allocator.copy_to_register(rt, first, result);
+    allocator.copy(rt, first, result);
 
     let other = allocator.acquire(rt, &pinned, &[result]);
-    allocator.copy_to_register(rt, second, other);
+    allocator.copy(rt, second, other);
 
     operation(rt, result, other);
 
-    allocator.replace(result, context.output_a, true);
+    allocator.replace(result, Value::Output(0), true);
     allocator.consume(first);
     allocator.consume(second);
 }
 
-fn compile_shift<F>(
+fn compile_mul(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    context: &Context,
     first: &Expression,
     second: &Expression,
     width: VMWidth,
-    operation: F,
-) where
-    F: FnOnce(&mut Runtime, AsmRegister64),
-{
-    let first = compile_expression(rt, allocator, context, first, width);
-    let second = compile_expression(rt, allocator, context, second, width);
+) {
+    let first = compile_expression(rt, allocator, first, width);
+    let second = compile_expression(rt, allocator, second, width);
 
     let pinned = [first, second]
         .into_iter()
@@ -661,228 +749,210 @@ fn compile_shift<F>(
         })
         .collect::<Vec<Value>>();
 
-    allocator.copy_to_register(rt, second, rcx);
+    let rhs = allocator.acquire(rt, &pinned, &[rax]);
+    allocator.copy(rt, second, rhs);
+    allocator.copy(rt, first, rax);
 
-    let result = allocator.acquire(rt, &pinned, &[rcx]);
-    allocator.copy_to_register(rt, first, result);
+    let signed = width == width.signed();
 
-    operation(rt, result);
+    match width.size() {
+        8 => {
+            if signed {
+                rt.asm.imul(rhs).unwrap();
+            } else {
+                rt.asm.mul(rhs).unwrap();
+            }
+        }
+        4 => {
+            let dword = get_gpr32(register::sized(rhs.into(), 4).unwrap()).unwrap();
 
-    allocator.replace(result, context.output_a, true);
+            if signed {
+                rt.asm.imul(dword).unwrap();
+            } else {
+                rt.asm.mul(dword).unwrap();
+            }
+        }
+        2 => {
+            let word = get_gpr16(register::sized(rhs.into(), 2).unwrap()).unwrap();
+
+            if signed {
+                rt.asm.imul(word).unwrap();
+            } else {
+                rt.asm.mul(word).unwrap();
+            }
+        }
+        1 => {
+            let byte = get_gpr8(register::sized(rhs.into(), 1).unwrap()).unwrap();
+
+            if signed {
+                rt.asm.imul(byte).unwrap();
+            } else {
+                rt.asm.mul(byte).unwrap();
+            }
+        }
+        _ => unreachable!(),
+    }
+
+    allocator.replace(rax, Value::Output(0), true);
+    allocator.replace(rdx, Value::Output(1), true);
+
     allocator.consume(first);
     allocator.consume(second);
 }
 
-fn compile_effect(
+fn compile_shift<F>(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    context: &Context,
-    effect: &Effect,
+    first: &Expression,
+    second: &Expression,
     width: VMWidth,
-) {
-    match effect {
-        Effect::Add(first, second) => compile_binary(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, left, right| {
-                rt.asm.add(left, right).unwrap();
-            },
-        ),
-        Effect::Sub(first, second) => compile_binary(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, left, right| {
-                rt.asm.sub(left, right).unwrap();
-            },
-        ),
-        Effect::And(first, second) => compile_binary(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, left, right| {
-                rt.asm.and(left, right).unwrap();
-            },
-        ),
-        Effect::Or(first, second) => compile_binary(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, left, right| {
-                rt.asm.or(left, right).unwrap();
-            },
-        ),
-        Effect::Xor(first, second) => compile_binary(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, left, right| {
-                rt.asm.xor(left, right).unwrap();
-            },
-        ),
-        Effect::Mul(first, second) => compile_binary(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, left, right| {
-                rt.asm.imul_2(left, right).unwrap();
-            },
-        ),
-        Effect::Shr(first, second) => compile_shift(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, result| {
-                rt.asm.shr(result, cl).unwrap();
-            },
-        ),
-        Effect::Shl(first, second) => compile_shift(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, result| {
-                rt.asm.shl(result, cl).unwrap();
-            },
-        ),
-        Effect::Ror(first, second) => compile_shift(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, result| {
-                rt.asm.ror(result, cl).unwrap();
-            },
-        ),
-        Effect::Rol(first, second) => compile_shift(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, result| {
-                rt.asm.rol(result, cl).unwrap();
-            },
-        ),
-        Effect::Sar(first, second) => compile_shift(
-            rt,
-            allocator,
-            context,
-            first,
-            second,
-            width,
-            |rt, result| {
-                rt.asm.sar(result, cl).unwrap();
-            },
-        ),
-        Effect::Assign(expression) => {
-            let value = compile_expression(rt, allocator, context, expression, width);
-            let register = allocator.acquire(rt, &[], &[]);
-            allocator.copy_to_register(rt, value, register);
+    operation: F,
+) where
+    F: FnOnce(&mut Runtime, AsmRegister64),
+{
+    let first = compile_expression(rt, allocator, first, width);
+    let second = compile_expression(rt, allocator, second, width);
 
-            allocator.replace(register, context.output_a, true);
+    let pinned = [first, second]
+        .into_iter()
+        .filter_map(|value| match value {
+            ValueRef::Value(value) => Some(value),
+            ValueRef::Immediate(_) => None,
+        })
+        .collect::<Vec<Value>>();
+
+    allocator.copy(rt, second, rcx);
+
+    let result = allocator.acquire(rt, &pinned, &[rcx]);
+    allocator.copy(rt, first, result);
+
+    operation(rt, result);
+
+    allocator.replace(result, Value::Output(0), true);
+    allocator.consume(first);
+    allocator.consume(second);
+}
+
+fn compile_effect(rt: &mut Runtime, allocator: &mut Allocator, effect: &Effect, width: VMWidth) {
+    match effect {
+        Effect::Add(first, second) => {
+            compile_binary(rt, allocator, first, second, width, |rt, left, right| {
+                rt.asm.add(left, right).unwrap();
+            })
+        }
+        Effect::Sub(first, second) => {
+            compile_binary(rt, allocator, first, second, width, |rt, left, right| {
+                rt.asm.sub(left, right).unwrap();
+            })
+        }
+        Effect::And(first, second) => {
+            compile_binary(rt, allocator, first, second, width, |rt, left, right| {
+                rt.asm.and(left, right).unwrap();
+            })
+        }
+        Effect::Or(first, second) => {
+            compile_binary(rt, allocator, first, second, width, |rt, left, right| {
+                rt.asm.or(left, right).unwrap();
+            })
+        }
+        Effect::Xor(first, second) => {
+            compile_binary(rt, allocator, first, second, width, |rt, left, right| {
+                rt.asm.xor(left, right).unwrap();
+            })
+        }
+        Effect::Mul(first, second) => compile_mul(rt, allocator, first, second, width),
+        Effect::Shr(first, second) => {
+            compile_shift(rt, allocator, first, second, width, |rt, result| {
+                rt.asm.shr(result, cl).unwrap();
+            })
+        }
+        Effect::Shl(first, second) => {
+            compile_shift(rt, allocator, first, second, width, |rt, result| {
+                rt.asm.shl(result, cl).unwrap();
+            })
+        }
+        Effect::Ror(first, second) => {
+            compile_shift(rt, allocator, first, second, width, |rt, result| {
+                rt.asm.ror(result, cl).unwrap();
+            })
+        }
+        Effect::Rol(first, second) => {
+            compile_shift(rt, allocator, first, second, width, |rt, result| {
+                rt.asm.rol(result, cl).unwrap();
+            })
+        }
+        Effect::Sar(first, second) => {
+            compile_shift(rt, allocator, first, second, width, |rt, result| {
+                rt.asm.sar(result, cl).unwrap();
+            })
+        }
+        Effect::Assign(expression) => {
+            let value = compile_expression(rt, allocator, expression, width);
+            let register = allocator.acquire(rt, &[], &[]);
+            allocator.copy(rt, value, register);
+
+            allocator.replace(register, Value::Output(0), true);
             allocator.consume(value);
         }
-        Effect::Bsr(expression) => compile_unary(
-            rt,
-            allocator,
-            context,
-            expression,
-            width,
-            |rt, result, source| {
+        Effect::Bsr(expression) => {
+            compile_unary(rt, allocator, expression, width, |rt, result, source| {
                 rt.asm.bsr(result, source).unwrap();
-            },
-        ),
-        Effect::Tzcnt(expression) => compile_unary(
-            rt,
-            allocator,
-            context,
-            expression,
-            width,
-            |rt, result, source| {
+            })
+        }
+        Effect::Tzcnt(expression) => {
+            compile_unary(rt, allocator, expression, width, |rt, result, source| {
                 rt.asm.tzcnt(result, source).unwrap();
-            },
-        ),
+            })
+        }
     }
 }
 
 fn compile_unary<F>(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    context: &Context,
     expression: &Expression,
     width: VMWidth,
     operation: F,
 ) where
     F: FnOnce(&mut Runtime, AsmRegister64, AsmRegister64),
 {
-    let value = compile_expression(rt, allocator, context, expression, width);
+    let value = compile_expression(rt, allocator, expression, width);
     let src = allocator.acquire(rt, &[], &[]);
 
-    allocator.copy_to_register(rt, value, src);
+    allocator.copy(rt, value, src);
 
     let mask = allocator.acquire(rt, &[], &[src]);
 
     rt.asm.mov(mask, width.mask() as i64).unwrap();
     rt.asm.and(src, mask).unwrap();
 
-    allocator.spill_register(rt, mask);
+    allocator.spill(rt, mask);
 
-    let dst = allocator.load_mutable(rt, context.output_a, &[src]);
+    let dst = allocator.mutable(rt, Value::Output(0), &[src]);
 
     operation(rt, dst, src);
 
-    allocator.mark_dirty(context.output_a);
+    allocator.dirty.insert(Value::Output(0));
     allocator.consume(value);
 }
 
 fn compile_expression(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    context: &Context,
     expression: &Expression,
     width: VMWidth,
 ) -> ValueRef {
     match expression {
-        Expression::Operand(Operand::Input(0)) => ValueRef::Value(context.input_a),
-        Expression::Operand(Operand::Input(1)) => ValueRef::Value(context.input_b),
-        Expression::Operand(Operand::Output(0)) => ValueRef::Value(context.output_a),
-        Expression::Operand(_) => unreachable!(),
+        Expression::Operand(Operand::Input(index)) => ValueRef::Value(Value::Input(*index)),
+        Expression::Operand(Operand::Output(index)) => ValueRef::Value(Value::Output(*index)),
         Expression::Constant(value) => ValueRef::Immediate(*value as i64),
         Expression::SignBit => ValueRef::Immediate(width.mask().ilog2() as i64),
         Expression::Sub(first, second)
         | Expression::BitAnd(first, second)
         | Expression::BitOr(first, second)
         | Expression::BitXor(first, second) => {
-            let first = compile_expression(rt, allocator, context, first, width);
-            let second = compile_expression(rt, allocator, context, second, width);
+            let first = compile_expression(rt, allocator, first, width);
+            let second = compile_expression(rt, allocator, second, width);
 
             let pinned = [first, second]
                 .into_iter()
@@ -893,10 +963,10 @@ fn compile_expression(
                 .collect::<Vec<Value>>();
 
             let result = allocator.acquire(rt, &pinned, &[]);
-            allocator.copy_to_register(rt, first, result);
+            allocator.copy(rt, first, result);
 
             let other = allocator.acquire(rt, &pinned, &[result]);
-            allocator.copy_to_register(rt, second, other);
+            allocator.copy(rt, second, other);
 
             match expression {
                 Expression::Sub(_, _) => rt.asm.sub(result, other).unwrap(),
@@ -910,17 +980,17 @@ fn compile_expression(
             allocator.consume(second);
 
             if other != result {
-                allocator.spill_register(rt, other);
+                allocator.spill(rt, other);
             }
 
-            let value = allocator.temp();
+            let value = allocator.temporary();
             allocator.replace(result, value, true);
 
             ValueRef::Value(value)
         }
         Expression::BitShr(first, second) | Expression::BitShl(first, second) => {
-            let first = compile_expression(rt, allocator, context, first, width);
-            let second = compile_expression(rt, allocator, context, second, width);
+            let first = compile_expression(rt, allocator, first, width);
+            let second = compile_expression(rt, allocator, second, width);
 
             let pinned = [first, second]
                 .into_iter()
@@ -930,10 +1000,10 @@ fn compile_expression(
                 })
                 .collect::<Vec<Value>>();
 
-            allocator.copy_to_register(rt, second, rcx);
+            allocator.copy(rt, second, rcx);
 
             let result = allocator.acquire(rt, &pinned, &[rcx]);
-            allocator.copy_to_register(rt, first, result);
+            allocator.copy(rt, first, result);
 
             match expression {
                 Expression::BitShr(_, _) => rt.asm.shr(result, cl).unwrap(),
@@ -944,16 +1014,16 @@ fn compile_expression(
             allocator.consume(first);
             allocator.consume(second);
 
-            let value = allocator.temp();
+            let value = allocator.temporary();
             allocator.replace(result, value, true);
 
             ValueRef::Value(value)
         }
         Expression::BitNot(inner) | Expression::LowByte(inner) => {
-            let inner = compile_expression(rt, allocator, context, inner, width);
+            let inner = compile_expression(rt, allocator, inner, width);
             let result = allocator.acquire(rt, &[], &[]);
 
-            allocator.copy_to_register(rt, inner, result);
+            allocator.copy(rt, inner, result);
 
             match expression {
                 Expression::BitNot(_) => rt.asm.not(result).unwrap(),
@@ -966,7 +1036,7 @@ fn compile_expression(
 
             allocator.consume(inner);
 
-            let value = allocator.temp();
+            let value = allocator.temporary();
             allocator.replace(result, value, true);
 
             ValueRef::Value(value)
@@ -977,27 +1047,44 @@ fn compile_expression(
 fn compile_flags(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    context: &Context,
     rules: &[(Flag, Condition)],
     width: VMWidth,
 ) {
     rt.asm
-        .mov(qword_ptr(rbp - Allocator::offset(Value::Flags)), 0i32)
+        .mov(
+            qword_ptr(
+                rbp - Allocator::offset(
+                    allocator.inputs,
+                    allocator.outputs,
+                    allocator.flags,
+                    Value::Flags,
+                ),
+            ),
+            0x0,
+        )
         .unwrap();
 
-    for (flag, definition) in rules {
-        match definition {
-            Condition::Compare(item) => {
-                compile_comparison(rt, allocator, context, *flag, item, width)
-            }
-            Condition::Parity(node) => compile_parity(rt, allocator, context, *flag, node, width),
+    for (flag, condition) in rules {
+        match condition {
+            Condition::Compare(item) => compile_comparison(rt, allocator, *flag, item, width),
+            Condition::Parity(node) => compile_parity(rt, allocator, *flag, node, width),
         }
     }
 
     let register = allocator.acquire(rt, &[], &[]);
 
     rt.asm
-        .mov(register, qword_ptr(rbp - Allocator::offset(Value::Flags)))
+        .mov(
+            register,
+            qword_ptr(
+                rbp - Allocator::offset(
+                    allocator.inputs,
+                    allocator.outputs,
+                    allocator.flags,
+                    Value::Flags,
+                ),
+            ),
+        )
         .unwrap();
     vreg::store_reg(rt, r12, register, VMReg::Flags);
 
@@ -1007,7 +1094,6 @@ fn compile_flags(
 fn compile_comparison(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    context: &Context,
     flag: Flag,
     compare: &Compare,
     width: VMWidth,
@@ -1019,8 +1105,8 @@ fn compile_comparison(
         Compare::BitSet(first, second) => (first, second, 3u8),
     };
 
-    let left = compile_expression(rt, allocator, context, first, width);
-    let right = compile_expression(rt, allocator, context, second, width);
+    let left = compile_expression(rt, allocator, first, width);
+    let right = compile_expression(rt, allocator, second, width);
 
     let pinned = [left, right]
         .into_iter()
@@ -1030,18 +1116,18 @@ fn compile_comparison(
         })
         .collect::<Vec<Value>>();
 
-    let left_register = allocator.acquire(rt, &pinned, &[]);
-    allocator.copy_to_register(rt, left, left_register);
+    let lhs = allocator.acquire(rt, &pinned, &[]);
+    allocator.copy(rt, left, lhs);
 
-    let right_register = allocator.acquire(rt, &pinned, &[left_register]);
-    allocator.copy_to_register(rt, right, right_register);
+    let rhs = allocator.acquire(rt, &pinned, &[lhs]);
+    allocator.copy(rt, right, rhs);
 
-    let result = allocator.acquire(rt, &pinned, &[left_register, right_register]);
+    let result = allocator.acquire(rt, &pinned, &[lhs, rhs]);
     let byte = get_gpr8(register::sized(result.into(), 1).unwrap()).unwrap();
 
     match condition {
-        0 | 1 | 2 => rt.asm.cmp(left_register, right_register).unwrap(),
-        3 => rt.asm.bt(left_register, right_register).unwrap(),
+        0 | 1 | 2 => rt.asm.cmp(lhs, rhs).unwrap(),
+        3 => rt.asm.bt(lhs, rhs).unwrap(),
         _ => unreachable!(),
     }
 
@@ -1058,31 +1144,40 @@ fn compile_comparison(
         .shl(result, flag.bit32().trailing_zeros() as i32)
         .unwrap();
     rt.asm
-        .or(qword_ptr(rbp - Allocator::offset(Value::Flags)), result)
+        .or(
+            qword_ptr(
+                rbp - Allocator::offset(
+                    allocator.inputs,
+                    allocator.outputs,
+                    allocator.flags,
+                    Value::Flags,
+                ),
+            ),
+            result,
+        )
         .unwrap();
 
-    allocator.spill_register(rt, result);
+    allocator.spill(rt, result);
     allocator.consume(left);
     allocator.consume(right);
-    allocator.spill_register(rt, left_register);
+    allocator.spill(rt, lhs);
 
-    if right_register != left_register {
-        allocator.spill_register(rt, right_register);
+    if rhs != lhs {
+        allocator.spill(rt, rhs);
     }
 }
 
 fn compile_parity(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    context: &Context,
     flag: Flag,
     node: &Expression,
     width: VMWidth,
 ) {
-    let value = compile_expression(rt, allocator, context, node, width);
+    let value = compile_expression(rt, allocator, node, width);
     let register = allocator.acquire(rt, &[], &[]);
 
-    allocator.copy_to_register(rt, value, register);
+    allocator.copy(rt, value, register);
 
     let byte = get_gpr8(register::sized(register.into(), 1).unwrap()).unwrap();
     rt.asm.movzx(register, byte).unwrap();
@@ -1093,7 +1188,17 @@ fn compile_parity(
         .shl(register, flag.bit32().trailing_zeros() as i32)
         .unwrap();
     rt.asm
-        .or(qword_ptr(rbp - Allocator::offset(Value::Flags)), register)
+        .or(
+            qword_ptr(
+                rbp - Allocator::offset(
+                    allocator.inputs,
+                    allocator.outputs,
+                    allocator.flags,
+                    Value::Flags,
+                ),
+            ),
+            register,
+        )
         .unwrap();
 
     allocator.untrack(register);

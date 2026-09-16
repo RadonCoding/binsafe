@@ -1,6 +1,7 @@
 #include <iostream>
 #include <chrono>
 #include <cstdint>
+#include <cassert>
 #include "../../../api/generated/binsafe.hpp"
 
 int main() {
@@ -57,6 +58,9 @@ int main() {
     auto end_virtualized = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double, std::milli> elapsed_virtualized = end_virtualized - start_virtualized;
+
+    assert(data_native[0] == data_virtualized[0]);
+    assert(data_native[1] == data_virtualized[1]);
 
     std::cout << "Native: " << elapsed_native.count() << " ms" << std::endl;
     std::cout << "Virtualized: " << elapsed_virtualized.count() << " ms" << std::endl;
