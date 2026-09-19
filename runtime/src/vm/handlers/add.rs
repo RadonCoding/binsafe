@@ -7,7 +7,7 @@ use crate::{
 };
 
 pub fn build(rt: &mut Runtime) {
-    semantic::build(
+    semantic::compiler::compile(
         rt,
         &Operation {
             effects: vec![Effect::Add(

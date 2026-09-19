@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 
-use iced_x86::code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeAssembler, CodeLabel};
+use iced_x86::{
+    code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeAssembler, CodeLabel},
+    BlockEncoderOptions,
+};
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
     functions,
     mapper::{mapped, Mappable, Mapper},
-    obfuscation,
     vm::{
         self,
         bytecode::{VMReg, VMVec},
@@ -851,7 +853,10 @@ impl Runtime {
 
         self.emit(&[EmissionTask::Data(DataDef::VehEnd)]);
 
-        let (instructions, result) = obfuscation::obfuscate(&mut self.asm, ip);
+        let result = self
+            .asm
+            .assemble_options(ip, BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS)
+            .unwrap();
 
         let labels = self
             .function_labels
@@ -868,11 +873,11 @@ impl Runtime {
 
         let offsets = &result.inner.new_instruction_offsets;
 
-        for (def, (_, end)) in &self.functions {
+        for (def, &(_, end)) in &self.functions {
             let label = self.function_labels[def];
             let start = result.label_ip(&label).unwrap();
             let offset = offsets[end - 1] as u64;
-            let size = instructions[end - 1].len() as u64;
+            let size = (offsets[end] - offsets[end - 1]) as u64;
             self.sizes.insert(label, ip + offset + size - start);
         }
 

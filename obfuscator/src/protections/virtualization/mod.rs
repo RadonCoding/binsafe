@@ -9,7 +9,7 @@ use exe::{Buffer, SectionCharacteristics};
 use exe::{PE, RVA};
 use iced_x86::code_asm::CodeAssembler;
 use iced_x86::Mnemonic;
-use logger::info;
+use logger::{debug, info};
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::bytecode::{self};
@@ -34,31 +34,28 @@ pub struct Virtualization {
 impl Virtualization {
     fn attestation(&self, engine: &mut Engine) -> Vec<u8> {
         let mut vcode = Vec::new();
-
-        // #[cfg(debug_assertions)]
-        // let mut log = Vec::new();
+        let mut log = Vec::new();
 
         let blocks = attestation::generate(engine, engine.rt.keys.secret);
 
-        for (_index, operations) in blocks.into_iter().enumerate() {
+        for (index, operations) in blocks.into_iter().enumerate() {
             let mut rng = rand::thread_rng();
 
-            // #[cfg(debug_assertions)]
-            // let (transformed, snapshots) =
-            //     bytecode::transform_with_snapshots(&mut engine.rt.mapper, operations, |ready| {
-            //         rng.gen_range(0..ready.len())
-            //     });
+            let transformed = if engine.args.verbose {
+                let (transformed, snapshots) = bytecode::transform_with_snapshots(
+                    &mut engine.rt.mapper,
+                    operations,
+                    |ready| rng.gen_range(0..ready.len()),
+                );
 
-            // #[cfg(not(debug_assertions))]
-            let transformed = bytecode::transform(&mut engine.rt.mapper, operations, |ready| {
-                rng.gen_range(0..ready.len())
-            });
+                log.push(format!("{}BLOCK {}:\n{}", " ".repeat(4), index, snapshots));
 
-            // #[cfg(debug_assertions)]
-            // {
-            //     let index = _index;
-            //     log.push(format!("  BLOCK {}:\n{}", index, snapshots));
-            // }
+                transformed
+            } else {
+                bytecode::transform(&mut engine.rt.mapper, operations, |ready| {
+                    rng.gen_range(0..ready.len())
+                })
+            };
 
             let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
 
@@ -86,16 +83,13 @@ impl Virtualization {
             vcode.extend_from_slice(&bytes);
         }
 
-        // #[cfg(debug_assertions)]
-        // {
-        //     use logger::debug;
-
-        //     debug!(
-        //         "ATTESTATION @ 0x{:016X}:\n{}",
-        //         engine.rt.keys.secret,
-        //         log.join("\n")
-        //     );
-        // }
+        if engine.args.verbose {
+            debug!(
+                "ATTESTATION @ 0x{:016X}:\n{}",
+                engine.rt.keys.secret,
+                log.join("\n")
+            );
+        }
 
         vcode
     }
@@ -103,13 +97,9 @@ impl Virtualization {
 
 impl Protection for Virtualization {
     fn initialize(&mut self, engine: &mut Engine) {
-        #[cfg(debug_assertions)]
-        const MAX_LOGGING: usize = 16;
+        let mut log = Vec::new();
 
         let mut vtable = Vec::new();
-
-        #[cfg(debug_assertions)]
-        let mut logs = Vec::new();
 
         let mut lookup = HashMap::new();
 
@@ -147,25 +137,21 @@ impl Protection for Virtualization {
             if lookup.get(&hash).is_none() {
                 let mut rng = rand::thread_rng();
 
-                #[cfg(debug_assertions)]
-                let transformed = if logs.len() < MAX_LOGGING {
+                let transformed = if engine.args.verbose {
                     let (transformed, snapshots) = bytecode::transform_with_snapshots(
                         &mut engine.rt.mapper,
                         lifted,
                         |ready| rng.gen_range(0..ready.len()),
                     );
-                    logs.push((block.rva, format!("{}", snapshots)));
+
+                    log.push((block.rva, format!("{}", snapshots)));
+
                     transformed
                 } else {
                     bytecode::transform(&mut engine.rt.mapper, lifted, |ready| {
                         rng.gen_range(0..ready.len())
                     })
                 };
-
-                #[cfg(not(debug_assertions))]
-                let transformed = bytecode::transform(&mut engine.rt.mapper, lifted, |ready| {
-                    rng.gen_range(0..ready.len())
-                });
 
                 let index = self.programs.len();
                 self.programs.push(transformed);
@@ -204,11 +190,8 @@ impl Protection for Virtualization {
             &vec![0u8; self.trampolines.len() * VM_DISPATCH_SIZE],
         );
 
-        #[cfg(debug_assertions)]
-        {
-            use logger::debug;
-
-            for (rva, log) in logs {
+        if engine.args.verbose {
+            for (rva, log) in log {
                 debug!("VIRTUALIZED @ 0x{:08X}:\n{}", rva, log);
             }
         }

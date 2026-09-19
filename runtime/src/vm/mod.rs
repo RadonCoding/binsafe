@@ -3,7 +3,6 @@ pub mod encoders;
 pub mod functions;
 pub mod handlers;
 pub mod lifters;
-#[cfg(debug_assertions)]
 mod snapshot;
 pub mod transform;
 pub mod utils;
