@@ -4,7 +4,6 @@ use crate::vm::lifters::{
     arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, div, extend, integer, lea, multiply,
     pcmpeqb, pmovskb, rdtsc, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
-#[cfg(debug_assertions)]
 use crate::vm::snapshot::Snapshots;
 use crate::vm::transform::encrypt::Encrypt;
 use crate::vm::transform::indirect::Indirect;
@@ -681,7 +680,6 @@ where
     operations
 }
 
-#[cfg(debug_assertions)]
 pub fn transform_with_snapshots<F>(
     mapper: &mut Mapper,
     mut operations: Vec<Box<dyn Encode>>,

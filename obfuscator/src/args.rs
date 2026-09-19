@@ -7,6 +7,9 @@ use clap::Parser;
 pub struct Args {
     pub input: PathBuf,
 
-    #[arg(short = 'v', long = "virtualization")]
+    #[arg(long = "virtualization")]
     pub virtualization: bool,
+
+    #[arg(short = 'v', long = "verbose")]
+    pub verbose: bool,
 }

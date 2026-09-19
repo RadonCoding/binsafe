@@ -71,12 +71,12 @@ const XSTATE_AVX: u32 = 2;
 const XSTATE_MASK_AVX: u64 = 4;
 
 #[derive(Clone, PartialEq, Eq, Default)]
-pub(crate) struct State {
+pub struct State {
     pub registers: HashMap<VMReg, u64>,
     pub vectors: HashMap<VMVec, [u128; 2]>,
 }
 
-pub(crate) enum Difference {
+pub enum Difference {
     Register(VMReg, u64, u64),
     Vector(VMVec, [u128; 2], [u128; 2]),
 }
@@ -111,7 +111,7 @@ impl State {
     }
 }
 
-pub(crate) struct Executor {
+pub struct Executor {
     pub rt: Runtime,
     pub mem: *mut c_void,
 }
@@ -452,7 +452,7 @@ impl Drop for Executor {
     }
 }
 
-pub(crate) fn encrypt_block(block: &mut Vec<u8>) {
+pub fn encrypt_block(block: &mut Vec<u8>) {
     crypt::encrypt_block(
         block,
         Executor::TEST_KEY_SEED,
@@ -462,7 +462,7 @@ pub(crate) fn encrypt_block(block: &mut Vec<u8>) {
     );
 }
 
-pub(crate) fn decrypt_payload(block: &mut Vec<u8>) {
+pub fn decrypt_payload(block: &mut Vec<u8>) {
     crypt::decrypt_payload(
         block,
         Executor::TEST_KEY_SEED,
@@ -471,7 +471,7 @@ pub(crate) fn decrypt_payload(block: &mut Vec<u8>) {
         0,
     )
 }
-pub(crate) fn decrypt_block(block: &mut Vec<u8>) {
+pub fn decrypt_block(block: &mut Vec<u8>) {
     crypt::decrypt_block(
         block,
         Executor::TEST_KEY_SEED,

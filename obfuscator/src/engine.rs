@@ -4,7 +4,7 @@ use exe::{
     ThunkFunctions, VecPE, HDR32_MAGIC, HDR64_MAGIC, PE, RVA,
 };
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};
-use logger::info;
+use logger::{debug, info};
 use markers::{MARKER_BEGIN, MARKER_END, MARKER_SIZE};
 use runtime::runtime::Runtime;
 use std::{collections::HashSet, fmt, mem};
@@ -200,7 +200,10 @@ impl<'a> Engine<'a> {
             size,
             instructions: mem::take(block),
         });
-        info!("{}", self.blocks[self.blocks.len() - 1])
+
+        if self.args.verbose {
+            debug!("{}", self.blocks[self.blocks.len() - 1])
+        }
     }
 
     fn collect_blocks(&mut self, code: &[u8], ip: u64, code_references: &[u32]) {
