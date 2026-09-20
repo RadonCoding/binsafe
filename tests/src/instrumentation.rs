@@ -20,34 +20,44 @@ pub unsafe extern "system" fn virtual_handler(_info: *mut EXCEPTION_POINTERS) ->
         .contains(&GetCurrentThreadId())
     {
         TerminateThread(GetCurrentThread(), 0).unwrap();
+
         return EXCEPTION_CONTINUE_EXECUTION;
     }
     EXCEPTION_CONTINUE_SEARCH
 }
 
 pub unsafe extern "system" fn native_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
-    let entry = NATIVE_REGISTRY
-        .lock()
-        .unwrap()
-        .get(&GetCurrentThreadId())
-        .copied();
+    let terminate = {
+        let mut registry = NATIVE_REGISTRY.lock().unwrap();
 
-    if let Some((context, limit)) = entry {
-        if (*(*info).ExceptionRecord).ExceptionCode == EXCEPTION_SINGLE_STEP {
-            let rip = (*(*info).ContextRecord).Rip as usize;
+        if let Some((context, limit, exception)) = registry.get_mut(&GetCurrentThreadId()) {
+            if (*(*info).ExceptionRecord).ExceptionCode == EXCEPTION_SINGLE_STEP {
+                let rip = (*(*info).ContextRecord).Rip as usize;
 
-            if rip < limit {
-                (*(*info).ContextRecord).EFlags |= Flag::Trap.bit32();
-                return EXCEPTION_CONTINUE_EXECUTION;
+                if rip < *limit {
+                    (*(*info).ContextRecord).EFlags |= Flag::Trap.bit32();
+                    return EXCEPTION_CONTINUE_EXECUTION;
+                }
+
+                ptr::copy_nonoverlapping((*info).ContextRecord, *context as *mut CONTEXT, 1);
+
+                true
+            } else {
+                *exception = Some((*(*info).ExceptionRecord).ExceptionCode.0 as u32);
+
+                true
             }
-
-            ptr::copy_nonoverlapping((*info).ContextRecord, context as *mut CONTEXT, 1);
+        } else {
+            false
         }
+    };
 
+    if terminate {
         TerminateThread(GetCurrentThread(), 0).unwrap();
 
         return EXCEPTION_CONTINUE_EXECUTION;
     }
+
     EXCEPTION_CONTINUE_SEARCH
 }
 

@@ -1,16 +1,13 @@
 use std::slice;
 
-use iced_x86::MemoryOperand;
-use iced_x86::Register::{AL, AX, CL, CX, EAX, ECX, RAX, RBX, RCX, XMM0, XMM1, XMM2};
-use iced_x86::{Instruction, RflagsBits};
+use iced_x86::{
+    Code, Instruction, InstructionInfoFactory, Mnemonic, OpAccess, OpCodeOperandKind, OpKind,
+    Register, RflagsBits,
+};
 use runtime::vm::bytecode::{self, Flag, VMReg};
 
-use crate::constants::{
-    baseline, gpr, simd, IMM128_B, IMM128_C, IMM32_A, IMM64_A, IMM64_B, IMM8_A, SIMM32_A, SIMM8_A,
-};
-use crate::{
-    decrypt_block, decrypt_payload, encrypt_block, instruction, Difference, Executor, State,
-};
+use crate::constants::{gpr, simd, _IMM16_A, IMM128_A, IMM32_A, IMM64_A, IMM8_A};
+use crate::{decrypt_block, decrypt_payload, encrypt_block, Difference, Executor, State};
 
 #[test]
 fn test_crypt() {
@@ -22,16 +19,876 @@ fn test_crypt() {
 
     decrypt_block(&mut buffer);
 
-    let after = buffer.clone();
-
-    assert_eq!(before, after);
+    assert_eq!(before, buffer);
 }
 
-fn check(state: State, instruction: Instruction) {
-    check_with_memory(state, instruction, &mut []);
+macro_rules! define {
+    ($($code:ident)+ $(,)?) => {
+        $(
+            paste::paste! {
+                #[test]
+                fn [<test_ $code:lower>]() {
+                    test(Code::$code);
+                }
+            }
+        )+
+    };
 }
 
-fn check_with_memory(state: State, instruction: Instruction, memory: &mut [u8]) {
+define!(
+Adc_r64_rm64
+Adc_rm16_r16
+Adc_rm32_r32
+Adc_rm64_imm32
+Adc_rm64_imm8
+Adc_rm64_r64
+Adc_rm8_r8
+Add_r64_rm64
+Add_rm16_r16
+Add_rm32_r32
+Add_rm64_imm32
+Add_rm64_imm8
+Add_rm64_r64
+Add_rm8_r8
+Addpd_xmm_xmmm128
+Addps_xmm_xmmm128
+And_r64_rm64
+And_rm16_r16
+And_rm32_r32
+And_rm64_imm32
+And_rm64_imm8
+And_rm64_r64
+And_rm8_r8
+Andnpd_xmm_xmmm128
+Andnps_xmm_xmmm128
+Andpd_xmm_xmmm128
+Andps_xmm_xmmm128
+Bsr_r64_rm64
+Bswap_r64
+Bt_rm64_imm8
+Bt_rm64_r64
+Btc_rm64_imm8
+Btc_rm64_r64
+Btr_rm64_imm8
+Btr_rm64_r64
+Bts_rm64_imm8
+Bts_rm64_r64
+Cmp_r64_rm64
+Cmp_rm16_r16
+Cmp_rm32_r32
+Cmp_rm64_imm32
+Cmp_rm64_imm8
+Cmp_rm64_r64
+Cmp_rm8_r8
+Cmpxchg_rm64_r64
+Dec_rm64
+Div_rm64
+Divpd_xmm_xmmm128
+Divps_xmm_xmmm128
+Idiv_rm64
+Imul_r64_rm64
+Imul_r64_rm64_imm32
+Imul_r64_rm64_imm8
+Imul_rm64
+Inc_rm64
+Mov_r64_imm64
+Mov_r64_rm64
+Mov_rm64_imm32
+Mov_rm64_r64
+Movapd_xmm_xmmm128
+Movapd_xmmm128_xmm
+Movaps_xmm_xmmm128
+Movaps_xmmm128_xmm
+Movd_rm32_xmm
+Movd_xmm_rm32
+Movdqa_xmm_xmmm128
+Movdqa_xmmm128_xmm
+Movdqu_xmm_xmmm128
+Movdqu_xmmm128_xmm
+Movq_rm64_xmm
+Movq_xmm_rm64
+Movsd_xmm_xmmm64
+Movsd_xmmm64_xmm
+Movss_xmm_xmmm32
+Movss_xmmm32_xmm
+Movsx_r64_rm8
+Movsxd_r64_rm32
+Movupd_xmm_xmmm128
+Movupd_xmmm128_xmm
+Movups_xmm_xmmm128
+Movups_xmmm128_xmm
+Movzx_r64_rm8
+Mul_rm64
+Mulpd_xmm_xmmm128
+Mulps_xmm_xmmm128
+Neg_rm64
+Not_rm64
+Or_r64_rm64
+Or_rm16_r16
+Or_rm32_r32
+Or_rm64_imm32
+Or_rm64_imm8
+Or_rm64_r64
+Or_rm8_r8
+Orpd_xmm_xmmm128
+Orps_xmm_xmmm128
+Paddb_xmm_xmmm128
+Paddd_xmm_xmmm128
+Paddq_xmm_xmmm128
+Paddw_xmm_xmmm128
+Pand_xmm_xmmm128
+Pandn_xmm_xmmm128
+Pcmpeqb_xmm_xmmm128
+Pmovmskb_r64_xmm
+Pmulld_xmm_xmmm128
+Pmullw_xmm_xmmm128
+Por_xmm_xmmm128
+Psubb_xmm_xmmm128
+Psubd_xmm_xmmm128
+Psubq_xmm_xmmm128
+Psubw_xmm_xmmm128
+Pxor_xmm_xmmm128
+Rol_rm64_CL
+Rol_rm64_imm8
+Ror_rm64_CL
+Ror_rm64_imm8
+Sar_rm64_CL
+Sar_rm64_imm8
+Sbb_r64_rm64
+Sbb_rm16_r16
+Sbb_rm32_r32
+Sbb_rm64_imm32
+Sbb_rm64_imm8
+Sbb_rm64_r64
+Sbb_rm8_r8
+Seta_rm8
+Setae_rm8
+Setb_rm8
+Setbe_rm8
+Sete_rm8
+Setg_rm8
+Setge_rm8
+Setl_rm8
+Setle_rm8
+Setne_rm8
+Setno_rm8
+Setnp_rm8
+Setns_rm8
+Seto_rm8
+Setp_rm8
+Sets_rm8
+Shl_rm64_CL
+Shl_rm64_imm8
+Shr_rm64_CL
+Shr_rm64_imm8
+Sub_r64_rm64
+Sub_rm16_r16
+Sub_rm32_r32
+Sub_rm64_imm32
+Sub_rm64_imm8
+Sub_rm64_r64
+Sub_rm8_r8
+Subpd_xmm_xmmm128
+Subps_xmm_xmmm128
+Test_rm16_r16
+Test_rm32_r32
+Test_rm64_imm32
+Test_rm64_r64
+Test_rm8_r8
+Tzcnt_r64_rm64
+VEX_Vaddpd_xmm_xmm_xmmm128
+VEX_Vaddps_xmm_xmm_xmmm128
+VEX_Vandps_xmm_xmm_xmmm128
+VEX_Vdivpd_xmm_xmm_xmmm128
+VEX_Vdivps_xmm_xmm_xmmm128
+VEX_Vmulpd_xmm_xmm_xmmm128
+VEX_Vmulps_xmm_xmm_xmmm128
+VEX_Vpmulhw_xmm_xmm_xmmm128
+VEX_Vpmulld_xmm_xmm_xmmm128
+VEX_Vpmullw_xmm_xmm_xmmm128
+VEX_Vpxor_xmm_xmm_xmmm128
+VEX_Vsubpd_xmm_xmm_xmmm128
+VEX_Vsubps_xmm_xmm_xmmm128
+VEX_Vxorps_xmm_xmm_xmmm128
+Xadd_rm64_r64
+Xchg_rm64_r64
+Xor_r64_rm64
+Xor_rm16_r16
+Xor_rm32_r32
+Xor_rm64_imm32
+Xor_rm64_imm8
+Xor_rm64_r64
+Xor_rm8_r8
+Xorpd_xmm_xmmm128
+Xorps_xmm_xmmm128
+Adc_r8_rm8
+Adc_r16_rm16
+Adc_r32_rm32
+Add_r8_rm8
+Add_r16_rm16
+Add_r32_rm32
+And_r8_rm8
+And_r16_rm16
+And_r32_rm32
+Cmp_r8_rm8
+Cmp_r16_rm16
+Cmp_r32_rm32
+Or_r8_rm8
+Or_r16_rm16
+Or_r32_rm32
+Sbb_r8_rm8
+Sbb_r16_rm16
+Sbb_r32_rm32
+Sub_r8_rm8
+Sub_r16_rm16
+Sub_r32_rm32
+Xor_r8_rm8
+Xor_r16_rm16
+Xor_r32_rm32
+Mov_rm8_r8
+Mov_rm16_r16
+Mov_rm32_r32
+Mov_r8_rm8
+Mov_r16_rm16
+Mov_r32_rm32
+Mov_r8_imm8
+Mov_r16_imm16
+Mov_r32_imm32
+Mov_rm8_imm8
+Mov_rm16_imm16
+Mov_rm32_imm32
+Inc_rm8
+Inc_rm16
+Inc_rm32
+Dec_rm8
+Dec_rm16
+Dec_rm32
+Neg_rm8
+Neg_rm16
+Neg_rm32
+Not_rm8
+Not_rm16
+Not_rm32
+Bswap_r32
+Rol_rm8_CL
+Rol_rm16_CL
+Rol_rm32_CL
+Ror_rm8_CL
+Ror_rm16_CL
+Ror_rm32_CL
+Shl_rm8_CL
+Shl_rm16_CL
+Shl_rm32_CL
+Shr_rm8_CL
+Shr_rm16_CL
+Shr_rm32_CL
+Sar_rm8_CL
+Sar_rm16_CL
+Sar_rm32_CL
+Rol_rm8_imm8
+Rol_rm16_imm8
+Rol_rm32_imm8
+Ror_rm8_imm8
+Ror_rm16_imm8
+Ror_rm32_imm8
+Shl_rm8_imm8
+Shl_rm16_imm8
+Shl_rm32_imm8
+Shr_rm8_imm8
+Shr_rm16_imm8
+Shr_rm32_imm8
+Sar_rm8_imm8
+Sar_rm16_imm8
+Sar_rm32_imm8
+Mul_rm8
+Mul_rm16
+Mul_rm32
+Imul_rm8
+Imul_rm16
+Imul_rm32
+Imul_r16_rm16
+Imul_r32_rm32
+Imul_r16_rm16_imm16
+Imul_r32_rm32_imm32
+Imul_r16_rm16_imm8
+Imul_r32_rm32_imm8
+Div_rm8
+Div_rm16
+Div_rm32
+Idiv_rm8
+Idiv_rm16
+Idiv_rm32
+Bt_rm16_r16
+Bt_rm32_r32
+Btc_rm16_r16
+Btc_rm32_r32
+Btr_rm16_r16
+Btr_rm32_r32
+Bts_rm16_r16
+Bts_rm32_r32
+Bt_rm16_imm8
+Bt_rm32_imm8
+Btc_rm16_imm8
+Btc_rm32_imm8
+Btr_rm16_imm8
+Btr_rm32_imm8
+Bts_rm16_imm8
+Bts_rm32_imm8
+Bsr_r16_rm16
+Bsr_r32_rm32
+Tzcnt_r16_rm16
+Tzcnt_r32_rm32
+Xadd_rm8_r8
+Xadd_rm16_r16
+Xadd_rm32_r32
+Xchg_rm8_r8
+Xchg_rm16_r16
+Xchg_rm32_r32
+Cmpxchg_rm8_r8
+Cmpxchg_rm16_r16
+Cmpxchg_rm32_r32
+Movsx_r16_rm8
+Movsx_r32_rm8
+Movsx_r16_rm16
+Movsx_r32_rm16
+Movzx_r16_rm8
+Movzx_r32_rm8
+Movzx_r16_rm16
+Movzx_r32_rm16
+Test_rm8_imm8
+Test_rm16_imm16
+Test_rm32_imm32
+Add_rm8_imm8
+Add_rm16_imm16
+Add_rm32_imm32
+Add_rm16_imm8
+Add_rm32_imm8
+Or_rm8_imm8
+Or_rm16_imm16
+Or_rm32_imm32
+Or_rm16_imm8
+Or_rm32_imm8
+Adc_rm8_imm8
+Adc_rm16_imm16
+Adc_rm32_imm32
+Adc_rm16_imm8
+Adc_rm32_imm8
+Sbb_rm8_imm8
+Sbb_rm16_imm16
+Sbb_rm32_imm32
+Sbb_rm16_imm8
+Sbb_rm32_imm8
+And_rm8_imm8
+And_rm16_imm16
+And_rm32_imm32
+And_rm16_imm8
+And_rm32_imm8
+Sub_rm8_imm8
+Sub_rm16_imm16
+Sub_rm32_imm32
+Sub_rm16_imm8
+Sub_rm32_imm8
+Xor_rm8_imm8
+Xor_rm16_imm16
+Xor_rm32_imm32
+Xor_rm16_imm8
+Xor_rm32_imm8
+Cmp_rm8_imm8
+Cmp_rm16_imm16
+Cmp_rm32_imm32
+Cmp_rm16_imm8
+Cmp_rm32_imm8
+);
+
+fn test(code: Code) {
+    let instruction = build(code, Test::Registers, Register::None);
+
+    case(instruction, None);
+
+    let mut factory = InstructionInfoFactory::new();
+    let info = factory.info(&instruction);
+
+    if !info.used_memory().is_empty() {
+        let base = base(info.used_registers());
+        let instruction = build(code, Test::Memory, base);
+        let size = instruction.memory_size().size() as usize;
+
+        let words = size.div_ceil(16);
+
+        let mut backing = vec![IMM128_A; words.max(1)];
+
+        let memory = unsafe {
+            slice::from_raw_parts_mut(backing.as_mut_ptr() as *mut u8, backing.len() * 16)
+        };
+
+        case(instruction, Some(&mut memory[..size]));
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Test {
+    Registers,
+    Memory,
+}
+
+fn build(code: Code, test: Test, memory_base: Register) -> Instruction {
+    let info = code.op_code();
+    let kinds = [
+        info.op0_kind(),
+        info.op1_kind(),
+        info.op2_kind(),
+        info.op3_kind(),
+        info.op4_kind(),
+    ];
+
+    let memory_operand = if matches!(test, Test::Memory) {
+        kinds.iter().position(|kind| memory(*kind))
+    } else {
+        None
+    };
+
+    let mut instruction = Instruction::default();
+    instruction.set_code(code);
+
+    for index in 0..5 {
+        let kind = kinds[index];
+
+        if kind == OpCodeOperandKind::None {
+            continue;
+        }
+
+        if Some(index) == memory_operand {
+            instruction.set_op_kind(index as u32, OpKind::Memory);
+            instruction.set_memory_base(memory_base);
+            instruction.set_memory_index(Register::None);
+            instruction.set_memory_index_scale(1);
+            instruction.set_memory_displacement64(0);
+            instruction.set_memory_displ_size(0);
+            continue;
+        }
+
+        operand(&mut instruction, index as u32, kind);
+    }
+
+    instruction
+}
+
+fn operand(instruction: &mut Instruction, operand: u32, kind: OpCodeOperandKind) {
+    let op = match kind {
+        OpCodeOperandKind::r8_or_mem
+        | OpCodeOperandKind::r16_or_mem
+        | OpCodeOperandKind::r32_or_mem
+        | OpCodeOperandKind::r32_or_mem_mpx
+        | OpCodeOperandKind::r64_or_mem
+        | OpCodeOperandKind::r64_or_mem_mpx
+        | OpCodeOperandKind::mm_or_mem
+        | OpCodeOperandKind::xmm_or_mem
+        | OpCodeOperandKind::ymm_or_mem
+        | OpCodeOperandKind::zmm_or_mem
+        | OpCodeOperandKind::bnd_or_mem_mpx
+        | OpCodeOperandKind::k_or_mem
+        | OpCodeOperandKind::r8_reg
+        | OpCodeOperandKind::r8_opcode
+        | OpCodeOperandKind::r16_reg
+        | OpCodeOperandKind::r16_reg_mem
+        | OpCodeOperandKind::r16_rm
+        | OpCodeOperandKind::r16_opcode
+        | OpCodeOperandKind::r32_reg
+        | OpCodeOperandKind::r32_reg_mem
+        | OpCodeOperandKind::r32_rm
+        | OpCodeOperandKind::r32_opcode
+        | OpCodeOperandKind::r32_vvvv
+        | OpCodeOperandKind::r64_reg
+        | OpCodeOperandKind::r64_reg_mem
+        | OpCodeOperandKind::r64_rm
+        | OpCodeOperandKind::r64_opcode
+        | OpCodeOperandKind::r64_vvvv
+        | OpCodeOperandKind::seg_reg
+        | OpCodeOperandKind::k_reg
+        | OpCodeOperandKind::kp1_reg
+        | OpCodeOperandKind::k_rm
+        | OpCodeOperandKind::k_vvvv
+        | OpCodeOperandKind::mm_reg
+        | OpCodeOperandKind::mm_rm
+        | OpCodeOperandKind::xmm_reg
+        | OpCodeOperandKind::xmm_rm
+        | OpCodeOperandKind::xmm_vvvv
+        | OpCodeOperandKind::xmmp3_vvvv
+        | OpCodeOperandKind::xmm_is4
+        | OpCodeOperandKind::xmm_is5
+        | OpCodeOperandKind::ymm_reg
+        | OpCodeOperandKind::ymm_rm
+        | OpCodeOperandKind::ymm_vvvv
+        | OpCodeOperandKind::ymm_is4
+        | OpCodeOperandKind::ymm_is5
+        | OpCodeOperandKind::zmm_reg
+        | OpCodeOperandKind::zmm_rm
+        | OpCodeOperandKind::zmm_vvvv
+        | OpCodeOperandKind::zmmp3_vvvv
+        | OpCodeOperandKind::cr_reg
+        | OpCodeOperandKind::dr_reg
+        | OpCodeOperandKind::tr_reg
+        | OpCodeOperandKind::bnd_reg
+        | OpCodeOperandKind::es
+        | OpCodeOperandKind::cs
+        | OpCodeOperandKind::ss
+        | OpCodeOperandKind::ds
+        | OpCodeOperandKind::fs
+        | OpCodeOperandKind::gs
+        | OpCodeOperandKind::al
+        | OpCodeOperandKind::cl
+        | OpCodeOperandKind::ax
+        | OpCodeOperandKind::dx
+        | OpCodeOperandKind::eax
+        | OpCodeOperandKind::rax
+        | OpCodeOperandKind::st0
+        | OpCodeOperandKind::sti_opcode
+        | OpCodeOperandKind::tmm_reg
+        | OpCodeOperandKind::tmm_rm
+        | OpCodeOperandKind::tmm_vvvv => OpKind::Register,
+        OpCodeOperandKind::imm4_m2z | OpCodeOperandKind::imm8 | OpCodeOperandKind::imm8_const_1 => {
+            OpKind::Immediate8
+        }
+        OpCodeOperandKind::imm8sex16 => OpKind::Immediate8to16,
+        OpCodeOperandKind::imm8sex32 => OpKind::Immediate8to32,
+        OpCodeOperandKind::imm8sex64 => OpKind::Immediate8to64,
+        OpCodeOperandKind::imm16 => OpKind::Immediate16,
+        OpCodeOperandKind::imm32 => OpKind::Immediate32,
+        OpCodeOperandKind::imm32sex64 => OpKind::Immediate32to64,
+        OpCodeOperandKind::imm64 => OpKind::Immediate64,
+        _ => panic!("unsupported operand kind: {kind:?}"),
+    };
+
+    instruction.set_op_kind(operand, op);
+
+    if op == OpKind::Register {
+        instruction.set_op_register(operand, register(kind, operand as usize));
+    } else {
+        let value = match kind {
+            OpCodeOperandKind::imm4_m2z => 0,
+            OpCodeOperandKind::imm8_const_1 => 1,
+            OpCodeOperandKind::imm8
+            | OpCodeOperandKind::imm8sex16
+            | OpCodeOperandKind::imm8sex32
+            | OpCodeOperandKind::imm8sex64 => IMM8_A as u64,
+            OpCodeOperandKind::imm16 => _IMM16_A as u64,
+            OpCodeOperandKind::imm32 | OpCodeOperandKind::imm32sex64 => IMM32_A as u64,
+            OpCodeOperandKind::imm64 => IMM64_A,
+            _ => unreachable!(),
+        };
+
+        instruction.set_immediate_u64(operand, value);
+    }
+}
+
+fn register(kind: OpCodeOperandKind, operand: usize) -> Register {
+    match kind {
+        OpCodeOperandKind::al => Register::AL,
+        OpCodeOperandKind::cl => Register::CL,
+        OpCodeOperandKind::ax => Register::AX,
+        OpCodeOperandKind::dx => Register::DX,
+        OpCodeOperandKind::eax => Register::EAX,
+        OpCodeOperandKind::rax => Register::RAX,
+        OpCodeOperandKind::r8_reg | OpCodeOperandKind::r8_opcode | OpCodeOperandKind::r8_or_mem => {
+            [Register::AL, Register::CL, Register::DL, Register::BL][operand.min(3)]
+        }
+        OpCodeOperandKind::r16_reg
+        | OpCodeOperandKind::r16_opcode
+        | OpCodeOperandKind::r16_reg_mem
+        | OpCodeOperandKind::r16_rm
+        | OpCodeOperandKind::r16_or_mem => {
+            [Register::AX, Register::CX, Register::DX, Register::BX][operand.min(3)]
+        }
+        OpCodeOperandKind::r32_reg
+        | OpCodeOperandKind::r32_opcode
+        | OpCodeOperandKind::r32_vvvv
+        | OpCodeOperandKind::r32_reg_mem
+        | OpCodeOperandKind::r32_rm
+        | OpCodeOperandKind::r32_or_mem
+        | OpCodeOperandKind::r32_or_mem_mpx => {
+            [Register::EAX, Register::ECX, Register::EDX, Register::EBX][operand.min(3)]
+        }
+        OpCodeOperandKind::r64_reg
+        | OpCodeOperandKind::r64_opcode
+        | OpCodeOperandKind::r64_vvvv
+        | OpCodeOperandKind::r64_reg_mem
+        | OpCodeOperandKind::r64_rm
+        | OpCodeOperandKind::r64_or_mem
+        | OpCodeOperandKind::r64_or_mem_mpx => {
+            [Register::RAX, Register::RCX, Register::RDX, Register::RBX][operand.min(3)]
+        }
+        OpCodeOperandKind::xmm_reg
+        | OpCodeOperandKind::xmm_rm
+        | OpCodeOperandKind::xmm_vvvv
+        | OpCodeOperandKind::xmmp3_vvvv
+        | OpCodeOperandKind::xmm_is4
+        | OpCodeOperandKind::xmm_is5
+        | OpCodeOperandKind::xmm_or_mem => [
+            Register::XMM0,
+            Register::XMM1,
+            Register::XMM2,
+            Register::XMM3,
+        ][operand.min(3)],
+        OpCodeOperandKind::ymm_reg
+        | OpCodeOperandKind::ymm_rm
+        | OpCodeOperandKind::ymm_vvvv
+        | OpCodeOperandKind::ymm_is4
+        | OpCodeOperandKind::ymm_is5
+        | OpCodeOperandKind::ymm_or_mem => [
+            Register::YMM0,
+            Register::YMM1,
+            Register::YMM2,
+            Register::YMM3,
+        ][operand.min(3)],
+        OpCodeOperandKind::zmm_reg
+        | OpCodeOperandKind::zmm_rm
+        | OpCodeOperandKind::zmm_vvvv
+        | OpCodeOperandKind::zmmp3_vvvv
+        | OpCodeOperandKind::zmm_or_mem => [
+            Register::ZMM0,
+            Register::ZMM1,
+            Register::ZMM2,
+            Register::ZMM3,
+        ][operand.min(3)],
+        _ => panic!("unsupported operand kind: {kind:?}"),
+    }
+}
+
+fn memory(kind: OpCodeOperandKind) -> bool {
+    matches!(
+        kind,
+        OpCodeOperandKind::mem
+            | OpCodeOperandKind::mem_mpx
+            | OpCodeOperandKind::mem_mib
+            | OpCodeOperandKind::mem_vsib32x
+            | OpCodeOperandKind::mem_vsib64x
+            | OpCodeOperandKind::mem_vsib32y
+            | OpCodeOperandKind::mem_vsib64y
+            | OpCodeOperandKind::mem_vsib32z
+            | OpCodeOperandKind::mem_vsib64z
+            | OpCodeOperandKind::r8_or_mem
+            | OpCodeOperandKind::r16_or_mem
+            | OpCodeOperandKind::r32_or_mem
+            | OpCodeOperandKind::r32_or_mem_mpx
+            | OpCodeOperandKind::r64_or_mem
+            | OpCodeOperandKind::r64_or_mem_mpx
+            | OpCodeOperandKind::mm_or_mem
+            | OpCodeOperandKind::xmm_or_mem
+            | OpCodeOperandKind::ymm_or_mem
+            | OpCodeOperandKind::zmm_or_mem
+            | OpCodeOperandKind::bnd_or_mem_mpx
+            | OpCodeOperandKind::k_or_mem
+            | OpCodeOperandKind::r16_reg_mem
+            | OpCodeOperandKind::r32_reg_mem
+            | OpCodeOperandKind::r64_reg_mem
+    )
+}
+
+fn base(used: &[iced_x86::UsedRegister]) -> Register {
+    const CANDIDATES: &[Register] = &[
+        Register::R15,
+        Register::R14,
+        Register::R13,
+        Register::R12,
+        Register::R11,
+        Register::R10,
+        Register::R9,
+        Register::R8,
+        Register::RBX,
+        Register::RBP,
+        Register::RSI,
+        Register::RDI,
+    ];
+
+    CANDIDATES
+        .iter()
+        .copied()
+        .find(|candidate| !used.iter().any(|used| used.register() == *candidate))
+        .unwrap()
+}
+
+fn case(instruction: Instruction, mut memory: Option<&mut [u8]>) {
+    let mut info_factory = InstructionInfoFactory::new();
+    let info = info_factory.info(&instruction);
+
+    let vector = info
+        .used_registers()
+        .iter()
+        .any(|used| used.register().is_vector_register());
+
+    let mut state = if vector { simd() } else { gpr() };
+
+    let has_rax = info
+        .used_registers()
+        .iter()
+        .any(|used| used.register().full_register() == Register::RAX);
+
+    let has_rdx = info
+        .used_registers()
+        .iter()
+        .any(|used| used.register().full_register() == Register::RDX);
+
+    let reads_rdx = info.used_registers().iter().any(|used| {
+        used.register().full_register() == Register::RDX
+            && matches!(
+                used.access(),
+                OpAccess::Read | OpAccess::ReadWrite | OpAccess::ReadCondWrite | OpAccess::CondRead
+            )
+    });
+
+    if has_rax && has_rdx && reads_rdx {
+        state = state.with(VMReg::from(Register::RDX), 0);
+    }
+
+    if matches!(instruction.mnemonic(), Mnemonic::Div | Mnemonic::Idiv) {
+        let size = match instruction.op_kind(0) {
+            OpKind::Register => instruction.op_register(0).info().size(),
+            OpKind::Memory => instruction.memory_size().size(),
+            _ => unreachable!(),
+        };
+
+        let bits = size * 8;
+        let mask = if size == 8 {
+            u64::MAX
+        } else {
+            (1u64 << bits) - 1
+        };
+        let sign = 1u64 << (bits - 1);
+
+        let rax = state.registers[&VMReg::Rax];
+        let rdx = state.registers[&VMReg::Rdx];
+
+        let mut low = rax & mask;
+        let mut high = if size == 1 {
+            (rax >> 8) & mask
+        } else {
+            rdx & mask
+        };
+
+        let memory_operand = instruction.op_kind(0) == OpKind::Memory;
+
+        let mut divisor = if memory_operand {
+            let bytes = memory.as_deref().unwrap();
+
+            let mut value = 0;
+
+            for index in 0..size {
+                value |= (bytes[index] as u64) << (index * 8);
+            }
+
+            value
+        } else {
+            let register = instruction.op_register(0).full_register();
+
+            state.registers[&VMReg::from(register)] & mask
+        };
+
+        if divisor == 0 {
+            divisor = divisor.wrapping_add(1);
+
+            if memory_operand {
+                let bytes = memory.as_deref_mut().unwrap();
+
+                for index in 0..size {
+                    bytes[index] = (divisor >> (index * 8)) as u8;
+                }
+            } else {
+                let register = instruction.op_register(0).full_register();
+                let value = state.registers[&VMReg::from(register)];
+
+                state = state.with(VMReg::from(register), (value & !mask) | divisor);
+                low = divisor;
+            }
+        }
+
+        match instruction.mnemonic() {
+            Mnemonic::Div => {
+                high %= divisor;
+            }
+            Mnemonic::Idiv => {
+                let signed_low = if low & sign != 0 {
+                    low as i128 - (1i128 << bits)
+                } else {
+                    low as i128
+                };
+
+                let signed_divisor = if divisor & sign != 0 {
+                    divisor as i128 - (1i128 << bits)
+                } else {
+                    divisor as i128
+                };
+
+                if signed_low == -(1i128 << (bits - 1)) && signed_divisor == -1 {
+                    low = low.wrapping_add(1) & mask;
+
+                    if !memory_operand
+                        && instruction.op_register(0).full_register() != Register::RAX
+                    {
+                        let register = instruction.op_register(0).full_register();
+                        let value = state.registers[&VMReg::from(register)];
+
+                        state = state.with(VMReg::from(register), (value & !mask) | low);
+                    }
+
+                    if memory_operand && instruction.op_register(0) != Register::None {
+                        unreachable!();
+                    }
+                }
+
+                high = if low & sign != 0 { mask } else { 0 };
+            }
+            _ => unreachable!(),
+        }
+
+        if !memory_operand {
+            let register = instruction.op_register(0).full_register();
+
+            if register == Register::RAX {
+                let value = state.registers[&VMReg::Rax];
+
+                state = state.with(VMReg::Rax, (value & !mask) | low);
+            }
+        }
+
+        let rax = if size == 1 {
+            (rax & !(mask | (mask << 8))) | low | (high << 8)
+        } else {
+            (rax & !mask) | low
+        };
+
+        let rdx = if size == 1 { rdx } else { (rdx & !mask) | high };
+
+        state = state.with(VMReg::Rax, rax).with(VMReg::Rdx, rdx);
+    }
+
+    if instruction.rflags_read() != RflagsBits::NONE {
+        state = state.with(
+            VMReg::Flags,
+            Flag::Carry.bit64()
+                | Flag::Parity.bit64()
+                | Flag::Auxiliary.bit64()
+                | Flag::Zero.bit64()
+                | Flag::Sign.bit64()
+                | Flag::Overflow.bit64(),
+        );
+    }
+
+    if let Some(memory) = memory {
+        state = state.with(
+            VMReg::from(instruction.memory_base()),
+            memory.as_mut_ptr() as u64,
+        );
+        compare_memory(state, instruction, memory);
+    } else {
+        compare(state, instruction);
+    }
+}
+
+fn compare(state: State, instruction: Instruction) {
+    compare_memory(state, instruction, &mut []);
+}
+
+fn compare_memory(state: State, instruction: Instruction, memory: &mut [u8]) {
     let baseline = memory.to_vec();
 
     let mut executor = Executor::new();
@@ -42,6 +899,16 @@ fn check_with_memory(state: State, instruction: Instruction, memory: &mut [u8]) 
     let mut executor = Executor::new();
     let lifted = bytecode::lift(&[instruction])
         .unwrap_or_else(|| panic!("{instruction} is not implemented"));
+
+    println!(
+        "{}",
+        lifted
+            .iter()
+            .map(|op| format!("{op:?}"))
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+
     let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |_| 0);
 
     let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed);
@@ -49,17 +916,19 @@ fn check_with_memory(state: State, instruction: Instruction, memory: &mut [u8]) 
     decrypt_payload(&mut bytes);
     let mut emulated = executor.run_virtual(state.clone(), &bytes);
 
-    normalize_and_compare(&mut native, &mut emulated, instruction);
+    normalize(&mut native, &mut emulated, instruction);
 }
 
-fn normalize_and_compare(native: &mut State, emulated: &mut State, instruction: Instruction) {
-    let normalize = |state: &mut State| {
-        state.registers.remove(&VMReg::Rsp);
+fn normalize(native: &mut State, emulated: &mut State, instruction: Instruction) {
+    native.registers.remove(&VMReg::Rsp);
+    emulated.registers.remove(&VMReg::Rsp);
 
+    for state in [&mut *native, &mut *emulated] {
         if let Some(flags) = state.registers.get_mut(&VMReg::Flags) {
             let mask = instruction.rflags_written()
                 | instruction.rflags_cleared()
                 | instruction.rflags_set();
+
             *flags &= ((mask & RflagsBits::CF != 0) as u64 * Flag::Carry.bit64())
                 | ((mask & RflagsBits::PF != 0) as u64 * Flag::Parity.bit64())
                 | ((mask & RflagsBits::AF != 0) as u64 * Flag::Auxiliary.bit64())
@@ -67,10 +936,7 @@ fn normalize_and_compare(native: &mut State, emulated: &mut State, instruction: 
                 | ((mask & RflagsBits::SF != 0) as u64 * Flag::Sign.bit64())
                 | ((mask & RflagsBits::OF != 0) as u64 * Flag::Overflow.bit64());
         }
-    };
-
-    normalize(native);
-    normalize(emulated);
+    }
 
     let differences = native.compare(emulated);
 
@@ -97,1499 +963,3 @@ fn dump(differences: &[Difference]) -> String {
 
     lines.join("\n")
 }
-
-macro_rules! testing {
-    ($name:ident, $state:expr, $instruction:expr) => {
-        #[test]
-        fn $name() {
-            check($state, $instruction);
-        }
-    };
-}
-
-macro_rules! testing_widths {
-    ($name:ident, $ins64:ident, $ins32:ident, $ins16:ident, $ins8:ident) => {
-        paste::paste! {
-            #[test]
-            fn [<$name _64>]() {
-                check(gpr(), instruction!($ins64, RAX, RCX));
-            }
-            #[test]
-            fn [<$name _32>]() {
-                check(gpr(), instruction!($ins32, EAX, ECX));
-            }
-            #[test]
-            fn [<$name _16>]() {
-                check(gpr(), instruction!($ins16, AX, CX));
-            }
-            #[test]
-            fn [<$name _8>]() {
-                check(gpr(), instruction!($ins8, AL, CL));
-            }
-        }
-    };
-}
-
-macro_rules! testing_memory {
-    ($name:ident, mut $buf:ident = $init:expr, $state:expr, $instruction:expr) => {
-        #[test]
-        fn $name() {
-            let mut $buf = $init;
-            check_with_memory($state, $instruction, unsafe {
-                slice::from_raw_parts_mut($buf.as_mut_ptr() as *mut u8, 8)
-            });
-        }
-    };
-    ($name:ident, $buf:ident = $init:expr, $state:expr, $instruction:expr) => {
-        #[test]
-        fn $name() {
-            let $buf = $init;
-            check_with_memory($state, $instruction, unsafe {
-                slice::from_raw_parts_mut($buf.as_ptr() as *mut u8, 8)
-            });
-        }
-    };
-}
-
-macro_rules! testing_set {
-    ($name:ident, $ins_variant:ident) => {
-        #[test]
-        fn $name() {
-            let mut buf = [0u8];
-            check_with_memory(
-                baseline().with(VMReg::Rax, buf.as_mut_ptr() as u64),
-                instruction!($ins_variant, MemoryOperand::with_base(RAX)),
-                &mut buf,
-            );
-        }
-    };
-}
-
-macro_rules! testing_simd_load {
-    ($name:ident, $init:expr, $instruction:expr) => {
-        #[test]
-        fn $name() {
-            let buf = $init;
-            check_with_memory(
-                simd().with(VMReg::Rax, buf.as_ptr() as u64),
-                $instruction,
-                unsafe { slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, 32) },
-            );
-        }
-    };
-}
-
-macro_rules! testing_simd_store {
-    ($name:ident, $instruction:expr) => {
-        #[test]
-        fn $name() {
-            let mut buf = [0u128, 0u128];
-            check_with_memory(
-                simd().with(VMReg::Rax, buf.as_mut_ptr() as u64),
-                $instruction,
-                unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 32) },
-            );
-        }
-    };
-}
-
-testing!(test_mov, gpr(), instruction!(Mov_r64_rm64, RAX, RCX));
-testing_memory!(
-    test_mov_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_A),
-    instruction!(Mov_r64_rm64, RCX, MemoryOperand::with_base(RAX))
-);
-testing_memory!(
-    test_mov_store,
-    mut buf = [0u64],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_A),
-    instruction!(Mov_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_mov_imm64,
-    gpr(),
-    instruction!(Mov_r64_imm64, RAX, IMM64_A as i64)
-);
-testing!(
-    test_mov_imm32,
-    gpr(),
-    instruction!(Mov_rm64_imm32, RAX, SIMM32_A)
-);
-
-testing!(test_movzx, gpr(), instruction!(Movzx_r64_rm8, RAX, CL));
-testing_memory!(
-    test_movzx_load,
-    buf = [IMM8_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Movzx_r64_rm8, RCX, MemoryOperand::with_base(RAX))
-);
-
-testing!(test_movzsx, gpr(), instruction!(Movsx_r64_rm8, RAX, CL));
-testing_memory!(
-    test_movsx_load,
-    buf = [IMM8_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Movsx_r64_rm8, RCX, MemoryOperand::with_base(RAX))
-);
-
-testing!(test_movzsxd, gpr(), instruction!(Movsxd_r64_rm32, RAX, EAX));
-testing_memory!(
-    test_movsxd_load,
-    buf = [IMM32_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Movsxd_r64_rm32, RCX, MemoryOperand::with_base(RAX))
-);
-
-testing_widths!(
-    test_add,
-    Add_rm64_r64,
-    Add_rm32_r32,
-    Add_rm16_r16,
-    Add_rm8_r8
-);
-testing_memory!(
-    test_add_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_A),
-    instruction!(Add_r64_rm64, RCX, MemoryOperand::with_base(RAX))
-);
-testing_memory!(
-    test_add_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Add_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_add_imm32,
-    gpr(),
-    instruction!(Add_rm64_imm32, RAX, SIMM32_A)
-);
-testing!(
-    test_add_imm8,
-    gpr(),
-    instruction!(Add_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing_widths!(
-    test_sub,
-    Sub_rm64_r64,
-    Sub_rm32_r32,
-    Sub_rm16_r16,
-    Sub_rm8_r8
-);
-testing_memory!(
-    test_sub_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_A),
-    instruction!(Sub_r64_rm64, RCX, MemoryOperand::with_base(RAX))
-);
-testing_memory!(
-    test_sub_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Sub_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_sub_imm32,
-    gpr(),
-    instruction!(Sub_rm64_imm32, RAX, SIMM32_A)
-);
-testing!(
-    test_sub_imm8,
-    gpr(),
-    instruction!(Sub_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing_widths!(
-    test_adc,
-    Adc_rm64_r64,
-    Adc_rm32_r32,
-    Adc_rm16_r16,
-    Adc_rm8_r8
-);
-testing_memory!(
-    test_adc_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Flags, 0b0000000000000001u64)
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_A),
-    instruction!(Adc_r64_rm64, RCX, MemoryOperand::with_base(RAX))
-);
-testing_memory!(
-    test_adc_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Flags, 0b0000000000000001u64)
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Adc_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_adc_imm32,
-    gpr().with(VMReg::Flags, 0b0000000000000001u64),
-    instruction!(Adc_rm64_imm32, RAX, SIMM32_A)
-);
-testing!(
-    test_adc_imm8,
-    gpr().with(VMReg::Flags, 0b0000000000000001u64),
-    instruction!(Adc_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing_widths!(
-    test_sbb,
-    Sbb_rm64_r64,
-    Sbb_rm32_r32,
-    Sbb_rm16_r16,
-    Sbb_rm8_r8
-);
-testing_memory!(
-    test_sbb_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Flags, 0b0000000000000001u64)
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_A),
-    instruction!(Sbb_r64_rm64, RCX, MemoryOperand::with_base(RAX))
-);
-testing_memory!(
-    test_sbb_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Flags, 0b0000000000000001u64)
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Sbb_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_sbb_imm32,
-    gpr().with(VMReg::Flags, 0b0000000000000001u64),
-    instruction!(Sbb_rm64_imm32, RAX, SIMM32_A)
-);
-testing!(
-    test_sbb_imm8,
-    gpr().with(VMReg::Flags, 0b0000000000000001u64),
-    instruction!(Sbb_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing_widths!(
-    test_cmp,
-    Cmp_rm64_r64,
-    Cmp_rm32_r32,
-    Cmp_rm16_r16,
-    Cmp_rm8_r8
-);
-testing_memory!(
-    test_cmp_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_A),
-    instruction!(Cmp_r64_rm64, RCX, MemoryOperand::with_base(RAX))
-);
-testing_memory!(
-    test_cmp_store,
-    buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Cmp_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_cmp_imm32,
-    gpr(),
-    instruction!(Cmp_rm64_imm32, RAX, SIMM32_A)
-);
-testing!(
-    test_cmp_imm8,
-    gpr(),
-    instruction!(Cmp_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing_widths!(
-    test_test,
-    Test_rm64_r64,
-    Test_rm32_r32,
-    Test_rm16_r16,
-    Test_rm8_r8
-);
-testing_memory!(
-    test_test_store,
-    buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Test_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_test_imm32,
-    gpr(),
-    instruction!(Test_rm64_imm32, RAX, SIMM32_A)
-);
-
-testing_widths!(
-    test_and,
-    And_rm64_r64,
-    And_rm32_r32,
-    And_rm16_r16,
-    And_rm8_r8
-);
-testing_memory!(
-    test_and_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_A),
-    instruction!(And_r64_rm64, RCX, MemoryOperand::with_base(RAX))
-);
-testing_memory!(
-    test_and_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(And_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_and_imm32,
-    gpr(),
-    instruction!(And_rm64_imm32, RAX, SIMM32_A)
-);
-testing!(
-    test_and_imm8,
-    gpr(),
-    instruction!(And_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing_widths!(test_or, Or_rm64_r64, Or_rm32_r32, Or_rm16_r16, Or_rm8_r8);
-testing_memory!(
-    test_or_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_A),
-    instruction!(Or_r64_rm64, RCX, MemoryOperand::with_base(RAX))
-);
-testing_memory!(
-    test_or_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Or_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_or_imm32,
-    gpr(),
-    instruction!(Or_rm64_imm32, RAX, SIMM32_A)
-);
-testing!(
-    test_or_imm8,
-    gpr(),
-    instruction!(Or_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing_widths!(
-    test_xor,
-    Xor_rm64_r64,
-    Xor_rm32_r32,
-    Xor_rm16_r16,
-    Xor_rm8_r8
-);
-testing_memory!(
-    test_xor_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_A),
-    instruction!(Xor_r64_rm64, RCX, MemoryOperand::with_base(RAX))
-);
-testing_memory!(
-    test_xor_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Xor_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_xor_imm32,
-    gpr(),
-    instruction!(Xor_rm64_imm32, RAX, SIMM32_A)
-);
-testing!(
-    test_xor_imm8,
-    gpr(),
-    instruction!(Xor_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing!(
-    test_rol,
-    gpr().with(VMReg::Rcx, IMM8_A),
-    instruction!(Rol_rm64_CL, RAX, CL)
-);
-testing_memory!(
-    test_rol_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM8_A),
-    instruction!(Rol_rm64_CL, MemoryOperand::with_base(RAX), CL)
-);
-testing!(
-    test_rol_imm8,
-    gpr(),
-    instruction!(Rol_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing!(
-    test_ror,
-    gpr().with(VMReg::Rcx, IMM8_A),
-    instruction!(Ror_rm64_CL, RAX, CL)
-);
-testing_memory!(
-    test_ror_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM8_A),
-    instruction!(Ror_rm64_CL, MemoryOperand::with_base(RAX), CL)
-);
-testing!(
-    test_ror_imm8,
-    gpr(),
-    instruction!(Ror_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing!(
-    test_shl,
-    gpr().with(VMReg::Rcx, IMM8_A),
-    instruction!(Shl_rm64_CL, RAX, CL)
-);
-testing_memory!(
-    test_shl_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM8_A),
-    instruction!(Shl_rm64_CL, MemoryOperand::with_base(RAX), CL)
-);
-testing!(
-    test_shl_imm8,
-    gpr(),
-    instruction!(Shl_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing!(
-    test_shr,
-    gpr().with(VMReg::Rcx, IMM8_A),
-    instruction!(Shr_rm64_CL, RAX, CL)
-);
-testing_memory!(
-    test_shr_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM8_A),
-    instruction!(Shr_rm64_CL, MemoryOperand::with_base(RAX), CL)
-);
-testing!(
-    test_shr_imm8,
-    gpr(),
-    instruction!(Shr_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing!(
-    test_sar,
-    gpr().with(VMReg::Rcx, IMM8_A),
-    instruction!(Sar_rm64_CL, RAX, CL)
-);
-testing_memory!(
-    test_sar_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM8_A),
-    instruction!(Sar_rm64_CL, MemoryOperand::with_base(RAX), CL)
-);
-testing!(
-    test_sar_imm8,
-    gpr(),
-    instruction!(Sar_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing!(test_inc, gpr(), instruction!(Inc_rm64, RAX));
-testing_memory!(
-    test_inc_store,
-    mut buf = [IMM64_A],
-    baseline().with(VMReg::Rax, buf.as_mut_ptr() as u64),
-    instruction!(Inc_rm64, MemoryOperand::with_base(RAX))
-);
-
-testing!(test_dec, gpr(), instruction!(Dec_rm64, RAX));
-testing_memory!(
-    test_dec_store,
-    mut buf = [IMM64_A],
-    baseline().with(VMReg::Rax, buf.as_mut_ptr() as u64),
-    instruction!(Dec_rm64, MemoryOperand::with_base(RAX))
-);
-
-testing!(test_neg, gpr(), instruction!(Neg_rm64, RAX));
-testing_memory!(
-    test_neg_store,
-    mut buf = [IMM64_A],
-    baseline().with(VMReg::Rax, buf.as_mut_ptr() as u64),
-    instruction!(Neg_rm64, MemoryOperand::with_base(RAX))
-);
-
-testing!(test_not, gpr(), instruction!(Not_rm64, RAX));
-testing_memory!(
-    test_not_store,
-    mut buf = [IMM64_A],
-    baseline().with(VMReg::Rax, buf.as_mut_ptr() as u64),
-    instruction!(Not_rm64, MemoryOperand::with_base(RAX))
-);
-
-testing!(test_mul, gpr(), instruction!(Mul_rm64, RCX));
-testing_memory!(
-    test_mul_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, IMM64_A)
-        .with(VMReg::Rcx, buf.as_ptr() as u64),
-    instruction!(Mul_rm64, MemoryOperand::with_base(RCX))
-);
-
-testing!(test_imul, gpr(), instruction!(Imul_rm64, RCX));
-testing_memory!(
-    test_imul_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, IMM64_A)
-        .with(VMReg::Rcx, buf.as_ptr() as u64),
-    instruction!(Imul_rm64, MemoryOperand::with_base(RCX))
-);
-
-testing!(test_imul2, gpr(), instruction!(Imul_r64_rm64, RAX, RCX));
-testing_memory!(
-    test_imul2_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, IMM64_A)
-        .with(VMReg::Rcx, buf.as_ptr() as u64),
-    instruction!(Imul_r64_rm64, RAX, MemoryOperand::with_base(RCX))
-);
-testing!(
-    test_imul3,
-    gpr(),
-    instruction!(Imul_r64_rm64_imm32, RAX, RCX, SIMM32_A)
-);
-testing!(
-    test_imul3_imm8,
-    gpr(),
-    instruction!(Imul_r64_rm64_imm8, RAX, RCX, SIMM8_A)
-);
-
-testing!(
-    test_div,
-    gpr().zeroed(VMReg::Rdx).with(VMReg::Rax, IMM64_A),
-    instruction!(Div_rm64, RCX)
-);
-testing_memory!(
-    test_div_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, IMM64_A)
-        .with(VMReg::Rdx, 0u64)
-        .with(VMReg::Rcx, buf.as_ptr() as u64),
-    instruction!(Div_rm64, MemoryOperand::with_base(RCX))
-);
-
-testing!(
-    test_idiv,
-    gpr().zeroed(VMReg::Rdx).with(VMReg::Rax, IMM64_A),
-    instruction!(Idiv_rm64, RCX)
-);
-testing_memory!(
-    test_idiv_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, IMM64_A)
-        .with(VMReg::Rdx, 0u64)
-        .with(VMReg::Rcx, buf.as_ptr() as u64),
-    instruction!(Idiv_rm64, MemoryOperand::with_base(RCX))
-);
-
-testing!(test_tzcnt, gpr(), instruction!(Tzcnt_r64_rm64, RAX, RCX));
-testing_memory!(
-    test_tzcnt_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, IMM64_A)
-        .with(VMReg::Rcx, buf.as_ptr() as u64),
-    instruction!(Tzcnt_r64_rm64, RAX, MemoryOperand::with_base(RCX))
-);
-
-testing!(test_bsr, gpr(), instruction!(Bsr_r64_rm64, RAX, RCX));
-testing_memory!(
-    test_bsr_load,
-    buf = [IMM64_B],
-    baseline()
-        .with(VMReg::Rax, IMM64_A)
-        .with(VMReg::Rcx, buf.as_ptr() as u64),
-    instruction!(Bsr_r64_rm64, RAX, MemoryOperand::with_base(RCX))
-);
-
-testing!(test_bswap, gpr(), instruction!(Bswap_r64, RAX));
-
-testing!(test_bt, gpr(), instruction!(Bt_rm64_r64, RAX, RCX));
-testing_memory!(
-    test_bt_store,
-    buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Bt_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_bt_imm8,
-    gpr(),
-    instruction!(Bt_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing!(test_bts, gpr(), instruction!(Bts_rm64_r64, RAX, RCX));
-testing_memory!(
-    test_bts_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Bts_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_bts_imm8,
-    gpr(),
-    instruction!(Bts_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing!(test_btr, gpr(), instruction!(Btr_rm64_r64, RAX, RCX));
-testing_memory!(
-    test_btr_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Btr_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_btr_imm8,
-    gpr(),
-    instruction!(Btr_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing!(test_btc, gpr(), instruction!(Btc_rm64_r64, RAX, RCX));
-testing_memory!(
-    test_btc_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Btc_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-testing!(
-    test_btc_imm8,
-    gpr(),
-    instruction!(Btc_rm64_imm8, RAX, SIMM8_A)
-);
-
-testing!(test_xchg, gpr(), instruction!(Xchg_rm64_r64, RAX, RCX));
-testing_memory!(
-    test_xchg_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Xchg_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-
-testing!(test_xadd, gpr(), instruction!(Xadd_rm64_r64, RAX, RCX));
-testing_memory!(
-    test_xadd_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Xadd_rm64_r64, MemoryOperand::with_base(RAX), RCX)
-);
-
-testing!(
-    test_cmpxchg,
-    gpr(),
-    instruction!(Cmpxchg_rm64_r64, RBX, RCX)
-);
-testing_memory!(
-    test_cmpxchg_store,
-    mut buf = [IMM64_A],
-    baseline()
-        .with(VMReg::Rax, IMM64_A)
-        .with(VMReg::Rbx, buf.as_mut_ptr() as u64)
-        .with(VMReg::Rcx, IMM64_B),
-    instruction!(Cmpxchg_rm64_r64, MemoryOperand::with_base(RBX), RCX)
-);
-
-testing!(test_cmove, gpr(), instruction!(Cmove_r64_rm64, RAX, RCX));
-testing!(test_cmovne, gpr(), instruction!(Cmovne_r64_rm64, RAX, RCX));
-testing!(test_cmova, gpr(), instruction!(Cmova_r64_rm64, RAX, RCX));
-testing!(test_cmovae, gpr(), instruction!(Cmovae_r64_rm64, RAX, RCX));
-testing!(test_cmovb, gpr(), instruction!(Cmovb_r64_rm64, RAX, RCX));
-testing!(test_cmovbe, gpr(), instruction!(Cmovbe_r64_rm64, RAX, RCX));
-testing!(test_cmovg, gpr(), instruction!(Cmovg_r64_rm64, RAX, RCX));
-testing!(test_cmovge, gpr(), instruction!(Cmovge_r64_rm64, RAX, RCX));
-testing!(test_cmovl, gpr(), instruction!(Cmovl_r64_rm64, RAX, RCX));
-testing!(test_cmovle, gpr(), instruction!(Cmovle_r64_rm64, RAX, RCX));
-testing!(test_cmovo, gpr(), instruction!(Cmovo_r64_rm64, RAX, RCX));
-testing!(test_cmovno, gpr(), instruction!(Cmovno_r64_rm64, RAX, RCX));
-testing!(test_cmovp, gpr(), instruction!(Cmovp_r64_rm64, RAX, RCX));
-testing!(test_cmovnp, gpr(), instruction!(Cmovnp_r64_rm64, RAX, RCX));
-testing!(test_cmovs, gpr(), instruction!(Cmovs_r64_rm64, RAX, RCX));
-testing!(test_cmovns, gpr(), instruction!(Cmovns_r64_rm64, RAX, RCX));
-
-testing!(test_seta, gpr(), instruction!(Seta_rm8, AL));
-testing_set!(test_seta_store, Seta_rm8);
-
-testing!(test_setae, gpr(), instruction!(Setae_rm8, AL));
-testing_set!(test_setae_store, Setae_rm8);
-
-testing!(test_setb, gpr(), instruction!(Setb_rm8, AL));
-testing_set!(test_setb_store, Setb_rm8);
-
-testing!(test_setbe, gpr(), instruction!(Setbe_rm8, AL));
-testing_set!(test_setbe_store, Setbe_rm8);
-
-testing!(test_sete, gpr(), instruction!(Sete_rm8, AL));
-testing_set!(test_sete_store, Sete_rm8);
-
-testing!(test_setg, gpr(), instruction!(Setg_rm8, AL));
-testing_set!(test_setg_store, Setg_rm8);
-
-testing!(test_setge, gpr(), instruction!(Setge_rm8, AL));
-testing_set!(test_setge_store, Setge_rm8);
-
-testing!(test_setl, gpr(), instruction!(Setl_rm8, AL));
-testing_set!(test_setl_store, Setl_rm8);
-
-testing!(test_setle, gpr(), instruction!(Setle_rm8, AL));
-testing_set!(test_setle_store, Setle_rm8);
-
-testing!(test_setne, gpr(), instruction!(Setne_rm8, AL));
-testing_set!(test_setne_store, Setne_rm8);
-
-testing!(test_seto, gpr(), instruction!(Seto_rm8, AL));
-testing_set!(test_seto_store, Seto_rm8);
-
-testing!(test_setno, gpr(), instruction!(Setno_rm8, AL));
-testing_set!(test_setno_store, Setno_rm8);
-
-testing!(test_setp, gpr(), instruction!(Setp_rm8, AL));
-testing_set!(test_setp_store, Setp_rm8);
-
-testing!(test_setnp, gpr(), instruction!(Setnp_rm8, AL));
-testing_set!(test_setnp_store, Setnp_rm8);
-
-testing!(test_sets, gpr(), instruction!(Sets_rm8, AL));
-testing_set!(test_sets_store, Sets_rm8);
-
-testing!(test_setns, gpr(), instruction!(Setns_rm8, AL));
-testing_set!(test_setns_store, Setns_rm8);
-
-testing!(
-    test_pcmpeqb,
-    simd(),
-    instruction!(Pcmpeqb_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_pcmpeqb_load,
-    [IMM128_B, 0u128],
-    instruction!(Pcmpeqb_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
-testing!(
-    test_pmovmskb,
-    simd(),
-    instruction!(Pmovmskb_r64_xmm, RAX, XMM1)
-);
-
-testing!(test_movd, simd(), instruction!(Movd_xmm_rm32, XMM0, EAX));
-testing_simd_load!(
-    test_movd_load,
-    [IMM128_B, 0u128],
-    instruction!(Movd_xmm_rm32, XMM0, MemoryOperand::with_base(RAX))
-);
-testing_simd_store!(
-    test_movd_store,
-    instruction!(Movd_rm32_xmm, MemoryOperand::with_base(RAX), XMM1)
-);
-
-testing!(test_movq, simd(), instruction!(Movq_xmm_rm64, XMM0, RAX));
-testing_simd_load!(
-    test_movq_load,
-    [IMM128_B, 0u128],
-    instruction!(Movq_xmm_rm64, XMM0, MemoryOperand::with_base(RAX))
-);
-testing_simd_store!(
-    test_movq_store,
-    instruction!(Movq_rm64_xmm, MemoryOperand::with_base(RAX), XMM1)
-);
-
-testing!(
-    test_movaps,
-    simd(),
-    instruction!(Movaps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_movaps_load,
-    [IMM128_B, 0u128],
-    instruction!(Movaps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing_simd_store!(
-    test_movaps_store,
-    instruction!(Movaps_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1)
-);
-
-testing!(
-    test_movups,
-    simd(),
-    instruction!(Movups_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_movups_load,
-    [IMM128_B, 0u128],
-    instruction!(Movups_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing_simd_store!(
-    test_movups_store,
-    instruction!(Movups_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1)
-);
-
-testing!(
-    test_movapd,
-    simd(),
-    instruction!(Movapd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_movapd_load,
-    [IMM128_B, 0u128],
-    instruction!(Movapd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing_simd_store!(
-    test_movapd_store,
-    instruction!(Movapd_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1)
-);
-
-testing!(
-    test_movupd,
-    simd(),
-    instruction!(Movupd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_movupd_load,
-    [IMM128_B, 0u128],
-    instruction!(Movupd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing_simd_store!(
-    test_movupd_store,
-    instruction!(Movupd_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1)
-);
-
-testing!(
-    test_movdqa,
-    simd(),
-    instruction!(Movdqa_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_movdqa_load,
-    [IMM128_B, 0u128],
-    instruction!(Movdqa_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing_simd_store!(
-    test_movdqa_store,
-    instruction!(Movdqa_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1)
-);
-
-testing!(
-    test_movdqu,
-    simd(),
-    instruction!(Movdqu_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_movdqu_load,
-    [IMM128_B, 0u128],
-    instruction!(Movdqu_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing_simd_store!(
-    test_movdqu_store,
-    instruction!(Movdqu_xmmm128_xmm, MemoryOperand::with_base(RAX), XMM1)
-);
-
-testing!(
-    test_movss,
-    simd(),
-    instruction!(Movss_xmm_xmmm32, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_movss_load,
-    [IMM128_B, 0u128],
-    instruction!(Movss_xmm_xmmm32, XMM0, MemoryOperand::with_base(RAX))
-);
-testing_simd_store!(
-    test_movss_store,
-    instruction!(Movss_xmmm32_xmm, MemoryOperand::with_base(RAX), XMM1)
-);
-
-testing!(
-    test_movsd,
-    simd(),
-    instruction!(Movsd_xmm_xmmm64, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_movsd_load,
-    [IMM128_B, 0u128],
-    instruction!(Movsd_xmm_xmmm64, XMM0, MemoryOperand::with_base(RAX))
-);
-testing_simd_store!(
-    test_movsd_store,
-    instruction!(Movsd_xmmm64_xmm, MemoryOperand::with_base(RAX), XMM1)
-);
-
-testing!(
-    test_pand,
-    simd(),
-    instruction!(Pand_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_pand_load,
-    [IMM128_B, 0u128],
-    instruction!(Pand_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_andps,
-    simd(),
-    instruction!(Andps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_andps_load,
-    [IMM128_B, 0u128],
-    instruction!(Andps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_andpd,
-    simd(),
-    instruction!(Andpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_andpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Andpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_vandps,
-    simd(),
-    instruction!(VEX_Vandps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vandps_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vandps_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-
-testing!(
-    test_pandn,
-    simd(),
-    instruction!(Pandn_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_pandn_load,
-    [IMM128_B, 0u128],
-    instruction!(Pandn_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_andnps,
-    simd(),
-    instruction!(Andnps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_andnps_load,
-    [IMM128_B, 0u128],
-    instruction!(Andnps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_andnpd,
-    simd(),
-    instruction!(Andnpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_andnpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Andnpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
-testing!(test_por, simd(), instruction!(Por_xmm_xmmm128, XMM0, XMM1));
-testing_simd_load!(
-    test_por_load,
-    [IMM128_B, 0u128],
-    instruction!(Por_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_orps,
-    simd(),
-    instruction!(Orps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_orps_load,
-    [IMM128_B, 0u128],
-    instruction!(Orps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_orpd,
-    simd(),
-    instruction!(Orpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_orpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Orpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-
-testing!(
-    test_pxor,
-    simd(),
-    instruction!(Pxor_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_pxor_load,
-    [IMM128_B, 0u128],
-    instruction!(Pxor_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_xorps,
-    simd(),
-    instruction!(Xorps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_xorps_load,
-    [IMM128_B, 0u128],
-    instruction!(Xorps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_xorpd,
-    simd(),
-    instruction!(Xorpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_xorpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Xorpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_vpxor,
-    simd(),
-    instruction!(VEX_Vpxor_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vpxor_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vpxor_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-testing!(
-    test_vxorps,
-    simd(),
-    instruction!(VEX_Vxorps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vxorps_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vxorps_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-
-testing!(
-    test_paddb,
-    simd(),
-    instruction!(Paddb_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_paddb_load,
-    [IMM128_B, 0u128],
-    instruction!(Paddb_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_paddw,
-    simd(),
-    instruction!(Paddw_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_paddw_load,
-    [IMM128_B, 0u128],
-    instruction!(Paddw_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_paddd,
-    simd(),
-    instruction!(Paddd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_paddd_load,
-    [IMM128_B, 0u128],
-    instruction!(Paddd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_paddq,
-    simd(),
-    instruction!(Paddq_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_paddq_load,
-    [IMM128_B, 0u128],
-    instruction!(Paddq_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_addps,
-    simd(),
-    instruction!(Addps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_addps_load,
-    [IMM128_B, 0u128],
-    instruction!(Addps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_addpd,
-    simd(),
-    instruction!(Addpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_addpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Addpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_vaddps,
-    simd(),
-    instruction!(VEX_Vaddps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vaddps_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vaddps_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-testing!(
-    test_vaddpd,
-    simd(),
-    instruction!(VEX_Vaddpd_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vaddpd_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vaddpd_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-
-testing!(
-    test_psubb,
-    simd(),
-    instruction!(Psubb_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_psubb_load,
-    [IMM128_B, 0u128],
-    instruction!(Psubb_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_psubw,
-    simd(),
-    instruction!(Psubw_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_psubw_load,
-    [IMM128_B, 0u128],
-    instruction!(Psubw_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_psubd,
-    simd(),
-    instruction!(Psubd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_psubd_load,
-    [IMM128_B, 0u128],
-    instruction!(Psubd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_psubq,
-    simd(),
-    instruction!(Psubq_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_psubq_load,
-    [IMM128_B, 0u128],
-    instruction!(Psubq_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_subps,
-    simd(),
-    instruction!(Subps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_subps_load,
-    [IMM128_B, 0u128],
-    instruction!(Subps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_subpd,
-    simd(),
-    instruction!(Subpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_subpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Subpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_vsubps,
-    simd(),
-    instruction!(VEX_Vsubps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vsubps_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vsubps_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-testing!(
-    test_vsubpd,
-    simd(),
-    instruction!(VEX_Vsubpd_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vsubpd_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vsubpd_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-
-testing!(
-    test_pmullw,
-    simd(),
-    instruction!(Pmullw_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_pmullw_load,
-    [IMM128_B, 0u128],
-    instruction!(Pmullw_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_pmulld,
-    simd(),
-    instruction!(Pmulld_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_pmulld_load,
-    [IMM128_B, 0u128],
-    instruction!(Pmulld_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_mulps,
-    simd(),
-    instruction!(Mulps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_mulps_load,
-    [IMM128_B, 0u128],
-    instruction!(Mulps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_mulpd,
-    simd(),
-    instruction!(Mulpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_mulpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Mulpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_vpmullw,
-    simd(),
-    instruction!(VEX_Vpmullw_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vpmullw_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vpmullw_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-testing!(
-    test_vpmulhw,
-    simd(),
-    instruction!(VEX_Vpmulhw_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vpmulhw_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vpmulhw_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-testing!(
-    test_vpmulld,
-    simd(),
-    instruction!(VEX_Vpmulld_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vpmulld_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vpmulld_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-testing!(
-    test_vmulps,
-    simd(),
-    instruction!(VEX_Vmulps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vmulps_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vmulps_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-testing!(
-    test_vmulpd,
-    simd(),
-    instruction!(VEX_Vmulpd_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vmulpd_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vmulpd_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-
-testing!(
-    test_divps,
-    simd(),
-    instruction!(Divps_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_divps_load,
-    [IMM128_B, 0u128],
-    instruction!(Divps_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_divpd,
-    simd(),
-    instruction!(Divpd_xmm_xmmm128, XMM0, XMM1)
-);
-testing_simd_load!(
-    test_divpd_load,
-    [IMM128_B, 0u128],
-    instruction!(Divpd_xmm_xmmm128, XMM0, MemoryOperand::with_base(RAX))
-);
-testing!(
-    test_vdivps,
-    simd(),
-    instruction!(VEX_Vdivps_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vdivps_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vdivps_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);
-testing!(
-    test_vdivpd,
-    simd(),
-    instruction!(VEX_Vdivpd_xmm_xmm_xmmm128, XMM0, XMM1, XMM2)
-);
-testing_simd_load!(
-    test_vdivpd_load,
-    [IMM128_C, 0u128],
-    instruction!(
-        VEX_Vdivpd_xmm_xmm_xmmm128,
-        XMM0,
-        XMM1,
-        MemoryOperand::with_base(RAX)
-    )
-);

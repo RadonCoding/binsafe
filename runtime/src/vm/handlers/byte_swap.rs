@@ -14,7 +14,10 @@ pub fn build(rt: &mut Runtime) {
                 Effect::Assign(Expression::BitAnd(
                     Box::new(Expression::BitShr(
                         Box::new(Expression::Operand(Operand::Input(0))),
-                        Box::new(Expression::Constant(56)),
+                        Box::new(Expression::Sub(
+                            Box::new(Expression::BitSize),
+                            Box::new(Expression::Constant(8)),
+                        )),
                     )),
                     Box::new(Expression::Constant(0xFF)),
                 )),
@@ -23,7 +26,10 @@ pub fn build(rt: &mut Runtime) {
                     Expression::BitAnd(
                         Box::new(Expression::BitShr(
                             Box::new(Expression::Operand(Operand::Input(0))),
-                            Box::new(Expression::Constant(40)),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(24)),
+                            )),
                         )),
                         Box::new(Expression::Constant(0xFF00)),
                     ),
@@ -33,7 +39,10 @@ pub fn build(rt: &mut Runtime) {
                     Expression::BitAnd(
                         Box::new(Expression::BitShr(
                             Box::new(Expression::Operand(Operand::Input(0))),
-                            Box::new(Expression::Constant(24)),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(40)),
+                            )),
                         )),
                         Box::new(Expression::Constant(0xFF_0000)),
                     ),
@@ -43,7 +52,10 @@ pub fn build(rt: &mut Runtime) {
                     Expression::BitAnd(
                         Box::new(Expression::BitShr(
                             Box::new(Expression::Operand(Operand::Input(0))),
-                            Box::new(Expression::Constant(8)),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(56)),
+                            )),
                         )),
                         Box::new(Expression::Constant(0xFF_000000)),
                     ),
@@ -53,9 +65,12 @@ pub fn build(rt: &mut Runtime) {
                     Expression::BitAnd(
                         Box::new(Expression::BitShl(
                             Box::new(Expression::Operand(Operand::Input(0))),
-                            Box::new(Expression::Constant(8)),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(56)),
+                            )),
                         )),
-                        Box::new(Expression::Constant(0xFF_00000000)),
+                        Box::new(Expression::ByteMask(3)),
                     ),
                 ),
                 Effect::Or(
@@ -63,9 +78,12 @@ pub fn build(rt: &mut Runtime) {
                     Expression::BitAnd(
                         Box::new(Expression::BitShl(
                             Box::new(Expression::Operand(Operand::Input(0))),
-                            Box::new(Expression::Constant(24)),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(40)),
+                            )),
                         )),
-                        Box::new(Expression::Constant(0xFF_0000000000)),
+                        Box::new(Expression::ByteMask(2)),
                     ),
                 ),
                 Effect::Or(
@@ -73,9 +91,12 @@ pub fn build(rt: &mut Runtime) {
                     Expression::BitAnd(
                         Box::new(Expression::BitShl(
                             Box::new(Expression::Operand(Operand::Input(0))),
-                            Box::new(Expression::Constant(40)),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(24)),
+                            )),
                         )),
-                        Box::new(Expression::Constant(0xFF_000000000000)),
+                        Box::new(Expression::ByteMask(1)),
                     ),
                 ),
                 Effect::Or(
@@ -83,9 +104,12 @@ pub fn build(rt: &mut Runtime) {
                     Expression::BitAnd(
                         Box::new(Expression::BitShl(
                             Box::new(Expression::Operand(Operand::Input(0))),
-                            Box::new(Expression::Constant(56)),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(8)),
+                            )),
                         )),
-                        Box::new(Expression::Constant(0xFF_00000000000000)),
+                        Box::new(Expression::ByteMask(0)),
                     ),
                 ),
             ],

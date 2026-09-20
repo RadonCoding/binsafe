@@ -34,8 +34,8 @@ use windows::Win32::{
     Foundation::CloseHandle,
     System::{
         Diagnostics::Debug::{
-            AddVectoredExceptionHandler, GetThreadContext, SetThreadContext, SetXStateFeaturesMask,
-            CONTEXT, CONTEXT_ALL_AMD64, CONTEXT_XSTATE_AMD64,
+            AddVectoredExceptionHandler, GetThreadContext, RaiseException, SetThreadContext,
+            SetXStateFeaturesMask, CONTEXT, CONTEXT_ALL_AMD64, CONTEXT_XSTATE_AMD64,
         },
         Memory::{
             VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE,
@@ -59,7 +59,7 @@ static TLS_KEY: OnceLock<u32> = OnceLock::new();
 static TLS_DEBUG: OnceLock<u32> = OnceLock::new();
 static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
 
-static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize)>>> =
+static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize, Option<u32>)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static NATIVE_HANDLER: OnceLock<()> = OnceLock::new();
 
@@ -70,7 +70,7 @@ static VIRTUAL_HANDLER: OnceLock<()> = OnceLock::new();
 const XSTATE_AVX: u32 = 2;
 const XSTATE_MASK_AVX: u64 = 4;
 
-#[derive(Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct State {
     pub registers: HashMap<VMReg, u64>,
     pub vectors: HashMap<VMVec, [u128; 2]>,
@@ -82,8 +82,11 @@ pub enum Difference {
 }
 
 impl State {
-    pub fn with<T: Into<u64>>(mut self, register: VMReg, value: T) -> Self {
-        self.registers.insert(register, value.into());
+    pub fn with<T: TryInto<u64>>(mut self, register: VMReg, value: T) -> Self
+    where
+        T::Error: std::fmt::Debug,
+    {
+        self.registers.insert(register, value.try_into().unwrap());
         self
     }
 
@@ -421,7 +424,7 @@ impl Executor {
         NATIVE_REGISTRY
             .lock()
             .unwrap()
-            .insert(thread_id, (context as *mut CONTEXT as usize, limit));
+            .insert(thread_id, (context as *mut CONTEXT as usize, limit, None));
 
         unsafe {
             SetThreadContext(thread, context).unwrap();
@@ -430,7 +433,17 @@ impl Executor {
             CloseHandle(thread).unwrap();
         }
 
-        NATIVE_REGISTRY.lock().unwrap().remove(&thread_id);
+        let exception = NATIVE_REGISTRY
+            .lock()
+            .unwrap()
+            .remove(&thread_id)
+            .and_then(|(_, _, exception)| exception);
+
+        if let Some(exception) = exception {
+            unsafe {
+                RaiseException(exception, 0, None);
+            }
+        }
 
         context.EFlags &= !(Flag::Interrupt.bit32() | Flag::Reserved1.bit32());
 
@@ -469,8 +482,9 @@ pub fn decrypt_payload(block: &mut Vec<u8>) {
         Executor::TEST_KEY_MUL,
         Executor::TEST_KEY_ADD,
         0,
-    )
+    );
 }
+
 pub fn decrypt_block(block: &mut Vec<u8>) {
     crypt::decrypt_block(
         block,
@@ -478,22 +492,5 @@ pub fn decrypt_block(block: &mut Vec<u8>) {
         Executor::TEST_KEY_MUL,
         Executor::TEST_KEY_ADD,
         0,
-    )
+    );
 }
-
-macro_rules! instruction {
-    (branch $code:ident, $target:expr) => {
-        iced_x86::Instruction::with_branch(iced_x86::Code::$code, $target).unwrap()
-    };
-    ($code:ident, $a:expr) => {
-        iced_x86::Instruction::with1(iced_x86::Code::$code, $a).unwrap()
-    };
-    ($code:ident, $a:expr, $b:expr) => {
-        iced_x86::Instruction::with2(iced_x86::Code::$code, $a, $b).unwrap()
-    };
-    ($code:ident, $a:expr, $b:expr, $c:expr) => {
-        iced_x86::Instruction::with3(iced_x86::Code::$code, $a, $b, $c).unwrap()
-    };
-}
-
-pub(crate) use instruction;

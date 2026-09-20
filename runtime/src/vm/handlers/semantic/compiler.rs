@@ -1,6 +1,7 @@
 use iced_x86::code_asm::{
-    cl, get_gpr16, get_gpr32, get_gpr8, qword_ptr, r12, r13, r14, r14d, rax, rbp, rcx, rdx, rsp,
-    AsmRegister16, AsmRegister32, AsmRegister64, AsmRegister8, CodeAssembler, CodeLabel,
+    ah, ax, cl, dl, dword_ptr, dx, get_gpr16, get_gpr32, get_gpr8, qword_ptr, r12, r13, r14, r14d,
+    rax, rbp, rcx, rdx, rsp, AsmRegister16, AsmRegister32, AsmRegister64, AsmRegister8,
+    CodeAssembler, CodeLabel,
 };
 
 use crate::{
@@ -16,12 +17,7 @@ use crate::{
     },
 };
 
-#[cfg(debug_assertions)]
-#[track_caller]
 pub fn compile(rt: &mut Runtime, operation: &Operation) {
-    #[cfg(debug_assertions)]
-    let index = rt.asm.instructions().len();
-
     let mut epilogue = rt.asm.create_label();
     let operands = operation.operands();
     let outputs = operation.outputs();
@@ -148,21 +144,6 @@ pub fn compile(rt: &mut Runtime, operation: &Operation) {
     rt.asm.pop(r14).unwrap();
     rt.asm.pop(r13).unwrap();
     rt.asm.ret().unwrap();
-
-    #[cfg(debug_assertions)]
-    {
-        use std::panic::Location;
-
-        use logger::debug;
-
-        let location = Location::caller();
-
-        debug!("{}", location.file());
-
-        for instruction in &rt.asm.instructions()[index..] {
-            debug!("{}{instruction}", " ".repeat(4));
-        }
-    }
 }
 
 fn compile_effects(
@@ -173,6 +154,25 @@ fn compile_effects(
 ) {
     for effect in effects {
         compile_effect(rt, allocator, effect, width);
+    }
+}
+
+fn mask(rt: &mut Runtime, register: AsmRegister64, width: VMWidth) {
+    match width.size() {
+        1 => {
+            let byte = get_gpr8(register::sized(register.into(), 1).unwrap()).unwrap();
+            rt.asm.movzx(register, byte).unwrap();
+        }
+        2 => {
+            let word = get_gpr16(register::sized(register.into(), 2).unwrap()).unwrap();
+            rt.asm.movzx(register, word).unwrap();
+        }
+        4 => {
+            let dword = get_gpr32(register::sized(register.into(), 4).unwrap()).unwrap();
+            rt.asm.mov(dword, dword).unwrap();
+        }
+        8 => {}
+        _ => unreachable!(),
     }
 }
 
@@ -199,9 +199,11 @@ fn compile_binary<F>(
 
     let dst = allocator.acquire(rt, &pinned, &[]);
     allocator.copy(rt, first, dst);
+    mask(rt, dst, width);
 
     let src = allocator.acquire(rt, &pinned, &[dst]);
     allocator.copy(rt, second, src);
+    mask(rt, src, width);
 
     operation(rt, dst, src);
 
@@ -232,7 +234,7 @@ fn compile_mul(
     allocator.copy(rt, second, src);
     allocator.copy(rt, first, rax);
 
-    compile_implicit(
+    compile_operation(
         rt,
         width,
         src,
@@ -245,6 +247,11 @@ fn compile_mul(
         |asm, dword| asm.imul(dword).unwrap(),
         |asm, qword| asm.imul(qword).unwrap(),
     );
+
+    if width.size() == 1 {
+        rt.asm.movzx(rdx, ax).unwrap();
+        rt.asm.shr(rdx, 0x8).unwrap();
+    }
 
     allocator.replace(rax, Value::Output(0), true);
     allocator.replace(rdx, Value::Output(1), true);
@@ -279,7 +286,11 @@ fn compile_div(
     allocator.copy(rt, second, rax);
     allocator.copy(rt, third, rdx);
 
-    compile_implicit(
+    if width.size() == 1 {
+        rt.asm.mov(ah, dl).unwrap();
+    }
+
+    compile_operation(
         rt,
         width,
         src,
@@ -293,6 +304,10 @@ fn compile_div(
         |asm, qword| asm.idiv(qword).unwrap(),
     );
 
+    if width.size() == 1 {
+        rt.asm.movzx(dx, ah).unwrap();
+    }
+
     allocator.replace(rax, Value::Output(0), true);
     allocator.replace(rdx, Value::Output(1), true);
 
@@ -301,7 +316,7 @@ fn compile_div(
     allocator.consume(third);
 }
 
-fn compile_implicit<U8, U16, U32, U64, S8, S16, S32, S64>(
+fn compile_operation<U8, U16, U32, U64, S8, S16, S32, S64>(
     rt: &mut Runtime,
     width: VMWidth,
     src: AsmRegister64,
@@ -360,15 +375,29 @@ fn compile_implicit<U8, U16, U32, U64, S8, S16, S32, S64>(
     }
 }
 
-fn compile_shift<F>(
+fn compile_shift<U8, U16, U32, U64, S8, S16, S32, S64>(
     rt: &mut Runtime,
     allocator: &mut Allocator,
     first: &Expression,
     second: &Expression,
     width: VMWidth,
-    operation: F,
+    unsigned8: U8,
+    unsigned16: U16,
+    unsigned32: U32,
+    unsigned64: U64,
+    signed8: S8,
+    signed16: S16,
+    signed32: S32,
+    signed64: S64,
 ) where
-    F: FnOnce(&mut Runtime, AsmRegister64),
+    U8: FnOnce(&mut CodeAssembler, AsmRegister8),
+    U16: FnOnce(&mut CodeAssembler, AsmRegister16),
+    U32: FnOnce(&mut CodeAssembler, AsmRegister32),
+    U64: FnOnce(&mut CodeAssembler, AsmRegister64),
+    S8: FnOnce(&mut CodeAssembler, AsmRegister8),
+    S16: FnOnce(&mut CodeAssembler, AsmRegister16),
+    S32: FnOnce(&mut CodeAssembler, AsmRegister32),
+    S64: FnOnce(&mut CodeAssembler, AsmRegister64),
 {
     let first = compile_expression(rt, allocator, first, width);
     let second = compile_expression(rt, allocator, second, width);
@@ -386,7 +415,10 @@ fn compile_shift<F>(
     let dst = allocator.acquire(rt, &pinned, &[rcx]);
     allocator.copy(rt, first, dst);
 
-    operation(rt, dst);
+    compile_operation(
+        rt, width, dst, unsigned8, unsigned16, unsigned32, unsigned64, signed8, signed16, signed32,
+        signed64,
+    );
 
     allocator.replace(dst, Value::Output(0), true);
     allocator.consume(first);
@@ -424,31 +456,161 @@ fn compile_effect(rt: &mut Runtime, allocator: &mut Allocator, effect: &Effect, 
         Effect::Div(first, second, third) => {
             compile_div(rt, allocator, first, second, third, width)
         }
-        Effect::Shr(first, second) => {
-            compile_shift(rt, allocator, first, second, width, |rt, dst| {
-                rt.asm.shr(dst, cl).unwrap();
-            })
-        }
-        Effect::Shl(first, second) => {
-            compile_shift(rt, allocator, first, second, width, |rt, dst| {
-                rt.asm.shl(dst, cl).unwrap();
-            })
-        }
-        Effect::Ror(first, second) => {
-            compile_shift(rt, allocator, first, second, width, |rt, dst| {
-                rt.asm.ror(dst, cl).unwrap();
-            })
-        }
-        Effect::Rol(first, second) => {
-            compile_shift(rt, allocator, first, second, width, |rt, dst| {
-                rt.asm.rol(dst, cl).unwrap();
-            })
-        }
-        Effect::Sar(first, second) => {
-            compile_shift(rt, allocator, first, second, width, |rt, dst| {
-                rt.asm.sar(dst, cl).unwrap();
-            })
-        }
+        Effect::Shr(first, second) => compile_shift(
+            rt,
+            allocator,
+            first,
+            second,
+            width,
+            |asm, byte| {
+                asm.shr(byte, cl).unwrap();
+            },
+            |asm, word| {
+                asm.shr(word, cl).unwrap();
+            },
+            |asm, dword| {
+                asm.shr(dword, cl).unwrap();
+            },
+            |asm, qword| {
+                asm.shr(qword, cl).unwrap();
+            },
+            |asm, byte| {
+                asm.shr(byte, cl).unwrap();
+            },
+            |asm, word| {
+                asm.shr(word, cl).unwrap();
+            },
+            |asm, dword| {
+                asm.shr(dword, cl).unwrap();
+            },
+            |asm, qword| {
+                asm.shr(qword, cl).unwrap();
+            },
+        ),
+        Effect::Shl(first, second) => compile_shift(
+            rt,
+            allocator,
+            first,
+            second,
+            width,
+            |asm, byte| {
+                asm.shl(byte, cl).unwrap();
+            },
+            |asm, word| {
+                asm.shl(word, cl).unwrap();
+            },
+            |asm, dword| {
+                asm.shl(dword, cl).unwrap();
+            },
+            |asm, qword| {
+                asm.shl(qword, cl).unwrap();
+            },
+            |asm, byte| {
+                asm.shl(byte, cl).unwrap();
+            },
+            |asm, word| {
+                asm.shl(word, cl).unwrap();
+            },
+            |asm, dword| {
+                asm.shl(dword, cl).unwrap();
+            },
+            |asm, qword| {
+                asm.shl(qword, cl).unwrap();
+            },
+        ),
+        Effect::Ror(first, second) => compile_shift(
+            rt,
+            allocator,
+            first,
+            second,
+            width,
+            |asm, byte| {
+                asm.ror(byte, cl).unwrap();
+            },
+            |asm, word| {
+                asm.ror(word, cl).unwrap();
+            },
+            |asm, dword| {
+                asm.ror(dword, cl).unwrap();
+            },
+            |asm, qword| {
+                asm.ror(qword, cl).unwrap();
+            },
+            |asm, byte| {
+                asm.ror(byte, cl).unwrap();
+            },
+            |asm, word| {
+                asm.ror(word, cl).unwrap();
+            },
+            |asm, dword| {
+                asm.ror(dword, cl).unwrap();
+            },
+            |asm, qword| {
+                asm.ror(qword, cl).unwrap();
+            },
+        ),
+        Effect::Rol(first, second) => compile_shift(
+            rt,
+            allocator,
+            first,
+            second,
+            width,
+            |asm, byte| {
+                asm.rol(byte, cl).unwrap();
+            },
+            |asm, word| {
+                asm.rol(word, cl).unwrap();
+            },
+            |asm, dword| {
+                asm.rol(dword, cl).unwrap();
+            },
+            |asm, qword| {
+                asm.rol(qword, cl).unwrap();
+            },
+            |asm, byte| {
+                asm.rol(byte, cl).unwrap();
+            },
+            |asm, word| {
+                asm.rol(word, cl).unwrap();
+            },
+            |asm, dword| {
+                asm.rol(dword, cl).unwrap();
+            },
+            |asm, qword| {
+                asm.rol(qword, cl).unwrap();
+            },
+        ),
+        Effect::Sar(first, second) => compile_shift(
+            rt,
+            allocator,
+            first,
+            second,
+            width,
+            |asm, byte| {
+                asm.sar(byte, cl).unwrap();
+            },
+            |asm, word| {
+                asm.sar(word, cl).unwrap();
+            },
+            |asm, dword| {
+                asm.sar(dword, cl).unwrap();
+            },
+            |asm, qword| {
+                asm.sar(qword, cl).unwrap();
+            },
+            |asm, byte| {
+                asm.sar(byte, cl).unwrap();
+            },
+            |asm, word| {
+                asm.sar(word, cl).unwrap();
+            },
+            |asm, dword| {
+                asm.sar(dword, cl).unwrap();
+            },
+            |asm, qword| {
+                asm.sar(qword, cl).unwrap();
+            },
+        ),
         Effect::Assign(expression) => {
             let src = compile_expression(rt, allocator, expression, width);
             let dst = allocator.acquire(rt, &[], &[]);
@@ -510,6 +672,10 @@ fn compile_expression(
         Expression::Operand(Operand::Output(index)) => Reference::Value(Value::Output(*index)),
         Expression::Constant(value) => Reference::Immediate(*value as i64),
         Expression::SignBit => Reference::Immediate(width.mask().ilog2() as i64),
+        Expression::BitSize => Reference::Immediate((width.size() * 8) as i64),
+        Expression::ByteMask(n) => {
+            Reference::Immediate(((0xFF as u64) << ((width.size() - 1 - n) * 8)) as i64)
+        }
         Expression::Sub(first, second)
         | Expression::BitAnd(first, second)
         | Expression::BitOr(first, second)
@@ -527,9 +693,11 @@ fn compile_expression(
 
             let dst = allocator.acquire(rt, &pinned, &[]);
             allocator.copy(rt, first, dst);
+            mask(rt, dst, width);
 
             let src = allocator.acquire(rt, &pinned, &[dst]);
             allocator.copy(rt, second, src);
+            mask(rt, src, width);
 
             match expression {
                 Expression::Sub(_, _) => rt.asm.sub(dst, src).unwrap(),
@@ -538,6 +706,8 @@ fn compile_expression(
                 Expression::BitXor(_, _) => rt.asm.xor(dst, src).unwrap(),
                 _ => unreachable!(),
             }
+
+            mask(rt, dst, width);
 
             allocator.consume(first);
             allocator.consume(second);
@@ -567,12 +737,15 @@ fn compile_expression(
 
             let dst = allocator.acquire(rt, &pinned, &[rcx]);
             allocator.copy(rt, first, dst);
+            mask(rt, dst, width);
 
             match expression {
                 Expression::BitShr(_, _) => rt.asm.shr(dst, cl).unwrap(),
                 Expression::BitShl(_, _) => rt.asm.shl(dst, cl).unwrap(),
                 _ => unreachable!(),
             }
+
+            mask(rt, dst, width);
 
             allocator.consume(first);
             allocator.consume(second);
@@ -614,9 +787,15 @@ fn compile_flags(
     flags: &[(Flag, Condition)],
     width: VMWidth,
 ) {
+    let register = allocator.acquire(rt, &[], &[]);
+
+    vreg::load_reg(rt, r12, VMReg::Flags, register);
+
     rt.asm
-        .mov(qword_ptr(rbp - allocator.offset(Value::Flags)), 0x0)
+        .mov(qword_ptr(rbp - allocator.offset(Value::Flags)), register)
         .unwrap();
+
+    allocator.untrack(register);
 
     for (flag, condition) in flags {
         match condition {
@@ -630,6 +809,7 @@ fn compile_flags(
     rt.asm
         .mov(register, qword_ptr(rbp - allocator.offset(Value::Flags)))
         .unwrap();
+
     vreg::store_reg(rt, r12, register, VMReg::Flags);
 
     allocator.untrack(register);
@@ -642,11 +822,11 @@ fn compile_comparison(
     compare: &Compare,
     width: VMWidth,
 ) {
-    let (first, second, condition) = match compare {
-        Compare::Equal(first, second) => (first, second, 0u8),
-        Compare::LessThan(first, second) => (first, second, 1u8),
-        Compare::GreaterThan(first, second) => (first, second, 2u8),
-        Compare::BitSet(first, second) => (first, second, 3u8),
+    let (first, second) = match compare {
+        Compare::Equal(first, second)
+        | Compare::LessThan(first, second)
+        | Compare::GreaterThan(first, second)
+        | Compare::BitSet(first, second) => (first, second),
     };
 
     let first = compile_expression(rt, allocator, first, width);
@@ -662,33 +842,47 @@ fn compile_comparison(
 
     let dst = allocator.acquire(rt, &pinned, &[]);
     allocator.copy(rt, first, dst);
+    mask(rt, dst, width);
 
     let src = allocator.acquire(rt, &pinned, &[dst]);
     allocator.copy(rt, second, src);
+    mask(rt, src, width);
 
     let tmp = allocator.acquire(rt, &pinned, &[dst, src]);
+
     let byte = get_gpr8(register::sized(tmp.into(), 1).unwrap()).unwrap();
 
-    match condition {
-        0 | 1 | 2 => rt.asm.cmp(dst, src).unwrap(),
-        3 => rt.asm.bt(dst, src).unwrap(),
-        _ => unreachable!(),
-    }
-
-    match condition {
-        0 => rt.asm.sete(byte).unwrap(),
-        1 => rt.asm.setb(byte).unwrap(),
-        2 => rt.asm.seta(byte).unwrap(),
-        3 => rt.asm.setc(byte).unwrap(),
-        _ => unreachable!(),
+    match compare {
+        Compare::Equal(_, _) => {
+            rt.asm.cmp(dst, src).unwrap();
+            rt.asm.sete(byte).unwrap();
+        }
+        Compare::LessThan(_, _) => {
+            rt.asm.cmp(dst, src).unwrap();
+            rt.asm.setb(byte).unwrap();
+        }
+        Compare::GreaterThan(_, _) => {
+            rt.asm.cmp(dst, src).unwrap();
+            rt.asm.seta(byte).unwrap();
+        }
+        Compare::BitSet(_, _) => {
+            rt.asm.bt(dst, src).unwrap();
+            rt.asm.setc(byte).unwrap();
+        }
     }
 
     rt.asm.movzx(tmp, byte).unwrap();
+
+    let bit = flag.bit32().trailing_zeros() as i32;
+
+    let mask = flag.bit32();
+
     rt.asm
-        .shl(tmp, flag.bit32().trailing_zeros() as i32)
+        .and(dword_ptr(rbp - allocator.offset(Value::Flags)), !mask)
         .unwrap();
+    rt.asm.shl(tmp, bit).unwrap();
     rt.asm
-        .or(qword_ptr(rbp - allocator.offset(Value::Flags)), tmp)
+        .or(dword_ptr(rbp - allocator.offset(Value::Flags)), tmp)
         .unwrap();
 
     allocator.spill(rt, tmp);
@@ -718,11 +912,16 @@ fn compile_parity(
     rt.asm.popcnt(dst, dst).unwrap();
     rt.asm.not(dst).unwrap();
     rt.asm.and(dst, 0x1).unwrap();
+
+    let shift = flag.bit32().trailing_zeros() as i32;
+    let mask = 1u32 << shift;
+
     rt.asm
-        .shl(dst, flag.bit32().trailing_zeros() as i32)
+        .and(dword_ptr(rbp - allocator.offset(Value::Flags)), !mask)
         .unwrap();
+    rt.asm.shl(dst, shift).unwrap();
     rt.asm
-        .or(qword_ptr(rbp - allocator.offset(Value::Flags)), dst)
+        .or(dword_ptr(rbp - allocator.offset(Value::Flags)), dst)
         .unwrap();
 
     allocator.untrack(dst);

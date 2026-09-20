@@ -33,8 +33,8 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.subps(xmm0, xmm1).unwrap();
         },
         |rt| {
-            // subsd xmm0, xmm1
-            rt.asm.subsd(xmm0, xmm1).unwrap();
+            // subpd xmm0, xmm1
+            rt.asm.subpd(xmm0, xmm1).unwrap();
         },
         // avx_int
         |rt| {
@@ -66,8 +66,8 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.vsubps(ymm0, ymm0, ymm1).unwrap();
         },
         |rt| {
-            // vsubsd ymm0, ymm0, ymm1
-            rt.asm.vsubsd(xmm0, xmm0, xmm1).unwrap();
+            // vsubpd ymm0, ymm0, ymm1
+            rt.asm.vsubpd(ymm0, ymm0, ymm1).unwrap();
         },
     );
 }
