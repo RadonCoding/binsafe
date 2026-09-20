@@ -80,5 +80,17 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
 
     let body = transfer::encode(instruction)?;
 
-    Some(vec![Box::new(Block::skip(logic, conditions, body))])
+    let mut encoded = Vec::new();
+
+    if instruction.op0_register().is_gpr32() {
+        let mut zero_extend = Instruction::default();
+        zero_extend.set_code(Code::Mov_rm32_r32);
+        zero_extend.set_op_register(0, instruction.op0_register());
+        zero_extend.set_op_register(1, instruction.op0_register());
+        encoded.extend(transfer::encode(&zero_extend)?);
+    }
+
+    encoded.push(Box::new(Block::skip(logic, conditions, body)));
+
+    Some(encoded)
 }

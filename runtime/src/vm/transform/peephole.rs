@@ -36,7 +36,10 @@ fn optimize(operations: &mut Vec<Box<dyn Encode>>) {
                 .as_any()
                 .downcast_ref::<StoreRegister>(),
         ) {
-            if load.source == store.destination && load.width == store.width {
+            if load.source == store.destination
+                && load.width == store.width
+                && store.width.size() != 4
+            {
                 operations.drain(index..index + 2);
                 continue;
             }
@@ -48,7 +51,10 @@ fn optimize(operations: &mut Vec<Box<dyn Encode>>) {
                 .as_any()
                 .downcast_ref::<LoadRegister>(),
         ) {
-            if store.destination == load.source && store.width == load.width {
+            if store.destination == load.source
+                && store.width == load.width
+                && store.width.size() != 4
+            {
                 if overwritten(&operations[index + 2..], store.destination) {
                     operations.drain(index..index + 2);
                     continue;

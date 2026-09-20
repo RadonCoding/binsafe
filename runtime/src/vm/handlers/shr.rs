@@ -33,9 +33,9 @@ pub fn build(rt: &mut Runtime) {
                 ),
                 (
                     Flag::Overflow,
-                    Condition::Compare(Compare::Equal(
-                        Expression::Constant(1),
-                        Expression::Constant(0),
+                    Condition::Compare(Compare::BitSet(
+                        Expression::Operand(Operand::Input(0)),
+                        Expression::SignBit,
                     )),
                 ),
                 (

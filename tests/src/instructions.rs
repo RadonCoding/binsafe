@@ -6,7 +6,7 @@ use iced_x86::{
 };
 use runtime::vm::bytecode::{self, Flag, VMReg};
 
-use crate::constants::{gpr, simd, IMM128_A, IMM16_A, IMM32_A, IMM64_A, IMM8_A, IP};
+use crate::constants::{gpr, simd, IMM128_A, IMM16_A, IMM32_A, IMM64_A, IMM8_A};
 use crate::{decrypt_block, decrypt_payload, encrypt_block, Difference, Executor, State};
 
 #[test]
@@ -446,39 +446,6 @@ Cmovp_r64_rm64
 Cmovs_r16_rm16
 Cmovs_r32_rm32
 Cmovs_r64_rm64
-Jo_rel8_64
-Jo_rel32_64
-Jno_rel8_64
-Jno_rel32_64
-Jb_rel8_64
-Jb_rel32_64
-Jae_rel8_64
-Jae_rel32_64
-Je_rel8_64
-Je_rel32_64
-Jne_rel8_64
-Jne_rel32_64
-Jbe_rel8_64
-Jbe_rel32_64
-Ja_rel8_64
-Ja_rel32_64
-Js_rel8_64
-Js_rel32_64
-Jns_rel8_64
-Jns_rel32_64
-Jp_rel8_64
-Jp_rel32_64
-Jnp_rel8_64
-Jnp_rel32_64
-Jl_rel8_64
-Jl_rel32_64
-Jge_rel8_64
-Jge_rel32_64
-Jle_rel8_64
-Jle_rel32_64
-Jg_rel8_64
-Jg_rel32_64
-Call_rel32_64
 );
 
 fn test(code: Code) {
@@ -555,25 +522,6 @@ fn build(code: Code, test: Test, memory_base: Register) -> Instruction {
 }
 
 fn operand(instruction: &mut Instruction, operand: u32, kind: OpCodeOperandKind) {
-    match kind {
-        OpCodeOperandKind::br16_1 | OpCodeOperandKind::br16_2 => {
-            instruction.set_op_kind(operand, OpKind::NearBranch16);
-            instruction.set_near_branch16(IP as u16);
-            return;
-        }
-        OpCodeOperandKind::br32_1 | OpCodeOperandKind::br32_4 => {
-            instruction.set_op_kind(operand, OpKind::NearBranch32);
-            instruction.set_near_branch32(IP as u32);
-            return;
-        }
-        OpCodeOperandKind::br64_1 | OpCodeOperandKind::br64_4 => {
-            instruction.set_op_kind(operand, OpKind::NearBranch64);
-            instruction.set_near_branch64(IP);
-            return;
-        }
-        _ => {}
-    }
-
     let op = match kind {
         OpCodeOperandKind::r8_or_mem
         | OpCodeOperandKind::r16_or_mem
@@ -989,8 +937,6 @@ fn compare(state: State, instruction: Instruction) {
 }
 
 fn compare_memory(state: State, instruction: Instruction, memory: &mut [u8]) {
-    println!("{instruction}");
-
     let baseline = memory.to_vec();
 
     let mut executor = Executor::new();
@@ -1001,16 +947,6 @@ fn compare_memory(state: State, instruction: Instruction, memory: &mut [u8]) {
     let mut executor = Executor::new();
     let lifted = bytecode::lift(&[instruction])
         .unwrap_or_else(|| panic!("{instruction} is not implemented"));
-
-    println!(
-        "{}",
-        lifted
-            .iter()
-            .map(|op| format!("{op:?}"))
-            .collect::<Vec<String>>()
-            .join("\n")
-    );
-
     let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |_| 0);
 
     let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed);

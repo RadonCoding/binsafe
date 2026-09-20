@@ -30,11 +30,11 @@ pub unsafe extern "system" fn native_handler(info: *mut EXCEPTION_POINTERS) -> i
     let terminate = {
         let mut registry = NATIVE_REGISTRY.lock().unwrap();
 
-        if let Some((context, limit, exception)) = registry.get_mut(&GetCurrentThreadId()) {
+        if let Some((context, base, limit, exception)) = registry.get_mut(&GetCurrentThreadId()) {
             if (*(*info).ExceptionRecord).ExceptionCode == EXCEPTION_SINGLE_STEP {
                 let rip = (*(*info).ContextRecord).Rip as usize;
 
-                if rip < *limit {
+                if rip >= *base && rip < *limit {
                     (*(*info).ContextRecord).EFlags |= Flag::Trap.bit32();
                     return EXCEPTION_CONTINUE_EXECUTION;
                 }
