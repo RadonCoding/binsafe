@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    constants::{FAKE_BRANCH_ADDRESS, REGISTERS, VECTORS},
+    constants::{IP, REGISTERS, VECTORS},
     instrumentation::{
         initialize_context, native_handler, read_register, read_vectors, virtual_handler,
         write_register, write_vectors,
@@ -52,7 +52,7 @@ mod constants;
 mod instructions;
 mod instrumentation;
 
-static FAKE_BRANCH_MAPPED: OnceLock<()> = OnceLock::new();
+static IP_MAPPED: OnceLock<()> = OnceLock::new();
 
 static TLS_REGISTERS: OnceLock<u32> = OnceLock::new();
 static TLS_KEY: OnceLock<u32> = OnceLock::new();
@@ -127,12 +127,20 @@ impl Executor {
     pub const SIZE: usize = 0x100000;
 
     pub fn new() -> Self {
-        FAKE_BRANCH_MAPPED.get_or_init(|| unsafe {
-            let _ = VirtualAlloc(
-                Some(FAKE_BRANCH_ADDRESS as *const c_void),
+        IP_MAPPED.get_or_init(|| unsafe {
+            let memory = VirtualAlloc(
+                Some(IP_BASE as *const c_void),
                 Self::SIZE,
                 MEM_COMMIT | MEM_RESERVE,
-                PAGE_READWRITE,
+                PAGE_EXECUTE_READWRITE,
+            );
+
+            assert!(!memory.is_null());
+
+            let target = IP as *mut u8;
+            assert!(
+                target as usize >= memory as usize
+                    && target as usize < memory as usize + Self::SIZE
             );
         });
 
