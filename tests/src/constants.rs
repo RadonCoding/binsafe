@@ -99,20 +99,15 @@ pub fn simd() -> State {
     vector(state, VMVec::Ymm2, bytes16(IMM128_C))
 }
 
-pub const IMM8_A: u8 = 0x85;
-pub const _IMM16_A: u16 = 0x8A5C;
-pub const IMM32_A: u32 = 0x8A5C_E179;
-pub const IMM64_A: u64 = 0x8A5C_E179_2D4B_7F67;
-pub const IMM64_B: u64 = 0x5BD4_F28A_3E5C_6E78;
-pub const IMM64_C: u64 = 0x4CE5_039B_4F6D_5D69;
+pub const IMM8_A: u8 = 0x01;
+pub const IMM16_A: u16 = 0x0123;
+pub const IMM32_A: u32 = 0x0123_4567;
+pub const IMM64_A: u64 = 0x0123_4567_89AB_CDEF;
+pub const IMM64_B: u64 = 0x1234_5678_9ABC_DEF0;
+pub const IMM64_C: u64 = 0x2345_6789_ABCD_EF01;
 
-pub const _SIMM8_A: i32 = 0x75;
-pub const _SIMM16_A: i16 = 0x6A5C;
-pub const _SIMM32_A: i32 = 0x6A5C_E179;
-pub const _SIMM64_A: i64 = 0x6A5C_E179_2D4B_7F67;
+pub const IMM128_A: u128 = 0x0123_4567_89AB_CDEF_0123_4567_89AB_CDEF;
+pub const IMM128_B: u128 = 0x1234_5678_9ABC_DEF0_1234_5678_9ABC_DEF0;
+pub const IMM128_C: u128 = 0x2345_6789_ABCD_EF01_2345_6789_ABCD_EF01;
 
-pub const IMM128_A: u128 = 0x6A5C_E179_2D4B_7F67_1032_5476_789A_BCDE;
-pub const IMM128_B: u128 = 0x5BD4_F28A_3E5C_6E78_2143_6587_89AB_CDEF;
-pub const IMM128_C: u128 = 0x4CE5_039B_4F6D_5D69_3254_7698_9ABC_DEF0;
-
-pub const FAKE_BRANCH_ADDRESS: u64 = 0x1234_ABCD;
+pub const IP: u64 = 0x0000_0000_3456_789A;

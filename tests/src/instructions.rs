@@ -6,7 +6,7 @@ use iced_x86::{
 };
 use runtime::vm::bytecode::{self, Flag, VMReg};
 
-use crate::constants::{gpr, simd, _IMM16_A, IMM128_A, IMM32_A, IMM64_A, IMM8_A};
+use crate::constants::{gpr, simd, IMM128_A, IMM16_A, IMM32_A, IMM64_A, IMM8_A, IP};
 use crate::{decrypt_block, decrypt_payload, encrypt_block, Difference, Executor, State};
 
 #[test]
@@ -398,6 +398,87 @@ Cmp_rm16_imm16
 Cmp_rm32_imm32
 Cmp_rm16_imm8
 Cmp_rm32_imm8
+Cmova_r16_rm16
+Cmova_r32_rm32
+Cmova_r64_rm64
+Cmovae_r16_rm16
+Cmovae_r32_rm32
+Cmovae_r64_rm64
+Cmovb_r16_rm16
+Cmovb_r32_rm32
+Cmovb_r64_rm64
+Cmovbe_r16_rm16
+Cmovbe_r32_rm32
+Cmovbe_r64_rm64
+Cmove_r16_rm16
+Cmove_r32_rm32
+Cmove_r64_rm64
+Cmovg_r16_rm16
+Cmovg_r32_rm32
+Cmovg_r64_rm64
+Cmovge_r16_rm16
+Cmovge_r32_rm32
+Cmovge_r64_rm64
+Cmovl_r16_rm16
+Cmovl_r32_rm32
+Cmovl_r64_rm64
+Cmovle_r16_rm16
+Cmovle_r32_rm32
+Cmovle_r64_rm64
+Cmovne_r16_rm16
+Cmovne_r32_rm32
+Cmovne_r64_rm64
+Cmovno_r16_rm16
+Cmovno_r32_rm32
+Cmovno_r64_rm64
+Cmovnp_r16_rm16
+Cmovnp_r32_rm32
+Cmovnp_r64_rm64
+Cmovns_r16_rm16
+Cmovns_r32_rm32
+Cmovns_r64_rm64
+Cmovo_r16_rm16
+Cmovo_r32_rm32
+Cmovo_r64_rm64
+Cmovp_r16_rm16
+Cmovp_r32_rm32
+Cmovp_r64_rm64
+Cmovs_r16_rm16
+Cmovs_r32_rm32
+Cmovs_r64_rm64
+Jo_rel8_64
+Jo_rel32_64
+Jno_rel8_64
+Jno_rel32_64
+Jb_rel8_64
+Jb_rel32_64
+Jae_rel8_64
+Jae_rel32_64
+Je_rel8_64
+Je_rel32_64
+Jne_rel8_64
+Jne_rel32_64
+Jbe_rel8_64
+Jbe_rel32_64
+Ja_rel8_64
+Ja_rel32_64
+Js_rel8_64
+Js_rel32_64
+Jns_rel8_64
+Jns_rel32_64
+Jp_rel8_64
+Jp_rel32_64
+Jnp_rel8_64
+Jnp_rel32_64
+Jl_rel8_64
+Jl_rel32_64
+Jge_rel8_64
+Jge_rel32_64
+Jle_rel8_64
+Jle_rel32_64
+Jg_rel8_64
+Jg_rel32_64
+Call_rel32_64
 );
 
 fn test(code: Code) {
@@ -474,6 +555,25 @@ fn build(code: Code, test: Test, memory_base: Register) -> Instruction {
 }
 
 fn operand(instruction: &mut Instruction, operand: u32, kind: OpCodeOperandKind) {
+    match kind {
+        OpCodeOperandKind::br16_1 | OpCodeOperandKind::br16_2 => {
+            instruction.set_op_kind(operand, OpKind::NearBranch16);
+            instruction.set_near_branch16(IP as u16);
+            return;
+        }
+        OpCodeOperandKind::br32_1 | OpCodeOperandKind::br32_4 => {
+            instruction.set_op_kind(operand, OpKind::NearBranch32);
+            instruction.set_near_branch32(IP as u32);
+            return;
+        }
+        OpCodeOperandKind::br64_1 | OpCodeOperandKind::br64_4 => {
+            instruction.set_op_kind(operand, OpKind::NearBranch64);
+            instruction.set_near_branch64(IP);
+            return;
+        }
+        _ => {}
+    }
+
     let op = match kind {
         OpCodeOperandKind::r8_or_mem
         | OpCodeOperandKind::r16_or_mem
@@ -571,7 +671,7 @@ fn operand(instruction: &mut Instruction, operand: u32, kind: OpCodeOperandKind)
             | OpCodeOperandKind::imm8sex16
             | OpCodeOperandKind::imm8sex32
             | OpCodeOperandKind::imm8sex64 => IMM8_A as u64,
-            OpCodeOperandKind::imm16 => _IMM16_A as u64,
+            OpCodeOperandKind::imm16 => IMM16_A as u64,
             OpCodeOperandKind::imm32 | OpCodeOperandKind::imm32sex64 => IMM32_A as u64,
             OpCodeOperandKind::imm64 => IMM64_A,
             _ => unreachable!(),
@@ -889,6 +989,8 @@ fn compare(state: State, instruction: Instruction) {
 }
 
 fn compare_memory(state: State, instruction: Instruction, memory: &mut [u8]) {
+    println!("{instruction}");
+
     let baseline = memory.to_vec();
 
     let mut executor = Executor::new();
