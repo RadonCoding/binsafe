@@ -23,15 +23,27 @@ pub fn build(rt: &mut Runtime) {
                             Box::new(Expression::BitSize),
                             Box::new(Expression::BitAnd(
                                 Box::new(Expression::Operand(Operand::Input(1))),
-                                Box::new(Expression::Constant(0x1f)),
+                                Box::new(Expression::BitOr(
+                                    Box::new(Expression::SignBit),
+                                    Box::new(Expression::Constant(0x1f)),
+                                )),
                             )),
                         ),
                     )),
                 ),
                 (
                     Flag::Overflow,
-                    Condition::Compare(Compare::Equal(
-                        Expression::Constant(1),
+                    Condition::Compare(Compare::GreaterThan(
+                        Expression::BitXor(
+                            Box::new(Expression::BitShr(
+                                Box::new(Expression::Operand(Operand::Input(0))),
+                                Box::new(Expression::SignBit),
+                            )),
+                            Box::new(Expression::BitShr(
+                                Box::new(Expression::Operand(Operand::Output(0))),
+                                Box::new(Expression::SignBit),
+                            )),
+                        ),
                         Expression::Constant(0),
                     )),
                 ),

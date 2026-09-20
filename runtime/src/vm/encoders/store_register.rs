@@ -37,5 +37,4 @@ impl Encode for StoreRegister {
     fn produces(&self) -> i32 {
         0
     }
-
 }

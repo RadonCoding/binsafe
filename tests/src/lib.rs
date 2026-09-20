@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    constants::{IP, REGISTERS, VECTORS},
+    constants::{REGISTERS, VECTORS},
     instrumentation::{
         initialize_context, native_handler, read_register, read_vectors, virtual_handler,
         write_register, write_vectors,
@@ -38,8 +38,7 @@ use windows::Win32::{
             SetXStateFeaturesMask, CONTEXT, CONTEXT_ALL_AMD64, CONTEXT_XSTATE_AMD64,
         },
         Memory::{
-            VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE,
-            PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
+            VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
         },
         Threading::{
             CreateThread, FlsAlloc, ResumeThread, SuspendThread, TlsAlloc, WaitForSingleObject,
@@ -52,14 +51,12 @@ mod constants;
 mod instructions;
 mod instrumentation;
 
-static IP_MAPPED: OnceLock<()> = OnceLock::new();
-
 static TLS_REGISTERS: OnceLock<u32> = OnceLock::new();
 static TLS_KEY: OnceLock<u32> = OnceLock::new();
 static TLS_DEBUG: OnceLock<u32> = OnceLock::new();
 static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
 
-static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize, Option<u32>)>>> =
+static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize, usize, Option<u32>)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static NATIVE_HANDLER: OnceLock<()> = OnceLock::new();
 
@@ -116,39 +113,22 @@ impl State {
 
 pub struct Executor {
     pub rt: Runtime,
-    pub mem: *mut c_void,
+    pub memory: *mut c_void,
 }
 
 impl Executor {
-    pub const TEST_KEY_SEED: u64 = 0x1234567890ABCDEF;
-    pub const TEST_KEY_MUL: u64 = 0x1234567890ABCDEF;
-    pub const TEST_KEY_ADD: u64 = 0x1234567890ABCDEF;
+    pub const TEST_KEY_INITIALIZER: u64 = 0x1234567890ABCDEF;
+    pub const TEST_KEY_MULTIPLIER: u64 = 0x1234567890ABCDEF;
+    pub const TEST_KEY_ADDEND: u64 = 0x1234567890ABCDEF;
 
     pub const SIZE: usize = 0x100000;
 
     pub fn new() -> Self {
-        IP_MAPPED.get_or_init(|| unsafe {
-            let memory = VirtualAlloc(
-                Some(IP_BASE as *const c_void),
-                Self::SIZE,
-                MEM_COMMIT | MEM_RESERVE,
-                PAGE_EXECUTE_READWRITE,
-            );
-
-            assert!(!memory.is_null());
-
-            let target = IP as *mut u8;
-            assert!(
-                target as usize >= memory as usize
-                    && target as usize < memory as usize + Self::SIZE
-            );
-        });
-
         let mut rt = Runtime::new(64);
 
-        rt.define_data_qword(DataDef::VmKeyInitializer, Self::TEST_KEY_SEED);
-        rt.define_data_qword(DataDef::VmKeyMultiplier, Self::TEST_KEY_MUL);
-        rt.define_data_qword(DataDef::VmKeyAddend, Self::TEST_KEY_ADD);
+        rt.define_data_qword(DataDef::VmKeyInitializer, Self::TEST_KEY_INITIALIZER);
+        rt.define_data_qword(DataDef::VmKeyMultiplier, Self::TEST_KEY_MULTIPLIER);
+        rt.define_data_qword(DataDef::VmKeyAddend, Self::TEST_KEY_ADDEND);
 
         rt.define_bool(BoolDef::HasVeh, true);
 
@@ -169,7 +149,7 @@ impl Executor {
             *FLS_CLEANUP.get_or_init(|| unsafe { FlsAlloc(None) }),
         );
 
-        let mem = unsafe {
+        let memory = unsafe {
             VirtualAlloc(
                 None,
                 Self::SIZE,
@@ -178,7 +158,7 @@ impl Executor {
             )
         };
 
-        Self { rt, mem }
+        Self { rt, memory }
     }
 
     pub fn run_virtual(&mut self, state: State, bytes: &[u8]) -> State {
@@ -304,14 +284,14 @@ impl Executor {
 
         self.rt.define_data_bytes(DataDef::VmCode, bytes);
 
-        let ip = self.mem as u64;
+        let ip = self.memory as u64;
 
         let code = self.rt.assemble(ip);
 
         assert!(code.len() <= Self::SIZE);
 
         unsafe {
-            ptr::copy_nonoverlapping(code.as_ptr(), self.mem as *mut u8, code.len());
+            ptr::copy_nonoverlapping(code.as_ptr(), self.memory as *mut u8, code.len());
         }
 
         VIRTUAL_HANDLER.get_or_init(|| unsafe {
@@ -327,8 +307,8 @@ impl Executor {
                 Some(mem::transmute::<
                     *const (),
                     unsafe extern "system" fn(*mut c_void) -> u32,
-                >(self.mem as *const ())),
-                Some(self.mem as *mut c_void),
+                >(self.memory as *const ())),
+                Some(self.memory as *mut c_void),
                 THREAD_CREATE_SUSPENDED,
                 Some(&mut thread_id),
             )
@@ -358,7 +338,7 @@ impl Executor {
     }
 
     pub fn run_native(&mut self, state: State, instructions: &[Instruction]) -> State {
-        let ip = self.mem as u64;
+        let ip = self.memory as u64;
 
         let result = BlockEncoder::encode(
             64,
@@ -370,12 +350,13 @@ impl Executor {
         unsafe {
             ptr::copy_nonoverlapping(
                 result.code_buffer.as_ptr(),
-                self.mem as *mut u8,
+                self.memory as *mut u8,
                 result.code_buffer.len(),
             );
         }
 
-        let limit = self.mem as usize + result.code_buffer.len();
+        let base = self.memory as usize;
+        let limit = base + result.code_buffer.len();
 
         let initialized = AtomicBool::new(false);
 
@@ -416,7 +397,7 @@ impl Executor {
             &mut *context
         };
 
-        context.Rip = self.mem as u64;
+        context.Rip = self.memory as u64;
 
         for (&register, &value) in &state.registers {
             write_register(context, register, value);
@@ -429,10 +410,10 @@ impl Executor {
             AddVectoredExceptionHandler(1, Some(native_handler));
         });
 
-        NATIVE_REGISTRY
-            .lock()
-            .unwrap()
-            .insert(thread_id, (context as *mut CONTEXT as usize, limit, None));
+        NATIVE_REGISTRY.lock().unwrap().insert(
+            thread_id,
+            (context as *mut CONTEXT as usize, base, limit, None),
+        );
 
         unsafe {
             SetThreadContext(thread, context).unwrap();
@@ -445,7 +426,7 @@ impl Executor {
             .lock()
             .unwrap()
             .remove(&thread_id)
-            .and_then(|(_, _, exception)| exception);
+            .and_then(|(_, _, _, exception)| exception);
 
         if let Some(exception) = exception {
             unsafe {
@@ -468,7 +449,7 @@ impl Executor {
 impl Drop for Executor {
     fn drop(&mut self) {
         unsafe {
-            let _ = VirtualFree(self.mem, 0, MEM_RELEASE);
+            let _ = VirtualFree(self.memory, 0, MEM_RELEASE);
         }
     }
 }
@@ -476,9 +457,9 @@ impl Drop for Executor {
 pub fn encrypt_block(block: &mut Vec<u8>) {
     crypt::encrypt_block(
         block,
-        Executor::TEST_KEY_SEED,
-        Executor::TEST_KEY_MUL,
-        Executor::TEST_KEY_ADD,
+        Executor::TEST_KEY_INITIALIZER,
+        Executor::TEST_KEY_MULTIPLIER,
+        Executor::TEST_KEY_ADDEND,
         0,
     );
 }
@@ -486,9 +467,9 @@ pub fn encrypt_block(block: &mut Vec<u8>) {
 pub fn decrypt_payload(block: &mut Vec<u8>) {
     crypt::decrypt_payload(
         block,
-        Executor::TEST_KEY_SEED,
-        Executor::TEST_KEY_MUL,
-        Executor::TEST_KEY_ADD,
+        Executor::TEST_KEY_INITIALIZER,
+        Executor::TEST_KEY_MULTIPLIER,
+        Executor::TEST_KEY_ADDEND,
         0,
     );
 }
@@ -496,9 +477,9 @@ pub fn decrypt_payload(block: &mut Vec<u8>) {
 pub fn decrypt_block(block: &mut Vec<u8>) {
     crypt::decrypt_block(
         block,
-        Executor::TEST_KEY_SEED,
-        Executor::TEST_KEY_MUL,
-        Executor::TEST_KEY_ADD,
+        Executor::TEST_KEY_INITIALIZER,
+        Executor::TEST_KEY_MULTIPLIER,
+        Executor::TEST_KEY_ADDEND,
         0,
     );
 }
