@@ -20,8 +20,11 @@ pub fn build(rt: &mut Runtime) {
                     Condition::Compare(Compare::BitSet(
                         Expression::Operand(Operand::Input(0)),
                         Expression::Sub(
-                            Box::new(Expression::Constant(64)),
-                            Box::new(Expression::Operand(Operand::Input(1))),
+                            Box::new(Expression::BitSize),
+                            Box::new(Expression::BitAnd(
+                                Box::new(Expression::Operand(Operand::Input(1))),
+                                Box::new(Expression::Constant(0x1f)),
+                            )),
                         ),
                     )),
                 ),

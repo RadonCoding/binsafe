@@ -34,9 +34,10 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.addps(xmm0, xmm1).unwrap();
         },
         |rt| {
-            // addsd xmm0, xmm1
-            rt.asm.addsd(xmm0, xmm1).unwrap();
+            // addpd xmm0, xmm1
+            rt.asm.addpd(xmm0, xmm1).unwrap();
         },
+        // avx_int
         |rt| {
             // vpaddb ymm0, ymm0, ymm1
             rt.asm.vpaddb(ymm0, ymm0, ymm1).unwrap();
@@ -66,8 +67,8 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.vaddps(ymm0, ymm0, ymm1).unwrap();
         },
         |rt| {
-            // vaddsd ymm0, ymm0, ymm1
-            rt.asm.vaddsd(xmm0, xmm0, xmm1).unwrap();
+            // vaddpd ymm0, ymm0, ymm1
+            rt.asm.vaddpd(ymm0, ymm0, ymm1).unwrap();
         },
     );
 }

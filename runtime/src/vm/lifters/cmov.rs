@@ -1,6 +1,6 @@
 use iced_x86::{Code, Instruction};
 
-use crate::vm::bytecode::{VMCondition, Flag, VMLogic};
+use crate::vm::bytecode::{Flag, VMCondition, VMLogic};
 use crate::vm::encoders::block::Block;
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::transfer;

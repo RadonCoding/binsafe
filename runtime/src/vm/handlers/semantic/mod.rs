@@ -22,6 +22,8 @@ pub enum Expression {
     Sub(Box<Expression>, Box<Expression>),
     LowByte(Box<Expression>),
     SignBit,
+    BitSize,
+    ByteMask(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -141,7 +143,9 @@ impl Expression {
             }
             Expression::Operand(Operand::Output(_))
             | Expression::Constant(_)
-            | Expression::SignBit => {}
+            | Expression::SignBit
+            | Expression::BitSize
+            | Expression::ByteMask(_) => {}
             Expression::BitAnd(lhs, rhs)
             | Expression::BitOr(lhs, rhs)
             | Expression::BitXor(lhs, rhs)
@@ -159,7 +163,11 @@ impl Expression {
 
     fn temporary(&self) -> usize {
         match self {
-            Expression::Operand(_) | Expression::Constant(_) | Expression::SignBit => 0,
+            Expression::Operand(_)
+            | Expression::Constant(_)
+            | Expression::SignBit
+            | Expression::BitSize
+            | Expression::ByteMask(_) => 0,
             Expression::BitAnd(lhs, rhs)
             | Expression::BitOr(lhs, rhs)
             | Expression::BitXor(lhs, rhs)

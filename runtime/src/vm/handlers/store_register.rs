@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{eax, ptr, r12, r8, r8d, r9, r9b, r9w, rax, rcx};
+use iced_x86::code_asm::{eax, ptr, r12, r8, r8d, r9, r9b, r9d, r9w, rax, rcx};
 
 use crate::{
     runtime::Runtime,
@@ -27,6 +27,8 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.mov(ptr(r12 + r8 * 8), r9).unwrap();
         })),
         Some(Box::new(|rt| {
+            // mov r9d, r9d
+            rt.asm.mov(r9d, r9d).unwrap();
             // mov [r12 + r8*8], r9
             rt.asm.mov(ptr(r12 + r8 * 8), r9).unwrap();
         })),
