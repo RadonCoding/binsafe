@@ -1,12 +1,12 @@
 use std::slice;
 
 use iced_x86::{
-    Code, Instruction, InstructionInfoFactory, Mnemonic, OpAccess, OpCodeOperandKind, OpKind,
-    Register, RflagsBits,
+    Code, Instruction, InstructionInfoFactory, OpAccess, OpCodeOperandKind, OpKind, Register,
+    RflagsBits,
 };
-use runtime::vm::bytecode::{self, Flag, VMReg};
+use runtime::vm::bytecode::{self, Flag, VMReg, VMVec};
 
-use crate::constants::{gpr, simd, IMM128_A, IMM16_A, IMM32_A, IMM64_A, IMM8_A};
+use crate::constants::{available, baseline, register, vector, IMMEDIATES};
 use crate::{decrypt_block, decrypt_payload, encrypt_block, Difference, Executor, State};
 
 #[test]
@@ -377,12 +377,10 @@ Sbb_rm8_imm8
 Sbb_rm16_imm16
 Sbb_rm32_imm32
 Sbb_rm16_imm8
-Sbb_rm32_imm8
 And_rm8_imm8
 And_rm16_imm16
 And_rm32_imm32
 And_rm16_imm8
-And_rm32_imm8
 Sub_rm8_imm8
 Sub_rm16_imm16
 Sub_rm32_imm32
@@ -449,27 +447,29 @@ Cmovs_r64_rm64
 );
 
 fn test(code: Code) {
-    let instruction = build(code, Test::Registers, Register::None);
+    for &immediate in IMMEDIATES {
+        let instruction = build(code, Test::Registers, Register::None, immediate);
 
-    case(instruction, None);
+        case(instruction, None, immediate);
 
-    let mut factory = InstructionInfoFactory::new();
-    let info = factory.info(&instruction);
+        let mut factory = InstructionInfoFactory::new();
+        let info = factory.info(&instruction);
 
-    if !info.used_memory().is_empty() {
-        let base = base(info.used_registers());
-        let instruction = build(code, Test::Memory, base);
-        let size = instruction.memory_size().size() as usize;
+        if !info.used_memory().is_empty() {
+            let base = available(info.used_registers());
+            let instruction = build(code, Test::Memory, base, immediate);
+            let size = instruction.memory_size().size() as usize;
 
-        let words = size.div_ceil(16);
+            let words = size.div_ceil(16);
 
-        let mut backing = vec![IMM128_A; words.max(1)];
+            let mut backing = vec![(immediate as u128) | ((immediate as u128) << 64); words.max(1)];
 
-        let memory = unsafe {
-            slice::from_raw_parts_mut(backing.as_mut_ptr() as *mut u8, backing.len() * 16)
-        };
+            let memory = unsafe {
+                slice::from_raw_parts_mut(backing.as_mut_ptr() as *mut u8, backing.len() * 16)
+            };
 
-        case(instruction, Some(&mut memory[..size]));
+            case(instruction, Some(&mut memory[..size]), immediate);
+        }
     }
 }
 
@@ -479,7 +479,7 @@ enum Test {
     Memory,
 }
 
-fn build(code: Code, test: Test, memory_base: Register) -> Instruction {
+fn build(code: Code, test: Test, memory_base: Register, immediate: u64) -> Instruction {
     let info = code.op_code();
     let kinds = [
         info.op0_kind(),
@@ -515,13 +515,13 @@ fn build(code: Code, test: Test, memory_base: Register) -> Instruction {
             continue;
         }
 
-        operand(&mut instruction, index as u32, kind);
+        operand(&mut instruction, index as u32, kind, immediate);
     }
 
     instruction
 }
 
-fn operand(instruction: &mut Instruction, operand: u32, kind: OpCodeOperandKind) {
+fn operand(instruction: &mut Instruction, operand: u32, kind: OpCodeOperandKind, immediate: u64) {
     let op = match kind {
         OpCodeOperandKind::r8_or_mem
         | OpCodeOperandKind::r16_or_mem
@@ -610,7 +610,7 @@ fn operand(instruction: &mut Instruction, operand: u32, kind: OpCodeOperandKind)
     instruction.set_op_kind(operand, op);
 
     if op == OpKind::Register {
-        instruction.set_op_register(operand, register(kind, operand as usize));
+        instruction.set_op_register(operand, register_for(kind, operand as usize));
     } else {
         let value = match kind {
             OpCodeOperandKind::imm4_m2z => 0,
@@ -618,10 +618,10 @@ fn operand(instruction: &mut Instruction, operand: u32, kind: OpCodeOperandKind)
             OpCodeOperandKind::imm8
             | OpCodeOperandKind::imm8sex16
             | OpCodeOperandKind::imm8sex32
-            | OpCodeOperandKind::imm8sex64 => IMM8_A as u64,
-            OpCodeOperandKind::imm16 => IMM16_A as u64,
-            OpCodeOperandKind::imm32 | OpCodeOperandKind::imm32sex64 => IMM32_A as u64,
-            OpCodeOperandKind::imm64 => IMM64_A,
+            | OpCodeOperandKind::imm8sex64 => immediate as u8 as u64,
+            OpCodeOperandKind::imm16 => immediate as u16 as u64,
+            OpCodeOperandKind::imm32 | OpCodeOperandKind::imm32sex64 => immediate as u32 as u64,
+            OpCodeOperandKind::imm64 => immediate,
             _ => unreachable!(),
         };
 
@@ -629,7 +629,7 @@ fn operand(instruction: &mut Instruction, operand: u32, kind: OpCodeOperandKind)
     }
 }
 
-fn register(kind: OpCodeOperandKind, operand: usize) -> Register {
+fn register_for(kind: OpCodeOperandKind, operand: usize) -> Register {
     match kind {
         OpCodeOperandKind::al => Register::AL,
         OpCodeOperandKind::cl => Register::CL,
@@ -638,66 +638,45 @@ fn register(kind: OpCodeOperandKind, operand: usize) -> Register {
         OpCodeOperandKind::eax => Register::EAX,
         OpCodeOperandKind::rax => Register::RAX,
         OpCodeOperandKind::r8_reg | OpCodeOperandKind::r8_opcode | OpCodeOperandKind::r8_or_mem => {
-            [Register::AL, Register::CL, Register::DL, Register::BL][operand.min(3)]
+            register(operand, 1)
         }
         OpCodeOperandKind::r16_reg
         | OpCodeOperandKind::r16_opcode
         | OpCodeOperandKind::r16_reg_mem
         | OpCodeOperandKind::r16_rm
-        | OpCodeOperandKind::r16_or_mem => {
-            [Register::AX, Register::CX, Register::DX, Register::BX][operand.min(3)]
-        }
+        | OpCodeOperandKind::r16_or_mem => register(operand, 2),
         OpCodeOperandKind::r32_reg
         | OpCodeOperandKind::r32_opcode
         | OpCodeOperandKind::r32_vvvv
         | OpCodeOperandKind::r32_reg_mem
         | OpCodeOperandKind::r32_rm
         | OpCodeOperandKind::r32_or_mem
-        | OpCodeOperandKind::r32_or_mem_mpx => {
-            [Register::EAX, Register::ECX, Register::EDX, Register::EBX][operand.min(3)]
-        }
+        | OpCodeOperandKind::r32_or_mem_mpx => register(operand, 4),
         OpCodeOperandKind::r64_reg
         | OpCodeOperandKind::r64_opcode
         | OpCodeOperandKind::r64_vvvv
         | OpCodeOperandKind::r64_reg_mem
         | OpCodeOperandKind::r64_rm
         | OpCodeOperandKind::r64_or_mem
-        | OpCodeOperandKind::r64_or_mem_mpx => {
-            [Register::RAX, Register::RCX, Register::RDX, Register::RBX][operand.min(3)]
-        }
+        | OpCodeOperandKind::r64_or_mem_mpx => register(operand, 8),
         OpCodeOperandKind::xmm_reg
         | OpCodeOperandKind::xmm_rm
         | OpCodeOperandKind::xmm_vvvv
         | OpCodeOperandKind::xmmp3_vvvv
         | OpCodeOperandKind::xmm_is4
         | OpCodeOperandKind::xmm_is5
-        | OpCodeOperandKind::xmm_or_mem => [
-            Register::XMM0,
-            Register::XMM1,
-            Register::XMM2,
-            Register::XMM3,
-        ][operand.min(3)],
+        | OpCodeOperandKind::xmm_or_mem => Register::XMM0 + ((operand % 16) as u32),
         OpCodeOperandKind::ymm_reg
         | OpCodeOperandKind::ymm_rm
         | OpCodeOperandKind::ymm_vvvv
         | OpCodeOperandKind::ymm_is4
         | OpCodeOperandKind::ymm_is5
-        | OpCodeOperandKind::ymm_or_mem => [
-            Register::YMM0,
-            Register::YMM1,
-            Register::YMM2,
-            Register::YMM3,
-        ][operand.min(3)],
+        | OpCodeOperandKind::ymm_or_mem => Register::YMM0 + ((operand % 16) as u32),
         OpCodeOperandKind::zmm_reg
         | OpCodeOperandKind::zmm_rm
         | OpCodeOperandKind::zmm_vvvv
         | OpCodeOperandKind::zmmp3_vvvv
-        | OpCodeOperandKind::zmm_or_mem => [
-            Register::ZMM0,
-            Register::ZMM1,
-            Register::ZMM2,
-            Register::ZMM3,
-        ][operand.min(3)],
+        | OpCodeOperandKind::zmm_or_mem => Register::ZMM0 + ((operand % 16) as u32),
         _ => panic!("unsupported operand kind: {kind:?}"),
     }
 }
@@ -732,39 +711,28 @@ fn memory(kind: OpCodeOperandKind) -> bool {
     )
 }
 
-fn base(used: &[iced_x86::UsedRegister]) -> Register {
-    const CANDIDATES: &[Register] = &[
-        Register::R15,
-        Register::R14,
-        Register::R13,
-        Register::R12,
-        Register::R11,
-        Register::R10,
-        Register::R9,
-        Register::R8,
-        Register::RBX,
-        Register::RBP,
-        Register::RSI,
-        Register::RDI,
-    ];
+fn case(instruction: Instruction, memory: Option<&mut [u8]>, immediate: u64) {
+    let mut factory = InstructionInfoFactory::new();
+    let info = factory.info(&instruction);
 
-    CANDIDATES
-        .iter()
-        .copied()
-        .find(|candidate| !used.iter().any(|used| used.register() == *candidate))
-        .unwrap()
-}
+    let mut state = baseline();
 
-fn case(instruction: Instruction, mut memory: Option<&mut [u8]>) {
-    let mut info_factory = InstructionInfoFactory::new();
-    let info = info_factory.info(&instruction);
+    for used in info.used_registers() {
+        let register = used.register();
 
-    let vector = info
-        .used_registers()
-        .iter()
-        .any(|used| used.register().is_vector_register());
+        if register.is_gpr() {
+            state = state.with(VMReg::from(register.full_register()), immediate);
+        }
+    }
 
-    let mut state = if vector { simd() } else { gpr() };
+    for index in 0..instruction.op_count() {
+        let register = instruction.op_register(index);
+
+        if register.is_vector_register() {
+            let immediate = (immediate as u128) | ((immediate as u128) << 64);
+            state = vector(state, VMVec::from(register), [immediate, immediate]);
+        }
+    }
 
     let has_rax = info
         .used_registers()
@@ -788,128 +756,9 @@ fn case(instruction: Instruction, mut memory: Option<&mut [u8]>) {
         state = state.with(VMReg::from(Register::RDX), 0);
     }
 
-    if matches!(instruction.mnemonic(), Mnemonic::Div | Mnemonic::Idiv) {
-        let size = match instruction.op_kind(0) {
-            OpKind::Register => instruction.op_register(0).info().size(),
-            OpKind::Memory => instruction.memory_size().size(),
-            _ => unreachable!(),
-        };
-
-        let bits = size * 8;
-        let mask = if size == 8 {
-            u64::MAX
-        } else {
-            (1u64 << bits) - 1
-        };
-        let sign = 1u64 << (bits - 1);
-
-        let rax = state.registers[&VMReg::Rax];
-        let rdx = state.registers[&VMReg::Rdx];
-
-        let mut low = rax & mask;
-        let mut high = if size == 1 {
-            (rax >> 8) & mask
-        } else {
-            rdx & mask
-        };
-
-        let memory_operand = instruction.op_kind(0) == OpKind::Memory;
-
-        let mut divisor = if memory_operand {
-            let bytes = memory.as_deref().unwrap();
-
-            let mut value = 0;
-
-            for index in 0..size {
-                value |= (bytes[index] as u64) << (index * 8);
-            }
-
-            value
-        } else {
-            let register = instruction.op_register(0).full_register();
-
-            state.registers[&VMReg::from(register)] & mask
-        };
-
-        if divisor == 0 {
-            divisor = divisor.wrapping_add(1);
-
-            if memory_operand {
-                let bytes = memory.as_deref_mut().unwrap();
-
-                for index in 0..size {
-                    bytes[index] = (divisor >> (index * 8)) as u8;
-                }
-            } else {
-                let register = instruction.op_register(0).full_register();
-                let value = state.registers[&VMReg::from(register)];
-
-                state = state.with(VMReg::from(register), (value & !mask) | divisor);
-                low = divisor;
-            }
-        }
-
-        match instruction.mnemonic() {
-            Mnemonic::Div => {
-                high %= divisor;
-            }
-            Mnemonic::Idiv => {
-                let signed_low = if low & sign != 0 {
-                    low as i128 - (1i128 << bits)
-                } else {
-                    low as i128
-                };
-
-                let signed_divisor = if divisor & sign != 0 {
-                    divisor as i128 - (1i128 << bits)
-                } else {
-                    divisor as i128
-                };
-
-                if signed_low == -(1i128 << (bits - 1)) && signed_divisor == -1 {
-                    low = low.wrapping_add(1) & mask;
-
-                    if !memory_operand
-                        && instruction.op_register(0).full_register() != Register::RAX
-                    {
-                        let register = instruction.op_register(0).full_register();
-                        let value = state.registers[&VMReg::from(register)];
-
-                        state = state.with(VMReg::from(register), (value & !mask) | low);
-                    }
-
-                    if memory_operand && instruction.op_register(0) != Register::None {
-                        unreachable!();
-                    }
-                }
-
-                high = if low & sign != 0 { mask } else { 0 };
-            }
-            _ => unreachable!(),
-        }
-
-        if !memory_operand {
-            let register = instruction.op_register(0).full_register();
-
-            if register == Register::RAX {
-                let value = state.registers[&VMReg::Rax];
-
-                state = state.with(VMReg::Rax, (value & !mask) | low);
-            }
-        }
-
-        let rax = if size == 1 {
-            (rax & !(mask | (mask << 8))) | low | (high << 8)
-        } else {
-            (rax & !mask) | low
-        };
-
-        let rdx = if size == 1 { rdx } else { (rdx & !mask) | high };
-
-        state = state.with(VMReg::Rax, rax).with(VMReg::Rdx, rdx);
-    }
-
-    if instruction.rflags_read() != RflagsBits::NONE {
+    if instruction.rflags_read() != RflagsBits::NONE
+        || instruction.rflags_written() != RflagsBits::NONE
+    {
         state = state.with(
             VMReg::Flags,
             Flag::Carry.bit64()
@@ -947,6 +796,7 @@ fn compare_memory(state: State, instruction: Instruction, memory: &mut [u8]) {
     let mut executor = Executor::new();
     let lifted = bytecode::lift(&[instruction])
         .unwrap_or_else(|| panic!("{instruction} is not implemented"));
+
     let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |_| 0);
 
     let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed);
@@ -962,18 +812,16 @@ fn normalize(native: &mut State, emulated: &mut State, instruction: Instruction)
     emulated.registers.remove(&VMReg::Rsp);
 
     for state in [&mut *native, &mut *emulated] {
-        if let Some(flags) = state.registers.get_mut(&VMReg::Flags) {
-            let mask = instruction.rflags_written()
-                | instruction.rflags_cleared()
-                | instruction.rflags_set();
+        let flags = state.registers.get_mut(&VMReg::Flags).unwrap();
+        let mask =
+            instruction.rflags_written() | instruction.rflags_cleared() | instruction.rflags_set();
 
-            *flags &= ((mask & RflagsBits::CF != 0) as u64 * Flag::Carry.bit64())
-                | ((mask & RflagsBits::PF != 0) as u64 * Flag::Parity.bit64())
-                | ((mask & RflagsBits::AF != 0) as u64 * Flag::Auxiliary.bit64())
-                | ((mask & RflagsBits::ZF != 0) as u64 * Flag::Zero.bit64())
-                | ((mask & RflagsBits::SF != 0) as u64 * Flag::Sign.bit64())
-                | ((mask & RflagsBits::OF != 0) as u64 * Flag::Overflow.bit64());
-        }
+        *flags &= ((mask & RflagsBits::CF != 0) as u64 * Flag::Carry.bit64())
+            | ((mask & RflagsBits::PF != 0) as u64 * Flag::Parity.bit64())
+            | ((mask & RflagsBits::AF != 0) as u64 * Flag::Auxiliary.bit64())
+            | ((mask & RflagsBits::ZF != 0) as u64 * Flag::Zero.bit64())
+            | ((mask & RflagsBits::SF != 0) as u64 * Flag::Sign.bit64())
+            | ((mask & RflagsBits::OF != 0) as u64 * Flag::Overflow.bit64());
     }
 
     let differences = native.compare(emulated);
@@ -995,6 +843,9 @@ fn dump(differences: &[Difference]) -> String {
                 lines.push(format!(
                     "{register:?}: native={native:02X?} virtual={emulated:02X?}"
                 ));
+            }
+            Difference::Exception(native, emulated) => {
+                lines.push(format!("Exception: native={native:?} virtual={emulated:?}"));
             }
         }
     }

@@ -28,12 +28,7 @@ pub fn build(rt: &mut Runtime) {
                 ),
             ],
             stores: None,
-            widths: &[
-                VMWidth::Lower64,
-                VMWidth::Lower32,
-                VMWidth::Lower16,
-                VMWidth::Lower8,
-            ],
+            widths: &[VMWidth::Lower64, VMWidth::Lower32, VMWidth::Lower16],
         },
     );
 }

@@ -10,11 +10,14 @@ pub fn build(rt: &mut Runtime) {
     semantic::compiler::compile(
         rt,
         &Operation {
-            effects: vec![Effect::Bsr(Expression::Operand(Operand::Input(0)))],
+            effects: vec![
+                Effect::Assign(Expression::Operand(Operand::Input(0))),
+                Effect::Bsr(Expression::Operand(Operand::Input(1))),
+            ],
             flags: vec![(
                 Flag::Zero,
                 Condition::Compare(Compare::Equal(
-                    Expression::Operand(Operand::Input(0)),
+                    Expression::Operand(Operand::Input(1)),
                     Expression::Constant(0),
                 )),
             )],

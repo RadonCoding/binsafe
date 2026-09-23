@@ -18,32 +18,14 @@ pub fn build(rt: &mut Runtime) {
                 (
                     Flag::Carry,
                     Condition::Compare(Compare::GreaterThan(
-                        Expression::Sub(
-                            Box::new(Expression::Operand(Operand::Output(1))),
-                            Box::new(Expression::Sub(
-                                Box::new(Expression::Constant(0)),
-                                Box::new(Expression::BitShr(
-                                    Box::new(Expression::Operand(Operand::Output(0))),
-                                    Box::new(Expression::SignBit),
-                                )),
-                            )),
-                        ),
+                        Expression::Operand(Operand::Output(1)),
                         Expression::Constant(0),
                     )),
                 ),
                 (
                     Flag::Overflow,
                     Condition::Compare(Compare::GreaterThan(
-                        Expression::Sub(
-                            Box::new(Expression::Operand(Operand::Output(1))),
-                            Box::new(Expression::Sub(
-                                Box::new(Expression::Constant(0)),
-                                Box::new(Expression::BitShr(
-                                    Box::new(Expression::Operand(Operand::Output(0))),
-                                    Box::new(Expression::SignBit),
-                                )),
-                            )),
-                        ),
+                        Expression::Operand(Operand::Output(1)),
                         Expression::Constant(0),
                     )),
                 ),
