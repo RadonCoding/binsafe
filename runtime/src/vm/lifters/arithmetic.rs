@@ -191,6 +191,7 @@ pub fn binary<O: Encode + 'static>(
     Some(operations)
 }
 
+// TODO: Create a handler for SBB & ADC
 pub fn carry<O: Encode + 'static>(
     instruction: &Instruction,
     make: impl Fn(VMWidth) -> O,

@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     ffi::c_void,
     hint, mem, ptr,
     sync::{
@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    constants::{REGISTERS, VECTORS},
+    constants::{VIRTUAL_REGISTERS, VIRTUAL_VECTORS},
     instrumentation::{
         initialize_context, native_handler, read_register, read_vectors, virtual_handler,
         write_register, write_vectors,
@@ -34,8 +34,8 @@ use windows::Win32::{
     Foundation::CloseHandle,
     System::{
         Diagnostics::Debug::{
-            AddVectoredExceptionHandler, GetThreadContext, RaiseException, SetThreadContext,
-            SetXStateFeaturesMask, CONTEXT, CONTEXT_ALL_AMD64, CONTEXT_XSTATE_AMD64,
+            AddVectoredExceptionHandler, GetThreadContext, SetThreadContext, SetXStateFeaturesMask,
+            CONTEXT, CONTEXT_ALL_AMD64, CONTEXT_XSTATE_AMD64,
         },
         Memory::{
             VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
@@ -60,8 +60,8 @@ static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize, usize, Option
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static NATIVE_HANDLER: OnceLock<()> = OnceLock::new();
 
-static VIRTUAL_REGISTRY: LazyLock<Mutex<HashSet<u32>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
+static VIRTUAL_REGISTRY: LazyLock<Mutex<HashMap<u32, Option<u32>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 static VIRTUAL_HANDLER: OnceLock<()> = OnceLock::new();
 
 const XSTATE_AVX: u32 = 2;
@@ -71,11 +71,13 @@ const XSTATE_MASK_AVX: u64 = 4;
 pub struct State {
     pub registers: HashMap<VMReg, u64>,
     pub vectors: HashMap<VMVec, [u128; 2]>,
+    pub exception: Option<u32>,
 }
 
 pub enum Difference {
     Register(VMReg, u64, u64),
     Vector(VMVec, [u128; 2], [u128; 2]),
+    Exception(u32, u32),
 }
 
 impl State {
@@ -93,6 +95,26 @@ impl State {
 
     pub fn compare(&self, other: &Self) -> Vec<Difference> {
         let mut differences = Vec::new();
+
+        match (self.exception, other.exception) {
+            (Some(native), Some(virtual_)) => {
+                if native != virtual_ {
+                    differences.push(Difference::Exception(native, virtual_));
+                }
+
+                return differences;
+            }
+            (Some(native), None) => {
+                differences.push(Difference::Exception(native, 0));
+                return differences;
+            }
+            (None, Some(virtual_)) => {
+                differences.push(Difference::Exception(0, virtual_));
+                return differences;
+            }
+            (None, None) => {}
+        }
+
         for (&register, &expected) in &self.registers {
             if let Some(&received) = other.registers.get(&register) {
                 if expected != received {
@@ -100,6 +122,7 @@ impl State {
                 }
             }
         }
+
         for (&vector, &expected) in &self.vectors {
             if let Some(&received) = other.vectors.get(&vector) {
                 if expected != received {
@@ -107,6 +130,7 @@ impl State {
                 }
             }
         }
+
         differences
     }
 }
@@ -198,9 +222,9 @@ impl Executor {
             )
             .unwrap();
 
-        let mut vectors = vec![[0u128; 2]; VECTORS.len()];
+        let mut vectors = vec![[0u128; 2]; VIRTUAL_VECTORS.len()];
 
-        for vector in VECTORS {
+        for vector in VIRTUAL_VECTORS {
             if let Some(v) = state.vectors.get(&vector) {
                 vectors[self.rt.mapper.index(vector) as usize] = *v;
             }
@@ -209,7 +233,7 @@ impl Executor {
         // mov r9, ...
         self.rt.asm.mov(r9, vectors.as_ptr() as u64).unwrap();
 
-        for vector in VECTORS {
+        for vector in VIRTUAL_VECTORS {
             // vmovdqu ymm0, [r9 + ...]
             self.rt
                 .asm
@@ -242,7 +266,7 @@ impl Executor {
         // mov r8, ...
         self.rt.asm.mov(r8, registers.as_mut_ptr() as u64).unwrap();
 
-        for register in REGISTERS {
+        for register in VIRTUAL_REGISTERS {
             // mov r9, [r12 + ...]
             self.rt
                 .asm
@@ -266,7 +290,7 @@ impl Executor {
         // mov r9, ...
         self.rt.asm.mov(r9, vectors.as_mut_ptr() as u64).unwrap();
 
-        for vector in VECTORS {
+        for vector in VIRTUAL_VECTORS {
             // vmovdqu ymm0, [r8 + ...]
             self.rt
                 .asm
@@ -315,7 +339,7 @@ impl Executor {
             .unwrap()
         };
 
-        VIRTUAL_REGISTRY.lock().unwrap().insert(thread_id);
+        VIRTUAL_REGISTRY.lock().unwrap().insert(thread_id, None);
 
         unsafe {
             ResumeThread(thread);
@@ -323,17 +347,22 @@ impl Executor {
             CloseHandle(thread).unwrap();
         }
 
-        VIRTUAL_REGISTRY.lock().unwrap().remove(&thread_id);
+        let exception = VIRTUAL_REGISTRY
+            .lock()
+            .unwrap()
+            .remove(&thread_id)
+            .flatten();
 
         State {
-            registers: REGISTERS
+            registers: VIRTUAL_REGISTERS
                 .iter()
                 .map(|&r| (r, registers[self.rt.mapper.index(r) as usize]))
                 .collect(),
-            vectors: VECTORS
+            vectors: VIRTUAL_VECTORS
                 .iter()
                 .map(|&v| (v, vectors[self.rt.mapper.index(v) as usize]))
                 .collect(),
+            exception,
         }
     }
 
@@ -428,21 +457,19 @@ impl Executor {
             .remove(&thread_id)
             .and_then(|(_, _, _, exception)| exception);
 
-        if let Some(exception) = exception {
-            unsafe {
-                RaiseException(exception, 0, None);
-            }
-        }
-
         context.EFlags &= !(Flag::Interrupt.bit32() | Flag::Reserved1.bit32());
 
-        let registers = REGISTERS
+        let registers = VIRTUAL_REGISTERS
             .iter()
             .map(|&register| (register, read_register(context, register)))
             .collect();
         let vectors = unsafe { read_vectors(context) };
 
-        State { registers, vectors }
+        State {
+            registers,
+            vectors,
+            exception,
+        }
     }
 }
 

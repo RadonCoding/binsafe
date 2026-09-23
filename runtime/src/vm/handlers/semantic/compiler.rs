@@ -619,27 +619,39 @@ fn compile_effect(rt: &mut Runtime, allocator: &mut Allocator, effect: &Effect, 
             allocator.replace(dst, Value::Output(0), true);
             allocator.consume(src);
         }
-        Effect::Bsr(expression) => {
-            compile_unary(rt, allocator, expression, width, |rt, dst, src| {
-                rt.asm.bsr(dst, src).unwrap();
-            })
-        }
-        Effect::Tzcnt(expression) => {
-            compile_unary(rt, allocator, expression, width, |rt, dst, src| {
-                rt.asm.tzcnt(dst, src).unwrap();
-            })
-        }
+        Effect::Bsr(expression) => compile_unary(
+            rt,
+            allocator,
+            expression,
+            width,
+            |rt, dst, src| rt.asm.bsr(dst, src).unwrap(),
+            |rt, dst, src| rt.asm.bsr(dst, src).unwrap(),
+            |rt, dst, src| rt.asm.bsr(dst, src).unwrap(),
+        ),
+        Effect::Tzcnt(expression) => compile_unary(
+            rt,
+            allocator,
+            expression,
+            width,
+            |rt, dst, src| rt.asm.tzcnt(dst, src).unwrap(),
+            |rt, dst, src| rt.asm.tzcnt(dst, src).unwrap(),
+            |rt, dst, src| rt.asm.tzcnt(dst, src).unwrap(),
+        ),
     }
 }
 
-fn compile_unary<F>(
+fn compile_unary<U16, U32, U64>(
     rt: &mut Runtime,
     allocator: &mut Allocator,
     expression: &Expression,
     width: VMWidth,
-    operation: F,
+    unsigned16: U16,
+    unsigned32: U32,
+    unsigned64: U64,
 ) where
-    F: FnOnce(&mut Runtime, AsmRegister64, AsmRegister64),
+    U16: FnOnce(&mut Runtime, AsmRegister16, AsmRegister16),
+    U32: FnOnce(&mut Runtime, AsmRegister32, AsmRegister32),
+    U64: FnOnce(&mut Runtime, AsmRegister64, AsmRegister64),
 {
     let value = compile_expression(rt, allocator, expression, width);
     let src = allocator.acquire(rt, &[], &[]);
@@ -655,7 +667,22 @@ fn compile_unary<F>(
 
     let dst = allocator.mutable(rt, Value::Output(0), &[src]);
 
-    operation(rt, dst, src);
+    match width.size() {
+        2 => {
+            let dst = get_gpr16(register::sized(dst.into(), 2).unwrap()).unwrap();
+            let src = get_gpr16(register::sized(src.into(), 2).unwrap()).unwrap();
+            unsigned16(rt, dst, src);
+        }
+        4 => {
+            let dst = get_gpr32(register::sized(dst.into(), 4).unwrap()).unwrap();
+            let src = get_gpr32(register::sized(src.into(), 4).unwrap()).unwrap();
+            unsigned32(rt, dst, src);
+        }
+        8 => {
+            unsigned64(rt, dst, src);
+        }
+        _ => unreachable!(),
+    }
 
     allocator.dirty(Value::Output(0));
     allocator.consume(value);
