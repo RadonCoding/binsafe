@@ -8,10 +8,10 @@ use crate::{
     register,
     runtime::Runtime,
     vm::{
-        bytecode::{Flag, VMReg, VMWidth},
+        bytecode::{VMReg, VMWidth},
         handlers::semantic::{
-            allocator::Allocator, Compare, Effect, Expression, Flags, Operand, Operation, Reference,
-            Value,
+            allocator::Allocator, Compare, Effect, Expression, Flags, Operand, Operation,
+            Reference, Value,
         },
         utils::{bytecode, scratch, vreg},
     },
@@ -878,10 +878,6 @@ fn compile_flags(rt: &mut Runtime, allocator: &mut Allocator, flags: &Flags, wid
 
             allocator.untrack(register);
         }
-        // A conditional flag write stores back to the flag register only when
-        // the condition holds; otherwise the store is redirected at the local
-        // slot, so the pre-operation flags are left untouched (a shift or
-        // rotate with a zero count does not affect the flags).
         Some(condition) => {
             let condition = compile_expression(rt, allocator, condition, width);
 
@@ -900,10 +896,10 @@ fn compile_flags(rt: &mut Runtime, allocator: &mut Allocator, flags: &Flags, wid
                 .mov(register, qword_ptr(rbp - allocator.offset(Value::Flags)))
                 .unwrap();
 
-            let offset = rt.mapper.index(VMReg::Flags) as i32 * 8;
-
             let target = allocator.acquire(rt, &[], &[selector, register]);
-            rt.asm.lea(target, ptr(r12 + offset)).unwrap();
+            rt.asm
+                .lea(target, ptr(r12 + rt.mapper.index(VMReg::Flags) as i32 * 8))
+                .unwrap();
 
             let skip = allocator.acquire(rt, &[], &[selector, register, target]);
             rt.asm

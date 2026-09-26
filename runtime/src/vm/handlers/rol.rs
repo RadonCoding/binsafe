@@ -2,7 +2,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{Flag, VMWidth},
-        handlers::semantic::{self, Flags, Compare, Effect, Expression, Operand, Operation},
+        handlers::semantic::{self, Compare, Effect, Expression, Flags, Operand, Operation},
     },
 };
 
@@ -15,18 +15,24 @@ pub fn build(rt: &mut Runtime) {
                 Expression::Operand(Operand::Input(1)),
             )],
             flags: Flags::When(
-Expression::BitAnd(Box::new(Expression::Operand(Operand::Input(1))), Box::new(Expression::BitOr(Box::new(Expression::SignBit), Box::new(Expression::Constant(0x1f))))),
-vec![
-                (
-                    Flag::Carry,
-                    Expression::Compare(Box::new(Compare::BitSet(
+                Expression::BitAnd(
+                    Box::new(Expression::Operand(Operand::Input(1))),
+                    Box::new(Expression::BitOr(
+                        Box::new(Expression::SignBit),
+                        Box::new(Expression::Constant(0x1f)),
+                    )),
+                ),
+                vec![
+                    (
+                        Flag::Carry,
+                        Expression::Compare(Box::new(Compare::BitSet(
                             Expression::Operand(Operand::Output(0)),
                             Expression::Constant(0),
                         ))),
-                ),
-                (
-                    Flag::Overflow,
-                    Expression::Compare(Box::new(Compare::GreaterThan(
+                    ),
+                    (
+                        Flag::Overflow,
+                        Expression::Compare(Box::new(Compare::GreaterThan(
                             Expression::BitXor(
                                 Box::new(Expression::BitShr(
                                     Box::new(Expression::Operand(Operand::Output(0))),
@@ -39,8 +45,9 @@ vec![
                             ),
                             Expression::Constant(0),
                         ))),
-                ),
-            ]),
+                    ),
+                ],
+            ),
             stores: None,
             widths: &[
                 VMWidth::Lower64,

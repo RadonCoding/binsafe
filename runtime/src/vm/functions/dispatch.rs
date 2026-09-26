@@ -129,7 +129,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut decrypt_block).unwrap();
     {
         #[cfg(feature = "profile")]
-        start_profiling(rt, "vm_crypt_decrypt");
+        start_profiling(rt);
 
         // Decrypt the block:
         // mov rcx, 0x1
@@ -138,7 +138,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.call(rt.function_labels[&FnDef::VmCrypt]).unwrap();
 
         #[cfg(feature = "profile")]
-        stop_profiling(rt, "vm_crypt_decrypt");
+        stop_profiling(rt, FnDef::VmCrypt, "decrypt");
 
         // mov rax, ...
         rt.asm.mov(rax, VM_INTEGRITY_QWORD).unwrap();
@@ -173,16 +173,30 @@ pub fn build(rt: &mut Runtime) {
         // r8d -> operation
         utils::bytecode::read_byte_zx(rt, r13, r8d);
 
-        // println!(
-        //     "{}",
-        //     VMOp::VARIANTS
-        //         .iter()
-        //         .map(|op| format!("{:?}={:016X}", op, rt.mapper.index(*op)))
-        //         .collect::<Vec<String>>()
-        //         .join("\n")
-        // );
+        #[cfg(feature = "profile")]
+        {
+            use crate::debug::print_thread_message;
 
-        // crate::debug::print_thread_message(rt, "Executing", Some(r8), None);
+            let mut epilogue = rt.asm.create_label();
+
+            let mut cases = Vec::new();
+
+            for op in VMOp::VARIANTS {
+                cases.push((rt.mapper.index(*op), rt.asm.create_label()));
+            }
+
+            rt.jumps(r8, cases.clone());
+
+            for (op, (_, mut label)) in VMOp::VARIANTS.iter().zip(cases) {
+                rt.asm.set_label(&mut label).unwrap();
+
+                print_thread_message(rt, &format!("{:?}", op), None, None);
+
+                rt.asm.jmp(epilogue).unwrap();
+            }
+
+            rt.asm.set_label(&mut epilogue).unwrap();
+        }
 
         // mov rcx, r13
         rt.asm.mov(rcx, r13).unwrap();
@@ -244,7 +258,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut check_exit).unwrap();
     {
         #[cfg(feature = "profile")]
-        start_profiling(rt, "vm_crypt_encrypt");
+        start_profiling(rt);
 
         // Re-encrypt the current block:
         // xor rcx, rcx
@@ -253,7 +267,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.call(rt.function_labels[&FnDef::VmCrypt]).unwrap();
 
         #[cfg(feature = "profile")]
-        stop_profiling(rt, "vm_crypt_encrypt");
+        stop_profiling(rt, FnDef::VmCrypt, "encrypt");
 
         // Skip if there is no branch:
         // mov rax, [r12 + ...]
