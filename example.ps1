@@ -1,12 +1,12 @@
 param(
     [Parameter(Mandatory)]
     [System.IO.DirectoryInfo]$Example,
-    [string[]]$Args
+    [string[]]$Arguments
 )
 
 $ErrorActionPreference = "Stop"
 
-$language = [System.IO.Path]::GetFileName([System.IO.Path]::GetDirectoryName([System.IO.Path]::GetDirectoryName($Example)))
+$language = Split-Path (Split-Path $Example -Parent) -Leaf
 
 $env:OUTPUT_DIRECTORY = Join-Path $PWD "api/generated"
 $env:TEMPLATES_DIRECTORY = Join-Path $PWD "api/templates"
@@ -15,7 +15,7 @@ cargo build --package markers
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-cargo build --bin obfuscator $Args
+cargo build --bin obfuscator $Arguments
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -72,9 +72,7 @@ if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
     throw "Source executable not found: $source"
 }
 
-& (Join-Path $PWD "target/debug/obfuscator.exe") `
-    --virtualization -v`
-$source
+& (Join-Path $PWD "target/debug/obfuscator.exe") --virtualization -v $source
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

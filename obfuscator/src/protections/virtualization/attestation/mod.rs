@@ -216,8 +216,8 @@ fn correct(
     let combined = combine_operation(operation, vp0, vp1);
     let correction = combined ^ key;
 
-    instructions.extend(xor(Some(VMReg::Vp0), Some(VMReg::Vt0)));
-    instructions.extend(xor(Some(VMReg::Vp1), Some(VMReg::Vt0)));
+    instructions.extend(xor(Some(VMReg::Vp0), Some(VMReg::Vt1)));
+    instructions.extend(xor(Some(VMReg::Vp1), Some(VMReg::Vt1)));
     instructions.extend(register_operation(operation));
     instructions.extend(immediate(correction));
     instructions.extend(xor(None, None));

@@ -654,14 +654,14 @@ fn transforms<'a>(
     picker: &'a RefCell<&'a mut dyn FnMut(&[usize]) -> usize>,
 ) -> Vec<Box<dyn Transform + 'a>> {
     vec![
-        // Box::new(Peephole),
-        // Box::new(Permute { picker }),
-        // Box::new(Scramble),
-        // Box::new(Mutation),
-        // Box::new(Indirect),
+        Box::new(Peephole),
+        Box::new(Permute { picker }),
+        Box::new(Scramble),
+        Box::new(Mutation),
+        Box::new(Indirect),
         Box::new(Encrypt),
-        // Box::new(Permute { picker }),
-        // Box::new(Peephole),
+        Box::new(Permute { picker }),
+        Box::new(Peephole),
     ]
 }
 
