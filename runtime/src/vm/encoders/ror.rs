@@ -36,5 +36,4 @@ impl Encode for Ror {
     fn produces(&self) -> i32 {
         1
     }
-
 }

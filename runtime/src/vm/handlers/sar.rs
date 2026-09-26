@@ -2,7 +2,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{Flag, VMWidth},
-        handlers::semantic::{self, Compare, Condition, Effect, Expression, Operand, Operation},
+        handlers::semantic::{self, Flags, Compare, Effect, Expression, Operand, Operation},
     },
 };
 
@@ -14,27 +14,18 @@ pub fn build(rt: &mut Runtime) {
                 Expression::Operand(Operand::Input(0)),
                 Expression::Operand(Operand::Input(1)),
             )],
-            flags: vec![
+            flags: Flags::When(
+Expression::BitAnd(Box::new(Expression::Operand(Operand::Input(1))), Box::new(Expression::BitOr(Box::new(Expression::SignBit), Box::new(Expression::Constant(0x1f))))),
+vec![
                 (
                     Flag::Carry,
-                    Condition::Compare(Compare::BitSet(
-                        Expression::Operand(Operand::Input(0)),
-                        Expression::Sub(
-                            Box::new(Expression::SignBit),
-                            Box::new(Expression::BitAnd(
-                                Box::new(Expression::Sub(
-                                    Box::new(Expression::BitSize),
-                                    Box::new(Expression::BitAnd(
-                                        Box::new(Expression::Operand(Operand::Input(1))),
-                                        Box::new(Expression::BitOr(
-                                            Box::new(Expression::SignBit),
-                                            Box::new(Expression::Constant(0x1f)),
-                                        )),
-                                    )),
-                                )),
-                                Box::new(Expression::BitShr(
-                                    Box::new(Expression::BitNot(Box::new(Expression::Constant(0)))),
+                    Expression::Compare(Box::new(Compare::BitSet(
+                            Expression::Operand(Operand::Input(0)),
+                            Expression::Sub(
+                                Box::new(Expression::SignBit),
+                                Box::new(Expression::BitAnd(
                                     Box::new(Expression::Sub(
+                                        Box::new(Expression::BitSize),
                                         Box::new(Expression::BitAnd(
                                             Box::new(Expression::Operand(Operand::Input(1))),
                                             Box::new(Expression::BitOr(
@@ -42,39 +33,54 @@ pub fn build(rt: &mut Runtime) {
                                                 Box::new(Expression::Constant(0x1f)),
                                             )),
                                         )),
-                                        Box::new(Expression::Constant(1)),
+                                    )),
+                                    Box::new(Expression::BitShr(
+                                        Box::new(Expression::BitNot(Box::new(
+                                            Expression::Constant(0),
+                                        ))),
+                                        Box::new(Expression::Sub(
+                                            Box::new(Expression::BitAnd(
+                                                Box::new(Expression::Operand(Operand::Input(1))),
+                                                Box::new(Expression::BitOr(
+                                                    Box::new(Expression::SignBit),
+                                                    Box::new(Expression::Constant(0x1f)),
+                                                )),
+                                            )),
+                                            Box::new(Expression::Constant(1)),
+                                        )),
                                     )),
                                 )),
-                            )),
-                        ),
-                    )),
+                            ),
+                        ))),
                 ),
                 (
                     Flag::Overflow,
-                    Condition::Compare(Compare::Equal(
-                        Expression::Constant(1),
-                        Expression::Constant(0),
-                    )),
+                    Expression::Compare(Box::new(Compare::Equal(
+                            Expression::Constant(1),
+                            Expression::Constant(0),
+                        ))),
                 ),
                 (
                     Flag::Sign,
-                    Condition::Compare(Compare::BitSet(
-                        Expression::Operand(Operand::Output(0)),
-                        Expression::SignBit,
-                    )),
+                    Expression::Compare(Box::new(Compare::BitSet(
+                            Expression::Operand(Operand::Output(0)),
+                            Expression::SignBit,
+                        ))),
                 ),
                 (
                     Flag::Zero,
-                    Condition::Compare(Compare::Equal(
-                        Expression::Operand(Operand::Output(0)),
-                        Expression::Constant(0),
-                    )),
+                    Expression::Compare(Box::new(Compare::Equal(
+                            Expression::Operand(Operand::Output(0)),
+                            Expression::Constant(0),
+                        ))),
                 ),
                 (
                     Flag::Parity,
-                    Condition::Parity(Expression::Operand(Operand::Output(0))),
+                    Expression::Parity(Box::new(Expression::Operand(
+                            Operand::Output(0),
+                        ))),
                 ),
-            ],
+            ]),
             stores: None,
             widths: &[
                 VMWidth::Lower64,

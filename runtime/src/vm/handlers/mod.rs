@@ -1,3 +1,4 @@
+pub mod adc;
 pub mod add;
 pub mod and;
 pub mod bit_scan_reverse;
@@ -29,6 +30,7 @@ pub mod ret;
 pub mod rol;
 pub mod ror;
 pub mod sar;
+pub mod sbb;
 pub mod semantic;
 pub mod shl;
 pub mod shr;

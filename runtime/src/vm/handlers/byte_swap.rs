@@ -2,7 +2,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::VMWidth,
-        handlers::semantic::{self, Effect, Expression, Operand, Operation},
+        handlers::semantic::{self, Flags, Effect, Expression, Operand, Operation},
     },
 };
 
@@ -113,7 +113,7 @@ pub fn build(rt: &mut Runtime) {
                     ),
                 ),
             ],
-            flags: vec![],
+            flags: Flags::Always(vec![]),
             stores: None,
             widths: &[VMWidth::Lower64, VMWidth::Lower32],
         },

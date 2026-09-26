@@ -32,5 +32,4 @@ impl Encode for VectorOr {
     fn produces(&self) -> i32 {
         1
     }
-
 }

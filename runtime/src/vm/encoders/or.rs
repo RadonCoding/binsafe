@@ -36,5 +36,4 @@ impl Encode for Or {
     fn produces(&self) -> i32 {
         1
     }
-
 }

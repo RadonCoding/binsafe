@@ -1,6 +1,6 @@
 use iced_x86::code_asm::{
-    ah, ax, cl, dl, dword_ptr, dx, get_gpr16, get_gpr32, get_gpr8, qword_ptr, r12, r13, r14, r14d,
-    rax, rbp, rcx, rdx, rsp, AsmRegister16, AsmRegister32, AsmRegister64, AsmRegister8,
+    ah, ax, cl, dl, dword_ptr, dx, get_gpr16, get_gpr32, get_gpr8, ptr, qword_ptr, r12, r13, r14,
+    r14d, rax, rbp, rcx, rdx, rsp, AsmRegister16, AsmRegister32, AsmRegister64, AsmRegister8,
     CodeAssembler, CodeLabel,
 };
 
@@ -10,8 +10,8 @@ use crate::{
     vm::{
         bytecode::{Flag, VMReg, VMWidth},
         handlers::semantic::{
-            allocator::Allocator, Compare, Condition, Effect, Expression, Operand, Operation,
-            Reference, Value,
+            allocator::Allocator, Compare, Effect, Expression, Flags, Operand, Operation, Reference,
+            Value,
         },
         utils::{bytecode, scratch, vreg},
     },
@@ -698,6 +698,27 @@ fn compile_expression(
         Expression::Operand(Operand::Input(index)) => Reference::Value(Value::Input(*index)),
         Expression::Operand(Operand::Output(index)) => Reference::Value(Value::Output(*index)),
         Expression::Constant(value) => Reference::Immediate(*value as i64),
+        Expression::Flag(flag) => {
+            let dst = allocator.acquire(rt, &[], &[]);
+
+            vreg::load_reg(rt, r12, VMReg::Flags, dst);
+
+            let bit = flag.bit32().trailing_zeros() as i32;
+
+            if bit > 0 {
+                rt.asm.shr(dst, bit).unwrap();
+            }
+
+            rt.asm.and(dst, 0x1).unwrap();
+
+            let tmp = allocator.temporary();
+
+            allocator.replace(dst, tmp, true);
+
+            Reference::Value(tmp)
+        }
+        Expression::Compare(compare) => compile_compare(rt, allocator, compare, width),
+        Expression::Parity(node) => compile_parity(rt, allocator, node, width),
         Expression::SignBit => Reference::Immediate(width.mask().ilog2() as i64),
         Expression::BitSize => Reference::Immediate((width.size() * 8) as i64),
         Expression::ByteMask(n) => {
@@ -808,12 +829,7 @@ fn compile_expression(
     }
 }
 
-fn compile_flags(
-    rt: &mut Runtime,
-    allocator: &mut Allocator,
-    flags: &[(Flag, Condition)],
-    width: VMWidth,
-) {
+fn compile_flags(rt: &mut Runtime, allocator: &mut Allocator, flags: &Flags, width: VMWidth) {
     let register = allocator.acquire(rt, &[], &[]);
 
     vreg::load_reg(rt, r12, VMReg::Flags, register);
@@ -824,31 +840,89 @@ fn compile_flags(
 
     allocator.untrack(register);
 
-    for (flag, condition) in flags {
-        match condition {
-            Condition::Compare(item) => compile_comparison(rt, allocator, *flag, item, width),
-            Condition::Parity(node) => compile_parity(rt, allocator, *flag, node, width),
-        }
+    for (flag, expression) in flags.values() {
+        let value = compile_expression(rt, allocator, expression, width);
+
+        let pinned = match value {
+            Reference::Value(value) => vec![value],
+            Reference::Immediate(_) => vec![],
+        };
+
+        let dst = allocator.acquire(rt, &pinned, &[]);
+        allocator.copy(rt, value, dst);
+        allocator.consume(value);
+
+        let bit = flag.bit32().trailing_zeros() as i32;
+        let mask = flag.bit32();
+
+        rt.asm
+            .and(dword_ptr(rbp - allocator.offset(Value::Flags)), !mask)
+            .unwrap();
+        rt.asm.shl(dst, bit).unwrap();
+        rt.asm
+            .or(dword_ptr(rbp - allocator.offset(Value::Flags)), dst)
+            .unwrap();
+
+        allocator.spill(rt, dst);
     }
 
-    let register = allocator.acquire(rt, &[], &[]);
+    match flags.condition() {
+        None => {
+            let register = allocator.acquire(rt, &[], &[]);
 
-    rt.asm
-        .mov(register, qword_ptr(rbp - allocator.offset(Value::Flags)))
-        .unwrap();
+            rt.asm
+                .mov(register, qword_ptr(rbp - allocator.offset(Value::Flags)))
+                .unwrap();
 
-    vreg::store_reg(rt, r12, register, VMReg::Flags);
+            vreg::store_reg(rt, r12, register, VMReg::Flags);
 
-    allocator.untrack(register);
+            allocator.untrack(register);
+        }
+        // A conditional flag write stores back to the flag register only when
+        // the condition holds; otherwise the store is redirected at the local
+        // slot, so the pre-operation flags are left untouched (a shift or
+        // rotate with a zero count does not affect the flags).
+        Some(condition) => {
+            let condition = compile_expression(rt, allocator, condition, width);
+
+            let pinned = match condition {
+                Reference::Value(value) => vec![value],
+                Reference::Immediate(_) => vec![],
+            };
+
+            let selector = allocator.acquire(rt, &pinned, &[]);
+            allocator.copy(rt, condition, selector);
+            allocator.consume(condition);
+
+            let register = allocator.acquire(rt, &[], &[selector]);
+
+            rt.asm
+                .mov(register, qword_ptr(rbp - allocator.offset(Value::Flags)))
+                .unwrap();
+
+            let offset = rt.mapper.index(VMReg::Flags) as i32 * 8;
+
+            let target = allocator.acquire(rt, &[], &[selector, register]);
+            rt.asm.lea(target, ptr(r12 + offset)).unwrap();
+
+            let skip = allocator.acquire(rt, &[], &[selector, register, target]);
+            rt.asm
+                .lea(skip, ptr(rbp - allocator.offset(Value::Flags)))
+                .unwrap();
+
+            rt.asm.test(selector, selector).unwrap();
+            rt.asm.cmovz(target, skip).unwrap();
+            rt.asm.mov(ptr(target), register).unwrap();
+        }
+    }
 }
 
-fn compile_comparison(
+fn compile_compare(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    flag: Flag,
     compare: &Compare,
     width: VMWidth,
-) {
+) -> Reference {
     let (first, second) = match compare {
         Compare::Equal(first, second)
         | Compare::LessThan(first, second)
@@ -900,19 +974,6 @@ fn compile_comparison(
 
     rt.asm.movzx(tmp, byte).unwrap();
 
-    let bit = flag.bit32().trailing_zeros() as i32;
-
-    let mask = flag.bit32();
-
-    rt.asm
-        .and(dword_ptr(rbp - allocator.offset(Value::Flags)), !mask)
-        .unwrap();
-    rt.asm.shl(tmp, bit).unwrap();
-    rt.asm
-        .or(dword_ptr(rbp - allocator.offset(Value::Flags)), tmp)
-        .unwrap();
-
-    allocator.spill(rt, tmp);
     allocator.consume(first);
     allocator.consume(second);
     allocator.spill(rt, dst);
@@ -920,15 +981,19 @@ fn compile_comparison(
     if src != dst {
         allocator.spill(rt, src);
     }
+
+    let value = allocator.temporary();
+    allocator.replace(tmp, value, true);
+
+    Reference::Value(value)
 }
 
 fn compile_parity(
     rt: &mut Runtime,
     allocator: &mut Allocator,
-    flag: Flag,
     node: &Expression,
     width: VMWidth,
-) {
+) -> Reference {
     let src = compile_expression(rt, allocator, node, width);
     let dst = allocator.acquire(rt, &[], &[]);
 
@@ -940,17 +1005,10 @@ fn compile_parity(
     rt.asm.not(dst).unwrap();
     rt.asm.and(dst, 0x1).unwrap();
 
-    let shift = flag.bit32().trailing_zeros() as i32;
-    let mask = 1u32 << shift;
-
-    rt.asm
-        .and(dword_ptr(rbp - allocator.offset(Value::Flags)), !mask)
-        .unwrap();
-    rt.asm.shl(dst, shift).unwrap();
-    rt.asm
-        .or(dword_ptr(rbp - allocator.offset(Value::Flags)), dst)
-        .unwrap();
-
-    allocator.untrack(dst);
     allocator.consume(src);
+
+    let value = allocator.temporary();
+    allocator.replace(dst, value, true);
+
+    Reference::Value(value)
 }

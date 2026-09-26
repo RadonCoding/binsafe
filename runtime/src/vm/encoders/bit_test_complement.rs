@@ -36,5 +36,4 @@ impl Encode for BitTestComplement {
     fn produces(&self) -> i32 {
         1
     }
-
 }

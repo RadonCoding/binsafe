@@ -36,5 +36,4 @@ impl Encode for Sub {
     fn produces(&self) -> i32 {
         1
     }
-
 }

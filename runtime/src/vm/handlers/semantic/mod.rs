@@ -21,6 +21,9 @@ pub enum Expression {
     BitNot(Box<Expression>),
     Sub(Box<Expression>, Box<Expression>),
     LowByte(Box<Expression>),
+    Compare(Box<Compare>),
+    Parity(Box<Expression>),
+    Flag(Flag),
     SignBit,
     BitSize,
     ByteMask(usize),
@@ -54,15 +57,15 @@ pub enum Compare {
 }
 
 #[derive(Debug, Clone)]
-pub enum Condition {
-    Compare(Compare),
-    Parity(Expression),
+pub enum Flags {
+    Always(Vec<(Flag, Expression)>),
+    When(Expression, Vec<(Flag, Expression)>),
 }
 
 #[derive(Debug)]
 pub struct Operation {
     pub effects: Vec<Effect>,
-    pub flags: Vec<(Flag, Condition)>,
+    pub flags: Flags,
     pub stores: Option<Vec<Expression>>,
     pub widths: &'static [VMWidth],
 }
@@ -91,9 +94,7 @@ impl Operation {
             effect.operands(&mut value);
         }
 
-        for (_, condition) in &self.flags {
-            condition.operands(&mut value);
-        }
+        self.flags.operands(&mut value);
 
         if let Some(stores) = &self.stores {
             for store in stores {
@@ -120,11 +121,7 @@ impl Operation {
 
     fn temporaries(&self) -> usize {
         let effects = self.effects.iter().map(Effect::temporary).sum::<usize>();
-        let flags = self
-            .flags
-            .iter()
-            .map(|(_, condition)| condition.temporary())
-            .sum::<usize>();
+        let flags = self.flags.temporary();
         let stores = self
             .stores
             .as_ref()
@@ -132,6 +129,46 @@ impl Operation {
             .unwrap_or(0);
 
         effects + flags + stores
+    }
+}
+
+impl Flags {
+    fn values(&self) -> &[(Flag, Expression)] {
+        match self {
+            Flags::Always(values) | Flags::When(_, values) => values,
+        }
+    }
+
+    fn condition(&self) -> Option<&Expression> {
+        match self {
+            Flags::Always(_) => None,
+            Flags::When(condition, _) => Some(condition),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.values().is_empty()
+    }
+
+    fn operands(&self, value: &mut usize) {
+        if let Some(condition) = self.condition() {
+            condition.operands(value);
+        }
+
+        for (_, expression) in self.values() {
+            expression.operands(value);
+        }
+    }
+
+    fn temporary(&self) -> usize {
+        let condition = self.condition().map(Expression::temporary).unwrap_or(0);
+        let values = self
+            .values()
+            .iter()
+            .map(|(_, expression)| expression.temporary())
+            .sum::<usize>();
+
+        condition + values
     }
 }
 
@@ -143,6 +180,7 @@ impl Expression {
             }
             Expression::Operand(Operand::Output(_))
             | Expression::Constant(_)
+            | Expression::Flag(_)
             | Expression::SignBit
             | Expression::BitSize
             | Expression::ByteMask(_) => {}
@@ -155,9 +193,10 @@ impl Expression {
                 lhs.operands(value);
                 rhs.operands(value);
             }
-            Expression::BitNot(inner) | Expression::LowByte(inner) => {
+            Expression::BitNot(inner) | Expression::LowByte(inner) | Expression::Parity(inner) => {
                 inner.operands(value);
             }
+            Expression::Compare(compare) => compare.operands(value),
         }
     }
 
@@ -168,13 +207,17 @@ impl Expression {
             | Expression::SignBit
             | Expression::BitSize
             | Expression::ByteMask(_) => 0,
+            Expression::Flag(_) => 1,
             Expression::BitAnd(lhs, rhs)
             | Expression::BitOr(lhs, rhs)
             | Expression::BitXor(lhs, rhs)
             | Expression::BitShr(lhs, rhs)
             | Expression::BitShl(lhs, rhs)
             | Expression::Sub(lhs, rhs) => 1 + lhs.temporary() + rhs.temporary(),
-            Expression::BitNot(inner) | Expression::LowByte(inner) => 1 + inner.temporary(),
+            Expression::BitNot(inner) | Expression::LowByte(inner) | Expression::Parity(inner) => {
+                1 + inner.temporary()
+            }
+            Expression::Compare(compare) => 1 + compare.temporary(),
         }
     }
 }
@@ -249,22 +292,6 @@ impl Effect {
             Effect::Assign(expression) | Effect::Bsr(expression) | Effect::Tzcnt(expression) => {
                 expression.temporary()
             }
-        }
-    }
-}
-
-impl Condition {
-    fn operands(&self, value: &mut usize) {
-        match self {
-            Condition::Compare(compare) => compare.operands(value),
-            Condition::Parity(expression) => expression.operands(value),
-        }
-    }
-
-    fn temporary(&self) -> usize {
-        match self {
-            Condition::Compare(compare) => compare.temporary(),
-            Condition::Parity(expression) => expression.temporary(),
         }
     }
 }

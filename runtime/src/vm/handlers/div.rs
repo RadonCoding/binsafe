@@ -2,7 +2,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::VMWidth,
-        handlers::semantic::{self, Effect, Expression, Operand, Operation},
+        handlers::semantic::{self, Flags, Effect, Expression, Operand, Operation},
     },
 };
 
@@ -15,7 +15,7 @@ pub fn build(rt: &mut Runtime) {
                 Expression::Operand(Operand::Input(1)),
                 Expression::Operand(Operand::Input(2)),
             )],
-            flags: vec![],
+            flags: Flags::Always(vec![]),
             stores: None,
             widths: &[
                 VMWidth::Lower64,

@@ -36,5 +36,4 @@ impl Encode for Xor {
     fn produces(&self) -> i32 {
         1
     }
-
 }

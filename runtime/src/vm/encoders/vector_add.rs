@@ -38,5 +38,4 @@ impl Encode for VectorAdd {
     fn produces(&self) -> i32 {
         1
     }
-
 }

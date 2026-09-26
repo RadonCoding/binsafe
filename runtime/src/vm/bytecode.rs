@@ -36,6 +36,8 @@ mapped! {
         // Arithmetic
         Add,
         Sub,
+        Adc,
+        Sbb,
         And,
         Or,
         Xor,

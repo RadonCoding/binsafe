@@ -38,5 +38,4 @@ impl Encode for VectorSub {
     fn produces(&self) -> i32 {
         1
     }
-
 }

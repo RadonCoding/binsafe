@@ -32,5 +32,4 @@ impl Encode for VectorXor {
     fn produces(&self) -> i32 {
         1
     }
-
 }
