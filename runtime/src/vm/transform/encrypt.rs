@@ -215,23 +215,23 @@ fn walk(
         }
 
         if leaf(&mut operations[i], *addend, *multiplier) {
-            skip -= 1;
+            // skip -= 1;
 
-            if !operations[i].is_branch() {
-                if skip == 0 {
-                    let sequence = transform(addend, multiplier, !flags[position]);
-                    let length = sequence.len();
-                    operations.splice(i + 1..i + 1, sequence);
+            // if !operations[i].is_branch() {
+            //     if skip == 0 {
+            //         let sequence = transform(addend, multiplier, !flags[position]);
+            //         let length = sequence.len();
+            //         operations.splice(i + 1..i + 1, sequence);
 
-                    for _ in 0..length {
-                        trace.push((*addend, *multiplier));
-                    }
+            //         for _ in 0..length {
+            //             trace.push((*addend, *multiplier));
+            //         }
 
-                    i += length;
+            //         i += length;
 
-                    skip = rng.gen_range(0..=8);
-                }
-            }
+            //         skip = rng.gen_range(0..=8);
+            //     }
+            // }
         }
 
         i += 1;

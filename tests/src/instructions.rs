@@ -1,5 +1,6 @@
 use std::slice;
 
+use iced_x86::code_asm::{eax, ecx, CodeAssembler};
 use iced_x86::{
     Code, Instruction, InstructionInfoFactory, OpAccess, OpCodeOperandKind, OpKind, Register,
     RflagsBits,
@@ -33,6 +34,32 @@ macro_rules! define {
             }
         )+
     };
+}
+
+#[test]
+fn test_nested_loop() {
+    let mut asm = CodeAssembler::new(64).unwrap();
+
+    let mut outer = asm.create_label();
+    let mut inner = asm.create_label();
+
+    asm.xor(eax, eax).unwrap();
+
+    asm.set_label(&mut outer).unwrap();
+    asm.xor(ecx, ecx).unwrap();
+
+    asm.set_label(&mut inner).unwrap();
+    asm.add(ecx, 1).unwrap();
+    asm.cmp(ecx, 31).unwrap();
+    asm.jbe(inner).unwrap();
+
+    asm.add(eax, 1).unwrap();
+    asm.cmp(eax, 0x4E1F).unwrap();
+    asm.jle(outer).unwrap();
+
+    let instructions = asm.take_instructions();
+
+    compare(baseline(), &instructions);
 }
 
 define!(
@@ -775,46 +802,50 @@ fn case(instruction: Instruction, memory: Option<&mut [u8]>, immediate: u64) {
             VMReg::from(instruction.memory_base()),
             memory.as_mut_ptr() as u64,
         );
-        compare_memory(state, instruction, memory);
+        compare_memory(state, &[instruction], memory);
     } else {
-        compare(state, instruction);
+        compare(state, &[instruction]);
     }
 }
 
-fn compare(state: State, instruction: Instruction) {
-    compare_memory(state, instruction, &mut []);
+fn compare(state: State, instructions: &[Instruction]) {
+    compare_memory(state, instructions, &mut []);
 }
 
-fn compare_memory(state: State, instruction: Instruction, memory: &mut [u8]) {
+fn compare_memory(state: State, instructions: &[Instruction], memory: &mut [u8]) {
     let baseline = memory.to_vec();
 
     let mut executor = Executor::new();
-    let mut native = executor.run_native(state.clone(), &[instruction]);
+    let mut native = executor.run_native(state.clone(), instructions);
 
     memory.copy_from_slice(&baseline);
 
     let mut executor = Executor::new();
-    let lifted = bytecode::lift(&[instruction])
-        .unwrap_or_else(|| panic!("{instruction} is not implemented"));
-
+    let lifted = bytecode::lift(instructions).unwrap();
     let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |_| 0);
 
     let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed);
     encrypt_block(&mut bytes);
     decrypt_payload(&mut bytes);
-    let mut emulated = executor.run_virtual(state.clone(), &bytes);
+    let mut emulated = executor.run_virtual(state, &bytes);
 
-    normalize(&mut native, &mut emulated, instruction);
+    normalize(&mut native, &mut emulated, instructions);
 }
 
-fn normalize(native: &mut State, emulated: &mut State, instruction: Instruction) {
+fn normalize(native: &mut State, emulated: &mut State, instructions: &[Instruction]) {
     native.registers.remove(&VMReg::Rsp);
     emulated.registers.remove(&VMReg::Rsp);
 
+    let mask = instructions
+        .iter()
+        .fold(RflagsBits::NONE, |mask, instruction| {
+            mask | instruction.rflags_written()
+                | instruction.rflags_cleared()
+                | instruction.rflags_set()
+        });
+
     for state in [&mut *native, &mut *emulated] {
         let flags = state.registers.get_mut(&VMReg::Flags).unwrap();
-        let mask =
-            instruction.rflags_written() | instruction.rflags_cleared() | instruction.rflags_set();
 
         *flags &= ((mask & RflagsBits::CF != 0) as u64 * Flag::Carry.bit64())
             | ((mask & RflagsBits::PF != 0) as u64 * Flag::Parity.bit64())
