@@ -2,7 +2,7 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{Flag, VMWidth},
-        handlers::semantic::{self, Flags, Compare, Effect, Expression, Operand, Operation},
+        handlers::semantic::{self, Compare, Effect, Expression, Flags, Operand, Operation},
     },
 };
 

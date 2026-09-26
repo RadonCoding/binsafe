@@ -191,6 +191,7 @@ impl<'a> Engine<'a> {
         if block.is_empty() {
             return;
         }
+
         let rva = block[0].ip() as u32;
         let offset = self.pe.translate(PETranslation::Memory(RVA(rva))).unwrap();
         let size = (end - rva) as usize;

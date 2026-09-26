@@ -87,13 +87,15 @@ pub fn deadzones(
     let mut events = Vec::new();
     scan(operations, &mut events, &effect);
 
+    let first = events.iter().position(|(_, writes)| *writes);
+
     let mut deadzones = vec![false; events.len()];
 
     let mut live = true;
 
     for (i, (reads, writes)) in events.iter().enumerate().rev() {
         if *writes {
-            live = false;
+            live = Some(i) == first;
         }
         if !live {
             deadzones[i] = true;
