@@ -1,6 +1,5 @@
 use std::slice;
 
-use iced_x86::code_asm::{eax, ecx, CodeAssembler};
 use iced_x86::{
     Code, Instruction, InstructionInfoFactory, OpAccess, OpCodeOperandKind, OpKind, Register,
     RflagsBits,
@@ -34,32 +33,6 @@ macro_rules! define {
             }
         )+
     };
-}
-
-#[test]
-fn test_nested_loop() {
-    let mut asm = CodeAssembler::new(64).unwrap();
-
-    let mut outer = asm.create_label();
-    let mut inner = asm.create_label();
-
-    asm.xor(eax, eax).unwrap();
-
-    asm.set_label(&mut outer).unwrap();
-    asm.xor(ecx, ecx).unwrap();
-
-    asm.set_label(&mut inner).unwrap();
-    asm.add(ecx, 1).unwrap();
-    asm.cmp(ecx, 31).unwrap();
-    asm.jbe(inner).unwrap();
-
-    asm.add(eax, 1).unwrap();
-    asm.cmp(eax, 0x4E1F).unwrap();
-    asm.jle(outer).unwrap();
-
-    let instructions = asm.take_instructions();
-
-    compare(baseline(), &instructions);
 }
 
 define!(

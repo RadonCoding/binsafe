@@ -15,33 +15,38 @@ pub fn build(rt: &mut Runtime) {
     // r8d -> destination
     utils::bytecode::read_byte_zx(rt, rcx, r8d);
 
-    // load r9
-    scratch::load(rt, r12, r9);
-
     utils::width::dispatch(
         rt,
         rax,
         &mut epilogue,
         Some(Box::new(|rt| {
+            // load r9
+            scratch::load(rt, r12, r9);
             // mov [r12 + r8*8], r9
             rt.asm.mov(ptr(r12 + r8 * 8), r9).unwrap();
         })),
         Some(Box::new(|rt| {
-            // mov r9d, r9d
-            rt.asm.mov(r9d, r9d).unwrap();
+            // load r9d
+            scratch::load_32(rt, r12, r9d);
             // mov [r12 + r8*8], r9
             rt.asm.mov(ptr(r12 + r8 * 8), r9).unwrap();
         })),
         None,
         Some(Box::new(|rt| {
+            // load r9
+            scratch::load(rt, r12, r9);
             // mov [r12 + r8*8], r9w
             rt.asm.mov(ptr(r12 + r8 * 8), r9w).unwrap();
         })),
         Some(Box::new(|rt| {
+            // load r9
+            scratch::load(rt, r12, r9);
             // mov [r12 + r8*8 + 0x1], r9b
             rt.asm.mov(ptr(r12 + r8 * 8 + 0x1), r9b).unwrap();
         })),
         Some(Box::new(|rt| {
+            // load r9
+            scratch::load(rt, r12, r9);
             // mov [r12 + r8*8], r9b
             rt.asm.mov(ptr(r12 + r8 * 8), r9b).unwrap();
         })),
