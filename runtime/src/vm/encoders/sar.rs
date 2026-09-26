@@ -36,5 +36,4 @@ impl Encode for Sar {
     fn produces(&self) -> i32 {
         1
     }
-
 }

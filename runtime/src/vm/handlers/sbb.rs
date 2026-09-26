@@ -12,7 +12,13 @@ pub fn build(rt: &mut Runtime) {
         &Operation {
             effects: vec![Effect::Sub(
                 Expression::Operand(Operand::Input(0)),
-                Expression::Operand(Operand::Input(1)),
+                Expression::Sub(
+                    Box::new(Expression::Sub(
+                        Box::new(Expression::Operand(Operand::Input(1))),
+                        Box::new(Expression::BitNot(Box::new(Expression::Flag(Flag::Carry)))),
+                    )),
+                    Box::new(Expression::Constant(1)),
+                ),
             )],
             flags: Flags::Always(vec![
                 (
@@ -31,9 +37,23 @@ pub fn build(rt: &mut Runtime) {
                 ),
                 (
                     Flag::Carry,
-                    Expression::Compare(Box::new(Compare::LessThan(
-                        Expression::Operand(Operand::Input(0)),
-                        Expression::Operand(Operand::Input(1)),
+                    Expression::Compare(Box::new(Compare::BitSet(
+                        Expression::BitOr(
+                            Box::new(Expression::BitAnd(
+                                Box::new(Expression::BitNot(Box::new(Expression::Operand(
+                                    Operand::Input(0),
+                                )))),
+                                Box::new(Expression::Operand(Operand::Input(1))),
+                            )),
+                            Box::new(Expression::BitAnd(
+                                Box::new(Expression::BitNot(Box::new(Expression::BitXor(
+                                    Box::new(Expression::Operand(Operand::Input(0))),
+                                    Box::new(Expression::Operand(Operand::Input(1))),
+                                )))),
+                                Box::new(Expression::Operand(Operand::Output(0))),
+                            )),
+                        ),
+                        Expression::SignBit,
                     ))),
                 ),
                 (

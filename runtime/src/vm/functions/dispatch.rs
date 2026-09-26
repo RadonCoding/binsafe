@@ -30,6 +30,8 @@ pub const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::StoreExtend, FnDef::VmHandlerStoreExtend),
     (VMOp::Add, FnDef::VmHandlerAdd),
     (VMOp::Sub, FnDef::VmHandlerSub),
+    (VMOp::Adc, FnDef::VmHandlerAdc),
+    (VMOp::Sbb, FnDef::VmHandlerSbb),
     (VMOp::Exchange, FnDef::VmHandlerExchange),
     (VMOp::ExchangeAdd, FnDef::VmHandlerExchangeAdd),
     (VMOp::CompareExchange, FnDef::VmHandlerCompareExchange),

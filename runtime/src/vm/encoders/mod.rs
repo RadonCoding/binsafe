@@ -84,6 +84,7 @@ pub trait Encode: Debug + Any {
     fn seal(&mut self, _mapper: &mut Mapper, _transform: &mut dyn FnMut(&mut [u8], usize)) {}
 }
 
+pub mod adc;
 pub mod add;
 pub mod and;
 pub mod bit_scan_reverse;
@@ -116,6 +117,7 @@ pub mod ret;
 pub mod rol;
 pub mod ror;
 pub mod sar;
+pub mod sbb;
 pub mod shl;
 pub mod shr;
 pub mod store_extend;

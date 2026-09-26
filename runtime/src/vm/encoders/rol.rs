@@ -36,5 +36,4 @@ impl Encode for Rol {
     fn produces(&self) -> i32 {
         1
     }
-
 }

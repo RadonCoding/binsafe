@@ -38,5 +38,4 @@ impl Encode for VectorMul {
     fn produces(&self) -> i32 {
         1
     }
-
 }

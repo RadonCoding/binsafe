@@ -36,5 +36,4 @@ impl Encode for TrailingZeros {
     fn produces(&self) -> i32 {
         1
     }
-
 }

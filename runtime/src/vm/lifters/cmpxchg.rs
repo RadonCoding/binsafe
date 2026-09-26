@@ -1,6 +1,6 @@
 use iced_x86::{Instruction, OpKind};
 
-use crate::vm::bytecode::{VMCondition, Flag, VMLogic, VMMem, VMReg};
+use crate::vm::bytecode::{Flag, VMCondition, VMLogic, VMMem, VMReg};
 use crate::vm::encoders::block::Block;
 use crate::vm::encoders::{
     compare_exchange::CompareExchange, discard::Discard, load_address::LoadAddress,

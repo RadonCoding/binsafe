@@ -4,11 +4,11 @@ use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 
 #[derive(Debug)]
-pub struct Xor {
+pub struct Adc {
     pub width: VMWidth,
 }
 
-impl Encode for Xor {
+impl Encode for Adc {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -18,11 +18,15 @@ impl Encode for Xor {
     }
 
     fn op(&self) -> Option<VMOp> {
-        Some(VMOp::Xor)
+        Some(VMOp::Adc)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(self.width)]
+    }
+
+    fn reads(&self) -> Vec<super::Effect> {
+        vec![Effect::Register(VMReg::Flags)]
     }
 
     fn writes(&self) -> Vec<super::Effect> {

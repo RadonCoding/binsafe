@@ -1,15 +1,15 @@
 use iced_x86::{Instruction, Mnemonic, OpKind};
 
-use crate::vm::bytecode::{Flag, VMMem, VMPrecision, VMReg, VMVec, VMWidth};
+use crate::vm::bytecode::{VMMem, VMPrecision, VMReg, VMVec, VMWidth};
 use crate::vm::encoders::vector_div::VectorDiv;
 use crate::vm::encoders::vector_mul::VectorMul;
 use crate::vm::encoders::{
-    add::Add, and::And, discard::Discard, load_address::LoadAddress, load_immediate::LoadImmediate,
-    load_memory::LoadMemory, load_register::LoadRegister, load_vector::LoadVector, or::Or,
-    rol::Rol, ror::Ror, sar::Sar, shl::Shl, shr::Shr, store_memory::StoreMemory,
-    store_merge::StoreMerge, store_register::StoreRegister, sub::Sub, vector_add::VectorAdd,
-    vector_and::VectorAnd, vector_and_not::VectorAndNot, vector_or::VectorOr,
-    vector_sub::VectorSub, vector_xor::VectorXor, xor::Xor, Encode,
+    adc::Adc, add::Add, and::And, discard::Discard, load_address::LoadAddress,
+    load_immediate::LoadImmediate, load_memory::LoadMemory, load_register::LoadRegister,
+    load_vector::LoadVector, or::Or, rol::Rol, ror::Ror, sar::Sar, sbb::Sbb, shl::Shl, shr::Shr,
+    store_memory::StoreMemory, store_merge::StoreMerge, store_register::StoreRegister, sub::Sub,
+    vector_add::VectorAdd, vector_and::VectorAnd, vector_and_not::VectorAndNot,
+    vector_or::VectorOr, vector_sub::VectorSub, vector_xor::VectorXor, xor::Xor, Encode,
 };
 use crate::vm::lifters::{operation_width, source};
 
@@ -22,8 +22,8 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     match instruction.mnemonic() {
         Mnemonic::Add => binary(instruction, |width| Add { width }, Tail::Writeback),
         Mnemonic::Sub => binary(instruction, |width| Sub { width }, Tail::Writeback),
-        Mnemonic::Adc => carry(instruction, |width| Add { width }),
-        Mnemonic::Sbb => carry(instruction, |width| Sub { width }),
+        Mnemonic::Adc => binary(instruction, |width| Adc { width }, Tail::Writeback),
+        Mnemonic::Sbb => binary(instruction, |width| Sbb { width }, Tail::Writeback),
         Mnemonic::Shl => binary(instruction, |width| Shl { width }, Tail::Writeback),
         Mnemonic::Shr => binary(instruction, |width| Shr { width }, Tail::Writeback),
         Mnemonic::Sar => binary(instruction, |width| Sar { width }, Tail::Writeback),
@@ -188,53 +188,6 @@ pub fn binary<O: Encode + 'static>(
             operations.push(Box::new(Discard::new()));
         }
     }
-    Some(operations)
-}
-
-// TODO: Create a handler for SBB & ADC
-pub fn carry<O: Encode + 'static>(
-    instruction: &Instruction,
-    make: impl Fn(VMWidth) -> O,
-) -> Option<Vec<Box<dyn Encode>>> {
-    let mut operations = Vec::<Box<dyn Encode>>::new();
-
-    let width = operation_width(instruction, 0);
-
-    source(&mut operations, instruction, 0, width);
-    source(&mut operations, instruction, 1, width);
-
-    operations.push(Box::new(LoadRegister {
-        width: VMWidth::Lower64,
-        source: VMReg::Flags,
-    }));
-    operations.push(Box::new(LoadImmediate {
-        width: VMWidth::Lower64,
-        source: Flag::Carry.bit64().to_le_bytes().to_vec(),
-    }));
-    operations.push(Box::new(And {
-        width: VMWidth::Lower64,
-    }));
-
-    operations.push(Box::new(Add { width }));
-
-    operations.push(Box::new(make(width)));
-
-    match instruction.op0_kind() {
-        OpKind::Register => {
-            operations.push(Box::new(StoreRegister {
-                width,
-                destination: VMReg::from(instruction.op0_register()),
-            }));
-        }
-        OpKind::Memory => {
-            operations.push(Box::new(LoadAddress {
-                source: VMMem::from(instruction),
-            }));
-            operations.push(Box::new(StoreMemory { width }));
-        }
-        _ => unreachable!(),
-    };
-
     Some(operations)
 }
 

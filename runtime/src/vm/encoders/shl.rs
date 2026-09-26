@@ -36,5 +36,4 @@ impl Encode for Shl {
     fn produces(&self) -> i32 {
         1
     }
-
 }

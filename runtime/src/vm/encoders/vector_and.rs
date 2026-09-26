@@ -32,5 +32,4 @@ impl Encode for VectorAnd {
     fn produces(&self) -> i32 {
         1
     }
-
 }

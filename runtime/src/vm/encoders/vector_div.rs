@@ -33,5 +33,4 @@ impl Encode for VectorDiv {
     fn produces(&self) -> i32 {
         1
     }
-
 }
