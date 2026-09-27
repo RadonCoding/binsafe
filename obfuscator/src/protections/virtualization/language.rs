@@ -60,7 +60,8 @@ pub fn skip<F: FnOnce(&mut Engine) -> Vec<Box<dyn Encode>>>(
     instructions
 }
 
-pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
+pub fn foreach<F: FnOnce(&mut Engine) -> Vec<Box<dyn Encode>>>(
+    engine: &mut Engine,
     counter: VMReg,
     bound: Bound,
     step: u64,
@@ -76,9 +77,10 @@ pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
 
     operations.push(Box::new(destination));
 
-    operations.extend(body());
+    operations.extend(body(engine));
     operations.extend(increment(counter, step));
     operations.extend(load_register(counter));
+
     match bound {
         Bound::Immediate(value) => {
             operations.push(Box::new(LoadImmediate {
@@ -93,6 +95,7 @@ pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
             }));
         }
     }
+
     operations.push(Box::new(Sub {
         width: VMWidth::Lower64,
     }));
@@ -101,7 +104,6 @@ pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
     let source = Label::source();
 
     operations.push(Box::new(source));
-
     operations.push(Box::new(LoadImmediate {
         width: VMWidth::SLower16,
         source: vec![0, 0],
@@ -116,7 +118,16 @@ pub fn foreach<F: FnOnce() -> Vec<Box<dyn Encode>>>(
         destination: Target::Label(destination),
     });
 
-    vec![Box::new(Block::new(operations, jumps))]
+    let block = Box::new(Block::new(operations, jumps));
+
+    match bound {
+        Bound::Register(register) => {
+            skip(engine, register, VMCondition::cmp(Flag::Zero, 1), |_| {
+                vec![block]
+            })
+        }
+        Bound::Immediate(_) => vec![block],
+    }
 }
 
 pub fn compute_data(engine: &mut Engine, def: DataDef) -> Vec<Box<dyn Encode>> {

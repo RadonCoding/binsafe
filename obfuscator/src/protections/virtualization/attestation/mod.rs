@@ -162,7 +162,7 @@ fn correct(
         engine,
         VMReg::Rdx,
         VMCondition::cmp(Flag::Zero, 0),
-        |_| {
+        |engine| {
             let mut b = Vec::new();
 
             b.extend(sub(Some(VMReg::Rax), Some(VMReg::Rcx)));
@@ -172,23 +172,29 @@ fn correct(
 
             b.extend(set_register(VMReg::R10, 0));
 
-            b.extend(foreach(VMReg::R8, Bound::Register(VMReg::R9), 8, || {
-                let mut outer = Vec::new();
+            b.extend(foreach(
+                engine,
+                VMReg::R8,
+                Bound::Register(VMReg::R9),
+                8,
+                |_| {
+                    let mut outer = Vec::new();
 
-                outer.extend(load_register(VMReg::R10));
-                outer.extend(load_memory(
-                    VMReg::Rcx,
-                    VMReg::R8,
-                    1,
-                    crypt::HEADER_SIZE as i32,
-                    VMSeg::None,
-                    VMWidth::Lower64,
-                ));
-                outer.extend(xor(None, None));
-                outer.extend(store_register(VMReg::R10));
+                    outer.extend(load_register(VMReg::R10));
+                    outer.extend(load_memory(
+                        VMReg::Rcx,
+                        VMReg::R8,
+                        1,
+                        crypt::HEADER_SIZE as i32,
+                        VMSeg::None,
+                        VMWidth::Lower64,
+                    ));
+                    outer.extend(xor(None, None));
+                    outer.extend(store_register(VMReg::R10));
 
-                outer
-            }));
+                    outer
+                },
+            ));
 
             b.extend(load_register(VMReg::R10));
 

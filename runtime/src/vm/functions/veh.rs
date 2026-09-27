@@ -60,9 +60,9 @@ const VM_TO_CONTEXT: &[(VMReg, i32)] = &[
     (VMReg::R9, 0xC0),
     (VMReg::R10, 0xC8),
     (VMReg::R11, 0xD0),
-    (VMReg::R13, 0xD8),
-    (VMReg::R14, 0xE0),
-    (VMReg::R15, 0xE8),
+    (VMReg::R12, 0xD8),
+    (VMReg::R13, 0xE0),
+    (VMReg::R14, 0xE8),
     (VMReg::R15, 0xF0),
     (VMReg::NEntry, 0xF8),
     (VMReg::Flags, 0x44),
@@ -99,7 +99,7 @@ pub fn handler(rt: &mut Runtime) {
 
     #[cfg(debug_assertions)]
     {
-        use crate::debug;
+        use crate::debug::print_thread_message;
 
         let mut software_exception = rt.asm.create_label();
 
@@ -112,21 +112,21 @@ pub fn handler(rt: &mut Runtime) {
         // jne ...
         rt.asm.jne(software_exception).unwrap();
 
-        debug::print_thread_message(rt, "ExceptionCode: ", Some(rcx), None);
+        print_thread_message(rt, "ExceptionCode: ", Some(rcx), None);
 
         // mov rax, [r14 + 0x20] -> ULONG_PTR EXCEPTION_RECORD->ExceptionInformation[0]
         rt.asm.mov(rax, ptr(r14 + 0x20)).unwrap();
-        debug::print_thread_message(rt, "ExceptionInformation[0]: ", Some(rax), None);
+        print_thread_message(rt, "ExceptionInformation[0]: ", Some(rax), None);
         // mov rax, [r14 + 0x28] -> ULONG_PTR EXCEPTION_RECORD->ExceptionInformation[1]
         rt.asm.mov(rax, ptr(r14 + 0x28)).unwrap();
-        debug::print_thread_message(rt, "ExceptionInformation[1]: ", Some(rax), None);
+        print_thread_message(rt, "ExceptionInformation[1]: ", Some(rax), None);
 
         // mov rax, [rdx] -> ExceptionAddress[0..8]
         rt.asm.mov(rax, ptr(rdx)).unwrap();
-        debug::print_thread_message(rt, "ExceptionAddress[0..8]: ", Some(rax), None);
+        print_thread_message(rt, "ExceptionAddress[0..8]: ", Some(rax), None);
         // mov rax, [rdx + 0x7] -> ExceptionAddress[7..15]
         rt.asm.mov(rax, ptr(rdx + 0x7)).unwrap();
-        debug::print_thread_message(rt, "ExceptionAddress[7..15]: ", Some(rax), None);
+        print_thread_message(rt, "ExceptionAddress[7..15]: ", Some(rax), None);
 
         // mov rax, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
         rt.asm.mov(rax, ptr(0x60).gs()).unwrap();
@@ -135,7 +135,7 @@ pub fn handler(rt: &mut Runtime) {
         // sub rdx, rax
         rt.asm.sub(rdx, rax).unwrap();
 
-        debug::print_thread_message(rt, "ExceptionAddress: ", Some(rdx), None);
+        print_thread_message(rt, "ExceptionAddress: ", Some(rdx), None);
 
         rt.asm.set_label(&mut software_exception).unwrap();
     }
