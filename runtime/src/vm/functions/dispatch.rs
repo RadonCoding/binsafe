@@ -284,12 +284,12 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.je(epilogue).unwrap();
 
         // Follow an indirect JMP rel32 entry into its trampoline:
-        // cmp [rax], 0xE9
-        rt.asm.cmp(byte_ptr(rax), 0xE9).unwrap();
+        // cmp [rax], 0x90
+        rt.asm.cmp(byte_ptr(rax), 0x90).unwrap();
         // jne ...
         rt.asm.jne(resolved).unwrap();
-        // movsxd r9, [rax + 0x1]
-        rt.asm.movsxd(r9, dword_ptr(rax + 0x1)).unwrap();
+        // movsxd r9, [rax + 0x2]
+        rt.asm.movsxd(r9, dword_ptr(rax + 0x2)).unwrap();
         // lea rax, [rax + ...]
         rt.asm.lea(rax, ptr(rax + VM_TRAMPOLINE_SIZE)).unwrap();
         // add rax, r9

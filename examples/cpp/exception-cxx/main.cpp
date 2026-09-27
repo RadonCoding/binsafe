@@ -20,16 +20,12 @@ int main() {
         throw 0x12345678;
     }
     catch (int value) {
-        std::cout << "caught" << std::endl;
-
         b = static_cast<uint32_t>(value);
     }
 
     BINSAFE_END();
 
     assert(a == b);
-
-    std::cout << "OK" << std::endl;
 
     return 0;
 }

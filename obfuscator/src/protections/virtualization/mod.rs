@@ -370,6 +370,8 @@ impl Protection for Virtualization {
 
                 asm.reset();
 
+                asm.nop().unwrap();
+
                 asm.jmp(trampoline_rva as u64).unwrap();
 
                 let branch = asm.assemble(rva as u64).unwrap();
