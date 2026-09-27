@@ -6,7 +6,7 @@ use exe::{Buffer, PE, RVA};
 use rand::Rng;
 use runtime::mapper::Mappable;
 use runtime::runtime::{DataDef, FnDef};
-use runtime::vm::bytecode::{Flag, VMReg, VMSeg, VMVec, VMWidth};
+use runtime::vm::bytecode::{VMReg, VMSeg, VMVec, VMWidth};
 use runtime::vm::encoders::Encode;
 
 const ACCUMULATOR: VMVec = VMVec::Ymm6;
@@ -52,61 +52,72 @@ pub fn generate(
 
     instructions.extend(set_vector(ACCUMULATOR, 0, 0));
 
-    instructions.extend(foreach(VMReg::Rax, Bound::Immediate(count), 1, || {
-        let mut outer = Vec::<Box<dyn Encode>>::new();
+    instructions.extend(foreach(
+        engine,
+        VMReg::Rax,
+        Bound::Immediate(count),
+        1,
+        |engine| {
+            let mut outer = Vec::<Box<dyn Encode>>::new();
 
-        outer.extend(load_memory(
-            VMReg::VImage,
-            VMReg::Rax,
-            8,
-            functions,
-            VMSeg::None,
-            VMWidth::Lower64,
-        ));
-        outer.extend(store_register(VMReg::Rcx));
-
-        outer.extend(load_register(VMReg::Rcx));
-        outer.extend(immediate(0x20));
-        outer.extend(shr(None, None));
-        outer.extend(store_register(VMReg::Rdx));
-
-        outer.extend(mask(Some(VMReg::Rcx), 0xFFFF_FFFF));
-        outer.extend(load_register(VMReg::VImage));
-        outer.extend(add(None, None));
-        outer.extend(store_register(VMReg::Rcx));
-
-        outer.extend(mask(Some(VMReg::Rdx), 15));
-        outer.extend(store_register(VMReg::R8));
-        outer.extend(sub(Some(VMReg::Rdx), Some(VMReg::R8)));
-        outer.extend(store_register(VMReg::R9));
-
-        outer.extend(foreach(VMReg::R10, Bound::Register(VMReg::R9), 16, || {
-            let mut inner = Vec::<Box<dyn Encode>>::new();
-
-            inner.extend(spill_vector(ACCUMULATOR, VMWidth::Lower128));
-            inner.extend(load_memory(
-                VMReg::Rcx,
-                VMReg::R10,
-                1,
-                0,
+            outer.extend(load_memory(
+                VMReg::VImage,
+                VMReg::Rax,
+                8,
+                functions,
                 VMSeg::None,
-                VMWidth::Lower128,
+                VMWidth::Lower64,
             ));
-            inner.push(vector_operation(operation));
-            inner.extend(reload_vector(ACCUMULATOR, VMWidth::Lower128));
+            outer.extend(store_register(VMReg::Rcx));
 
-            inner
-        }));
+            outer.extend(load_register(VMReg::Rcx));
+            outer.extend(immediate(0x20));
+            outer.extend(shr(None, None));
+            outer.extend(store_register(VMReg::Rdx));
 
-        outer.extend(compute_memory(VMReg::Rcx, VMReg::R10, 1, 0, VMSeg::None));
-        outer.extend(store_register(VMReg::Rdx));
+            outer.extend(mask(Some(VMReg::Rcx), 0xFFFF_FFFF));
+            outer.extend(load_register(VMReg::VImage));
+            outer.extend(add(None, None));
+            outer.extend(store_register(VMReg::Rcx));
 
-        outer.extend(skip(
-            engine,
-            VMReg::R8,
-            VMCondition::cmp(Flag::Zero, 1),
-            |_| {
-                foreach(VMReg::R9, Bound::Register(VMReg::R8), 1, || {
+            outer.extend(mask(Some(VMReg::Rdx), 15));
+            outer.extend(store_register(VMReg::R8));
+            outer.extend(sub(Some(VMReg::Rdx), Some(VMReg::R8)));
+            outer.extend(store_register(VMReg::R9));
+
+            outer.extend(foreach(
+                engine,
+                VMReg::R10,
+                Bound::Register(VMReg::R9),
+                16,
+                |_| {
+                    let mut inner = Vec::<Box<dyn Encode>>::new();
+
+                    inner.extend(spill_vector(ACCUMULATOR, VMWidth::Lower128));
+                    inner.extend(load_memory(
+                        VMReg::Rcx,
+                        VMReg::R10,
+                        1,
+                        0,
+                        VMSeg::None,
+                        VMWidth::Lower128,
+                    ));
+                    inner.push(vector_operation(operation));
+                    inner.extend(reload_vector(ACCUMULATOR, VMWidth::Lower128));
+
+                    inner
+                },
+            ));
+
+            outer.extend(compute_memory(VMReg::Rcx, VMReg::R9, 1, 0, VMSeg::None));
+            outer.extend(store_register(VMReg::Rdx));
+
+            outer.extend(foreach(
+                engine,
+                VMReg::R9,
+                Bound::Register(VMReg::R8),
+                1,
+                |_| {
                     let mut inner = Vec::<Box<dyn Encode>>::new();
 
                     inner.extend(spill_vector(ACCUMULATOR, VMWidth::Lower64));
@@ -122,12 +133,12 @@ pub fn generate(
                     inner.extend(reload_vector(ACCUMULATOR, VMWidth::Lower64));
 
                     inner
-                })
-            },
-        ));
+                },
+            ));
 
-        outer
-    }));
+            outer
+        },
+    ));
 
     instructions.extend(spill_vector(ACCUMULATOR, VMWidth::Lower128));
     instructions.extend(xor(None, None));
