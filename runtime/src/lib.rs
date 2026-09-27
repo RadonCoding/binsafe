@@ -23,7 +23,7 @@ pub const VM_DEBUG_SIZE: u64 = 0x100;
 // PUSH imm32 + CALL rel32
 pub const VM_DISPATCH_SIZE: usize = 10;
 
-// JMP rel32
-pub const VM_TRAMPOLINE_SIZE: usize = 5;
+// NOP + JMP rel32
+pub const VM_TRAMPOLINE_SIZE: usize = 6;
 
 pub const VM_INTEGRITY_QWORD: u64 = 0xFA11ED175001FA11;
