@@ -437,6 +437,7 @@ impl<'a> Engine<'a> {
                 | FlowControl::UnconditionalBranch
                 | FlowControl::Call => {
                     let target = instruction.near_branch_target() as u32;
+
                     if code_section.has_rva(RVA(target)) {
                         references.insert(target);
                     }
@@ -473,6 +474,7 @@ impl<'a> Engine<'a> {
             }
 
             previous.clear();
+
             cursor += instruction.len();
         }
 
