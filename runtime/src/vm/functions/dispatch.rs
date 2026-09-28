@@ -10,7 +10,7 @@ use crate::{
         bytecode::{VMOp, VMReg},
         utils::{self, lock},
     },
-    VM_DISPATCH_SIZE, VM_INTEGRITY_QWORD, VM_TRAMPOLINE_SIZE,
+    VM_DISPATCH_SIZE, VM_INTEGRITY_QWORD, VM_REDIRECT_SIZE, VM_TRAMPOLINE_SIZE,
 };
 
 #[cfg(feature = "profile")]
@@ -79,6 +79,8 @@ pub fn build(rt: &mut Runtime) {
     let mut check_suspend = rt.asm.create_label();
     let mut check_exit = rt.asm.create_label();
     let mut resolved = rt.asm.create_label();
+    let mut trampoline = rt.asm.create_label();
+    let mut lookup = rt.asm.create_label();
     let mut tamper = rt.asm.create_label();
     let mut terminate = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
@@ -283,13 +285,13 @@ pub fn build(rt: &mut Runtime) {
         // je ...
         rt.asm.je(epilogue).unwrap();
 
-        // Follow an indirect JMP rel32 entry into its trampoline:
-        // cmp [rax], 0x90
-        rt.asm.cmp(byte_ptr(rax), 0x90).unwrap();
+        // Follow an indirect CALL rel32 entry into its trampoline:
+        // cmp [rax], 0xE8
+        rt.asm.cmp(byte_ptr(rax), 0xE8).unwrap();
         // jne ...
         rt.asm.jne(resolved).unwrap();
-        // movsxd r9, [rax + 0x2]
-        rt.asm.movsxd(r9, dword_ptr(rax + 0x2)).unwrap();
+        // movsxd r9, [rax + 0x1]
+        rt.asm.movsxd(r9, dword_ptr(rax + 0x1)).unwrap();
         // lea rax, [rax + ...]
         rt.asm.lea(rax, ptr(rax + VM_TRAMPOLINE_SIZE)).unwrap();
         // add rax, r9
@@ -300,14 +302,31 @@ pub fn build(rt: &mut Runtime) {
             // cmp [rax], 0x68
             rt.asm.cmp(byte_ptr(rax), 0x68).unwrap();
             // jne ...
-            rt.asm.jne(epilogue).unwrap();
+            rt.asm.jne(trampoline).unwrap();
 
             // mov edx, [rax + 0x1]
             rt.asm.mov(edx, ptr(rax + 0x1)).unwrap();
-
             // add rax, ...
             rt.asm.add(rax, VM_DISPATCH_SIZE as i32).unwrap();
+            // jmp ...
+            rt.asm.jmp(lookup).unwrap();
+        }
 
+        rt.asm.set_label(&mut trampoline).unwrap();
+        {
+            // cmp [rax], 0xC7
+            rt.asm.cmp(byte_ptr(rax), 0xC7).unwrap();
+            // jne ...
+            rt.asm.jne(epilogue).unwrap();
+
+            // mov edx, [rax + 0x3]
+            rt.asm.mov(edx, ptr(rax + 0x3)).unwrap();
+            // add rax, ...
+            rt.asm.add(rax, VM_REDIRECT_SIZE as i32).unwrap();
+        }
+
+        rt.asm.set_label(&mut lookup).unwrap();
+        {
             // mov rcx, rax
             rt.asm.mov(rcx, rax).unwrap();
             // call ...

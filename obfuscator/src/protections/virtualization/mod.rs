@@ -7,14 +7,14 @@ use crate::engine::Engine;
 use crate::protections::Protection;
 use exe::{Buffer, SectionCharacteristics};
 use exe::{PE, RVA};
-use iced_x86::code_asm::CodeAssembler;
+use iced_x86::code_asm::{dword_ptr, rsp, CodeAssembler};
 use iced_x86::Mnemonic;
 use logger::{debug, info};
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::bytecode::{self};
 use runtime::vm::encoders::Encode;
-use runtime::{VM_DISPATCH_SIZE, VM_TRAMPOLINE_SIZE};
+use runtime::{VM_DISPATCH_SIZE, VM_REDIRECT_SIZE, VM_TRAMPOLINE_SIZE};
 
 mod attestation;
 pub mod crypt;
@@ -25,7 +25,7 @@ pub struct Virtualization {
     programs: Vec<Vec<Box<dyn Encode>>>,
     groups: Vec<Vec<u32>>,
     virtualized: HashMap<u32, usize>,
-    trampolines: HashMap<u32, usize>,
+    redirects: HashMap<u32, usize>,
     duplicates: usize,
     blocked: usize,
     missing: HashMap<Mnemonic, usize>,
@@ -169,10 +169,11 @@ impl Protection for Virtualization {
         for (_, group) in self.programs.iter().zip(&self.groups) {
             for &rva in group {
                 // Store the index of this VM-block's VM-table entry
-                let index = vtable.len() / 8;
+                let index = vtable.len() / 12;
                 self.virtualized.insert(rva, index);
 
-                // Store placeholders for stub displacement and bytecode offset
+                // Store placeholders for exit displacement, entry displacement, and bytecode offset
+                vtable.extend_from_slice(&0u32.to_le_bytes());
                 vtable.extend_from_slice(&0u32.to_le_bytes());
                 vtable.extend_from_slice(&0u32.to_le_bytes());
             }
@@ -181,13 +182,13 @@ impl Protection for Virtualization {
         // Reserve a trampoline slot for each block too small for an inline stub
         for block in &engine.blocks {
             if self.virtualized.contains_key(&block.rva) && block.size < VM_DISPATCH_SIZE {
-                self.trampolines.insert(block.rva, self.trampolines.len());
+                self.redirects.insert(block.rva, self.redirects.len());
             }
         }
 
         engine.rt.define_data_bytes(
             DataDef::VmTrampolines,
-            &vec![0u8; self.trampolines.len() * VM_DISPATCH_SIZE],
+            &vec![0u8; self.redirects.len() * VM_REDIRECT_SIZE],
         );
 
         if engine.args.verbose {
@@ -246,7 +247,7 @@ impl Protection for Virtualization {
                 let index = self.virtualized[&rva];
                 unsafe {
                     vtable
-                        .add(index * 8 + size_of::<u32>())
+                        .add(index * 12 + 2 * size_of::<u32>())
                         .copy_from(offset.to_le_bytes().as_ptr(), size_of::<u32>());
                 }
             }
@@ -290,11 +291,11 @@ impl Protection for Virtualization {
 
         let ventry_rva = engine.rt.lookup(engine.rt.function_labels[&FnDef::VmEntry]);
 
-        let trampolines_rva = engine
+        let redirects_rva = engine
             .rt
             .lookup(engine.rt.data_labels[&DataDef::VmTrampolines])
             as u32;
-        let trampolines_offset = engine.pe.translate(RVA(trampolines_rva).into()).unwrap();
+        let trampolines_offset = engine.pe.translate(RVA(redirects_rva).into()).unwrap();
         let trampolines = unsafe { engine.pe.as_ptr().add(trampolines_offset) as *mut u8 };
 
         for i in 0..engine.blocks.len() {
@@ -329,50 +330,59 @@ impl Protection for Virtualization {
 
                 assert_eq!(dispatch1.len(), dispatch2.len());
 
-                // Patch the stub displacement placeholder in the VM-table
+                // Patch the exit and entry displacement placeholders in the table
                 unsafe {
-                    let displacement = (size - dispatch2.len()) as u32;
+                    let exit = (rva as i64 + size as i64 - return_address as i64) as i32;
+                    let entry = (rva as i64 - return_address as i64) as i32;
                     vtable
-                        .add(vtable_index * 8)
-                        .copy_from(displacement.to_le_bytes().as_ptr(), size_of::<u32>());
+                        .add(vtable_index * 12)
+                        .copy_from((exit as u32).to_le_bytes().as_ptr(), size_of::<u32>());
+                    vtable
+                        .add(vtable_index * 12 + size_of::<u32>())
+                        .copy_from((entry as u32).to_le_bytes().as_ptr(), size_of::<u32>());
                 }
 
                 engine.replace(i, &dispatch2);
             } else {
-                let trampoline = self.trampolines[&rva];
-                let trampoline_rva = trampolines_rva + (trampoline * VM_DISPATCH_SIZE) as u32;
+                let redirect = self.redirects[&rva];
+                let redirect_rva = redirects_rva + (redirect * VM_REDIRECT_SIZE) as u32;
 
                 let mut asm = CodeAssembler::new(engine.bitness).unwrap();
 
-                let return_address = trampoline_rva + VM_DISPATCH_SIZE as u32;
+                let return_address = redirect_rva + VM_REDIRECT_SIZE as u32;
 
-                asm.push((vtable_index as i32 | 0x10000000) ^ return_address as i32)
-                    .unwrap();
+                asm.mov(
+                    dword_ptr(rsp),
+                    (vtable_index as i32 | 0x10000000) ^ return_address as i32,
+                )
+                .unwrap();
                 asm.call(ventry_rva).unwrap();
-                let dispatch = asm.assemble(trampoline_rva as u64).unwrap();
 
-                assert_eq!(dispatch.len(), VM_DISPATCH_SIZE);
+                let dispatch = asm.assemble(redirect_rva as u64).unwrap();
+
+                assert_eq!(dispatch.len(), VM_REDIRECT_SIZE);
 
                 unsafe {
                     trampolines
-                        .add(trampoline * VM_DISPATCH_SIZE)
-                        .copy_from(dispatch.as_ptr(), VM_DISPATCH_SIZE);
+                        .add(redirect * VM_REDIRECT_SIZE)
+                        .copy_from(dispatch.as_ptr(), VM_REDIRECT_SIZE);
                 }
 
-                // Patch the stub displacement placeholder in the VM-table to redirect to original block
+                // Patch the exit and entry displacement placeholders in the table
                 unsafe {
-                    let displacement = (rva as i64 + size as i64 - return_address as i64) as i32;
-                    vtable.add(vtable_index * 8).copy_from(
-                        (displacement as u32).to_le_bytes().as_ptr(),
-                        size_of::<u32>(),
-                    );
+                    let exit = (rva as i64 + size as i64 - return_address as i64) as i32;
+                    let entry = (rva as i64 - return_address as i64) as i32;
+                    vtable
+                        .add(vtable_index * 12)
+                        .copy_from((exit as u32).to_le_bytes().as_ptr(), size_of::<u32>());
+                    vtable
+                        .add(vtable_index * 12 + size_of::<u32>())
+                        .copy_from((entry as u32).to_le_bytes().as_ptr(), size_of::<u32>());
                 }
 
                 asm.reset();
 
-                asm.nop().unwrap();
-
-                asm.jmp(trampoline_rva as u64).unwrap();
+                asm.call(redirect_rva as u64).unwrap();
 
                 let branch = asm.assemble(rva as u64).unwrap();
 

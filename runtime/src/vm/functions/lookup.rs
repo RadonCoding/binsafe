@@ -6,7 +6,6 @@ use crate::{
         bytecode::VMReg,
         utils::{self},
     },
-    VM_DISPATCH_SIZE,
 };
 
 // unsigned char* (unsigned char*, unsigned int)
@@ -27,30 +26,30 @@ pub fn build(rt: &mut Runtime) {
     rt.asm
         .lea(r8, ptr(rt.data_labels[&DataDef::VmTable]))
         .unwrap();
-    // lea r8, [r8 + rdx*8]
-    rt.asm.lea(r8, ptr(r8 + rdx * 8)).unwrap();
+    // lea rax, [rdx + rdx*2]
+    rt.asm.lea(rax, ptr(rdx + rdx * 2)).unwrap();
+    // lea r8, [r8 + rax*4]
+    rt.asm.lea(r8, ptr(r8 + rax * 4)).unwrap();
 
-    // Read the displacement and the offset into bytecode from the table:
+    // Apply the exit displacement of the caller stub to the return address:
     // movsxd rax, [r8]
     rt.asm.movsxd(rax, dword_ptr(r8)).unwrap();
-    // mov edx, [r8 + 0x4]
-    rt.asm.mov(edx, ptr(r8 + 0x4)).unwrap();
+    // add rax, rcx
+    rt.asm.add(rax, rcx).unwrap();
+    // mov [r12 + ...], rax
+    utils::vreg::store_reg(rt, r12, rax, VMReg::NExit);
 
-    // Apply the displacement of the caller stub to the native exit point:
-    // mov r8, rcx
-    rt.asm.mov(r8, rcx).unwrap();
-    // add r8, rax
-    rt.asm.add(r8, rax).unwrap();
-    // mov [r12 + ...], r8
-    utils::vreg::store_reg(rt, r12, r8, VMReg::NExit);
+    // Apply the entry displacement of the caller stub to the return address:
+    // movsxd rax, [r8 + 0x4]
+    rt.asm.movsxd(rax, dword_ptr(r8 + 0x4)).unwrap();
+    // add rax, rcx
+    rt.asm.add(rax, rcx).unwrap();
+    // mov [r12 + ...], rax
+    utils::vreg::store_reg(rt, r12, rax, VMReg::NEntry);
 
-    // Apply the displacement of the caller stub to the native entry point:
-    // mov r8, rcx
-    rt.asm.mov(r8, rcx).unwrap();
-    // sub r8, ...
-    rt.asm.sub(r8, VM_DISPATCH_SIZE as i32).unwrap();
-    // mov [r12 + ...], r8
-    utils::vreg::store_reg(rt, r12, r8, VMReg::NEntry);
+    // Read the offset into bytecode from the table:
+    // mov edx, [r8 + 0x8]
+    rt.asm.mov(edx, ptr(r8 + 0x8)).unwrap();
 
     // Compute the block pointer from the offset into bytecode:
     // lea rax, [...]
