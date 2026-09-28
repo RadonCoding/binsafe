@@ -29,7 +29,6 @@ pub fn get_exception_handlers(pe: &VecPE) -> HashSet<u32> {
 
     for rf in functions {
         handlers.insert(rf.begin_address);
-        handlers.insert(rf.end_address);
 
         if rf.unwind_info_address != 0 {
             unwinds.push(rf.unwind_info_address);
