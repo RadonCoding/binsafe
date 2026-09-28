@@ -64,19 +64,19 @@ fn get_exception_unwinders(pe: &VecPE, rva: u32, handlers: &mut HashSet<u32>) {
         return;
     }
 
-    let mut pos = 4 + codes * 2;
+    let mut position = 4 + codes * 2;
 
-    if pos % 4 != 0 {
-        pos += 4 - (pos % 4);
+    if position % 4 != 0 {
+        position += 4 - (position % 4);
     }
 
     if flags & 0x04 != 0 {
-        let bytes = match pe.get_slice_ref::<u8>(offset, pos + 12) {
+        let bytes = match pe.get_slice_ref::<u8>(offset, position + 12) {
             Ok(b) => b,
             Err(_) => return,
         };
 
-        let chained = u32::from_le_bytes(bytes[pos + 8..pos + 12].try_into().unwrap());
+        let chained = u32::from_le_bytes(bytes[pos + 8..position + 12].try_into().unwrap());
 
         handlers.insert(chained);
 
@@ -89,16 +89,16 @@ fn get_exception_unwinders(pe: &VecPE, rva: u32, handlers: &mut HashSet<u32>) {
         return;
     }
 
-    let bytes = match pe.get_slice_ref::<u8>(offset, pos + 4) {
+    let bytes = match pe.get_slice_ref::<u8>(offset, position + 4) {
         Ok(b) => b,
         Err(_) => return,
     };
 
-    let handler = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap());
+    let handler = u32::from_le_bytes(bytes[position..position + 4].try_into().unwrap());
 
     handlers.insert(handler);
 
-    pos += 4;
+    position += 4;
 
     let section = match pe
         .get_section_table()
@@ -114,7 +114,7 @@ fn get_exception_unwinders(pe: &VecPE, rva: u32, handlers: &mut HashSet<u32>) {
         .translate(PETranslation::Memory(section.virtual_address))
         .unwrap();
     let end = base + section.size_of_raw_data as usize;
-    let start = offset + pos;
+    let start = offset + position;
 
     if start >= end {
         return;
