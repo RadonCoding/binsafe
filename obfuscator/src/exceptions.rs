@@ -76,7 +76,7 @@ fn get_exception_unwinders(pe: &VecPE, rva: u32, handlers: &mut HashSet<u32>) {
             Err(_) => return,
         };
 
-        let chained = u32::from_le_bytes(bytes[pos + 8..position + 12].try_into().unwrap());
+        let chained = u32::from_le_bytes(bytes[position + 8..position + 12].try_into().unwrap());
 
         handlers.insert(chained);
 
@@ -97,36 +97,4 @@ fn get_exception_unwinders(pe: &VecPE, rva: u32, handlers: &mut HashSet<u32>) {
     let handler = u32::from_le_bytes(bytes[position..position + 4].try_into().unwrap());
 
     handlers.insert(handler);
-
-    position += 4;
-
-    let section = match pe
-        .get_section_table()
-        .unwrap()
-        .iter()
-        .find(|s| rva >= s.virtual_address.0 && rva < s.virtual_address.0 + s.virtual_size)
-    {
-        Some(s) => s,
-        None => return,
-    };
-
-    let base = pe
-        .translate(PETranslation::Memory(section.virtual_address))
-        .unwrap();
-    let end = base + section.size_of_raw_data as usize;
-    let start = offset + position;
-
-    if start >= end {
-        return;
-    }
-
-    let bytes = match pe.get_slice_ref::<u8>(start, end - start) {
-        Ok(b) => b,
-        Err(_) => return,
-    };
-
-    for chunk in bytes.chunks_exact(4) {
-        let rva = u32::from_le_bytes(chunk.try_into().unwrap());
-        handlers.insert(rva);
-    }
 }
