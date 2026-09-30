@@ -14,6 +14,8 @@ use runtime::vm::encoders::load_register::LoadRegister;
 use runtime::vm::encoders::load_vector::LoadVector;
 use runtime::vm::encoders::mul::Mul;
 use runtime::vm::encoders::or::Or;
+use runtime::vm::encoders::pop::Pop;
+use runtime::vm::encoders::push::Push;
 use runtime::vm::encoders::shl::Shl;
 use runtime::vm::encoders::shr::Shr;
 use runtime::vm::encoders::store_memory::StoreMemory;
@@ -420,9 +422,12 @@ pub fn mul(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
         }));
     }
     instructions.push(Box::new(Mul {
-        width: VMWidth::Lower64,
+        width: VMWidth::SLower64,
     }));
+    instructions.push(Box::new(Push::new()));
     instructions.push(Box::new(Discard::new()));
+    instructions.push(Box::new(Pop::new()));
+
     instructions
 }
 
@@ -500,7 +505,7 @@ pub fn load_memory(
     instructions
 }
 
-pub fn store_memory(
+pub fn store_immediate(
     base: VMReg,
     index: VMReg,
     scale: u8,

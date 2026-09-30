@@ -13,7 +13,6 @@ pub mod dispatch;
 pub mod div;
 pub mod exchange;
 pub mod exchange_add;
-pub mod flags;
 pub mod jcc;
 pub mod load_address;
 pub mod load_immediate;

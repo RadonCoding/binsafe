@@ -50,7 +50,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
 
     block.extend(timestamp());
     block.extend(mask(None, !((1u64 << WINDOW) - 1)));
-    block.extend(lcg(engine, None));
+    block.extend(register_lcg(engine, None));
     block.extend(store_register(VMReg::Vt0));
 
     block.extend(sub(Some(VMReg::Vt0), Some(VMReg::Vt1)));
@@ -87,6 +87,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
             b.extend(store_register(VMReg::Rcx));
 
             b.extend(accumulate_immediate(
+                engine,
                 &mut rng,
                 VMReg::Vp0,
                 Some(VMReg::Rcx),
@@ -94,6 +95,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
                 &mut vp0,
             ));
             b.extend(accumulate_immediate(
+                engine,
                 &mut rng,
                 VMReg::Vp1,
                 Some(VMReg::Rcx),
@@ -111,6 +113,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
             b.extend(store_register(VMReg::Rcx));
 
             b.extend(accumulate_immediate(
+                engine,
                 &mut rng,
                 VMReg::Vp0,
                 Some(VMReg::Rcx),
@@ -118,6 +121,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
                 &mut vp0,
             ));
             b.extend(accumulate_immediate(
+                engine,
                 &mut rng,
                 VMReg::Vp1,
                 Some(VMReg::Rcx),
@@ -125,9 +129,10 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
                 &mut vp1,
             ));
 
-            b.extend(xor(Some(VMReg::Vp0), Some(VMReg::Vt0)));
+            b.extend(register_lcg(engine, Some(VMReg::Vp0)));
             b.extend(store_register(VMReg::Vp0));
-            b.extend(xor(Some(VMReg::Vp1), Some(VMReg::Vt0)));
+
+            b.extend(register_lcg(engine, Some(VMReg::Vp1)));
             b.extend(store_register(VMReg::Vp1));
 
             b.extend(copy(VMReg::Vt0, VMReg::Vt1));
@@ -219,12 +224,13 @@ fn correct(
     ));
 
     let operation = Operation::random(rng);
-    let combined = combine_operation(operation, vp0, vp1);
+    let combined = apply_lcg(engine, combine_operation(operation, vp0, vp1));
     let correction = combined ^ key;
 
-    instructions.extend(xor(Some(VMReg::Vp0), Some(VMReg::Vt1)));
-    instructions.extend(xor(Some(VMReg::Vp1), Some(VMReg::Vt1)));
+    instructions.extend(register_lcg_inverse(engine, Some(VMReg::Vp0)));
+    instructions.extend(register_lcg_inverse(engine, Some(VMReg::Vp1)));
     instructions.extend(register_operation(operation));
+    instructions.extend(register_lcg(engine, None));
     instructions.extend(immediate(correction));
     instructions.extend(xor(None, None));
 
@@ -235,7 +241,7 @@ fn correct(
     instructions
 }
 
-fn lcg(engine: &mut Engine, register: Option<VMReg>) -> Vec<Box<dyn Encode>> {
+fn register_lcg(engine: &mut Engine, register: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
     instructions.extend(load_data(
@@ -249,6 +255,32 @@ fn lcg(engine: &mut Engine, register: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     instructions.extend(add(register, None));
 
     instructions
+}
+
+fn register_lcg_inverse(engine: &mut Engine, register: Option<VMReg>) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+
+    if let Some(register) = register {
+        instructions.extend(load_register(register));
+    }
+
+    instructions.extend(load_data(engine, DataDef::VmKeyAddend, VMWidth::Lower64));
+    instructions.extend(sub(None, None));
+
+    instructions.extend(load_data(
+        engine,
+        DataDef::VmKeyMultiplierInverse,
+        VMWidth::Lower64,
+    ));
+    instructions.extend(mul(None, None));
+
+    instructions
+}
+
+fn apply_lcg(engine: &Engine, value: u64) -> u64 {
+    value
+        .wrapping_mul(engine.rt.keys.multiplier)
+        .wrapping_add(engine.rt.keys.addend)
 }
 
 fn combine_operation(operation: Operation, a: u64, b: u64) -> u64 {
@@ -296,6 +328,7 @@ fn vector_operation(operation: Operation) -> Box<dyn Encode> {
 }
 
 fn accumulate<R: Rng>(
+    engine: &mut Engine,
     rng: &mut R,
     accumulator: VMReg,
     source: Vec<Box<dyn Encode>>,
@@ -306,21 +339,19 @@ fn accumulate<R: Rng>(
 
     let operation = Operation::random(rng);
 
-    let mix = rng.gen::<u64>();
-
     instructions.extend(load_register(accumulator));
     instructions.extend(source);
-    instructions.extend(immediate(mix));
-    instructions.extend(xor(None, None));
+    instructions.extend(register_lcg(engine, None));
     instructions.extend(register_operation(operation));
     instructions.extend(store_register(accumulator));
 
-    apply_operation(operation, value ^ mix, expected);
+    apply_operation(operation, apply_lcg(engine, value), expected);
 
     instructions
 }
 
 pub fn accumulate_immediate<R: Rng>(
+    engine: &mut Engine,
     rng: &mut R,
     accumulator: VMReg,
     source: Option<VMReg>,
@@ -331,10 +362,11 @@ pub fn accumulate_immediate<R: Rng>(
         Some(register) => load_register(register),
         None => Vec::new(),
     };
-    accumulate(rng, accumulator, source, value, expected)
+    accumulate(engine, rng, accumulator, source, value, expected)
 }
 
 pub fn accumulate_memory<R: Rng>(
+    engine: &mut Engine,
     rng: &mut R,
     accumulator: VMReg,
     base: VMReg,
@@ -344,10 +376,11 @@ pub fn accumulate_memory<R: Rng>(
     expected: &mut u64,
 ) -> Vec<Box<dyn Encode>> {
     let source = load_memory(base, VMReg::None, 1, displacement, VMSeg::None, width);
-    accumulate(rng, accumulator, source, value, expected)
+    accumulate(engine, rng, accumulator, source, value, expected)
 }
 
 fn accumulate_byte<R: Rng>(
+    engine: &mut Engine,
     rng: &mut R,
     accumulator: VMReg,
     base: VMReg,
@@ -356,6 +389,7 @@ fn accumulate_byte<R: Rng>(
     expected: &mut u64,
 ) -> Vec<Box<dyn Encode>> {
     accumulate_memory(
+        engine,
         rng,
         accumulator,
         base,
@@ -367,6 +401,7 @@ fn accumulate_byte<R: Rng>(
 }
 
 fn accumulate_prologue<R: Rng>(
+    engine: &mut Engine,
     rng: &mut R,
     accumulator: VMReg,
     base: VMReg,
@@ -377,6 +412,7 @@ fn accumulate_prologue<R: Rng>(
 
     for (offset, byte) in prologue.iter().enumerate() {
         instructions.extend(accumulate_byte(
+            engine,
             rng,
             accumulator,
             base,

@@ -1,29 +1,34 @@
 #include <iostream>
 #include <cstdint>
 #include <cassert>
-#include "../../../api/generated/binsafe.hpp"
+#include "../../../api/binsafe.hpp"
+
+BINSAFE uint32_t guarded(int value)
+{
+    try {
+        throw value;
+    }
+    catch (int caught) {
+        return static_cast<uint32_t>(caught);
+    }
+
+    return 0;
+}
 
 int main() {
+    constexpr int value = 0x12345678;
+
     uint32_t a = 0;
     uint32_t b = 0;
 
     try {
-        throw 0x12345678;
+        throw value;
     }
     catch (int value) {
         a = static_cast<uint32_t>(value);
     }
 
-    BINSAFE_BEGIN();
-
-    try {        
-        throw 0x12345678;
-    }
-    catch (int value) {
-        b = static_cast<uint32_t>(value);
-    }
-
-    BINSAFE_END();
+    b = guarded(value);
 
     assert(a == b);
 

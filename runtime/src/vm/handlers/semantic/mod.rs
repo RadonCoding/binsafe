@@ -46,6 +46,9 @@ pub enum Effect {
     Sar(Expression, Expression),
     Bsr(Expression),
     Tzcnt(Expression),
+    Exchange(Expression, Expression),
+    ExchangeAdd(Expression, Expression),
+    CompareExchange(Expression, Expression, Expression),
 }
 
 #[derive(Debug, Clone)]
@@ -184,14 +187,14 @@ impl Expression {
             | Expression::SignBit
             | Expression::BitSize
             | Expression::ByteMask(_) => {}
-            Expression::BitAnd(lhs, rhs)
-            | Expression::BitOr(lhs, rhs)
-            | Expression::BitXor(lhs, rhs)
-            | Expression::BitShr(lhs, rhs)
-            | Expression::BitShl(lhs, rhs)
-            | Expression::Sub(lhs, rhs) => {
-                lhs.operands(value);
-                rhs.operands(value);
+            Expression::BitAnd(first, second)
+            | Expression::BitOr(first, second)
+            | Expression::BitXor(first, second)
+            | Expression::BitShr(first, second)
+            | Expression::BitShl(first, second)
+            | Expression::Sub(first, second) => {
+                first.operands(value);
+                second.operands(value);
             }
             Expression::BitNot(inner) | Expression::LowByte(inner) | Expression::Parity(inner) => {
                 inner.operands(value);
@@ -208,12 +211,12 @@ impl Expression {
             | Expression::BitSize
             | Expression::ByteMask(_) => 0,
             Expression::Flag(_) => 1,
-            Expression::BitAnd(lhs, rhs)
-            | Expression::BitOr(lhs, rhs)
-            | Expression::BitXor(lhs, rhs)
-            | Expression::BitShr(lhs, rhs)
-            | Expression::BitShl(lhs, rhs)
-            | Expression::Sub(lhs, rhs) => 1 + lhs.temporary() + rhs.temporary(),
+            Expression::BitAnd(first, second)
+            | Expression::BitOr(first, second)
+            | Expression::BitXor(first, second)
+            | Expression::BitShr(first, second)
+            | Expression::BitShl(first, second)
+            | Expression::Sub(first, second) => 1 + first.temporary() + second.temporary(),
             Expression::BitNot(inner) | Expression::LowByte(inner) | Expression::Parity(inner) => {
                 1 + inner.temporary()
             }
@@ -225,24 +228,31 @@ impl Expression {
 impl Effect {
     fn operands(&self, value: &mut usize) {
         match self {
-            Effect::Add(lhs, rhs)
-            | Effect::Sub(lhs, rhs)
-            | Effect::And(lhs, rhs)
-            | Effect::Or(lhs, rhs)
-            | Effect::Xor(lhs, rhs)
-            | Effect::Shr(lhs, rhs)
-            | Effect::Shl(lhs, rhs)
-            | Effect::Ror(lhs, rhs)
-            | Effect::Rol(lhs, rhs)
-            | Effect::Mul(lhs, rhs)
-            | Effect::Sar(lhs, rhs) => {
-                lhs.operands(value);
-                rhs.operands(value);
+            Effect::Add(first, second)
+            | Effect::Sub(first, second)
+            | Effect::And(first, second)
+            | Effect::Or(first, second)
+            | Effect::Xor(first, second)
+            | Effect::Shr(first, second)
+            | Effect::Shl(first, second)
+            | Effect::Ror(first, second)
+            | Effect::Rol(first, second)
+            | Effect::Mul(first, second)
+            | Effect::Sar(first, second)
+            | Effect::Exchange(first, second)
+            | Effect::ExchangeAdd(first, second) => {
+                first.operands(value);
+                second.operands(value);
             }
-            Effect::Div(divisor, low, high) => {
-                divisor.operands(value);
-                low.operands(value);
-                high.operands(value);
+            Effect::Div(first, second, third) => {
+                first.operands(value);
+                second.operands(value);
+                third.operands(value);
+            }
+            Effect::CompareExchange(first, second, third) => {
+                first.operands(value);
+                second.operands(value);
+                third.operands(value);
             }
             Effect::Assign(expression) | Effect::Bsr(expression) | Effect::Tzcnt(expression) => {
                 expression.operands(value);
@@ -264,10 +274,12 @@ impl Effect {
             | Effect::Sar(..)
             | Effect::Assign(..)
             | Effect::Bsr(..)
-            | Effect::Tzcnt(..) => {
+            | Effect::Tzcnt(..)
+            | Effect::Exchange(..)
+            | Effect::CompareExchange(..) => {
                 *value = (*value).max(1);
             }
-            Effect::Mul(..) | Effect::Div(..) => {
+            Effect::Mul(..) | Effect::Div(..) | Effect::ExchangeAdd(..) => {
                 *value = (*value).max(2);
             }
         }
@@ -275,19 +287,24 @@ impl Effect {
 
     fn temporary(&self) -> usize {
         match self {
-            Effect::Add(lhs, rhs)
-            | Effect::Sub(lhs, rhs)
-            | Effect::And(lhs, rhs)
-            | Effect::Or(lhs, rhs)
-            | Effect::Xor(lhs, rhs)
-            | Effect::Shr(lhs, rhs)
-            | Effect::Shl(lhs, rhs)
-            | Effect::Ror(lhs, rhs)
-            | Effect::Rol(lhs, rhs)
-            | Effect::Mul(lhs, rhs)
-            | Effect::Sar(lhs, rhs) => lhs.temporary() + rhs.temporary(),
-            Effect::Div(divisor, low, high) => {
-                divisor.temporary() + low.temporary() + high.temporary()
+            Effect::Add(first, second)
+            | Effect::Sub(first, second)
+            | Effect::And(first, second)
+            | Effect::Or(first, second)
+            | Effect::Xor(first, second)
+            | Effect::Shr(first, second)
+            | Effect::Shl(first, second)
+            | Effect::Ror(first, second)
+            | Effect::Rol(first, second)
+            | Effect::Mul(first, second)
+            | Effect::Sar(first, second)
+            | Effect::Exchange(first, second)
+            | Effect::ExchangeAdd(first, second) => first.temporary() + second.temporary(),
+            Effect::Div(first, second, third) => {
+                first.temporary() + second.temporary() + third.temporary()
+            }
+            Effect::CompareExchange(first, second, third) => {
+                first.temporary() + second.temporary() + third.temporary()
             }
             Effect::Assign(expression) | Effect::Bsr(expression) | Effect::Tzcnt(expression) => {
                 expression.temporary()
@@ -299,22 +316,22 @@ impl Effect {
 impl Compare {
     fn operands(&self, value: &mut usize) {
         match self {
-            Compare::Equal(lhs, rhs)
-            | Compare::LessThan(lhs, rhs)
-            | Compare::GreaterThan(lhs, rhs)
-            | Compare::BitSet(lhs, rhs) => {
-                lhs.operands(value);
-                rhs.operands(value);
+            Compare::Equal(first, second)
+            | Compare::LessThan(first, second)
+            | Compare::GreaterThan(first, second)
+            | Compare::BitSet(first, second) => {
+                first.operands(value);
+                second.operands(value);
             }
         }
     }
 
     fn temporary(&self) -> usize {
         match self {
-            Compare::Equal(lhs, rhs)
-            | Compare::LessThan(lhs, rhs)
-            | Compare::GreaterThan(lhs, rhs)
-            | Compare::BitSet(lhs, rhs) => lhs.temporary() + rhs.temporary(),
+            Compare::Equal(first, second)
+            | Compare::LessThan(first, second)
+            | Compare::GreaterThan(first, second)
+            | Compare::BitSet(first, second) => first.temporary() + second.temporary(),
         }
     }
 }

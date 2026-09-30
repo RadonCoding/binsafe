@@ -5,8 +5,8 @@ use iced_x86::code_asm::{
 };
 
 use crate::{
-    register,
     runtime::Runtime,
+    utils::register_of_size,
     vm::{
         bytecode::{VMReg, VMWidth},
         handlers::semantic::{
@@ -160,15 +160,15 @@ fn compile_effects(
 fn mask(rt: &mut Runtime, register: AsmRegister64, width: VMWidth) {
     match width.size() {
         1 => {
-            let byte = get_gpr8(register::sized(register.into(), 1).unwrap()).unwrap();
+            let byte = get_gpr8(register_of_size(register.into(), 1).unwrap()).unwrap();
             rt.asm.movzx(register, byte).unwrap();
         }
         2 => {
-            let word = get_gpr16(register::sized(register.into(), 2).unwrap()).unwrap();
+            let word = get_gpr16(register_of_size(register.into(), 2).unwrap()).unwrap();
             rt.asm.movzx(register, word).unwrap();
         }
         4 => {
-            let dword = get_gpr32(register::sized(register.into(), 4).unwrap()).unwrap();
+            let dword = get_gpr32(register_of_size(register.into(), 4).unwrap()).unwrap();
             rt.asm.mov(dword, dword).unwrap();
         }
         8 => {}
@@ -316,6 +316,163 @@ fn compile_div(
     allocator.consume(third);
 }
 
+fn compile_exchange(
+    rt: &mut Runtime,
+    allocator: &mut Allocator,
+    first: &Expression,
+    second: &Expression,
+    width: VMWidth,
+) {
+    let first = compile_expression(rt, allocator, first, width);
+    let second = compile_expression(rt, allocator, second, VMWidth::Lower64);
+
+    let pinned = [first, second]
+        .into_iter()
+        .filter_map(|value| match value {
+            Reference::Value(value) => Some(value),
+            Reference::Immediate(_) => None,
+        })
+        .collect::<Vec<Value>>();
+
+    let dst = allocator.acquire(rt, &pinned, &[]);
+    allocator.copy(rt, first, dst);
+
+    let src = allocator.acquire(rt, &pinned, &[dst]);
+    allocator.copy(rt, second, src);
+
+    match width.size() {
+        1 => {
+            let byte = get_gpr8(register_of_size(dst.into(), 1).unwrap()).unwrap();
+            rt.asm.xchg(ptr(src), byte).unwrap();
+        }
+        2 => {
+            let word = get_gpr16(register_of_size(dst.into(), 2).unwrap()).unwrap();
+            rt.asm.xchg(ptr(src), word).unwrap();
+        }
+        4 => {
+            let dword = get_gpr32(register_of_size(dst.into(), 4).unwrap()).unwrap();
+            rt.asm.xchg(ptr(src), dword).unwrap();
+        }
+        8 => {
+            rt.asm.xchg(ptr(src), dst).unwrap();
+        }
+        _ => unreachable!(),
+    }
+
+    allocator.replace(dst, Value::Output(0), true);
+
+    allocator.consume(first);
+    allocator.consume(second);
+}
+
+fn compile_exchange_add(
+    rt: &mut Runtime,
+    allocator: &mut Allocator,
+    first: &Expression,
+    second: &Expression,
+    width: VMWidth,
+) {
+    let first = compile_expression(rt, allocator, first, width);
+    let second = compile_expression(rt, allocator, second, VMWidth::Lower64);
+
+    let pinned = [first, second]
+        .into_iter()
+        .filter_map(|value| match value {
+            Reference::Value(value) => Some(value),
+            Reference::Immediate(_) => None,
+        })
+        .collect::<Vec<Value>>();
+
+    let dst = allocator.acquire(rt, &pinned, &[]);
+    allocator.copy(rt, first, dst);
+
+    let src = allocator.acquire(rt, &pinned, &[dst]);
+    allocator.copy(rt, second, src);
+
+    match width.size() {
+        1 => {
+            let byte = get_gpr8(register_of_size(dst.into(), 1).unwrap()).unwrap();
+            rt.asm.lock().xadd(ptr(src), byte).unwrap();
+        }
+        2 => {
+            let word = get_gpr16(register_of_size(dst.into(), 2).unwrap()).unwrap();
+            rt.asm.lock().xadd(ptr(src), word).unwrap();
+        }
+        4 => {
+            let dword = get_gpr32(register_of_size(dst.into(), 4).unwrap()).unwrap();
+            rt.asm.lock().xadd(ptr(src), dword).unwrap();
+        }
+        8 => {
+            rt.asm.lock().xadd(ptr(src), dst).unwrap();
+        }
+        _ => unreachable!(),
+    }
+
+    allocator.copy(rt, first, src);
+
+    rt.asm.add(src, dst).unwrap();
+
+    allocator.replace(dst, Value::Output(1), true);
+    allocator.replace(src, Value::Output(0), true);
+
+    allocator.consume(first);
+    allocator.consume(second);
+}
+
+fn compile_compare_exchange(
+    rt: &mut Runtime,
+    allocator: &mut Allocator,
+    first: &Expression,
+    second: &Expression,
+    third: &Expression,
+    width: VMWidth,
+) {
+    let first = compile_expression(rt, allocator, first, width);
+    let second = compile_expression(rt, allocator, second, width);
+    let third = compile_expression(rt, allocator, third, VMWidth::Lower64);
+
+    let pinned = [first, second, third]
+        .into_iter()
+        .filter_map(|value| match value {
+            Reference::Value(value) => Some(value),
+            Reference::Immediate(_) => None,
+        })
+        .collect::<Vec<Value>>();
+
+    let src = allocator.acquire(rt, &pinned, &[rax]);
+    allocator.copy(rt, second, src);
+
+    let dst = allocator.acquire(rt, &pinned, &[rax, src]);
+    allocator.copy(rt, third, dst);
+
+    allocator.copy(rt, first, rax);
+
+    match width.size() {
+        1 => {
+            let byte = get_gpr8(register_of_size(src.into(), 1).unwrap()).unwrap();
+            rt.asm.lock().cmpxchg(ptr(dst), byte).unwrap();
+        }
+        2 => {
+            let word = get_gpr16(register_of_size(src.into(), 2).unwrap()).unwrap();
+            rt.asm.lock().cmpxchg(ptr(dst), word).unwrap();
+        }
+        4 => {
+            let dword = get_gpr32(register_of_size(src.into(), 4).unwrap()).unwrap();
+            rt.asm.lock().cmpxchg(ptr(dst), dword).unwrap();
+        }
+        8 => {
+            rt.asm.lock().cmpxchg(ptr(dst), src).unwrap();
+        }
+        _ => unreachable!(),
+    }
+
+    allocator.replace(rax, Value::Output(0), true);
+
+    allocator.consume(first);
+    allocator.consume(second);
+    allocator.consume(third);
+}
+
 fn compile_operation<U8, U16, U32, U64, S8, S16, S32, S64>(
     rt: &mut Runtime,
     width: VMWidth,
@@ -342,30 +499,30 @@ fn compile_operation<U8, U16, U32, U64, S8, S16, S32, S64>(
 
     match (width.size(), signed) {
         (1, false) => {
-            let byte = get_gpr8(register::sized(src.into(), 1).unwrap()).unwrap();
+            let byte = get_gpr8(register_of_size(src.into(), 1).unwrap()).unwrap();
             unsigned8(&mut rt.asm, byte);
         }
         (2, false) => {
-            let word = get_gpr16(register::sized(src.into(), 2).unwrap()).unwrap();
+            let word = get_gpr16(register_of_size(src.into(), 2).unwrap()).unwrap();
             unsigned16(&mut rt.asm, word);
         }
         (4, false) => {
-            let dword = get_gpr32(register::sized(src.into(), 4).unwrap()).unwrap();
+            let dword = get_gpr32(register_of_size(src.into(), 4).unwrap()).unwrap();
             unsigned32(&mut rt.asm, dword);
         }
         (8, false) => {
             unsigned64(&mut rt.asm, src);
         }
         (1, true) => {
-            let byte = get_gpr8(register::sized(src.into(), 1).unwrap()).unwrap();
+            let byte = get_gpr8(register_of_size(src.into(), 1).unwrap()).unwrap();
             signed8(&mut rt.asm, byte);
         }
         (2, true) => {
-            let word = get_gpr16(register::sized(src.into(), 2).unwrap()).unwrap();
+            let word = get_gpr16(register_of_size(src.into(), 2).unwrap()).unwrap();
             signed16(&mut rt.asm, word);
         }
         (4, true) => {
-            let dword = get_gpr32(register::sized(src.into(), 4).unwrap()).unwrap();
+            let dword = get_gpr32(register_of_size(src.into(), 4).unwrap()).unwrap();
             signed32(&mut rt.asm, dword);
         }
         (8, true) => {
@@ -637,6 +794,13 @@ fn compile_effect(rt: &mut Runtime, allocator: &mut Allocator, effect: &Effect, 
             |rt, dst, src| rt.asm.tzcnt(dst, src).unwrap(),
             |rt, dst, src| rt.asm.tzcnt(dst, src).unwrap(),
         ),
+        Effect::Exchange(first, second) => compile_exchange(rt, allocator, first, second, width),
+        Effect::ExchangeAdd(first, second) => {
+            compile_exchange_add(rt, allocator, first, second, width)
+        }
+        Effect::CompareExchange(first, second, third) => {
+            compile_compare_exchange(rt, allocator, first, second, third, width)
+        }
     }
 }
 
@@ -669,13 +833,13 @@ fn compile_unary<U16, U32, U64>(
 
     match width.size() {
         2 => {
-            let dst = get_gpr16(register::sized(dst.into(), 2).unwrap()).unwrap();
-            let src = get_gpr16(register::sized(src.into(), 2).unwrap()).unwrap();
+            let dst = get_gpr16(register_of_size(dst.into(), 2).unwrap()).unwrap();
+            let src = get_gpr16(register_of_size(src.into(), 2).unwrap()).unwrap();
             unsigned16(rt, dst, src);
         }
         4 => {
-            let dst = get_gpr32(register::sized(dst.into(), 4).unwrap()).unwrap();
-            let src = get_gpr32(register::sized(src.into(), 4).unwrap()).unwrap();
+            let dst = get_gpr32(register_of_size(dst.into(), 4).unwrap()).unwrap();
+            let src = get_gpr32(register_of_size(src.into(), 4).unwrap()).unwrap();
             unsigned32(rt, dst, src);
         }
         8 => {
@@ -813,7 +977,7 @@ fn compile_expression(
             match expression {
                 Expression::BitNot(_) => rt.asm.not(dst).unwrap(),
                 Expression::LowByte(_) => {
-                    let byte = get_gpr8(register::sized(dst.into(), 1).unwrap()).unwrap();
+                    let byte = get_gpr8(register_of_size(dst.into(), 1).unwrap()).unwrap();
                     rt.asm.movzx(dst, byte).unwrap();
                 }
                 _ => unreachable!(),
@@ -947,7 +1111,7 @@ fn compile_compare(
 
     let tmp = allocator.acquire(rt, &pinned, &[dst, src]);
 
-    let byte = get_gpr8(register::sized(tmp.into(), 1).unwrap()).unwrap();
+    let byte = get_gpr8(register_of_size(tmp.into(), 1).unwrap()).unwrap();
 
     match compare {
         Compare::Equal(_, _) => {
@@ -995,7 +1159,7 @@ fn compile_parity(
 
     allocator.copy(rt, src, dst);
 
-    let byte = get_gpr8(register::sized(dst.into(), 1).unwrap()).unwrap();
+    let byte = get_gpr8(register_of_size(dst.into(), 1).unwrap()).unwrap();
     rt.asm.movzx(dst, byte).unwrap();
     rt.asm.popcnt(dst, dst).unwrap();
     rt.asm.not(dst).unwrap();

@@ -1,7 +1,7 @@
 use iced_x86::{Register, UsedRegister};
 use runtime::{
     mapper::Mappable,
-    register,
+    utils,
     vm::bytecode::{VMReg, VMVec},
 };
 
@@ -103,7 +103,7 @@ pub fn vector(mut state: State, register: VMVec, bytes: [u128; 2]) -> State {
 }
 
 pub fn register(operand: usize, size: usize) -> Register {
-    register::sized(NATIVE_REGISTERS[operand % NATIVE_REGISTERS.len()], size).unwrap()
+    register_of_size(NATIVE_REGISTERS[operand % NATIVE_REGISTERS.len()], size).unwrap()
 }
 
 pub fn available(used: &[UsedRegister]) -> Register {

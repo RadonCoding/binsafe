@@ -8,13 +8,6 @@ $ErrorActionPreference = "Stop"
 
 $language = Split-Path (Split-Path $Example -Parent) -Leaf
 
-$env:OUTPUT_DIRECTORY = Join-Path $PWD "api/generated"
-$env:TEMPLATES_DIRECTORY = Join-Path $PWD "api/templates"
-
-cargo build --package markers
-
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
 cargo build --bin obfuscator $Arguments
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

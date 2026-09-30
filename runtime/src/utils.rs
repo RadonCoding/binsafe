@@ -1,6 +1,18 @@
 use iced_x86::Register;
 
-pub fn sized(register: Register, size: usize) -> Option<Register> {
+/// Computes the multiplicative inverse of odd `x` modulo 2^64.
+pub fn invert_multiplier(x: u64) -> u64 {
+    let mut inverse = x;
+
+    for _ in 0..5 {
+        inverse = inverse.wrapping_mul(2u64.wrapping_sub(x.wrapping_mul(inverse)));
+    }
+
+    inverse
+}
+
+// Converts `register` to the same register of `size`.
+pub fn register_of_size(register: Register, size: usize) -> Option<Register> {
     let number = register.number() as usize;
 
     match size {

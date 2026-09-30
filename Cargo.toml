@@ -1,4 +1,4 @@
 [workspace]
-members = ["logger", "obfuscator", "runtime", "tests", "markers"]
+members = ["logger", "obfuscator", "runtime", "tests"]
 resolver = "2"
 exclude = ["examples"]

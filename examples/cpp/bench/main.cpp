@@ -2,9 +2,37 @@
 #include <chrono>
 #include <cstdint>
 #include <cassert>
-#include "../../../api/generated/binsafe.hpp"
+#include "../../../api/binsafe.hpp"
 
-int main() {
+#define ENCIPHER(data, key, delta)                                                     \
+    do                                                                                 \
+    {                                                                                  \
+        uint32_t v0 = (data)[0];                                                       \
+        uint32_t v1 = (data)[1];                                                       \
+                                                                                       \
+        for (int i = 0; i < 20000; ++i)                                                \
+        {                                                                              \
+            uint32_t sum = 0;                                                          \
+                                                                                       \
+            for (uint32_t r = 0; r < 32; r++)                                          \
+            {                                                                          \
+                v0 += (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + (key)[sum & 3]);         \
+                sum += (delta);                                                        \
+                v1 += (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + (key)[(sum >> 11) & 3]); \
+            }                                                                          \
+        }                                                                              \
+                                                                                       \
+        (data)[0] = v0;                                                                \
+        (data)[1] = v1;                                                                \
+    } while (0)
+
+BINSAFE void encipher(uint32_t data[2], uint32_t const key[4], uint32_t delta)
+{
+    ENCIPHER(data, key, delta);
+}
+
+int main()
+{
     uint32_t key[4] = {0xA3B1C2D3, 0xE4F50617, 0x28394A5B, 0x6C7D8E9F};
     uint32_t const delta = 0x9E3779B9;
 
@@ -12,20 +40,7 @@ int main() {
 
     auto start_native = std::chrono::high_resolution_clock::now();
 
-    uint32_t v0_nat = data_native[0];
-    uint32_t v1_nat = data_native[1];
-
-    for (int i = 0; i < 20000; ++i) {
-        uint32_t sum = 0;
-        for (uint32_t r = 0; r < 32; r++) {
-            v0_nat += (((v1_nat << 4) ^ (v1_nat >> 5)) + v1_nat) ^ (sum + key[sum & 3]);
-            sum += delta;
-            v1_nat += (((v0_nat << 4) ^ (v0_nat >> 5)) + v0_nat) ^ (sum + key[(sum >> 11) & 3]);
-        }
-    }
-
-    data_native[0] = v0_nat;
-    data_native[1] = v1_nat;
+    ENCIPHER(data_native, key, delta);
 
     auto end_native = std::chrono::high_resolution_clock::now();
 
@@ -35,25 +50,7 @@ int main() {
 
     auto start_virtualized = std::chrono::high_resolution_clock::now();
 
-    BINSAFE_BEGIN();
-
-    uint32_t v0_virtualized = data_virtualized[0];
-    uint32_t v1_virtualized = data_virtualized[1];
-
-    for (int i = 0; i < 20000; ++i) {
-        uint32_t sum = 0;
-        
-        for (uint32_t r = 0; r < 32; r++) {
-            v0_virtualized += (((v1_virtualized << 4) ^ (v1_virtualized >> 5)) + v1_virtualized) ^ (sum + key[sum & 3]);
-            sum += delta;
-            v1_virtualized += (((v0_virtualized << 4) ^ (v0_virtualized >> 5)) + v0_virtualized) ^ (sum + key[(sum >> 11) & 3]);
-        }
-    }
-
-    data_virtualized[0] = v0_virtualized;
-    data_virtualized[1] = v1_virtualized;
-
-    BINSAFE_END();
+    encipher(data_virtualized, key, delta);
 
     auto end_virtualized = std::chrono::high_resolution_clock::now();
 

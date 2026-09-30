@@ -38,7 +38,6 @@ mapped! {
         VmVectorsCapture,
         VmVectorsRestore,
         VmVectorsCopy,
-        VmFlags,
         /* VM HANDLERS */
         VmHandlerJcc,
         VmHandlerRet,
@@ -121,6 +120,7 @@ mapped! {
         VmTrampolines,
         VmKeyInitializer,
         VmKeyMultiplier,
+        VmKeyMultiplierInverse,
         VmKeyAddend,
         VehEnd,
         ImportAddresses,
@@ -271,7 +271,7 @@ impl Default for Keys {
 
         Self {
             initializer: rng.gen::<u64>(),
-            multiplier: rng.gen::<u64>(),
+            multiplier: rng.gen::<u64>() | 1,
             addend: rng.gen::<u64>(),
             secret: rng.gen::<u64>(),
         }
@@ -708,7 +708,6 @@ impl Runtime {
             (FnDef::VmHandlerVectorDiv, vm::handlers::vector_div::build),
             (FnDef::VmHandlerTimestamp, vm::handlers::timestamp::build),
             (FnDef::VmHandlerDispatch, vm::handlers::dispatch::build),
-            (FnDef::VmFlags, vm::handlers::flags::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (FnDef::Hash, functions::hash::build),
             (FnDef::Resolve, functions::resolve::build),
@@ -740,6 +739,10 @@ impl Runtime {
         self.define_data_qword(DataDef::VmKeyInitializer, self.keys.initializer);
         self.define_data_qword(DataDef::VmKeyAddend, self.keys.addend);
         self.define_data_qword(DataDef::VmKeyMultiplier, self.keys.multiplier);
+        self.define_data_qword(
+            DataDef::VmKeyMultiplierInverse,
+            crate::utils::invert_multiplier(self.keys.multiplier),
+        );
 
         self.define_bool(BoolDef::IsLocked, false);
         self.define_bool(BoolDef::HasAvx, false);

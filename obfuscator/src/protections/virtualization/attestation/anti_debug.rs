@@ -64,6 +64,7 @@ fn query_kd_debugger_enabled(
         VMWidth::Lower8,
     ));
     b.extend(accumulate_immediate(
+        engine,
         rng,
         ACCUMULATOR,
         None,
@@ -73,6 +74,7 @@ fn query_kd_debugger_enabled(
 
     b.extend(import(engine, ImportDef::NtQuerySystemInformation));
     b.extend(accumulate_prologue(
+        engine,
         rng,
         ACCUMULATOR,
         VMReg::Rax,
@@ -99,6 +101,7 @@ fn query_kd_debugger_enabled(
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
+        engine,
         rng,
         ACCUMULATOR,
         Some(VMReg::Rax),
@@ -108,6 +111,7 @@ fn query_kd_debugger_enabled(
 
     // READ KernelDebuggerEnabled + KernelDebuggerNotPresent
     b.extend(accumulate_memory(
+        engine,
         rng,
         ACCUMULATOR,
         VMReg::Rsp,
@@ -129,6 +133,7 @@ fn query_process_debug_object_handle(
 
     b.extend(import(engine, ImportDef::NtQueryInformationProcess));
     b.extend(accumulate_prologue(
+        engine,
         rng,
         ACCUMULATOR,
         VMReg::Rax,
@@ -152,11 +157,12 @@ fn query_process_debug_object_handle(
     // ProcessInformationLength -> R9
     b.extend(set_register(VMReg::R9, 8));
     // ReturnLength -> [RSP + ...]
-    b.extend(store_memory(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
+    b.extend(store_immediate(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
     // NtQueryInformationProcess
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
+        engine,
         rng,
         ACCUMULATOR,
         Some(VMReg::Rax),
@@ -166,6 +172,7 @@ fn query_process_debug_object_handle(
 
     // READ ProcessDebugObjectHandle
     b.extend(accumulate_memory(
+        engine,
         rng,
         ACCUMULATOR,
         VMReg::Rsp,
@@ -187,6 +194,7 @@ fn set_hide_from_debugger(
 
     b.extend(import(engine, ImportDef::NtSetInformationThread));
     b.extend(accumulate_prologue(
+        engine,
         rng,
         ACCUMULATOR,
         VMReg::Rax,
@@ -205,6 +213,7 @@ fn set_hide_from_debugger(
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
+        engine,
         rng,
         ACCUMULATOR,
         Some(VMReg::Rax),
@@ -224,6 +233,7 @@ fn query_hide_from_debbuger(
 
     b.extend(import(engine, ImportDef::NtQueryInformationThread));
     b.extend(accumulate_prologue(
+        engine,
         rng,
         ACCUMULATOR,
         VMReg::Rax,
@@ -248,11 +258,12 @@ fn query_hide_from_debbuger(
     // ThreadInformationLength -> R9
     b.extend(set_register(VMReg::R9, 1));
     // ReturnLength -> [RSP + ...]
-    b.extend(store_memory(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
+    b.extend(store_immediate(VMReg::Rsp, VMReg::None, 1, 0x20, 0));
     // NtQueryInformationThread
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
+        engine,
         rng,
         ACCUMULATOR,
         Some(VMReg::Rax),
@@ -262,6 +273,7 @@ fn query_hide_from_debbuger(
 
     // READ ThreadHideFromDebugger
     b.extend(accumulate_byte(
+        engine,
         rng,
         ACCUMULATOR,
         VMReg::Rsp,
