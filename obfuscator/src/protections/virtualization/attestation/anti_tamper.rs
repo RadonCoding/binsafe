@@ -41,6 +41,8 @@ pub fn generate(
             apply_operation(operation, byte as u64, &mut lane0);
         }
     }
+    
+    *expected = lane0 ^ lane1;
 
     let count = FnDef::VARIANTS.len();
 
@@ -140,10 +142,7 @@ pub fn generate(
 
     instructions.extend(spill_vector(ACCUMULATOR, VMWidth::Lower128));
     instructions.extend(xor(None, None));
-    instructions.extend(register_lcg(engine, None));
     instructions.extend(store_register(VMReg::Vp1));
-
-    *expected = apply_lcg(engine, lane0 ^ lane1);
 
     instructions
 }
