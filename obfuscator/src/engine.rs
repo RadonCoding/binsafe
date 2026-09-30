@@ -5,11 +5,12 @@ use exe::{
 };
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Formatter, Instruction, IntelFormatter};
 use logger::{debug, info};
-use markers::{MARKER_BEGIN, MARKER_END, MARKER_SIZE};
 use runtime::runtime::Runtime;
 use std::{collections::HashSet, fmt, mem};
 
 use crate::{args::Args, exceptions, protections::Protection};
+
+const BINSAFE_SECTION: &str = ".binsafe";
 
 pub struct Block {
     pub rva: u32,
@@ -124,7 +125,10 @@ impl<'a> Engine<'a> {
 
     pub fn scan(&mut self) {
         let entry_point = self.pe.get_entrypoint().unwrap();
-        let code_section = self.pe.get_section_by_rva(entry_point).unwrap();
+        let code_section = self
+            .pe
+            .get_section_by_name(BINSAFE_SECTION)
+            .unwrap_or(self.pe.get_section_by_rva(entry_point).unwrap());
 
         info!(
             "Section VA: 0x{:X}, file offset: 0x{:X}",
@@ -139,52 +143,11 @@ impl<'a> Engine<'a> {
         let ip = code_section.virtual_address.0 as u64;
         let code = code_section.read(&self.pe).unwrap().to_vec();
 
-        let markers = self.find_markers(&code);
-
-        let data_references = self.collect_data_references(&code, ip, &markers);
-        let mut code_references =
-            self.collect_code_references(&code, ip, &code_section, &data_references, &markers);
-
-        for &(start, _) in &markers {
-            code_references.insert(ip as u32 + start as u32);
-        }
-
-        if self.scan_markers(ip, &code, &code_references, &markers) {
-            return;
-        }
+        let data_references = self.collect_data_references(&code, ip);
+        let code_references =
+            self.collect_code_references(&code, ip, &code_section, &data_references);
 
         self.scan_blocks(ip, &code, &code_references);
-    }
-
-    fn find_markers(&self, code: &[u8]) -> Vec<(usize, usize)> {
-        let mut markers = Vec::new();
-        let mut begin = None;
-        let mut cursor = 0;
-
-        while cursor + MARKER_SIZE <= code.len() {
-            if code[cursor..cursor + MARKER_SIZE] == MARKER_BEGIN {
-                begin = Some(cursor + MARKER_SIZE);
-                cursor += MARKER_SIZE;
-                continue;
-            }
-            if code[cursor..cursor + MARKER_SIZE] == MARKER_END {
-                if let Some(start) = begin.take() {
-                    markers.push((start, cursor));
-                }
-                cursor += MARKER_SIZE;
-                continue;
-            }
-            cursor += 1;
-        }
-
-        markers
-    }
-
-    fn is_marker(&self, offset: usize, markers: &[(usize, usize)]) -> bool {
-        markers.iter().any(|&(s, e)| {
-            (offset >= s.saturating_sub(MARKER_SIZE) && offset < s)
-                || (offset >= e && offset < e + MARKER_SIZE)
-        })
     }
 
     fn capture_block(&mut self, block: &mut Vec<Instruction>, end: u32) {
@@ -257,49 +220,6 @@ impl<'a> Engine<'a> {
         }
     }
 
-    fn scan_markers(
-        &mut self,
-        ip: u64,
-        code: &[u8],
-        code_references: &HashSet<u32>,
-        markers: &[(usize, usize)],
-    ) -> bool {
-        if markers.is_empty() {
-            return false;
-        }
-
-        info!("Found {} marked regions", markers.len());
-
-        let mut sorted_code_references = code_references.iter().copied().collect::<Vec<u32>>();
-        sorted_code_references.sort();
-
-        for &(start, end) in markers {
-            self.collect_blocks(
-                &code[start..end],
-                ip + start as u64,
-                &sorted_code_references,
-            );
-        }
-
-        for &(start, end) in markers {
-            let start_offset = self
-                .pe
-                .translate(PETranslation::Memory(RVA(ip as u32 + start as u32)))
-                .unwrap();
-            let end_offset = self
-                .pe
-                .translate(PETranslation::Memory(RVA(ip as u32 + end as u32)))
-                .unwrap();
-
-            self.nop(start_offset - MARKER_SIZE, MARKER_SIZE);
-            self.nop(end_offset, MARKER_SIZE);
-        }
-
-        info!("Found {} blocks", self.blocks.len());
-
-        true
-    }
-
     fn scan_blocks(&mut self, ip: u64, code: &[u8], code_references: &HashSet<u32>) {
         let mut sorted_code_references = code_references.iter().copied().collect::<Vec<u32>>();
         sorted_code_references.sort();
@@ -309,21 +229,11 @@ impl<'a> Engine<'a> {
         info!("Found {} blocks", self.blocks.len());
     }
 
-    fn collect_data_references(
-        &self,
-        code: &[u8],
-        ip: u64,
-        markers: &[(usize, usize)],
-    ) -> HashSet<u32> {
+    fn collect_data_references(&self, code: &[u8], ip: u64) -> HashSet<u32> {
         let mut data_references = HashSet::new();
         let mut cursor = 0;
 
         while cursor < code.len() {
-            if self.is_marker(cursor, markers) {
-                cursor += MARKER_SIZE;
-                continue;
-            }
-
             let mut decoder = Decoder::with_ip(
                 self.bitness,
                 &code[cursor..],
@@ -404,19 +314,12 @@ impl<'a> Engine<'a> {
         ip: u64,
         code_section: &ImageSectionHeader,
         data_references: &HashSet<u32>,
-        markers: &[(usize, usize)],
     ) -> HashSet<u32> {
         let mut references = self.collect_static_references(code_section);
         let mut cursor = 0;
         let mut previous = Vec::new();
 
         while cursor < code.len() {
-            if self.is_marker(cursor, markers) {
-                cursor += MARKER_SIZE;
-                previous.clear();
-                continue;
-            }
-
             let mut decoder = Decoder::with_ip(
                 self.bitness,
                 &code[cursor..],

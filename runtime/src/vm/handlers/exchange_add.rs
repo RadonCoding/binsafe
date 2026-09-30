@@ -1,87 +1,82 @@
-use iced_x86::code_asm::{eax, ptr, r12, r13, r8, r9, r9b, r9d, r9w, rax, rcx};
-
 use crate::{
-    runtime::{FnDef, Runtime},
+    runtime::Runtime,
     vm::{
-        bytecode::Flag,
-        utils::{self, scratch},
+        bytecode::{Flag, VMWidth},
+        handlers::semantic::{self, Compare, Effect, Expression, Flags, Operand, Operation},
     },
 };
 
-// unsigned char* (unsigned char*)
 pub fn build(rt: &mut Runtime) {
-    let mut epilogue = rt.asm.create_label();
-
-    // push r13
-    rt.asm.push(r13).unwrap();
-    // mov r13, rcx
-    rt.asm.mov(r13, rcx).unwrap();
-
-    // eax -> width
-    utils::bytecode::read_byte_zx(rt, r13, eax);
-
-    // load r8
-    scratch::load(rt, r12, r8);
-    // load r9
-    scratch::load(rt, r12, r9);
-
-    utils::width::dispatch(
+    semantic::compiler::compile(
         rt,
-        rax,
-        &mut epilogue,
-        Some(Box::new(|rt| {
-            // lock xadd [r8], r9
-            rt.asm.lock().xadd(ptr(r8), r9).unwrap();
-        })),
-        Some(Box::new(|rt| {
-            // lock xadd [r8], r9d
-            rt.asm.lock().xadd(ptr(r8), r9d).unwrap();
-        })),
-        None,
-        Some(Box::new(|rt| {
-            // lock xadd [r8], r9w
-            rt.asm.lock().xadd(ptr(r8), r9w).unwrap();
-        })),
-        None,
-        Some(Box::new(|rt| {
-            // lock xadd [r8], r9b
-            rt.asm.lock().xadd(ptr(r8), r9b).unwrap();
-        })),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
+        &Operation {
+            effects: vec![Effect::ExchangeAdd(
+                Expression::Operand(Operand::Input(0)),
+                Expression::Operand(Operand::Input(1)),
+            )],
+            flags: Flags::Always(vec![
+                (
+                    Flag::Zero,
+                    Expression::Compare(Box::new(Compare::Equal(
+                        Expression::Operand(Operand::Output(0)),
+                        Expression::Constant(0),
+                    ))),
+                ),
+                (
+                    Flag::Sign,
+                    Expression::Compare(Box::new(Compare::BitSet(
+                        Expression::Operand(Operand::Output(0)),
+                        Expression::SignBit,
+                    ))),
+                ),
+                (
+                    Flag::Carry,
+                    Expression::Compare(Box::new(Compare::LessThan(
+                        Expression::Operand(Operand::Output(0)),
+                        Expression::Operand(Operand::Input(0)),
+                    ))),
+                ),
+                (
+                    Flag::Overflow,
+                    Expression::Compare(Box::new(Compare::BitSet(
+                        Expression::BitAnd(
+                            Box::new(Expression::BitXor(
+                                Box::new(Expression::Operand(Operand::Input(0))),
+                                Box::new(Expression::Operand(Operand::Output(0))),
+                            )),
+                            Box::new(Expression::BitXor(
+                                Box::new(Expression::Operand(Operand::Output(1))),
+                                Box::new(Expression::Operand(Operand::Output(0))),
+                            )),
+                        ),
+                        Expression::SignBit,
+                    ))),
+                ),
+                (
+                    Flag::Parity,
+                    Expression::Parity(Box::new(Expression::Operand(Operand::Output(0)))),
+                ),
+                (
+                    Flag::Auxiliary,
+                    Expression::Compare(Box::new(Compare::BitSet(
+                        Expression::BitXor(
+                            Box::new(Expression::BitXor(
+                                Box::new(Expression::Operand(Operand::Input(0))),
+                                Box::new(Expression::Operand(Operand::Output(1))),
+                            )),
+                            Box::new(Expression::Operand(Operand::Output(0))),
+                        ),
+                        Expression::Constant(4),
+                    ))),
+                ),
+            ]),
+            stores: Some(vec![Expression::Operand(Operand::Output(1))]),
+            widths: &[
+                VMWidth::Lower64,
+                VMWidth::Lower32,
+                VMWidth::Lower16,
+                VMWidth::Lower8,
+            ],
+        },
     );
-
-    rt.asm.set_label(&mut epilogue).unwrap();
-    {
-        // mov rcx, ...
-        rt.asm
-            .mov(
-                rcx,
-                Flag::Carry.bit64()
-                    | Flag::Parity.bit64()
-                    | Flag::Auxiliary.bit64()
-                    | Flag::Zero.bit64()
-                    | Flag::Sign.bit64()
-                    | Flag::Overflow.bit64(),
-            )
-            .unwrap();
-        // pushfq
-        rt.asm.pushfq().unwrap();
-        // call ...
-        rt.asm.call(rt.function_labels[&FnDef::VmFlags]).unwrap();
-
-        // store r9
-        scratch::store(rt, r12, r9);
-
-        // mov rax, r13
-        rt.asm.mov(rax, r13).unwrap();
-        // pop r13
-        rt.asm.pop(r13).unwrap();
-        // ret
-        rt.asm.ret().unwrap();
-    }
 }

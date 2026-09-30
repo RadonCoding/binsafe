@@ -2,8 +2,8 @@
 pub mod debug;
 pub mod functions;
 pub mod mapper;
-pub mod register;
 pub mod runtime;
+pub mod utils;
 pub mod vm;
 
 macro_rules! stack {
