@@ -797,7 +797,7 @@ fn compare_memory(state: State, instructions: &[Instruction], memory: &mut [u8])
 
     let mut executor = Executor::new();
     let lifted = bytecode::lift(instructions).unwrap();
-    let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, |_| 0);
+    let transformed = bytecode::transform(&mut executor.rt.mapper, lifted, 0, |_| 0);
 
     let mut bytes = bytecode::assemble(&mut executor.rt.mapper, &transformed);
     encrypt_block(&mut bytes);

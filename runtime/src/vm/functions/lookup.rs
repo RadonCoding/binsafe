@@ -54,7 +54,7 @@ pub fn build(rt: &mut Runtime) {
     // Compute the block pointer from the offset into bytecode:
     // lea rax, [...]
     rt.asm
-        .lea(rax, ptr(rt.data_labels[&DataDef::VmCode]))
+        .lea(rax, ptr(rt.data_labels[&DataDef::VmCodeStart]))
         .unwrap();
     // movsxd rcx, [rax]
     rt.asm.movsxd(rcx, ptr(rax)).unwrap();

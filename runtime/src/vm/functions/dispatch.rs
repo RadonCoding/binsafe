@@ -5,7 +5,7 @@ use iced_x86::code_asm::{
 
 use crate::{
     mapper::Mappable,
-    runtime::{FnDef, ImportDef, Runtime, StringDef},
+    runtime::{DataDef, FnDef, ImportDef, Runtime, StringDef},
     vm::{
         bytecode::{VMOp, VMReg},
         utils::{self, lock},
@@ -154,10 +154,27 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov [r12 + ...], 0x0
         utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
-        // mov [r12 + ...], 0x0
-        utils::vreg::store_imm(rt, r12, 0x0, VMReg::VImmAdd);
-        // mov [r12 + ...], 0x1
-        utils::vreg::store_imm(rt, r12, 0x1, VMReg::VImmMul);
+
+        // lea rax, [...]
+        rt.asm
+            .lea(rax, ptr(rt.data_labels[&DataDef::VmCodeStart]))
+            .unwrap();
+        // movsxd rcx, [rax]
+        rt.asm.movsxd(rcx, ptr(rax)).unwrap();
+        // add rax, rcx
+        rt.asm.add(rax, rcx).unwrap();
+        // mov rcx, r13
+        rt.asm.mov(rcx, r13).unwrap();
+        // sub rcx, 0x2
+        rt.asm.sub(rcx, 0x2).unwrap();
+        // sub rcx, rax
+        rt.asm.sub(rcx, rax).unwrap();
+        // mov [r12 + ...], rcx
+        utils::vreg::store_reg(rt, r12, rcx, VMReg::VImmAdd);
+        // or rcx, 0x1
+        rt.asm.or(rcx, 0x1).unwrap();
+        // mov [r12 + ...], rcx
+        utils::vreg::store_reg(rt, r12, rcx, VMReg::VImmMul);
     }
 
     rt.asm.set_label(&mut execute_loop).unwrap();

@@ -26,7 +26,9 @@ struct Encryptor<'a> {
 }
 
 /// Encrypts every immediate against rolling immediates held in [`VMReg::VImmAdd`] and [`VMReg::VImmMul`].
-pub struct Encrypt;
+pub struct Encrypt {
+    pub offset: u64,
+}
 
 impl Transform for Encrypt {
     fn phase(&self) -> Phase {
@@ -42,7 +44,16 @@ impl Transform for Encrypt {
         let mut encryptor = Encryptor::new(mapper, &mut operations, addend, multiplier);
 
         encryptor.process();
-        encryptor.prologue(addend, multiplier);
+
+        operations.splice(
+            0..0,
+            restore(
+                addend,
+                multiplier,
+                self.offset,
+                invert_multiplier(self.offset | 1),
+            ),
+        );
 
         operations
     }
@@ -71,38 +82,6 @@ impl<'a> Encryptor<'a> {
             self.operations,
             &mut self.addend,
             &mut self.multiplier,
-        );
-    }
-
-    /// Emits the seed sequence for [`VMReg::VImmAdd`] and [`VMReg::VImmMul`].
-    fn prologue(&mut self, addend: u64, multiplier: u64) {
-        self.operations.insert(
-            0,
-            Box::new(LoadImmediate {
-                width: VMWidth::Lower64,
-                source: addend.to_le_bytes().to_vec(),
-            }),
-        );
-        self.operations.insert(
-            1,
-            Box::new(LoadImmediate {
-                width: VMWidth::Lower64,
-                source: invert_multiplier(multiplier).to_le_bytes().to_vec(),
-            }),
-        );
-        self.operations.insert(
-            2,
-            Box::new(StoreRegister {
-                width: VMWidth::Lower64,
-                destination: VMReg::VImmMul,
-            }),
-        );
-        self.operations.insert(
-            3,
-            Box::new(StoreRegister {
-                width: VMWidth::Lower64,
-                destination: VMReg::VImmAdd,
-            }),
         );
     }
 }

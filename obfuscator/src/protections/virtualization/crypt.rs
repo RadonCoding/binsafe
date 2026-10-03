@@ -7,6 +7,65 @@ pub const TRAILER_SIZE: usize = size_of::<u8>() + size_of::<u8>();
 const ENCRYPTED: u8 = 0;
 const DECRYPTED: u8 = 1;
 
+pub struct Cipher {
+    multiplier: u64,
+    addend: u64,
+}
+
+impl Cipher {
+    pub fn new(multiplier: u64, addend: u64) -> Self {
+        Self { multiplier, addend }
+    }
+
+    pub fn encrypt_block(&self, block: &mut Vec<u8>, key: u64, secret: u64) {
+        let length = prepare_block(block);
+        self.encrypt_payload(block, key, secret);
+        finalize_encrypt(block, length);
+    }
+
+    pub fn decrypt_block(&self, block: &mut Vec<u8>, key: u64, secret: u64) {
+        let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
+        self.decrypt_payload(block, key, secret);
+        unprepare_block(block, length);
+    }
+
+    fn encrypt_payload(&self, block: &mut [u8], key: u64, secret: u64) {
+        let mut key = key ^ secret;
+
+        for chunk in block.chunks_exact_mut(8) {
+            let mut qword = u64::from_le_bytes(chunk.try_into().unwrap());
+            qword ^= key;
+            chunk.copy_from_slice(&qword.to_le_bytes());
+            key ^= qword;
+            key = key.wrapping_mul(self.multiplier).wrapping_add(self.addend);
+        }
+    }
+
+    pub fn decrypt_payload(&self, block: &mut [u8], mut key: u64, secret: u64) {
+        let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
+        let payload = &mut block[HEADER_SIZE..HEADER_SIZE + ((length + 8 + 7) & !7)];
+
+        for chunk in payload.chunks_exact_mut(8) {
+            let qword = u64::from_le_bytes(chunk.try_into().unwrap());
+            let original = qword ^ key;
+            chunk.copy_from_slice(&original.to_le_bytes());
+            key ^= qword ^ secret;
+            key = key.wrapping_mul(self.multiplier).wrapping_add(self.addend);
+        }
+
+        assert_eq!(
+            u64::from_le_bytes(
+                payload[length..length + size_of::<u64>()]
+                    .try_into()
+                    .unwrap()
+            ),
+            VM_INTEGRITY_QWORD
+        );
+
+        finalize_decrypt(block);
+    }
+}
+
 pub fn derive_hash(bytes: &[u8]) -> u64 {
     let start = HEADER_SIZE;
     let end = bytes.len() - TRAILER_SIZE;
@@ -22,18 +81,6 @@ pub fn derive_key(bytes: &[u8]) -> u64 {
     u64::from_le_bytes(bytes[start..end].try_into().unwrap())
 }
 
-pub fn encrypt_block(block: &mut Vec<u8>, key: u64, mul: u64, add: u64, att: u64) {
-    let length = prepare_block(block);
-    encrypt_payload(block, key, mul, add, att);
-    finalize_encrypt(block, length);
-}
-
-pub fn decrypt_block(block: &mut Vec<u8>, key: u64, mul: u64, add: u64, att: u64) {
-    let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
-    decrypt_payload(block, key, mul, add, att);
-    unprepare_block(block, length);
-}
-
 fn align_payload(block: &mut Vec<u8>) {
     let mut rng = rand::thread_rng();
 
@@ -44,43 +91,7 @@ fn align_payload(block: &mut Vec<u8>) {
     }
 }
 
-fn encrypt_payload(block: &mut [u8], key: u64, mul: u64, add: u64, att: u64) {
-    let mut key = key ^ att;
-
-    for chunk in block.chunks_exact_mut(8) {
-        let mut qword = u64::from_le_bytes(chunk.try_into().unwrap());
-        qword ^= key;
-        chunk.copy_from_slice(&qword.to_le_bytes());
-        key ^= qword;
-        key = key.wrapping_mul(mul).wrapping_add(add);
-    }
-}
-
-pub fn decrypt_payload(block: &mut [u8], mut key: u64, mul: u64, add: u64, att: u64) {
-    let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
-    let payload = &mut block[HEADER_SIZE..HEADER_SIZE + ((length + 8 + 7) & !7)];
-
-    for chunk in payload.chunks_exact_mut(8) {
-        let qword = u64::from_le_bytes(chunk.try_into().unwrap());
-        let original = qword ^ key;
-        chunk.copy_from_slice(&original.to_le_bytes());
-        key ^= qword ^ att;
-        key = key.wrapping_mul(mul).wrapping_add(add);
-    }
-
-    assert_eq!(
-        u64::from_le_bytes(
-            payload[length..length + size_of::<u64>()]
-                .try_into()
-                .unwrap()
-        ),
-        VM_INTEGRITY_QWORD
-    );
-
-    finalize_decrypt(block);
-}
-
-pub fn finalize_encrypt(block: &mut Vec<u8>, length: u16) {
+fn finalize_encrypt(block: &mut Vec<u8>, length: u16) {
     // word  - length
     block.splice(0..0, length.to_le_bytes());
     // byte  - state

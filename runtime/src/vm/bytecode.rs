@@ -652,6 +652,7 @@ pub fn assemble(mapper: &mut Mapper, operations: &[Box<dyn Encode>]) -> Vec<u8> 
 
 fn transforms<'a>(
     picker: &'a RefCell<&'a mut dyn FnMut(&[usize]) -> usize>,
+    offset: u64,
 ) -> Vec<Box<dyn Transform + 'a>> {
     vec![
         Box::new(Peephole),
@@ -659,7 +660,7 @@ fn transforms<'a>(
         Box::new(Scramble),
         Box::new(Mutation),
         Box::new(Indirect),
-        Box::new(Encrypt),
+        Box::new(Encrypt { offset }),
         Box::new(Permute { picker }),
         Box::new(Peephole),
     ]
@@ -668,6 +669,7 @@ fn transforms<'a>(
 pub fn transform<F>(
     mapper: &mut Mapper,
     mut operations: Vec<Box<dyn Encode>>,
+    offset: u64,
     mut picker: F,
 ) -> Vec<Box<dyn Encode>>
 where
@@ -675,7 +677,7 @@ where
 {
     let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
 
-    for transform in &transforms(&picker) {
+    for transform in &transforms(&picker, offset) {
         operations = transform.run(mapper, operations);
     }
 
@@ -685,6 +687,7 @@ where
 pub fn transform_with_snapshots<F>(
     mapper: &mut Mapper,
     mut operations: Vec<Box<dyn Encode>>,
+    offset: u64,
     mut picker: F,
 ) -> (Vec<Box<dyn Encode>>, Snapshots)
 where
@@ -695,7 +698,7 @@ where
     let mut snapshots = Snapshots::new();
     snapshots.record(Phase::Lift, &operations);
 
-    for transform in &transforms(&picker) {
+    for transform in &transforms(&picker, offset) {
         operations = transform.run(mapper, operations);
 
         snapshots.record(transform.phase(), &operations);
