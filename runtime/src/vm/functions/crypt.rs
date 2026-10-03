@@ -169,7 +169,7 @@ pub fn build(rt: &mut Runtime) {
         {
             // lea rax, [...]
             rt.asm
-                .lea(rax, ptr(rt.data_labels[&DataDef::VmCode]))
+                .lea(rax, ptr(rt.data_labels[&DataDef::VmCodeStart]))
                 .unwrap();
             // movsxd rcx, [rax]
             rt.asm.movsxd(rcx, ptr(rax)).unwrap();
@@ -213,7 +213,7 @@ pub fn build(rt: &mut Runtime) {
         {
             // lea rcx, [...]
             rt.asm
-                .lea(rcx, ptr(rt.data_labels[&DataDef::VmCode]))
+                .lea(rcx, ptr(rt.data_labels[&DataDef::VmAttestation]))
                 .unwrap();
             // movsxd rax, [rcx]
             rt.asm.movsxd(rax, ptr(rcx)).unwrap();

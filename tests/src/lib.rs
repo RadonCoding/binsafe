@@ -249,8 +249,10 @@ impl Executor {
         // lea rax, [...]
         self.rt
             .asm
-            .lea(rax, ptr(self.rt.data_labels[&DataDef::VmCode]))
+            .lea(rax, ptr(self.rt.data_labels[&DataDef::VmCodeStart]))
             .unwrap();
+        // add rax, size_of::<i32>()
+        self.rt.asm.add(rax, size_of::<i32>() as i32).unwrap();
         // mov [r12 + ...], rax
         utils::vreg::store_reg(&mut self.rt, r12, rax, VMReg::BPointer);
 
@@ -306,7 +308,9 @@ impl Executor {
         // ret
         self.rt.asm.ret().unwrap();
 
-        self.rt.define_data_bytes(DataDef::VmCode, bytes);
+        let mut data = (size_of::<i32>() as i32).to_le_bytes().to_vec();
+        data.extend_from_slice(bytes);
+        self.rt.define_data_bytes(DataDef::VmCodeStart, &data);
 
         let ip = self.memory as u64;
 
@@ -481,32 +485,18 @@ impl Drop for Executor {
     }
 }
 
+fn cipher() -> crypt::Cipher {
+    crypt::Cipher::new(Executor::TEST_KEY_MULTIPLIER, Executor::TEST_KEY_ADDEND)
+}
+
 pub fn encrypt_block(block: &mut Vec<u8>) {
-    crypt::encrypt_block(
-        block,
-        Executor::TEST_KEY_INITIALIZER,
-        Executor::TEST_KEY_MULTIPLIER,
-        Executor::TEST_KEY_ADDEND,
-        0,
-    );
+    cipher().encrypt_block(block, Executor::TEST_KEY_INITIALIZER, 0);
 }
 
 pub fn decrypt_payload(block: &mut Vec<u8>) {
-    crypt::decrypt_payload(
-        block,
-        Executor::TEST_KEY_INITIALIZER,
-        Executor::TEST_KEY_MULTIPLIER,
-        Executor::TEST_KEY_ADDEND,
-        0,
-    );
+    cipher().decrypt_payload(block, Executor::TEST_KEY_INITIALIZER, 0);
 }
 
 pub fn decrypt_block(block: &mut Vec<u8>) {
-    crypt::decrypt_block(
-        block,
-        Executor::TEST_KEY_INITIALIZER,
-        Executor::TEST_KEY_MULTIPLIER,
-        Executor::TEST_KEY_ADDEND,
-        0,
-    );
+    cipher().decrypt_block(block, Executor::TEST_KEY_INITIALIZER, 0);
 }

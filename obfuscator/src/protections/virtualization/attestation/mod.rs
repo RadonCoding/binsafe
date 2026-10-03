@@ -157,10 +157,10 @@ fn correct(
 ) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
-    instructions.extend(load_absolute(engine, DataDef::VmAttestation, VMReg::Rax));
-    instructions.extend(load_absolute(engine, DataDef::VmCode, VMReg::Rcx));
+    instructions.extend(load_absolute(engine, DataDef::VmCodeEnd, VMReg::Rax));
+    instructions.extend(load_absolute(engine, DataDef::VmAttestation, VMReg::Rcx));
 
-    instructions.extend(sub(Some(VMReg::Vg0), Some(VMReg::Rax)));
+    instructions.extend(sub(Some(VMReg::Vg0), Some(VMReg::Rcx)));
     instructions.extend(store_register(VMReg::Rdx));
 
     instructions.extend(skip(
@@ -244,15 +244,19 @@ fn correct(
 fn register_lcg(engine: &mut Engine, register: Option<VMReg>) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
+    if let Some(register) = register {
+        instructions.extend(load_register(register));
+    }
+
     instructions.extend(load_data(
         engine,
         DataDef::VmKeyMultiplier,
         VMWidth::Lower64,
     ));
-    instructions.extend(mul(register, None));
+    instructions.extend(mul(None, None));
 
     instructions.extend(load_data(engine, DataDef::VmKeyAddend, VMWidth::Lower64));
-    instructions.extend(add(register, None));
+    instructions.extend(add(None, None));
 
     instructions
 }
