@@ -5,8 +5,6 @@ use runtime::runtime::ImportDef;
 use runtime::vm::bytecode::{VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::Encode;
 
-const ACCUMULATOR: VMReg = VMReg::Rbx;
-
 const NT_QUERY_INFORMATION_PROCESS_PROLOGUE: [u8; 3] = [0x4C, 0x8B, 0xD1];
 const NT_SET_INFORMATION_THREAD_PROLOGUE: [u8; 3] = [0x4C, 0x8B, 0xD1];
 const NT_QUERY_INFORMATION_THREAD_PROLOGUE: [u8; 3] = [0x4C, 0x8B, 0xD1];
@@ -33,15 +31,12 @@ pub fn generate(
 
     instructions.extend(reserve(0x30));
 
-    instructions.extend(set_register(ACCUMULATOR, 0));
+    instructions.extend(set_register(VMReg::Vp0, 0));
 
     instructions.extend(query_kd_debugger_enabled(engine, rng, expected));
     instructions.extend(query_process_debug_object_handle(engine, rng, expected));
     instructions.extend(set_hide_from_debugger(engine, rng, expected));
     instructions.extend(query_hide_from_debbuger(engine, rng, expected));
-
-    instructions.extend(load_register(ACCUMULATOR));
-    instructions.extend(store_register(VMReg::Vp0));
 
     instructions.extend(release(0x30));
 
@@ -64,20 +59,16 @@ fn query_kd_debugger_enabled(
         VMWidth::Lower8,
     ));
     b.extend(accumulate_immediate(
-        engine,
         rng,
-        ACCUMULATOR,
-        None,
+        VMReg::Vp0,        None,
         0,
         &mut *expected,
     ));
 
     b.extend(import(engine, ImportDef::NtQuerySystemInformation));
     b.extend(accumulate_prologue(
-        engine,
         rng,
-        ACCUMULATOR,
-        VMReg::Rax,
+        VMReg::Vp0,        VMReg::Rax,
         &NT_QUERY_INFORMATION_PROCESS_PROLOGUE,
         expected,
     ));
@@ -101,20 +92,16 @@ fn query_kd_debugger_enabled(
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
-        engine,
         rng,
-        ACCUMULATOR,
-        Some(VMReg::Rax),
+        VMReg::Vp0,        Some(VMReg::Rax),
         STATUS_SUCCESS,
         expected,
     ));
 
     // READ KernelDebuggerEnabled + KernelDebuggerNotPresent
     b.extend(accumulate_memory(
-        engine,
         rng,
-        ACCUMULATOR,
-        VMReg::Rsp,
+        VMReg::Vp0,        VMReg::Rsp,
         0x20,
         VMWidth::Lower16,
         0x0100,
@@ -133,10 +120,8 @@ fn query_process_debug_object_handle(
 
     b.extend(import(engine, ImportDef::NtQueryInformationProcess));
     b.extend(accumulate_prologue(
-        engine,
         rng,
-        ACCUMULATOR,
-        VMReg::Rax,
+        VMReg::Vp0,        VMReg::Rax,
         &NT_QUERY_INFORMATION_PROCESS_PROLOGUE,
         expected,
     ));
@@ -162,20 +147,16 @@ fn query_process_debug_object_handle(
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
-        engine,
         rng,
-        ACCUMULATOR,
-        Some(VMReg::Rax),
+        VMReg::Vp0,        Some(VMReg::Rax),
         STATUS_PORT_NOT_SET,
         expected,
     ));
 
     // READ ProcessDebugObjectHandle
     b.extend(accumulate_memory(
-        engine,
         rng,
-        ACCUMULATOR,
-        VMReg::Rsp,
+        VMReg::Vp0,        VMReg::Rsp,
         0x28,
         VMWidth::Lower64,
         0,
@@ -194,10 +175,8 @@ fn set_hide_from_debugger(
 
     b.extend(import(engine, ImportDef::NtSetInformationThread));
     b.extend(accumulate_prologue(
-        engine,
         rng,
-        ACCUMULATOR,
-        VMReg::Rax,
+        VMReg::Vp0,        VMReg::Rax,
         &NT_SET_INFORMATION_THREAD_PROLOGUE,
         expected,
     ));
@@ -213,10 +192,8 @@ fn set_hide_from_debugger(
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
-        engine,
         rng,
-        ACCUMULATOR,
-        Some(VMReg::Rax),
+        VMReg::Vp0,        Some(VMReg::Rax),
         STATUS_SUCCESS,
         expected,
     ));
@@ -233,10 +210,8 @@ fn query_hide_from_debbuger(
 
     b.extend(import(engine, ImportDef::NtQueryInformationThread));
     b.extend(accumulate_prologue(
-        engine,
         rng,
-        ACCUMULATOR,
-        VMReg::Rax,
+        VMReg::Vp0,        VMReg::Rax,
         &NT_QUERY_INFORMATION_THREAD_PROLOGUE,
         expected,
     ));
@@ -263,20 +238,16 @@ fn query_hide_from_debbuger(
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
-        engine,
         rng,
-        ACCUMULATOR,
-        Some(VMReg::Rax),
+        VMReg::Vp0,        Some(VMReg::Rax),
         STATUS_SUCCESS,
         expected,
     ));
 
     // READ ThreadHideFromDebugger
     b.extend(accumulate_byte(
-        engine,
         rng,
-        ACCUMULATOR,
-        VMReg::Rsp,
+        VMReg::Vp0,        VMReg::Rsp,
         0x28,
         1,
         expected,
