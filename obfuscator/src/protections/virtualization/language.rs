@@ -1,6 +1,6 @@
 use crate::engine::Engine;
 use runtime::runtime::{DataDef, FnDef, ImportDef};
-use runtime::vm::bytecode::{Flag, VMCondition, VMLogic, VMMem, VMReg, VMSeg, VMVec, VMWidth};
+use runtime::vm::bytecode::{Flag, VMCondition, VMLogic, VMMem, VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::add::Add;
 use runtime::vm::encoders::and::And;
 use runtime::vm::encoders::block::{Block, Jump, Target};
@@ -11,7 +11,6 @@ use runtime::vm::encoders::load_address::LoadAddress;
 use runtime::vm::encoders::load_immediate::LoadImmediate;
 use runtime::vm::encoders::load_memory::LoadMemory;
 use runtime::vm::encoders::load_register::LoadRegister;
-use runtime::vm::encoders::load_vector::LoadVector;
 use runtime::vm::encoders::mul::Mul;
 use runtime::vm::encoders::or::Or;
 use runtime::vm::encoders::pop::Pop;
@@ -19,7 +18,6 @@ use runtime::vm::encoders::push::Push;
 use runtime::vm::encoders::shl::Shl;
 use runtime::vm::encoders::shr::Shr;
 use runtime::vm::encoders::store_memory::StoreMemory;
-use runtime::vm::encoders::store_merge::StoreMerge;
 use runtime::vm::encoders::store_register::StoreRegister;
 use runtime::vm::encoders::sub::Sub;
 use runtime::vm::encoders::timestamp::Timestamp;
@@ -199,24 +197,6 @@ pub fn set_register(register: VMReg, value: u64) -> Vec<Box<dyn Encode>> {
     ]
 }
 
-pub fn set_vector(destination: VMVec, lo: u64, hi: u64) -> Vec<Box<dyn Encode>> {
-    let mut instructions: Vec<Box<dyn Encode>> = Vec::<Box<dyn Encode>>::new();
-
-    instructions.push(Box::new(LoadImmediate {
-        width: VMWidth::Lower64,
-        source: lo.to_le_bytes().to_vec(),
-    }));
-    instructions.push(Box::new(LoadImmediate {
-        width: VMWidth::Lower64,
-        source: hi.to_le_bytes().to_vec(),
-    }));
-    instructions.push(Box::new(StoreMerge {
-        width: VMWidth::Lower128,
-        destination,
-    }));
-    instructions
-}
-
 pub fn copy(source: VMReg, destination: VMReg) -> Vec<Box<dyn Encode>> {
     vec![
         Box::new(LoadRegister {
@@ -330,19 +310,11 @@ pub fn load_register(source: VMReg) -> Vec<Box<dyn Encode>> {
     })]
 }
 
-pub fn spill_vector(source: VMVec, width: VMWidth) -> Vec<Box<dyn Encode>> {
-    vec![Box::new(LoadVector { width, source })]
-}
-
 pub fn store_register(destination: VMReg) -> Vec<Box<dyn Encode>> {
     vec![Box::new(StoreRegister {
         width: VMWidth::Lower64,
         destination,
     })]
-}
-
-pub fn reload_vector(destination: VMVec, width: VMWidth) -> Vec<Box<dyn Encode>> {
-    vec![Box::new(StoreMerge { width, destination })]
 }
 
 pub fn mask(source: Option<VMReg>, mask: u64) -> Vec<Box<dyn Encode>> {

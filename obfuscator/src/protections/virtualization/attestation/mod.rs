@@ -4,10 +4,7 @@ use crate::engine::Engine;
 use crate::protections::virtualization::{crypt, language::*};
 use rand::Rng;
 use runtime::runtime::DataDef;
-use runtime::vm::bytecode::{Flag, VMCondition, VMPrecision, VMReg, VMSeg, VMWidth};
-use runtime::vm::encoders::vector_add::VectorAdd;
-use runtime::vm::encoders::vector_sub::VectorSub;
-use runtime::vm::encoders::vector_xor::VectorXor;
+use runtime::vm::bytecode::{Flag, VMCondition, VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::Encode;
 
 mod anti_debug;
@@ -36,6 +33,14 @@ impl Operation {
             _ => Operation::Xor,
         }
     }
+
+    fn inverse(self) -> Self {
+        match self {
+            Operation::Add => Operation::Sub,
+            Operation::Sub => Operation::Add,
+            Operation::Xor => Operation::Xor,
+        }
+    }
 }
 
 pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
@@ -47,6 +52,9 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
 
     let mut vp0 = 0;
     let mut vp1 = 0;
+
+    let mix0 = Operation::random(&mut rng);
+    let mix1 = Operation::random(&mut rng);
 
     block.extend(timestamp());
     block.extend(mask(None, !((1u64 << WINDOW) - 1)));
@@ -87,7 +95,6 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
             b.extend(store_register(VMReg::Rcx));
 
             b.extend(accumulate_immediate(
-                engine,
                 &mut rng,
                 VMReg::Vp0,
                 Some(VMReg::Rcx),
@@ -95,7 +102,6 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
                 &mut vp0,
             ));
             b.extend(accumulate_immediate(
-                engine,
                 &mut rng,
                 VMReg::Vp1,
                 Some(VMReg::Rcx),
@@ -113,7 +119,6 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
             b.extend(store_register(VMReg::Rcx));
 
             b.extend(accumulate_immediate(
-                engine,
                 &mut rng,
                 VMReg::Vp0,
                 Some(VMReg::Rcx),
@@ -121,7 +126,6 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
                 &mut vp0,
             ));
             b.extend(accumulate_immediate(
-                engine,
                 &mut rng,
                 VMReg::Vp1,
                 Some(VMReg::Rcx),
@@ -129,10 +133,12 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
                 &mut vp1,
             ));
 
-            b.extend(register_lcg(engine, Some(VMReg::Vp0)));
+            b.extend(register_operation(mix0, Some(VMReg::Vp0), Some(VMReg::Vt0)));
+            b.extend(register_lcg(engine, None));
             b.extend(store_register(VMReg::Vp0));
 
-            b.extend(register_lcg(engine, Some(VMReg::Vp1)));
+            b.extend(register_operation(mix1, Some(VMReg::Vp1), Some(VMReg::Vt0)));
+            b.extend(register_lcg(engine, None));
             b.extend(store_register(VMReg::Vp1));
 
             b.extend(copy(VMReg::Vt0, VMReg::Vt1));
@@ -141,7 +147,7 @@ pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
         },
     ));
 
-    block.extend(correct(engine, &mut rng, key, vp0, vp1));
+    block.extend(correct(engine, &mut rng, key, vp0, vp1, mix0, mix1));
 
     blocks.push(block);
 
@@ -154,6 +160,8 @@ fn correct(
     key: u64,
     vp0: u64,
     vp1: u64,
+    mix0: Operation,
+    mix1: Operation,
 ) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
@@ -224,13 +232,16 @@ fn correct(
     ));
 
     let operation = Operation::random(rng);
-    let combined = apply_lcg(engine, combine_operation(operation, vp0, vp1));
+    let combined = combine_operation(operation, vp0, vp1);
     let correction = combined ^ key;
 
     instructions.extend(register_lcg_inverse(engine, Some(VMReg::Vp0)));
+    instructions.extend(register_operation(mix0.inverse(), None, Some(VMReg::Vt1)));
+
     instructions.extend(register_lcg_inverse(engine, Some(VMReg::Vp1)));
-    instructions.extend(register_operation(operation));
-    instructions.extend(register_lcg(engine, None));
+    instructions.extend(register_operation(mix1.inverse(), None, Some(VMReg::Vt1)));
+
+    instructions.extend(register_operation(operation, None, None));
     instructions.extend(immediate(correction));
     instructions.extend(xor(None, None));
 
@@ -301,38 +312,19 @@ fn apply_operation(operation: Operation, value: u64, expected: &mut u64) {
     }
 }
 
-fn register_operation(operation: Operation) -> Vec<Box<dyn Encode>> {
-    let mut instructions = Vec::<Box<dyn Encode>>::new();
-
+fn register_operation(
+    operation: Operation,
+    a: Option<VMReg>,
+    b: Option<VMReg>,
+) -> Vec<Box<dyn Encode>> {
     match operation {
-        Operation::Add => instructions.extend(add(None, None)),
-        Operation::Sub => instructions.extend(sub(None, None)),
-        Operation::Xor => instructions.extend(xor(None, None)),
-    }
-
-    instructions
-}
-
-fn vector_operation(operation: Operation) -> Box<dyn Encode> {
-    match operation {
-        Operation::Add => Box::new(VectorAdd {
-            width: VMWidth::Lower128,
-            stride: VMWidth::Lower64,
-            precision: VMPrecision::Integer,
-        }),
-        Operation::Sub => Box::new(VectorSub {
-            width: VMWidth::Lower128,
-            stride: VMWidth::Lower64,
-            precision: VMPrecision::Integer,
-        }),
-        Operation::Xor => Box::new(VectorXor {
-            width: VMWidth::Lower128,
-        }),
+        Operation::Add => add(a, b),
+        Operation::Sub => sub(a, b),
+        Operation::Xor => xor(a, b),
     }
 }
 
 fn accumulate<R: Rng>(
-    engine: &mut Engine,
     rng: &mut R,
     accumulator: VMReg,
     source: Vec<Box<dyn Encode>>,
@@ -343,19 +335,21 @@ fn accumulate<R: Rng>(
 
     let operation = Operation::random(rng);
 
+    let mix = rng.gen::<u64>();
+
     instructions.extend(load_register(accumulator));
     instructions.extend(source);
-    instructions.extend(register_lcg(engine, None));
-    instructions.extend(register_operation(operation));
+    instructions.extend(immediate(mix));
+    instructions.extend(xor(None, None));
+    instructions.extend(register_operation(operation, None, None));
     instructions.extend(store_register(accumulator));
 
-    apply_operation(operation, apply_lcg(engine, value), expected);
+    apply_operation(operation, value ^ mix, expected);
 
     instructions
 }
 
 pub fn accumulate_immediate<R: Rng>(
-    engine: &mut Engine,
     rng: &mut R,
     accumulator: VMReg,
     source: Option<VMReg>,
@@ -366,11 +360,10 @@ pub fn accumulate_immediate<R: Rng>(
         Some(register) => load_register(register),
         None => Vec::new(),
     };
-    accumulate(engine, rng, accumulator, source, value, expected)
+    accumulate(rng, accumulator, source, value, expected)
 }
 
 pub fn accumulate_memory<R: Rng>(
-    engine: &mut Engine,
     rng: &mut R,
     accumulator: VMReg,
     base: VMReg,
@@ -380,11 +373,10 @@ pub fn accumulate_memory<R: Rng>(
     expected: &mut u64,
 ) -> Vec<Box<dyn Encode>> {
     let source = load_memory(base, VMReg::None, 1, displacement, VMSeg::None, width);
-    accumulate(engine, rng, accumulator, source, value, expected)
+    accumulate(rng, accumulator, source, value, expected)
 }
 
 fn accumulate_byte<R: Rng>(
-    engine: &mut Engine,
     rng: &mut R,
     accumulator: VMReg,
     base: VMReg,
@@ -393,7 +385,6 @@ fn accumulate_byte<R: Rng>(
     expected: &mut u64,
 ) -> Vec<Box<dyn Encode>> {
     accumulate_memory(
-        engine,
         rng,
         accumulator,
         base,
@@ -405,7 +396,6 @@ fn accumulate_byte<R: Rng>(
 }
 
 fn accumulate_prologue<R: Rng>(
-    engine: &mut Engine,
     rng: &mut R,
     accumulator: VMReg,
     base: VMReg,
@@ -416,7 +406,6 @@ fn accumulate_prologue<R: Rng>(
 
     for (offset, byte) in prologue.iter().enumerate() {
         instructions.extend(accumulate_byte(
-            engine,
             rng,
             accumulator,
             base,
