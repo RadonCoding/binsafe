@@ -21,6 +21,18 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.xor(edx, r8d).unwrap();
     // and edx, 0x0FFFFFFF
     rt.asm.and(edx, 0x0FFFFFFF).unwrap();
+    // sub edx, ...
+    rt.asm.sub(edx, rt.keys.addend as u32 as i32).unwrap();
+    // imul edx, edx, ...
+    rt.asm
+        .imul_3(
+            edx,
+            edx,
+            crate::utils::invert_multiplier(rt.keys.multiplier) as u32 as i32,
+        )
+        .unwrap();
+    // and edx, 0x0FFFFFFF
+    rt.asm.and(edx, 0x0FFFFFFF).unwrap();
 
     // lea r8, [...]
     rt.asm

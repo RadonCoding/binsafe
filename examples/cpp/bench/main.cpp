@@ -10,7 +10,7 @@
         uint32_t v0 = (data)[0];                                                       \
         uint32_t v1 = (data)[1];                                                       \
                                                                                        \
-        for (int i = 0; i < 20000; ++i)                                                \
+        for (int i = 0; i < 10000; ++i)                                                \
         {                                                                              \
             uint32_t sum = 0;                                                          \
                                                                                        \

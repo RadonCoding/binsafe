@@ -1,12 +1,14 @@
 using namespace System.IO
 
 param(
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory, Position = 0)]
     [DirectoryInfo]$Example,
 
+    [Parameter(Position = 1)]
     [ValidateSet("debug", "release")]
     [string]$Configuration = "debug",
 
+    [Parameter(Position = 2)]
     [string[]]$Arguments
 )
 
@@ -14,7 +16,12 @@ $ErrorActionPreference = "Stop"
 
 $language = Split-Path (Split-Path $Example -Parent) -Leaf
 
-cargo build --bin obfuscator --$Configuration $Arguments
+if ($Configuration -eq "release") {
+    cargo build --bin obfuscator --release $Arguments
+}
+else {
+    cargo build --bin obfuscator $Arguments
+}
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -22,9 +29,12 @@ switch ($language) {
     "rust" {
         $manifest = Join-Path $Example.FullName "Cargo.toml"
 
-        cargo build `
-            --manifest-path $manifest `
-            --$Configuration
+        if ($Configuration -eq "release") {
+            cargo build --manifest-path $manifest --release
+        }
+        else {
+            cargo build --manifest-path $manifest
+        }
 
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
