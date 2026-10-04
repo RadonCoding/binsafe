@@ -21,7 +21,9 @@ pub enum Expression {
     BitShr(Box<Expression>, Box<Expression>),
     BitShl(Box<Expression>, Box<Expression>),
     BitNot(Box<Expression>),
+    Add(Box<Expression>, Box<Expression>),
     Sub(Box<Expression>, Box<Expression>),
+    Mul(Box<Expression>, Box<Expression>),
     LowByte(Box<Expression>),
     Compare(Box<Compare>),
     Parity(Box<Expression>),
@@ -112,7 +114,15 @@ impl Expression {
                 Box::new(a.obfuscate(rng, budget)),
                 Box::new(b.obfuscate(rng, budget)),
             ),
+            Expression::Add(a, b) => Expression::Add(
+                Box::new(a.obfuscate(rng, budget)),
+                Box::new(b.obfuscate(rng, budget)),
+            ),
             Expression::Sub(a, b) => Expression::Sub(
+                Box::new(a.obfuscate(rng, budget)),
+                Box::new(b.obfuscate(rng, budget)),
+            ),
+            Expression::Mul(a, b) => Expression::Mul(
                 Box::new(a.obfuscate(rng, budget)),
                 Box::new(b.obfuscate(rng, budget)),
             ),
@@ -159,6 +169,25 @@ impl Expression {
                 *budget -= 1;
                 Expression::Sub(
                     Box::new(Expression::Sub(Box::new(Expression::Constant(0)), a)),
+                    Box::new(Expression::Constant(1)),
+                )
+            }
+            // a + b = (a ^ b) + ((a & b) << 1)
+            Expression::Add(a, b) => {
+                *budget -= 1;
+                Expression::Add(
+                    Box::new(Expression::BitXor(a.clone(), b.clone())),
+                    Box::new(Expression::BitShl(
+                        Box::new(Expression::BitAnd(a, b)),
+                        Box::new(Expression::Constant(1)),
+                    )),
+                )
+            }
+            // a - b = a + ~b + 1
+            Expression::Sub(a, b) => {
+                *budget -= 1;
+                Expression::Add(
+                    Box::new(Expression::Add(a, Box::new(Expression::BitNot(b)))),
                     Box::new(Expression::Constant(1)),
                 )
             }
@@ -326,7 +355,9 @@ impl Expression {
             | Expression::BitXor(first, second)
             | Expression::BitShr(first, second)
             | Expression::BitShl(first, second)
-            | Expression::Sub(first, second) => {
+            | Expression::Add(first, second)
+            | Expression::Sub(first, second)
+            | Expression::Mul(first, second) => {
                 first.operands(value);
                 second.operands(value);
             }
@@ -350,7 +381,9 @@ impl Expression {
             | Expression::BitXor(first, second)
             | Expression::BitShr(first, second)
             | Expression::BitShl(first, second)
-            | Expression::Sub(first, second) => 1 + first.temporary() + second.temporary(),
+            | Expression::Add(first, second)
+            | Expression::Sub(first, second)
+            | Expression::Mul(first, second) => 1 + first.temporary() + second.temporary(),
             Expression::BitNot(inner) | Expression::LowByte(inner) | Expression::Parity(inner) => {
                 1 + inner.temporary()
             }

@@ -149,7 +149,8 @@ impl Allocator {
             .iter()
             .copied()
             .find(|register| !avoid.contains(register))
-            .expect("allocator has no usable register");
+            .unwrap();
+
         self.spill(rt, register);
         register
     }
