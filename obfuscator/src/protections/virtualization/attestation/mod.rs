@@ -247,6 +247,8 @@ fn correct(
 
     instructions.extend(xor(None, None));
 
+    instructions.extend(register_lcg(engine, None));
+
     instructions.extend(store_register(VMReg::Vg0));
 
     instructions

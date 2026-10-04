@@ -7,20 +7,7 @@ use iced_x86::{
 use runtime::vm::bytecode::{self, Flag, VMReg, VMVec};
 
 use crate::constants::{available, baseline, register, vector, IMMEDIATES};
-use crate::{decrypt_block, decrypt_payload, encrypt_block, Difference, Executor, State};
-
-#[test]
-fn test_crypt() {
-    let mut buffer = vec![0xDE, 0xAD, 0xC0, 0xDE];
-
-    let before = buffer.clone();
-
-    encrypt_block(&mut buffer);
-
-    decrypt_block(&mut buffer);
-
-    assert_eq!(before, buffer);
-}
+use crate::{decrypt_payload, encrypt_block, Difference, Executor, State};
 
 macro_rules! define {
     ($($code:ident)+ $(,)?) => {

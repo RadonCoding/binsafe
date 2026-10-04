@@ -21,7 +21,7 @@ use iced_x86::{
     code_asm::{ptr, r12, r12d, r8, r9, rax, ymm0},
     BlockEncoder, BlockEncoderOptions, Instruction, InstructionBlock,
 };
-use obfuscator::protections::virtualization::crypt;
+use obfuscator::protections::virtualization::crypt::{self, Cipher};
 use runtime::{
     mapper::Mappable,
     runtime::{BoolDef, DataDef, FnDef, Runtime},
@@ -486,7 +486,7 @@ impl Drop for Executor {
 }
 
 fn cipher() -> crypt::Cipher {
-    crypt::Cipher::new(Executor::TEST_KEY_MULTIPLIER, Executor::TEST_KEY_ADDEND)
+    Cipher::new(Executor::TEST_KEY_MULTIPLIER, Executor::TEST_KEY_ADDEND)
 }
 
 pub fn encrypt_block(block: &mut Vec<u8>) {

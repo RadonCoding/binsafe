@@ -30,7 +30,9 @@ impl Cipher {
     }
 
     fn encrypt_payload(&self, block: &mut [u8], key: u64, secret: u64) {
-        let mut key = key ^ secret;
+        let mut key = (key ^ secret)
+            .wrapping_mul(self.multiplier)
+            .wrapping_add(self.addend);
 
         for chunk in block.chunks_exact_mut(8) {
             let mut qword = u64::from_le_bytes(chunk.try_into().unwrap());
@@ -41,9 +43,13 @@ impl Cipher {
         }
     }
 
-    pub fn decrypt_payload(&self, block: &mut [u8], mut key: u64, secret: u64) {
+    pub fn decrypt_payload(&self, block: &mut [u8], key: u64, secret: u64) {
         let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
         let payload = &mut block[HEADER_SIZE..HEADER_SIZE + ((length + 8 + 7) & !7)];
+
+        let mut key = (key ^ secret)
+            .wrapping_mul(self.multiplier)
+            .wrapping_add(self.addend);
 
         for chunk in payload.chunks_exact_mut(8) {
             let qword = u64::from_le_bytes(chunk.try_into().unwrap());

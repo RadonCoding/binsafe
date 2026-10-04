@@ -17,7 +17,26 @@ use crate::{
     },
 };
 
+const BUDGET: u32 = 2;
+
 pub fn compile(rt: &mut Runtime, operation: &Operation) {
+    let mut rng = rand::thread_rng();
+
+    let mut budget = BUDGET;
+
+    let operation = Operation {
+        effects: operation
+            .effects
+            .iter()
+            .cloned()
+            .map(|effect| effect.obfuscate(&mut rng, &mut budget))
+            .collect(),
+        flags: operation.flags.clone(),
+        stores: operation.stores.clone(),
+        widths: operation.widths,
+    };
+    let operation = &operation;
+
     let mut epilogue = rt.asm.create_label();
     let operands = operation.operands();
     let outputs = operation.outputs();

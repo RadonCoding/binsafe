@@ -246,6 +246,19 @@ pub fn build(rt: &mut Runtime) {
             rt.asm
                 .mov(rcx, ptr(rt.data_labels[&DataDef::VmKeyInitializer]))
                 .unwrap();
+
+            // mov rax, [...]
+            rt.asm
+                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyMultiplier]))
+                .unwrap();
+            // imul rcx, rax
+            rt.asm.imul_2(rcx, rax).unwrap();
+            // mov rax, [...]
+            rt.asm
+                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyAddend]))
+                .unwrap();
+            // add rcx, rax
+            rt.asm.add(rcx, rax).unwrap();
         }
 
         rt.asm.set_label(&mut save_key).unwrap();

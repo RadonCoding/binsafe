@@ -1,3 +1,5 @@
+use rand::Rng;
+
 use crate::vm::bytecode::{Flag, VMWidth};
 
 mod allocator;
@@ -87,7 +89,139 @@ enum Reference {
     Immediate(i64),
 }
 
-// TODO: Implement a mixed-boolean-arithmetic engine!
+impl Expression {
+    fn obfuscate(self, rng: &mut impl Rng, budget: &mut u32) -> Expression {
+        let expression = match self {
+            Expression::BitAnd(a, b) => Expression::BitAnd(
+                Box::new(a.obfuscate(rng, budget)),
+                Box::new(b.obfuscate(rng, budget)),
+            ),
+            Expression::BitOr(a, b) => Expression::BitOr(
+                Box::new(a.obfuscate(rng, budget)),
+                Box::new(b.obfuscate(rng, budget)),
+            ),
+            Expression::BitXor(a, b) => Expression::BitXor(
+                Box::new(a.obfuscate(rng, budget)),
+                Box::new(b.obfuscate(rng, budget)),
+            ),
+            Expression::BitShr(a, b) => Expression::BitShr(
+                Box::new(a.obfuscate(rng, budget)),
+                Box::new(b.obfuscate(rng, budget)),
+            ),
+            Expression::BitShl(a, b) => Expression::BitShl(
+                Box::new(a.obfuscate(rng, budget)),
+                Box::new(b.obfuscate(rng, budget)),
+            ),
+            Expression::Sub(a, b) => Expression::Sub(
+                Box::new(a.obfuscate(rng, budget)),
+                Box::new(b.obfuscate(rng, budget)),
+            ),
+            Expression::BitNot(a) => Expression::BitNot(Box::new(a.obfuscate(rng, budget))),
+            Expression::LowByte(a) => Expression::LowByte(Box::new(a.obfuscate(rng, budget))),
+            Expression::Parity(a) => Expression::Parity(Box::new(a.obfuscate(rng, budget))),
+            Expression::Compare(compare) => {
+                Expression::Compare(Box::new(compare.obfuscate(rng, budget)))
+            }
+            leaf => leaf,
+        };
+
+        if *budget == 0 || !rng.gen_bool(0.5) {
+            return expression;
+        }
+
+        match expression {
+            // a ^ b = (a | b) - (a & b)
+            Expression::BitXor(a, b) => {
+                *budget -= 1;
+                Expression::Sub(
+                    Box::new(Expression::BitOr(a.clone(), b.clone())),
+                    Box::new(Expression::BitAnd(a, b)),
+                )
+            }
+            // a | b = ~(~a & ~b)
+            Expression::BitOr(a, b) => {
+                *budget -= 1;
+                Expression::BitNot(Box::new(Expression::BitAnd(
+                    Box::new(Expression::BitNot(a)),
+                    Box::new(Expression::BitNot(b)),
+                )))
+            }
+            // a & b = ~(~a | ~b)
+            Expression::BitAnd(a, b) => {
+                *budget -= 1;
+                Expression::BitNot(Box::new(Expression::BitOr(
+                    Box::new(Expression::BitNot(a)),
+                    Box::new(Expression::BitNot(b)),
+                )))
+            }
+            // ~a = -a - 1
+            Expression::BitNot(a) => {
+                *budget -= 1;
+                Expression::Sub(
+                    Box::new(Expression::Sub(Box::new(Expression::Constant(0)), a)),
+                    Box::new(Expression::Constant(1)),
+                )
+            }
+            other => other,
+        }
+    }
+}
+
+impl Compare {
+    fn obfuscate(self, rng: &mut impl Rng, budget: &mut u32) -> Compare {
+        match self {
+            Compare::Equal(a, b) => {
+                Compare::Equal(a.obfuscate(rng, budget), b.obfuscate(rng, budget))
+            }
+            Compare::LessThan(a, b) => {
+                Compare::LessThan(a.obfuscate(rng, budget), b.obfuscate(rng, budget))
+            }
+            Compare::GreaterThan(a, b) => {
+                Compare::GreaterThan(a.obfuscate(rng, budget), b.obfuscate(rng, budget))
+            }
+            Compare::BitSet(a, b) => {
+                Compare::BitSet(a.obfuscate(rng, budget), b.obfuscate(rng, budget))
+            }
+        }
+    }
+}
+
+impl Effect {
+    fn obfuscate(self, rng: &mut impl Rng, budget: &mut u32) -> Effect {
+        match self {
+            Effect::Add(a, b) => Effect::Add(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::Sub(a, b) => Effect::Sub(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::And(a, b) => Effect::And(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::Or(a, b) => Effect::Or(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::Xor(a, b) => Effect::Xor(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::Shr(a, b) => Effect::Shr(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::Shl(a, b) => Effect::Shl(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::Ror(a, b) => Effect::Ror(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::Rol(a, b) => Effect::Rol(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::Mul(a, b) => Effect::Mul(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::Div(a, b, c) => Effect::Div(
+                a.obfuscate(rng, budget),
+                b.obfuscate(rng, budget),
+                c.obfuscate(rng, budget),
+            ),
+            Effect::Assign(a) => Effect::Assign(a.obfuscate(rng, budget)),
+            Effect::Sar(a, b) => Effect::Sar(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
+            Effect::Bsr(a) => Effect::Bsr(a.obfuscate(rng, budget)),
+            Effect::Tzcnt(a) => Effect::Tzcnt(a.obfuscate(rng, budget)),
+            Effect::Exchange(a, b) => {
+                Effect::Exchange(a.obfuscate(rng, budget), b.obfuscate(rng, budget))
+            }
+            Effect::ExchangeAdd(a, b) => {
+                Effect::ExchangeAdd(a.obfuscate(rng, budget), b.obfuscate(rng, budget))
+            }
+            Effect::CompareExchange(a, b, c) => Effect::CompareExchange(
+                a.obfuscate(rng, budget),
+                b.obfuscate(rng, budget),
+                c.obfuscate(rng, budget),
+            ),
+        }
+    }
+}
 
 impl Operation {
     fn operands(&self) -> usize {

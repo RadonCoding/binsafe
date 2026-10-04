@@ -326,6 +326,9 @@ impl Protection for Virtualization {
             .lookup(engine.rt.data_labels[&DataDef::VmTrampolines])
             as u32;
 
+        let multiplier = engine.rt.keys.multiplier;
+        let addend = engine.rt.keys.addend;
+
         for i in 0..engine.blocks.len() {
             let rva = engine.blocks[i].rva;
             let size = engine.blocks[i].size;
@@ -336,10 +339,14 @@ impl Protection for Virtualization {
 
             let index = self.virtualized[&rva];
 
+            let token = ((index as u64).wrapping_mul(multiplier).wrapping_add(addend) & 0x0FFFFFFF)
+                as i32
+                | 0x10000000;
+
             let mut asm = CodeAssembler::new(engine.bitness).unwrap();
 
             if size >= VM_DISPATCH_SIZE {
-                asm.push(index as i32 | 0x10000000).unwrap();
+                asm.push(token).unwrap();
                 asm.call(entry_rva).unwrap();
                 let first = asm.assemble(rva as u64).unwrap();
 
@@ -350,7 +357,7 @@ impl Protection for Virtualization {
                 // Stub has to be assembled twice so that the runtime return address can be calculated
                 let return_address = rva as i32 + first.len() as i32;
 
-                asm.push((index as i32 | 0x10000000) ^ return_address)
+                asm.push(token ^ return_address)
                     .unwrap();
                 asm.call(entry_rva).unwrap();
                 let second = asm.assemble(rva as u64).unwrap();
@@ -370,7 +377,7 @@ impl Protection for Virtualization {
 
                 let return_address = (redirect_rva + VM_REDIRECT_SIZE as u32) as i32;
 
-                asm.mov(dword_ptr(rsp), (index as i32 | 0x10000000) ^ return_address)
+                asm.mov(dword_ptr(rsp), token ^ return_address)
                     .unwrap();
                 asm.call(entry_rva).unwrap();
                 let dispatch = asm.assemble(redirect_rva as u64).unwrap();
