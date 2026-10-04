@@ -33,26 +33,26 @@ BINSAFE void encipher(uint32_t data[2], uint32_t const key[4], uint32_t delta)
 
 int main()
 {
-    uint32_t key[4] = {0xA3B1C2D3, 0xE4F50617, 0x28394A5B, 0x6C7D8E9F};
-    uint32_t const delta = 0x9E3779B9;
+    constexpr uint32_t key[4] = {0xA3B1C2D3, 0xE4F50617, 0x28394A5B, 0x6C7D8E9F};
+    constexpr uint32_t delta = 0x9E3779B9;
 
     uint32_t data_native[2] = {0x12345678, 0x9ABCDEF0};
 
-    auto start_native = std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point start_native = std::chrono::high_resolution_clock::now();
 
     ENCIPHER(data_native, key, delta);
 
-    auto end_native = std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point end_native = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double, std::milli> elapsed_native = end_native - start_native;
 
     uint32_t data_virtualized[2] = {0x12345678, 0x9ABCDEF0};
 
-    auto start_virtualized = std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point start_virtualized = std::chrono::high_resolution_clock::now();
 
     encipher(data_virtualized, key, delta);
 
-    auto end_virtualized = std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point end_virtualized = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double, std::milli> elapsed_virtualized = end_virtualized - start_virtualized;
 

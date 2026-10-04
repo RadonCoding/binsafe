@@ -243,6 +243,14 @@ enum EmissionTask {
     DispatchStub(usize, usize),
 }
 
+pub type Handler = Box<dyn FnOnce(&mut Runtime)>;
+
+struct DispatchCase {
+    label: CodeLabel,
+    epilogue: CodeLabel,
+    handler: Handler,
+}
+
 struct Dispatch {
     table: CodeLabel,
     stubs: Vec<(u8, CodeLabel, CodeLabel)>,
@@ -300,6 +308,8 @@ pub struct Runtime {
     imports: HashMap<ImportDef, usize>,
 
     dispatches: Vec<Dispatch>,
+
+    cases: Vec<DispatchCase>,
 
     functions: HashMap<FnDef, (usize, usize)>,
 
@@ -372,6 +382,8 @@ impl Runtime {
             imports,
 
             dispatches: Vec::new(),
+
+            cases: Vec::new(),
 
             functions: HashMap::new(),
 
@@ -478,6 +490,31 @@ impl Runtime {
         self.asm
             .call(self.function_labels[&FnDef::Resolve])
             .unwrap();
+    }
+
+    pub fn switch(
+        &mut self,
+        key: AsmRegister64,
+        epilogue: CodeLabel,
+        handlers: Vec<(Vec<u8>, Handler)>,
+    ) {
+        let mut cases = Vec::new();
+
+        for (indices, handler) in handlers {
+            let label = self.asm.create_label();
+
+            for index in indices {
+                cases.push((index, label));
+            }
+
+            self.cases.push(DispatchCase {
+                label,
+                epilogue,
+                handler,
+            });
+        }
+
+        self.dispatch(key, cases);
     }
 
     pub fn jumps(&mut self, key: AsmRegister64, cases: Vec<(u8, CodeLabel)>) {
@@ -846,18 +883,43 @@ impl Runtime {
 
         let mut phase_two = Vec::new();
 
-        for i in 0..self.dispatches.len() {
-            phase_two.push(EmissionTask::DispatchTable(i));
+        phase_two.extend(data_phase_two.iter().cloned());
 
-            for j in 0..self.dispatches[i].stubs.len() {
-                phase_two.push(EmissionTask::DispatchStub(i, j));
+        // A case handler may register further dispatches (nested width/precision
+        // dispatch), so drain in shuffled waves until no new work remains.
+        let mut dispatched = 0;
+
+        loop {
+            for i in dispatched..self.dispatches.len() {
+                phase_two.push(EmissionTask::DispatchTable(i));
+
+                for j in 0..self.dispatches[i].stubs.len() {
+                    phase_two.push(EmissionTask::DispatchStub(i, j));
+                }
+            }
+            dispatched = self.dispatches.len();
+
+            let mut cases = std::mem::take(&mut self.cases);
+
+            if phase_two.is_empty() && cases.is_empty() {
+                break;
+            }
+
+            phase_two.shuffle(&mut rng);
+            self.emit(&phase_two);
+            phase_two = Vec::new();
+
+            cases.shuffle(&mut rng);
+
+            for case in cases {
+                let mut label = case.label;
+
+                self.asm.set_label(&mut label).unwrap();
+                (case.handler)(self);
+                // jmp ...
+                self.asm.jmp(case.epilogue).unwrap();
             }
         }
-
-        phase_two.extend(data_phase_two.iter().cloned());
-        phase_two.shuffle(&mut rng);
-
-        self.emit(&phase_two);
 
         self.emit(&[EmissionTask::Data(DataDef::VehEnd)]);
 

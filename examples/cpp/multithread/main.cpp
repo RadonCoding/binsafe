@@ -2,7 +2,6 @@
 #include <cstdint>
 #include <cassert>
 #include <thread>
-#include <vector>
 #include "../../../api/binsafe.hpp"
 
 BINSAFE uint32_t echo(uint32_t input)
