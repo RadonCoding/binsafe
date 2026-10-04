@@ -1,11 +1,27 @@
 use rand::Rng;
-use runtime::VM_INTEGRITY_QWORD;
+use runtime::{VM_CIPHER_ROUNDS, VM_INTEGRITY_QWORD};
 
 pub const HEADER_SIZE: usize = size_of::<u16>();
 pub const TRAILER_SIZE: usize = size_of::<u8>() + size_of::<u8>();
 
 const ENCRYPTED: u8 = 0;
 const DECRYPTED: u8 = 1;
+
+fn keystream(key: u64, counter: u64) -> u64 {
+    let mut a = key as u32;
+    let mut b = (key >> 32) as u32;
+    let mut x = (counter >> 32) as u32;
+    let mut y = counter as u32;
+
+    for round in 0..VM_CIPHER_ROUNDS {
+        x = x.rotate_right(8).wrapping_add(y) ^ a;
+        y = y.rotate_left(3) ^ x;
+        b = a.wrapping_add(b.rotate_right(8)) ^ round;
+        a = a.rotate_left(3) ^ b;
+    }
+
+    ((x as u64) << 32) | (y as u64)
+}
 
 pub struct Cipher {
     multiplier: u64,
@@ -30,16 +46,14 @@ impl Cipher {
     }
 
     fn encrypt_payload(&self, block: &mut [u8], key: u64, secret: u64) {
-        let mut key = (key ^ secret)
+        let key = (key ^ secret)
             .wrapping_mul(self.multiplier)
             .wrapping_add(self.addend);
 
-        for chunk in block.chunks_exact_mut(8) {
-            let mut qword = u64::from_le_bytes(chunk.try_into().unwrap());
-            qword ^= key;
-            chunk.copy_from_slice(&qword.to_le_bytes());
-            key ^= qword;
-            key = key.wrapping_mul(self.multiplier).wrapping_add(self.addend);
+        for (counter, chunk) in block.chunks_exact_mut(8).enumerate() {
+            let qword = u64::from_le_bytes(chunk.try_into().unwrap());
+            let cipher = qword ^ keystream(key, counter as u64);
+            chunk.copy_from_slice(&cipher.to_le_bytes());
         }
     }
 
@@ -47,16 +61,14 @@ impl Cipher {
         let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
         let payload = &mut block[HEADER_SIZE..HEADER_SIZE + ((length + 8 + 7) & !7)];
 
-        let mut key = (key ^ secret)
+        let key = (key ^ secret)
             .wrapping_mul(self.multiplier)
             .wrapping_add(self.addend);
 
-        for chunk in payload.chunks_exact_mut(8) {
-            let qword = u64::from_le_bytes(chunk.try_into().unwrap());
-            let original = qword ^ key;
+        for (counter, chunk) in payload.chunks_exact_mut(8).enumerate() {
+            let cipher = u64::from_le_bytes(chunk.try_into().unwrap());
+            let original = cipher ^ keystream(key, counter as u64);
             chunk.copy_from_slice(&original.to_le_bytes());
-            key ^= qword ^ secret;
-            key = key.wrapping_mul(self.multiplier).wrapping_add(self.addend);
         }
 
         assert_eq!(

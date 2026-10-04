@@ -135,7 +135,7 @@ impl Expression {
             leaf => leaf,
         };
 
-        if *budget == 0 || !rng.gen_bool(0.5) {
+        if *budget == 0 || rng.gen() {
             return expression;
         }
 
