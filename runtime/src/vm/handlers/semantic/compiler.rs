@@ -907,7 +907,9 @@ fn compile_expression(
         Expression::ByteMask(n) => {
             Reference::Immediate(((0xFF as u64) << ((width.size() - 1 - n) * 8)) as i64)
         }
-        Expression::Sub(first, second)
+        Expression::Add(first, second)
+        | Expression::Sub(first, second)
+        | Expression::Mul(first, second)
         | Expression::BitAnd(first, second)
         | Expression::BitOr(first, second)
         | Expression::BitXor(first, second) => {
@@ -931,7 +933,9 @@ fn compile_expression(
             mask(rt, src, width);
 
             match expression {
+                Expression::Add(_, _) => rt.asm.add(dst, src).unwrap(),
                 Expression::Sub(_, _) => rt.asm.sub(dst, src).unwrap(),
+                Expression::Mul(_, _) => rt.asm.imul_2(dst, src).unwrap(),
                 Expression::BitAnd(_, _) => rt.asm.and(dst, src).unwrap(),
                 Expression::BitOr(_, _) => rt.asm.or(dst, src).unwrap(),
                 Expression::BitXor(_, _) => rt.asm.xor(dst, src).unwrap(),
