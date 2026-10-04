@@ -30,3 +30,5 @@ pub const VM_REDIRECT_SIZE: usize = 12;
 pub const VM_TRAMPOLINE_SIZE: usize = 5;
 
 pub const VM_INTEGRITY_QWORD: u64 = 0xFA11ED175001FA11;
+
+pub const VM_CIPHER_ROUNDS: u32 = 27;
