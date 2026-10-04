@@ -3,29 +3,34 @@
 #include <cassert>
 #include "../../../api/binsafe.hpp"
 
-BINSAFE uint32_t guarded(int value)
+BINSAFE uint32_t guarded(uint32_t value)
 {
-    try {
+    try
+    {
         throw value;
     }
-    catch (int caught) {
-        return static_cast<uint32_t>(caught);
+    catch (uint32_t caught)
+    {
+        return caught;
     }
 
     return 0;
 }
 
-int main() {
-    constexpr int value = 0x12345678;
+int main()
+{
+    constexpr uint32_t value = 0x12345678;
 
     uint32_t a = 0;
     uint32_t b = 0;
 
-    try {
+    try
+    {
         throw value;
     }
-    catch (int value) {
-        a = static_cast<uint32_t>(value);
+    catch (uint32_t caught)
+    {
+        a = caught;
     }
 
     b = guarded(value);
