@@ -167,8 +167,9 @@ fn correct(
 
     instructions.extend(load_absolute(engine, DataDef::VmCodeEnd, VMReg::Rax));
     instructions.extend(load_absolute(engine, DataDef::VmAttestation, VMReg::Rcx));
+    instructions.extend(load_absolute(engine, DataDef::VmCodeStart, VMReg::R8));
 
-    instructions.extend(sub(Some(VMReg::Vg0), Some(VMReg::Rcx)));
+    instructions.extend(sub(Some(VMReg::Vg0), Some(VMReg::R8)));
     instructions.extend(store_register(VMReg::Rdx));
 
     instructions.extend(skip(
@@ -190,7 +191,7 @@ fn correct(
                 VMReg::R8,
                 Bound::Register(VMReg::R9),
                 8,
-                |_| {
+                |engine| {
                     let mut outer = Vec::new();
 
                     outer.extend(load_register(VMReg::R10));
@@ -203,6 +204,7 @@ fn correct(
                         VMWidth::Lower64,
                     ));
                     outer.extend(xor(None, None));
+                    outer.extend(register_lcg(engine, None));
                     outer.extend(store_register(VMReg::R10));
 
                     outer

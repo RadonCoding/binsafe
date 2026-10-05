@@ -245,23 +245,21 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut start_key).unwrap();
         {
-            // mov rcx, [...]
+            // lea rcx, [...]
             rt.asm
-                .mov(rcx, ptr(rt.data_labels[&DataDef::VmKeyInitializer]))
+                .lea(rcx, ptr(rt.data_labels[&DataDef::VmAttestation]))
                 .unwrap();
-
-            // mov rax, [...]
-            rt.asm
-                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyMultiplier]))
-                .unwrap();
-            // imul rcx, rax
-            rt.asm.imul_2(rcx, rax).unwrap();
-            // mov rax, [...]
-            rt.asm
-                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyAddend]))
-                .unwrap();
+            // movsxd rax, [rcx]
+            rt.asm.movsxd(rax, ptr(rcx)).unwrap();
             // add rcx, rax
             rt.asm.add(rcx, rax).unwrap();
+            // mov rdx, r14
+            rt.asm.mov(rdx, r14).unwrap();
+            // call ...
+            rt.asm.call(rt.function_labels[&FnDef::VmInvoke]).unwrap();
+
+            // mov rcx, rax
+            rt.asm.mov(rcx, rax).unwrap();
         }
 
         rt.asm.set_label(&mut save_key).unwrap();

@@ -4,6 +4,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::{i32, slice};
 
 use crate::engine::Engine;
+use crate::protections::virtualization::crypt::Cipher;
 use crate::protections::Protection;
 use exe::{Buffer, SectionCharacteristics};
 use exe::{PE, RVA};
@@ -55,7 +56,10 @@ fn resolve(engine: &Engine, label: DataDef) -> (u32, usize) {
 fn write_displacement(engine: &mut Engine, label: DataDef, target: u32) {
     let (rva, offset) = resolve(engine, label);
     let displacement = (target as i64 - rva as i64) as i32;
-    engine.pe.write(offset, &displacement.to_le_bytes()).unwrap();
+    engine
+        .pe
+        .write(offset, &displacement.to_le_bytes())
+        .unwrap();
 }
 
 fn write_entry(engine: &mut Engine, index: usize, entry: TableEntry) {
@@ -94,7 +98,7 @@ impl Virtualization {
 
         let blocks = attestation::generate(engine, engine.rt.keys.secret);
 
-        let cipher = crypt::Cipher::new(engine.rt.keys.multiplier, engine.rt.keys.addend);
+        let cipher = Cipher::new(engine.rt.keys.multiplier, engine.rt.keys.addend);
 
         for (index, operations) in blocks.into_iter().enumerate() {
             let mut rng = rand::thread_rng();
@@ -154,7 +158,7 @@ impl Protection for Virtualization {
 
         let mut code = Vec::new();
 
-        let cipher = crypt::Cipher::new(engine.rt.keys.multiplier, engine.rt.keys.addend);
+        let cipher = Cipher::new(engine.rt.keys.multiplier, engine.rt.keys.addend);
 
         'outer: for block in &mut engine.blocks {
             if block.size < VM_TRAMPOLINE_SIZE {
@@ -211,19 +215,8 @@ impl Protection for Virtualization {
 
                 let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
 
-                let key = if code.is_empty() {
-                    engine.rt.keys.initializer
-                } else {
-                    crypt::derive_key(&code)
-                };
-
-                let secret = if code.is_empty() {
-                    0
-                } else {
-                    engine.rt.keys.secret
-                };
-
-                cipher.encrypt_block(&mut bytes, key, secret);
+                cipher.encrypt_block(&mut bytes, 0, 0);
+                cipher.decrypt_payload(&mut bytes, 0, 0);
 
                 code.extend_from_slice(&bytes);
 
@@ -300,10 +293,33 @@ impl Protection for Virtualization {
         }
 
         let attestation = self.attestation(engine, code.len() as u64);
+
+        let cipher = Cipher::new(engine.rt.keys.multiplier, engine.rt.keys.addend);
+
+        let secret = engine.rt.keys.secret;
+
+        let mut key = crypt::derive_hash(
+            &attestation,
+            engine.rt.keys.multiplier,
+            engine.rt.keys.addend,
+        );
+
+        let mut position = 0;
+
+        for bytes in &self.programs {
+            let block = &mut code[position..position + bytes.len()];
+
+            cipher.encrypt_payload(block, key, secret);
+
+            key = crypt::derive_key(block);
+
+            position += bytes.len();
+        }
+
         code.extend_from_slice(&attestation);
 
         let section = engine.create_section(
-            Some("🏴‍☠️"),
+            Some("☠️"),
             &code,
             SectionCharacteristics::CNT_INITIALIZED_DATA
                 | SectionCharacteristics::MEM_READ
@@ -357,8 +373,7 @@ impl Protection for Virtualization {
                 // Stub has to be assembled twice so that the runtime return address can be calculated
                 let return_address = rva as i32 + first.len() as i32;
 
-                asm.push(token ^ return_address)
-                    .unwrap();
+                asm.push(token ^ return_address).unwrap();
                 asm.call(entry_rva).unwrap();
                 let second = asm.assemble(rva as u64).unwrap();
 
@@ -377,8 +392,7 @@ impl Protection for Virtualization {
 
                 let return_address = (redirect_rva + VM_REDIRECT_SIZE as u32) as i32;
 
-                asm.mov(dword_ptr(rsp), token ^ return_address)
-                    .unwrap();
+                asm.mov(dword_ptr(rsp), token ^ return_address).unwrap();
                 asm.call(entry_rva).unwrap();
                 let dispatch = asm.assemble(redirect_rva as u64).unwrap();
 
