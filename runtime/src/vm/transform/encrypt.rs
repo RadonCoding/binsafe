@@ -3,6 +3,7 @@ use std::{matches, slice};
 use rand::Rng;
 
 use crate::mapper::Mapper;
+use crate::utils::invert_multiplier;
 use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::discard::Discard;
 use crate::vm::encoders::jcc::Jcc;
@@ -25,7 +26,9 @@ struct Encryptor<'a> {
 }
 
 /// Encrypts every immediate against rolling immediates held in [`VMReg::VImmAdd`] and [`VMReg::VImmMul`].
-pub struct Encrypt;
+pub struct Encrypt {
+    pub offset: u64,
+}
 
 impl Transform for Encrypt {
     fn phase(&self) -> Phase {
@@ -41,7 +44,16 @@ impl Transform for Encrypt {
         let mut encryptor = Encryptor::new(mapper, &mut operations, addend, multiplier);
 
         encryptor.process();
-        encryptor.prologue(addend, multiplier);
+
+        operations.splice(
+            0..0,
+            restore(
+                addend,
+                multiplier,
+                self.offset,
+                invert_multiplier(self.offset | 1),
+            ),
+        );
 
         operations
     }
@@ -72,38 +84,6 @@ impl<'a> Encryptor<'a> {
             &mut self.multiplier,
         );
     }
-
-    /// Emits the seed sequence for [`VMReg::VImmAdd`] and [`VMReg::VImmMul`].
-    fn prologue(&mut self, addend: u64, multiplier: u64) {
-        self.operations.insert(
-            0,
-            Box::new(LoadImmediate {
-                width: VMWidth::Lower64,
-                source: addend.to_le_bytes().to_vec(),
-            }),
-        );
-        self.operations.insert(
-            1,
-            Box::new(LoadImmediate {
-                width: VMWidth::Lower64,
-                source: invert(multiplier).to_le_bytes().to_vec(),
-            }),
-        );
-        self.operations.insert(
-            2,
-            Box::new(StoreRegister {
-                width: VMWidth::Lower64,
-                destination: VMReg::VImmMul,
-            }),
-        );
-        self.operations.insert(
-            3,
-            Box::new(StoreRegister {
-                width: VMWidth::Lower64,
-                destination: VMReg::VImmAdd,
-            }),
-        );
-    }
 }
 
 /// Emits a sequence to restore [`VMReg::VImmAdd`]/[`VMReg::VImmMul`] using the current values.
@@ -122,7 +102,9 @@ fn restore(
         source,
     }));
 
-    let mut source = invert(destination_multiplier).to_le_bytes().to_vec();
+    let mut source = invert_multiplier(destination_multiplier)
+        .to_le_bytes()
+        .to_vec();
     encrypt(&mut source, source_addend, source_multiplier);
     sequence.push(Box::new(LoadImmediate {
         width: VMWidth::Lower64,
@@ -266,19 +248,8 @@ fn leaf(operation: &mut Box<dyn Encode>, addend: u64, multiplier: u64) -> bool {
     false
 }
 
-/// Computes the multiplicative inverse of odd `x` modulo 2^64.
-fn invert(x: u64) -> u64 {
-    let mut inverse = x;
-
-    for _ in 0..5 {
-        inverse = inverse.wrapping_mul(2u64.wrapping_sub(x.wrapping_mul(inverse)));
-    }
-
-    inverse
-}
-
 /// Encrypts `source` against `addend` and `multiplier`.
-fn encrypt(source: &mut [u8], addend: u64, multiplier: u64) {
+pub fn encrypt(source: &mut [u8], addend: u64, multiplier: u64) {
     let mut buffer = [0u8; 8];
     buffer[..source.len()].copy_from_slice(source);
 
@@ -389,7 +360,7 @@ fn transform(addend: &mut u64, multiplier: &mut u64, preserve: bool) -> Vec<Box<
                 }
             };
 
-            let inverse = invert(factor);
+            let inverse = invert_multiplier(factor);
 
             encrypt(&mut source, *addend, *multiplier);
 

@@ -1,50 +1,103 @@
+using namespace System.IO
+
 param(
-    [Parameter(Mandatory)]
-    [string]$Example
+    [Parameter(Mandatory, Position = 0)]
+    [DirectoryInfo]$Example,
+
+    [Parameter(Position = 1)]
+    [ValidateSet("debug", "release")]
+    [string]$Configuration = "debug",
+
+    [Parameter(Position = 2)]
+    [string[]]$Arguments
 )
 
 $ErrorActionPreference = "Stop"
 
-$language = $Example.Split("/")[1]
+$language = Split-Path (Split-Path $Example -Parent) -Leaf
 
-$env:OUTPUT_DIRECTORY = "$PWD/api/generated"
-$env:TEMPLATES_DIRECTORY = "$PWD/api/templates"
-
-cargo build --package markers
-
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-cargo build --bin obfuscator
+if ($Configuration -eq "release") {
+    cargo build --bin obfuscator --release $Arguments
+}
+else {
+    cargo build --bin obfuscator $Arguments
+}
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 switch ($language) {
     "rust" {
-        cargo build --manifest-path "$Example/Cargo.toml"
+        $manifest = Join-Path $Example.FullName "Cargo.toml"
+
+        if ($Configuration -eq "release") {
+            cargo build --manifest-path $manifest --release
+        }
+        else {
+            cargo build --manifest-path $manifest
+        }
 
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-        $metadata = cargo metadata --manifest-path "$Example/Cargo.toml" --format-version 1 --no-deps | ConvertFrom-Json
+        $metadata = cargo metadata `
+            --manifest-path $manifest `
+            --format-version 1 `
+            --no-deps | ConvertFrom-Json
 
-        $package = $metadata.packages[0]
-        $target = $package.targets | Where-Object { $_.kind -contains "bin" } | Select-Object -First 1
+        $manifest = [Path]::GetFullPath($manifest)
 
-        $source = Join-Path $metadata.target_directory "debug\$($target.name).exe"
+        $package = $metadata.packages |
+            Where-Object {
+                [Path]::GetFullPath($_.manifest_path) -eq $manifest
+            } |
+            Select-Object -First 1
+
+        $target = $package.targets |
+            Where-Object { $_.kind -contains "bin" } |
+            Select-Object -First 1
+
+        $source = Join-Path `
+            $metadata.target_directory `
+            "$Configuration\$($target.name).exe"
     }
-    "cpp" {
-        g++ "$Example/main.cpp"
-        
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-        $source = Join-Path $PWD "a.exe"
+    "cpp" {
+        $main = Join-Path $Example.FullName "main.cpp"
+
+        $source = Join-Path `
+            $Example.Parent.Parent.FullName `
+            "$($Example.Name).exe"
+
+        if ($Configuration -eq "release") {
+            g++ $main -o $source -O2
+        }
+        else {
+            g++ $main -o $source -O0 -g
+        }
+
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+
+    default {
+        throw "Unsupported language: $language"
     }
 }
 
-& "target/debug/obfuscator.exe" --virtualization $source
+$source = [Path]::GetFullPath($source)
+
+if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+    throw "Source executable not found: $source"
+}
+
+$obfuscator = Join-Path $PWD "target\$Configuration\obfuscator.exe"
+
+& $obfuscator --virtualization -v $source
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$destination = [System.IO.Path]::ChangeExtension($source, ".protected.exe")
+$destination = [Path]::ChangeExtension(
+    $source,
+    ".protected.exe"
+)
 
 & $destination
 

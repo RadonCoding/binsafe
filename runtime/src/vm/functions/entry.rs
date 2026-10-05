@@ -166,13 +166,13 @@ pub fn build(rt: &mut Runtime) {
     }
 
     #[cfg(feature = "profile")]
-    start_profiling(rt, "vm_dispatch");
+    start_profiling(rt);
 
     // call ...
     rt.asm.call(rt.function_labels[&FnDef::VmDispatch]).unwrap();
 
     #[cfg(feature = "profile")]
-    stop_profiling(rt, "vm_dispatch");
+    stop_profiling(rt, FnDef::VmDispatch, "dispatch");
 
     // jmp ...
     rt.asm.jmp(rt.function_labels[&FnDef::VmExit]).unwrap();

@@ -328,8 +328,6 @@ pub fn print_thread_message(
     // pop rbp
     rt.asm.pop(rbp).unwrap();
 
-    lock::release_debug(rt);
-
     restore(rt);
 }
 
@@ -363,77 +361,46 @@ fn load(rt: &mut Runtime, dst: AsmRegister64) {
     rt.asm.mov(ptr(0x1480 + r10 * 8).gs(), r11).unwrap();
 }
 
-pub fn start_profiling(rt: &mut Runtime, _message: &str) {
-    // pushfq
+pub fn start_profiling(rt: &mut Runtime) {
     rt.asm.pushfq().unwrap();
-    // push rdx
     rt.asm.push(rdx).unwrap();
-    // push rax
     rt.asm.push(rax).unwrap();
-
-    // push r10
     rt.asm.push(r10).unwrap();
-    // push r11
     rt.asm.push(r11).unwrap();
 
-    // rdtsc
     rt.asm.rdtsc().unwrap();
-    // shl rdx, 0x20
     rt.asm.shl(rdx, 0x20).unwrap();
-    // or rdx, rax
     rt.asm.or(rdx, rax).unwrap();
 
     store(rt, rdx);
 
-    // pop r11
     rt.asm.pop(r11).unwrap();
-    // pop r10
     rt.asm.pop(r10).unwrap();
-
-    // pop rax
     rt.asm.pop(rax).unwrap();
-    // pop rdx
     rt.asm.pop(rdx).unwrap();
-    // popfq
     rt.asm.popfq().unwrap();
 }
 
-pub fn stop_profiling(rt: &mut Runtime, message: &str) {
-    // pushfq
+pub fn stop_profiling(rt: &mut Runtime, def: FnDef, message: &str) {
     rt.asm.pushfq().unwrap();
-    // push rdx
     rt.asm.push(rdx).unwrap();
-    // push rax
     rt.asm.push(rax).unwrap();
-
-    // push r10
     rt.asm.push(r10).unwrap();
-    // push r11
     rt.asm.push(r11).unwrap();
 
-    // rdtsc
     rt.asm.rdtsc().unwrap();
-    // shl rdx, 0x20
     rt.asm.shl(rdx, 0x20).unwrap();
-    // or rdx, rax
     rt.asm.or(rdx, rax).unwrap();
 
     load(rt, rax);
 
-    // sub rdx, rax
     rt.asm.sub(rdx, rax).unwrap();
 
-    print_thread_message(rt, &format!("cycles for {}", message), Some(rdx), None);
+    print_thread_message(rt, &format!("{:?} - {}", def, message), Some(rdx), None);
 
-    // pop r11
     rt.asm.pop(r11).unwrap();
-    // pop r10
     rt.asm.pop(r10).unwrap();
-
-    // pop rax
     rt.asm.pop(rax).unwrap();
-    // pop rdx
     rt.asm.pop(rdx).unwrap();
-    // popfq
     rt.asm.popfq().unwrap();
 }

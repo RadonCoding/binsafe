@@ -1,6 +1,5 @@
 use iced_x86::{Instruction, OpKind};
 
-
 use crate::vm::bytecode::{VMMem, VMVec, VMWidth};
 use crate::vm::encoders::{
     load_address::LoadAddress, load_memory::LoadMemory, load_vector::LoadVector,
