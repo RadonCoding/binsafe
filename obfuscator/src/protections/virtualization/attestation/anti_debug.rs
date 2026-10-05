@@ -60,7 +60,8 @@ fn query_kd_debugger_enabled(
     ));
     b.extend(accumulate_immediate(
         rng,
-        VMReg::Vp0,        None,
+        VMReg::Vp0,
+        None,
         0,
         &mut *expected,
     ));
@@ -68,7 +69,8 @@ fn query_kd_debugger_enabled(
     b.extend(import(engine, ImportDef::NtQuerySystemInformation));
     b.extend(accumulate_prologue(
         rng,
-        VMReg::Vp0,        VMReg::Rax,
+        VMReg::Vp0,
+        VMReg::Rax,
         &NT_QUERY_INFORMATION_PROCESS_PROLOGUE,
         expected,
     ));
@@ -93,7 +95,8 @@ fn query_kd_debugger_enabled(
 
     b.extend(accumulate_immediate(
         rng,
-        VMReg::Vp0,        Some(VMReg::Rax),
+        VMReg::Vp0,
+        Some(VMReg::Rax),
         STATUS_SUCCESS,
         expected,
     ));
@@ -101,7 +104,8 @@ fn query_kd_debugger_enabled(
     // READ KernelDebuggerEnabled + KernelDebuggerNotPresent
     b.extend(accumulate_memory(
         rng,
-        VMReg::Vp0,        VMReg::Rsp,
+        VMReg::Vp0,
+        VMReg::Rsp,
         0x20,
         VMWidth::Lower16,
         0x0100,
@@ -121,7 +125,8 @@ fn query_process_debug_object_handle(
     b.extend(import(engine, ImportDef::NtQueryInformationProcess));
     b.extend(accumulate_prologue(
         rng,
-        VMReg::Vp0,        VMReg::Rax,
+        VMReg::Vp0,
+        VMReg::Rax,
         &NT_QUERY_INFORMATION_PROCESS_PROLOGUE,
         expected,
     ));
@@ -148,7 +153,8 @@ fn query_process_debug_object_handle(
 
     b.extend(accumulate_immediate(
         rng,
-        VMReg::Vp0,        Some(VMReg::Rax),
+        VMReg::Vp0,
+        Some(VMReg::Rax),
         STATUS_PORT_NOT_SET,
         expected,
     ));
@@ -156,7 +162,8 @@ fn query_process_debug_object_handle(
     // READ ProcessDebugObjectHandle
     b.extend(accumulate_memory(
         rng,
-        VMReg::Vp0,        VMReg::Rsp,
+        VMReg::Vp0,
+        VMReg::Rsp,
         0x28,
         VMWidth::Lower64,
         0,
@@ -176,7 +183,8 @@ fn set_hide_from_debugger(
     b.extend(import(engine, ImportDef::NtSetInformationThread));
     b.extend(accumulate_prologue(
         rng,
-        VMReg::Vp0,        VMReg::Rax,
+        VMReg::Vp0,
+        VMReg::Rax,
         &NT_SET_INFORMATION_THREAD_PROLOGUE,
         expected,
     ));
@@ -193,7 +201,8 @@ fn set_hide_from_debugger(
 
     b.extend(accumulate_immediate(
         rng,
-        VMReg::Vp0,        Some(VMReg::Rax),
+        VMReg::Vp0,
+        Some(VMReg::Rax),
         STATUS_SUCCESS,
         expected,
     ));
@@ -211,7 +220,8 @@ fn query_hide_from_debbuger(
     b.extend(import(engine, ImportDef::NtQueryInformationThread));
     b.extend(accumulate_prologue(
         rng,
-        VMReg::Vp0,        VMReg::Rax,
+        VMReg::Vp0,
+        VMReg::Rax,
         &NT_QUERY_INFORMATION_THREAD_PROLOGUE,
         expected,
     ));
@@ -239,7 +249,8 @@ fn query_hide_from_debbuger(
 
     b.extend(accumulate_immediate(
         rng,
-        VMReg::Vp0,        Some(VMReg::Rax),
+        VMReg::Vp0,
+        Some(VMReg::Rax),
         STATUS_SUCCESS,
         expected,
     ));
@@ -247,7 +258,8 @@ fn query_hide_from_debbuger(
     // READ ThreadHideFromDebugger
     b.extend(accumulate_byte(
         rng,
-        VMReg::Vp0,        VMReg::Rsp,
+        VMReg::Vp0,
+        VMReg::Rsp,
         0x28,
         1,
         expected,
