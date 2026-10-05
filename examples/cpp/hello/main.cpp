@@ -1,7 +1,7 @@
 #include <iostream>
 #include "../../../api/binsafe.hpp"
 
-extern "C" BINSAFE void hello()
+BINSAFE void hello()
 {
     std::cout << "Hello, world!" << std::endl;
 }
