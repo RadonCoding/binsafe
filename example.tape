@@ -9,7 +9,7 @@ Type "eco zenburn"
 Enter
 Type "aa"
 Enter
-Type "pdf @ sym.main"
+Type "pdf @ sym.hello"
 Enter
 
 Type "q"
@@ -21,6 +21,6 @@ Type "eco zenburn"
 Enter
 Type "aa"
 Enter
-Type "pdf @ sym.main"
+Type "pdf @ sym.hello"
 Enter
 Sleep 5s
