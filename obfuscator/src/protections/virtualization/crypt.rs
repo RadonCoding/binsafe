@@ -35,8 +35,8 @@ impl Cipher {
 
     pub fn encrypt_block(&self, block: &mut Vec<u8>, key: u64, secret: u64) {
         let length = prepare_block(block);
-        self.encrypt_payload(block, key, secret);
         finalize_encrypt(block, length);
+        self.encrypt_payload(block, key, secret);
     }
 
     pub fn decrypt_block(&self, block: &mut Vec<u8>, key: u64, secret: u64) {
@@ -45,16 +45,22 @@ impl Cipher {
         unprepare_block(block, length);
     }
 
-    fn encrypt_payload(&self, block: &mut [u8], key: u64, secret: u64) {
+    pub fn encrypt_payload(&self, block: &mut [u8], key: u64, secret: u64) {
+        let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
+        let payload = &mut block[HEADER_SIZE..HEADER_SIZE + ((length + 8 + 7) & !7)];
+
         let key = (key ^ secret)
             .wrapping_mul(self.multiplier)
             .wrapping_add(self.addend);
 
-        for (counter, chunk) in block.chunks_exact_mut(8).enumerate() {
+        for (counter, chunk) in payload.chunks_exact_mut(8).enumerate() {
             let qword = u64::from_le_bytes(chunk.try_into().unwrap());
             let cipher = qword ^ keystream(key, counter as u64);
             chunk.copy_from_slice(&cipher.to_le_bytes());
         }
+
+        // byte  - state
+        block[block.len() - TRAILER_SIZE] = ENCRYPTED;
     }
 
     pub fn decrypt_payload(&self, block: &mut [u8], key: u64, secret: u64) {
@@ -84,12 +90,14 @@ impl Cipher {
     }
 }
 
-pub fn derive_hash(bytes: &[u8]) -> u64 {
+pub fn derive_hash(bytes: &[u8], multiplier: u64, addend: u64) -> u64 {
     let start = HEADER_SIZE;
     let end = bytes.len() - TRAILER_SIZE;
     let payload = &bytes[start..end];
-    payload.chunks_exact(8).fold(0, |key, chunk| {
-        key ^ u64::from_le_bytes(chunk.try_into().unwrap())
+    payload.chunks_exact(8).fold(0, |hash, chunk| {
+        (hash ^ u64::from_le_bytes(chunk.try_into().unwrap()))
+            .wrapping_mul(multiplier)
+            .wrapping_add(addend)
     })
 }
 
