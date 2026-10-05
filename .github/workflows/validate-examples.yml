@@ -24,7 +24,8 @@ jobs:
 
       - id: discover
         run: |
-          examples=$(find examples -mindepth 2 -maxdepth 2 -type d | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          blacklist=$(jq -R -s -c 'split("\n") | map(select(length > 0))' <<< "$BLACKLIST")
+          examples=$(find examples -mindepth 2 -maxdepth 2 -type d | jq -R -s -c --argjson blacklist "$blacklist" 'split("\n") | map(select(length > 0)) | map(select(IN($blacklist[]) | not))')
           echo "examples=$examples" >> $GITHUB_OUTPUT
 
   validate:
@@ -76,11 +77,6 @@ jobs:
 
       - name: Validate examples
         run: |
-          if grep -qxF "${{ matrix.example }}" <<< "$BLACKLIST"; then
-            echo "Skipping ${{ matrix.example }}"
-            exit 0
-          fi
-
           language=$(echo "${{ matrix.example }}" | cut -d/ -f2)
           case $language in
             rust)
