@@ -29,4 +29,5 @@ Type "s section..binsafe"
 Enter
 Type "pdui add byte [rax], al~:0..-1"
 Enter
-Sleep 5s
+
+Sleep 10s
