@@ -26,8 +26,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mingw-w64 wine wine32 wine64 ttyd vhs
 
-          curl -fsSLo radare2.deb https://github.com/radareorg/radare2/releases/download/6.2.2/radare2_6.2.2_amd64.deb
-          sudo dpkg -i radare2.deb
+          curl -fsSLO https://github.com/radareorg/radare2/releases/download/6.2.2/radare2_6.2.2_amd64.deb
+          sudo dpkg -i radare2_6.2.2_amd64.deb
 
       - name: Build for Windows
         run: cargo build --bin obfuscator --release --target x86_64-pc-windows-gnu
