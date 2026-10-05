@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ffi::c_void, ptr};
 
-use crate::{constants::VECTORS, NATIVE_REGISTRY, VIRTUAL_REGISTRY, XSTATE_AVX};
+use crate::{constants::VIRTUAL_VECTORS, NATIVE_REGISTRY, VIRTUAL_REGISTRY, XSTATE_AVX};
 use runtime::vm::bytecode::{Flag, VMReg, VMVec};
 use windows::Win32::{
     Foundation::EXCEPTION_SINGLE_STEP,
@@ -13,41 +13,59 @@ use windows::Win32::{
     },
 };
 
-pub unsafe extern "system" fn virtual_handler(_info: *mut EXCEPTION_POINTERS) -> i32 {
-    if VIRTUAL_REGISTRY
-        .lock()
-        .unwrap()
-        .contains(&GetCurrentThreadId())
-    {
+pub unsafe extern "system" fn virtual_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
+    let terminate = {
+        let mut registry = VIRTUAL_REGISTRY.lock().unwrap();
+
+        if let Some(exception) = registry.get_mut(&GetCurrentThreadId()) {
+            *exception = Some((*(*info).ExceptionRecord).ExceptionCode.0 as u32);
+            true
+        } else {
+            false
+        }
+    };
+
+    if terminate {
         TerminateThread(GetCurrentThread(), 0).unwrap();
+
         return EXCEPTION_CONTINUE_EXECUTION;
     }
+
     EXCEPTION_CONTINUE_SEARCH
 }
 
 pub unsafe extern "system" fn native_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
-    let entry = NATIVE_REGISTRY
-        .lock()
-        .unwrap()
-        .get(&GetCurrentThreadId())
-        .copied();
+    let terminate = {
+        let mut registry = NATIVE_REGISTRY.lock().unwrap();
 
-    if let Some((context, limit)) = entry {
-        if (*(*info).ExceptionRecord).ExceptionCode == EXCEPTION_SINGLE_STEP {
-            let rip = (*(*info).ContextRecord).Rip as usize;
+        if let Some((context, base, limit, exception)) = registry.get_mut(&GetCurrentThreadId()) {
+            if (*(*info).ExceptionRecord).ExceptionCode == EXCEPTION_SINGLE_STEP {
+                let rip = (*(*info).ContextRecord).Rip as usize;
 
-            if rip < limit {
-                (*(*info).ContextRecord).EFlags |= Flag::Trap.bit32();
-                return EXCEPTION_CONTINUE_EXECUTION;
+                if rip >= *base && rip < *limit {
+                    (*(*info).ContextRecord).EFlags |= Flag::Trap.bit32();
+                    return EXCEPTION_CONTINUE_EXECUTION;
+                }
+
+                ptr::copy_nonoverlapping((*info).ContextRecord, *context as *mut CONTEXT, 1);
+
+                true
+            } else {
+                *exception = Some((*(*info).ExceptionRecord).ExceptionCode.0 as u32);
+
+                true
             }
-
-            ptr::copy_nonoverlapping((*info).ContextRecord, context as *mut CONTEXT, 1);
+        } else {
+            false
         }
+    };
 
+    if terminate {
         TerminateThread(GetCurrentThread(), 0).unwrap();
 
         return EXCEPTION_CONTINUE_EXECUTION;
     }
+
     EXCEPTION_CONTINUE_SEARCH
 }
 
@@ -101,11 +119,13 @@ pub unsafe fn write_vectors(context: &mut CONTEXT, vectors: &HashMap<VMVec, [u12
     let upper = LocateXStateFeature(context, XSTATE_AVX, None) as *mut M128A;
 
     for (&vector, &value) in vectors {
-        let index = VECTORS.iter().position(|&v| v == vector).unwrap();
+        let index = VIRTUAL_VECTORS.iter().position(|&v| v == vector).unwrap();
+
         context.Anonymous.FltSave.XmmRegisters[index] = M128A {
             Low: value[0] as u64,
             High: (value[0] >> 64) as i64,
         };
+
         *upper.add(index) = M128A {
             Low: value[1] as u64,
             High: (value[1] >> 64) as i64,
@@ -116,20 +136,23 @@ pub unsafe fn write_vectors(context: &mut CONTEXT, vectors: &HashMap<VMVec, [u12
 pub unsafe fn read_vectors(context: &mut CONTEXT) -> HashMap<VMVec, [u128; 2]> {
     let upper = LocateXStateFeature(context, XSTATE_AVX, None) as *const M128A;
 
-    VECTORS
+    VIRTUAL_VECTORS
         .iter()
         .enumerate()
         .map(|(index, &vector)| {
             let low = context.Anonymous.FltSave.XmmRegisters[index];
+
             let high = if upper.is_null() {
                 M128A::default()
             } else {
                 *upper.add(index)
             };
+
             let value = [
                 low.Low as u128 | ((low.High as u64 as u128) << 64),
                 high.Low as u128 | ((high.High as u64 as u128) << 64),
             ];
+
             (vector, value)
         })
         .collect()

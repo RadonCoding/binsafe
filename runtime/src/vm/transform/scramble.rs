@@ -3,19 +3,32 @@ use std::mem;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
+use crate::mapper::Mapper;
 use crate::vm::bytecode::VMWidth;
 use crate::vm::encoders::block::{Block, Jump, Target};
 use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::Encode;
-use crate::vm::transform::atomize;
+use crate::vm::transform::{atomize, Phase, Transform};
 
 /// Shuffles the physical order of atoms by chaining them in execution order through signed-offset [`Jcc`]s.
-pub fn scramble(mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
-    walk(&mut operations, true);
+pub struct Scramble;
 
-    operations
+impl Transform for Scramble {
+    fn phase(&self) -> Phase {
+        Phase::Scramble
+    }
+
+    fn run(
+        &self,
+        _mapper: &mut Mapper,
+        mut operations: Vec<Box<dyn Encode>>,
+    ) -> Vec<Box<dyn Encode>> {
+        walk(&mut operations, true);
+
+        operations
+    }
 }
 
 /// Recurses into existing blocks and scrambles the current level.

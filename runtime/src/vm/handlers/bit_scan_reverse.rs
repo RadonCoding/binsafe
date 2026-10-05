@@ -1,1 +1,28 @@
-crate::vm::handlers::arithmetic!(bsr, bitscan, crate::vm::bytecode::Flag::Zero.bit64());
+use crate::{
+    runtime::Runtime,
+    vm::{
+        bytecode::{Flag, VMWidth},
+        handlers::semantic::{self, Compare, Effect, Expression, Flags, Operand, Operation},
+    },
+};
+
+pub fn build(rt: &mut Runtime) {
+    semantic::compiler::compile(
+        rt,
+        &Operation {
+            effects: vec![
+                Effect::Assign(Expression::Operand(Operand::Input(0))),
+                Effect::Bsr(Expression::Operand(Operand::Input(1))),
+            ],
+            flags: Flags::Always(vec![(
+                Flag::Zero,
+                Expression::Compare(Box::new(Compare::Equal(
+                    Expression::Operand(Operand::Input(1)),
+                    Expression::Constant(0),
+                ))),
+            )]),
+            stores: None,
+            widths: &[VMWidth::Lower64, VMWidth::Lower32, VMWidth::Lower16],
+        },
+    );
+}

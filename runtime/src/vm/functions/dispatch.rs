@@ -5,18 +5,18 @@ use iced_x86::code_asm::{
 
 use crate::{
     mapper::Mappable,
-    runtime::{FnDef, ImportDef, Runtime, StringDef},
+    runtime::{DataDef, FnDef, ImportDef, Runtime, StringDef},
     vm::{
         bytecode::{VMOp, VMReg},
         utils::{self, lock},
     },
-    VM_DISPATCH_SIZE, VM_INTEGRITY_QWORD, VM_TRAMPOLINE_SIZE,
+    VM_DISPATCH_SIZE, VM_INTEGRITY_QWORD, VM_REDIRECT_SIZE, VM_TRAMPOLINE_SIZE,
 };
 
 #[cfg(feature = "profile")]
 use crate::debug::{start_profiling, stop_profiling};
 
-const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
+pub const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::Jcc, FnDef::VmHandlerJcc),
     (VMOp::Ret, FnDef::VmHandlerRet),
     (VMOp::LoadImmediate, FnDef::VmHandlerLoadImmediate),
@@ -30,6 +30,8 @@ const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::StoreExtend, FnDef::VmHandlerStoreExtend),
     (VMOp::Add, FnDef::VmHandlerAdd),
     (VMOp::Sub, FnDef::VmHandlerSub),
+    (VMOp::Adc, FnDef::VmHandlerAdc),
+    (VMOp::Sbb, FnDef::VmHandlerSbb),
     (VMOp::Exchange, FnDef::VmHandlerExchange),
     (VMOp::ExchangeAdd, FnDef::VmHandlerExchangeAdd),
     (VMOp::CompareExchange, FnDef::VmHandlerCompareExchange),
@@ -64,6 +66,7 @@ const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
     (VMOp::VectorMul, FnDef::VmHandlerVectorMul),
     (VMOp::VectorDiv, FnDef::VmHandlerVectorDiv),
     (VMOp::Timestamp, FnDef::VmHandlerTimestamp),
+    (VMOp::Dispatch, FnDef::VmHandlerDispatch),
 ];
 
 pub fn build(rt: &mut Runtime) {
@@ -76,6 +79,8 @@ pub fn build(rt: &mut Runtime) {
     let mut check_suspend = rt.asm.create_label();
     let mut check_exit = rt.asm.create_label();
     let mut resolved = rt.asm.create_label();
+    let mut trampoline = rt.asm.create_label();
+    let mut lookup = rt.asm.create_label();
     let mut tamper = rt.asm.create_label();
     let mut terminate = rt.asm.create_label();
     let mut epilogue = rt.asm.create_label();
@@ -126,7 +131,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut decrypt_block).unwrap();
     {
         #[cfg(feature = "profile")]
-        start_profiling(rt, "vm_crypt_decrypt");
+        start_profiling(rt);
 
         // Decrypt the block:
         // mov rcx, 0x1
@@ -135,7 +140,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.call(rt.function_labels[&FnDef::VmCrypt]).unwrap();
 
         #[cfg(feature = "profile")]
-        stop_profiling(rt, "vm_crypt_decrypt");
+        stop_profiling(rt, FnDef::VmCrypt, "decrypt");
 
         // mov rax, ...
         rt.asm.mov(rax, VM_INTEGRITY_QWORD).unwrap();
@@ -149,10 +154,27 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov [r12 + ...], 0x0
         utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
-        // mov [r12 + ...], 0x0
-        utils::vreg::store_imm(rt, r12, 0x0, VMReg::VImmAdd);
-        // mov [r12 + ...], 0x1
-        utils::vreg::store_imm(rt, r12, 0x1, VMReg::VImmMul);
+
+        // lea rax, [...]
+        rt.asm
+            .lea(rax, ptr(rt.data_labels[&DataDef::VmCodeStart]))
+            .unwrap();
+        // movsxd rcx, [rax]
+        rt.asm.movsxd(rcx, ptr(rax)).unwrap();
+        // add rax, rcx
+        rt.asm.add(rax, rcx).unwrap();
+        // mov rcx, r13
+        rt.asm.mov(rcx, r13).unwrap();
+        // sub rcx, 0x2
+        rt.asm.sub(rcx, 0x2).unwrap();
+        // sub rcx, rax
+        rt.asm.sub(rcx, rax).unwrap();
+        // mov [r12 + ...], rcx
+        utils::vreg::store_reg(rt, r12, rcx, VMReg::VImmAdd);
+        // or rcx, 0x1
+        rt.asm.or(rcx, 0x1).unwrap();
+        // mov [r12 + ...], rcx
+        utils::vreg::store_reg(rt, r12, rcx, VMReg::VImmMul);
     }
 
     rt.asm.set_label(&mut execute_loop).unwrap();
@@ -170,16 +192,30 @@ pub fn build(rt: &mut Runtime) {
         // r8d -> operation
         utils::bytecode::read_byte_zx(rt, r13, r8d);
 
-        // println!(
-        //     "{}",
-        //     VMOp::VARIANTS
-        //         .iter()
-        //         .map(|op| format!("{:?}={:016X}", op, rt.mapper.index(*op)))
-        //         .collect::<Vec<String>>()
-        //         .join("\n")
-        // );
+        #[cfg(feature = "profile")]
+        {
+            use crate::debug::print_thread_message;
 
-        // crate::debug::print_thread_message(rt, "Executing", Some(r8), None);
+            let mut epilogue = rt.asm.create_label();
+
+            let mut cases = Vec::new();
+
+            for op in VMOp::VARIANTS {
+                cases.push((rt.mapper.index(*op), rt.asm.create_label()));
+            }
+
+            rt.jumps(r8, cases.clone());
+
+            for (op, (_, mut label)) in VMOp::VARIANTS.iter().zip(cases) {
+                rt.asm.set_label(&mut label).unwrap();
+
+                print_thread_message(rt, &format!("{:?}", op), None, None);
+
+                rt.asm.jmp(epilogue).unwrap();
+            }
+
+            rt.asm.set_label(&mut epilogue).unwrap();
+        }
 
         // mov rcx, r13
         rt.asm.mov(rcx, r13).unwrap();
@@ -241,7 +277,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut check_exit).unwrap();
     {
         #[cfg(feature = "profile")]
-        start_profiling(rt, "vm_crypt_encrypt");
+        start_profiling(rt);
 
         // Re-encrypt the current block:
         // xor rcx, rcx
@@ -250,7 +286,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.call(rt.function_labels[&FnDef::VmCrypt]).unwrap();
 
         #[cfg(feature = "profile")]
-        stop_profiling(rt, "vm_crypt_encrypt");
+        stop_profiling(rt, FnDef::VmCrypt, "encrypt");
 
         // Compute the address where execution will continue:
         // mov rax, [r12 + ...]
@@ -266,9 +302,9 @@ pub fn build(rt: &mut Runtime) {
         // je ...
         rt.asm.je(epilogue).unwrap();
 
-        // Follow an indirect JMP rel32 entry into its trampoline:
-        // cmp [rax], 0xE9
-        rt.asm.cmp(byte_ptr(rax), 0xE9).unwrap();
+        // Follow an indirect CALL rel32 entry into its trampoline:
+        // cmp [rax], 0xE8
+        rt.asm.cmp(byte_ptr(rax), 0xE8).unwrap();
         // jne ...
         rt.asm.jne(resolved).unwrap();
         // movsxd r9, [rax + 0x1]
@@ -283,14 +319,31 @@ pub fn build(rt: &mut Runtime) {
             // cmp [rax], 0x68
             rt.asm.cmp(byte_ptr(rax), 0x68).unwrap();
             // jne ...
-            rt.asm.jne(epilogue).unwrap();
+            rt.asm.jne(trampoline).unwrap();
 
             // mov edx, [rax + 0x1]
             rt.asm.mov(edx, ptr(rax + 0x1)).unwrap();
-
             // add rax, ...
             rt.asm.add(rax, VM_DISPATCH_SIZE as i32).unwrap();
+            // jmp ...
+            rt.asm.jmp(lookup).unwrap();
+        }
 
+        rt.asm.set_label(&mut trampoline).unwrap();
+        {
+            // cmp [rax], 0xC7
+            rt.asm.cmp(byte_ptr(rax), 0xC7).unwrap();
+            // jne ...
+            rt.asm.jne(epilogue).unwrap();
+
+            // mov edx, [rax + 0x3]
+            rt.asm.mov(edx, ptr(rax + 0x3)).unwrap();
+            // add rax, ...
+            rt.asm.add(rax, VM_REDIRECT_SIZE as i32).unwrap();
+        }
+
+        rt.asm.set_label(&mut lookup).unwrap();
+        {
             // mov rcx, rax
             rt.asm.mov(rcx, rax).unwrap();
             // call ...

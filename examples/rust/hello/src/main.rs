@@ -1,10 +1,14 @@
 include!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../../api/generated/binsafe.rs"
+    "/../../../api/binsafe.rs"
 ));
 
+binsafe! {
+    fn hello() {
+        println!("Hello, world!");
+    }
+}
+
 fn main() {
-    binsafe_begin!();
-    println!("Hello, world!");
-    binsafe_end!();
+    hello();
 }

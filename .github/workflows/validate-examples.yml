@@ -44,12 +44,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mingw-w64 wine wine32 wine64
 
-      - name: Generate templates
-        env:
-          OUTPUT_DIRECTORY: ${{ github.workspace }}/api/generated
-          TEMPLATES_DIRECTORY: ${{ github.workspace }}/api/templates
-        run: cargo build --package markers
-
       - name: Build for Windows
         run: cargo build --bin obfuscator --release --target x86_64-pc-windows-gnu
 
@@ -58,7 +52,7 @@ jobs:
           language=$(echo "${{ matrix.example }}" | cut -d/ -f2)
           case $language in
             rust) cargo build --manifest-path ${{ matrix.example }}/Cargo.toml --release --target x86_64-pc-windows-gnu ;;
-            cpp)  x86_64-w64-mingw32-g++ ${{ matrix.example }}/main.cpp -o ${{ matrix.example }}/example.exe -static ;;
+            cpp)  x86_64-w64-mingw32-g++ ${{ matrix.example }}/main.cpp -o ${{ matrix.example }}/example.exe -static-libgcc -static-libstdc++ ;;
           esac
 
       - name: Obfuscate examples

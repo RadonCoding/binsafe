@@ -58,7 +58,6 @@ pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
                             jcc.conditions.push(y);
                         }
                     }
-
                     1 => {
                         // X OR !X == 1.
                         jcc.logic = or;
@@ -70,7 +69,6 @@ pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
                             jcc.conditions.push(random(&flags, rng));
                         }
                     }
-
                     _ => {
                         // X AND 1 == X.
                         jcc.logic = and;

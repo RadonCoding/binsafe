@@ -1,6 +1,5 @@
 use iced_x86::Instruction;
 
-
 use crate::vm::bytecode::{VMReg, VMVec, VMWidth};
 use crate::vm::encoders::{
     load_vector::LoadVector, packed_byte_mask::PackedByteMask, store_register::StoreRegister,

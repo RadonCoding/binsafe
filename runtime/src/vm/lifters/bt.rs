@@ -1,6 +1,5 @@
 use iced_x86::{Instruction, Mnemonic};
 
-
 use crate::vm::encoders::{
     bit_test::BitTest, bit_test_complement::BitTestComplement, bit_test_reset::BitTestReset,
     bit_test_set::BitTestSet, Encode,
