@@ -12,8 +12,8 @@ mod anti_tamper;
 #[cfg(debug_assertions)]
 mod debug;
 
-// Masks lower 34 bits of timestamp, creating a ~5s window on a 3.5 GHz CPU
-const WINDOW: u64 = 0x22;
+// Masks lower 32 bits of timestamp, creating a ~1s window on a 3.5 GHz CPU
+const WINDOW: u64 = 0x20;
 
 const MINIMUM_CYCLES: u64 = 1_000_000;
 const MAXIMUM_CYCLES: u64 = 100_000_000;
