@@ -30,11 +30,19 @@ impl Encode for Discard {
         self
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::Discard)]
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::Discard)
     }
 
-    fn depth(&self) -> i32 {
-        -1
+    fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {
+        vec![]
+    }
+
+    fn consumes(&self) -> i32 {
+        1
+    }
+
+    fn produces(&self) -> i32 {
+        0
     }
 }

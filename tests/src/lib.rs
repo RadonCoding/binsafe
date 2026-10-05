@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     ffi::c_void,
     hint, mem, ptr,
     sync::{
@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    constants::{FAKE_BRANCH_ADDRESS, REGISTERS, VECTORS},
+    constants::{VIRTUAL_REGISTERS, VIRTUAL_VECTORS},
     instrumentation::{
         initialize_context, native_handler, read_register, read_vectors, virtual_handler,
         write_register, write_vectors,
@@ -21,7 +21,7 @@ use iced_x86::{
     code_asm::{ptr, r12, r12d, r8, r9, rax, ymm0},
     BlockEncoder, BlockEncoderOptions, Instruction, InstructionBlock,
 };
-use obfuscator::protections::virtualization::crypt;
+use obfuscator::protections::virtualization::crypt::{self, Cipher};
 use runtime::{
     mapper::Mappable,
     runtime::{BoolDef, DataDef, FnDef, Runtime},
@@ -38,8 +38,7 @@ use windows::Win32::{
             CONTEXT, CONTEXT_ALL_AMD64, CONTEXT_XSTATE_AMD64,
         },
         Memory::{
-            VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE,
-            PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
+            VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
         },
         Threading::{
             CreateThread, FlsAlloc, ResumeThread, SuspendThread, TlsAlloc, WaitForSingleObject,
@@ -52,38 +51,41 @@ mod constants;
 mod instructions;
 mod instrumentation;
 
-static FAKE_BRANCH_MAPPED: OnceLock<()> = OnceLock::new();
-
 static TLS_REGISTERS: OnceLock<u32> = OnceLock::new();
 static TLS_KEY: OnceLock<u32> = OnceLock::new();
 static TLS_DEBUG: OnceLock<u32> = OnceLock::new();
 static FLS_CLEANUP: OnceLock<u32> = OnceLock::new();
 
-static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize)>>> =
+static NATIVE_REGISTRY: LazyLock<Mutex<HashMap<u32, (usize, usize, usize, Option<u32>)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static NATIVE_HANDLER: OnceLock<()> = OnceLock::new();
 
-static VIRTUAL_REGISTRY: LazyLock<Mutex<HashSet<u32>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
+static VIRTUAL_REGISTRY: LazyLock<Mutex<HashMap<u32, Option<u32>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 static VIRTUAL_HANDLER: OnceLock<()> = OnceLock::new();
 
 const XSTATE_AVX: u32 = 2;
 const XSTATE_MASK_AVX: u64 = 4;
 
-#[derive(Clone, PartialEq, Eq, Default)]
-pub(crate) struct State {
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct State {
     pub registers: HashMap<VMReg, u64>,
     pub vectors: HashMap<VMVec, [u128; 2]>,
+    pub exception: Option<u32>,
 }
 
-pub(crate) enum Difference {
+pub enum Difference {
     Register(VMReg, u64, u64),
     Vector(VMVec, [u128; 2], [u128; 2]),
+    Exception(u32, u32),
 }
 
 impl State {
-    pub fn with<T: Into<u64>>(mut self, register: VMReg, value: T) -> Self {
-        self.registers.insert(register, value.into());
+    pub fn with<T: TryInto<u64>>(mut self, register: VMReg, value: T) -> Self
+    where
+        T::Error: std::fmt::Debug,
+    {
+        self.registers.insert(register, value.try_into().unwrap());
         self
     }
 
@@ -93,6 +95,26 @@ impl State {
 
     pub fn compare(&self, other: &Self) -> Vec<Difference> {
         let mut differences = Vec::new();
+
+        match (self.exception, other.exception) {
+            (Some(native), Some(virtual_)) => {
+                if native != virtual_ {
+                    differences.push(Difference::Exception(native, virtual_));
+                }
+
+                return differences;
+            }
+            (Some(native), None) => {
+                differences.push(Difference::Exception(native, 0));
+                return differences;
+            }
+            (None, Some(virtual_)) => {
+                differences.push(Difference::Exception(0, virtual_));
+                return differences;
+            }
+            (None, None) => {}
+        }
+
         for (&register, &expected) in &self.registers {
             if let Some(&received) = other.registers.get(&register) {
                 if expected != received {
@@ -100,6 +122,7 @@ impl State {
                 }
             }
         }
+
         for (&vector, &expected) in &self.vectors {
             if let Some(&received) = other.vectors.get(&vector) {
                 if expected != received {
@@ -107,37 +130,29 @@ impl State {
                 }
             }
         }
+
         differences
     }
 }
 
-pub(crate) struct Executor {
+pub struct Executor {
     pub rt: Runtime,
-    pub mem: *mut c_void,
+    pub memory: *mut c_void,
 }
 
 impl Executor {
-    pub const TEST_KEY_SEED: u64 = 0x1234567890ABCDEF;
-    pub const TEST_KEY_MUL: u64 = 0x1234567890ABCDEF;
-    pub const TEST_KEY_ADD: u64 = 0x1234567890ABCDEF;
+    pub const TEST_KEY_INITIALIZER: u64 = 0x1234567890ABCDEF;
+    pub const TEST_KEY_MULTIPLIER: u64 = 0x1234567890ABCDEF;
+    pub const TEST_KEY_ADDEND: u64 = 0x1234567890ABCDEF;
 
     pub const SIZE: usize = 0x100000;
 
     pub fn new() -> Self {
-        FAKE_BRANCH_MAPPED.get_or_init(|| unsafe {
-            let _ = VirtualAlloc(
-                Some(FAKE_BRANCH_ADDRESS as *const c_void),
-                Self::SIZE,
-                MEM_COMMIT | MEM_RESERVE,
-                PAGE_READWRITE,
-            );
-        });
-
         let mut rt = Runtime::new(64);
 
-        rt.define_data_qword(DataDef::VmKeySeed, Self::TEST_KEY_SEED);
-        rt.define_data_qword(DataDef::VmKeyMul, Self::TEST_KEY_MUL);
-        rt.define_data_qword(DataDef::VmKeyAdd, Self::TEST_KEY_ADD);
+        rt.define_data_qword(DataDef::VmKeyInitializer, Self::TEST_KEY_INITIALIZER);
+        rt.define_data_qword(DataDef::VmKeyMultiplier, Self::TEST_KEY_MULTIPLIER);
+        rt.define_data_qword(DataDef::VmKeyAddend, Self::TEST_KEY_ADDEND);
 
         rt.define_bool(BoolDef::HasVeh, true);
 
@@ -158,7 +173,7 @@ impl Executor {
             *FLS_CLEANUP.get_or_init(|| unsafe { FlsAlloc(None) }),
         );
 
-        let mem = unsafe {
+        let memory = unsafe {
             VirtualAlloc(
                 None,
                 Self::SIZE,
@@ -167,7 +182,7 @@ impl Executor {
             )
         };
 
-        Self { rt, mem }
+        Self { rt, memory }
     }
 
     pub fn run_virtual(&mut self, state: State, bytes: &[u8]) -> State {
@@ -207,9 +222,9 @@ impl Executor {
             )
             .unwrap();
 
-        let mut vectors = vec![[0u128; 2]; VECTORS.len()];
+        let mut vectors = vec![[0u128; 2]; VIRTUAL_VECTORS.len()];
 
-        for vector in VECTORS {
+        for vector in VIRTUAL_VECTORS {
             if let Some(v) = state.vectors.get(&vector) {
                 vectors[self.rt.mapper.index(vector) as usize] = *v;
             }
@@ -218,7 +233,7 @@ impl Executor {
         // mov r9, ...
         self.rt.asm.mov(r9, vectors.as_ptr() as u64).unwrap();
 
-        for vector in VECTORS {
+        for vector in VIRTUAL_VECTORS {
             // vmovdqu ymm0, [r9 + ...]
             self.rt
                 .asm
@@ -234,8 +249,10 @@ impl Executor {
         // lea rax, [...]
         self.rt
             .asm
-            .lea(rax, ptr(self.rt.data_labels[&DataDef::VmCode]))
+            .lea(rax, ptr(self.rt.data_labels[&DataDef::VmCodeStart]))
             .unwrap();
+        // add rax, size_of::<i32>()
+        self.rt.asm.add(rax, size_of::<i32>() as i32).unwrap();
         // mov [r12 + ...], rax
         utils::vreg::store_reg(&mut self.rt, r12, rax, VMReg::BPointer);
 
@@ -251,7 +268,7 @@ impl Executor {
         // mov r8, ...
         self.rt.asm.mov(r8, registers.as_mut_ptr() as u64).unwrap();
 
-        for register in REGISTERS {
+        for register in VIRTUAL_REGISTERS {
             // mov r9, [r12 + ...]
             self.rt
                 .asm
@@ -275,7 +292,7 @@ impl Executor {
         // mov r9, ...
         self.rt.asm.mov(r9, vectors.as_mut_ptr() as u64).unwrap();
 
-        for vector in VECTORS {
+        for vector in VIRTUAL_VECTORS {
             // vmovdqu ymm0, [r8 + ...]
             self.rt
                 .asm
@@ -291,16 +308,18 @@ impl Executor {
         // ret
         self.rt.asm.ret().unwrap();
 
-        self.rt.define_data_bytes(DataDef::VmCode, bytes);
+        let mut data = (size_of::<i32>() as i32).to_le_bytes().to_vec();
+        data.extend_from_slice(bytes);
+        self.rt.define_data_bytes(DataDef::VmCodeStart, &data);
 
-        let ip = self.mem as u64;
+        let ip = self.memory as u64;
 
         let code = self.rt.assemble(ip);
 
         assert!(code.len() <= Self::SIZE);
 
         unsafe {
-            ptr::copy_nonoverlapping(code.as_ptr(), self.mem as *mut u8, code.len());
+            ptr::copy_nonoverlapping(code.as_ptr(), self.memory as *mut u8, code.len());
         }
 
         VIRTUAL_HANDLER.get_or_init(|| unsafe {
@@ -316,15 +335,15 @@ impl Executor {
                 Some(mem::transmute::<
                     *const (),
                     unsafe extern "system" fn(*mut c_void) -> u32,
-                >(self.mem as *const ())),
-                Some(self.mem as *mut c_void),
+                >(self.memory as *const ())),
+                Some(self.memory as *mut c_void),
                 THREAD_CREATE_SUSPENDED,
                 Some(&mut thread_id),
             )
             .unwrap()
         };
 
-        VIRTUAL_REGISTRY.lock().unwrap().insert(thread_id);
+        VIRTUAL_REGISTRY.lock().unwrap().insert(thread_id, None);
 
         unsafe {
             ResumeThread(thread);
@@ -332,22 +351,27 @@ impl Executor {
             CloseHandle(thread).unwrap();
         }
 
-        VIRTUAL_REGISTRY.lock().unwrap().remove(&thread_id);
+        let exception = VIRTUAL_REGISTRY
+            .lock()
+            .unwrap()
+            .remove(&thread_id)
+            .flatten();
 
         State {
-            registers: REGISTERS
+            registers: VIRTUAL_REGISTERS
                 .iter()
                 .map(|&r| (r, registers[self.rt.mapper.index(r) as usize]))
                 .collect(),
-            vectors: VECTORS
+            vectors: VIRTUAL_VECTORS
                 .iter()
                 .map(|&v| (v, vectors[self.rt.mapper.index(v) as usize]))
                 .collect(),
+            exception,
         }
     }
 
     pub fn run_native(&mut self, state: State, instructions: &[Instruction]) -> State {
-        let ip = self.mem as u64;
+        let ip = self.memory as u64;
 
         let result = BlockEncoder::encode(
             64,
@@ -359,12 +383,13 @@ impl Executor {
         unsafe {
             ptr::copy_nonoverlapping(
                 result.code_buffer.as_ptr(),
-                self.mem as *mut u8,
+                self.memory as *mut u8,
                 result.code_buffer.len(),
             );
         }
 
-        let limit = self.mem as usize + result.code_buffer.len();
+        let base = self.memory as usize;
+        let limit = base + result.code_buffer.len();
 
         let initialized = AtomicBool::new(false);
 
@@ -405,7 +430,7 @@ impl Executor {
             &mut *context
         };
 
-        context.Rip = self.mem as u64;
+        context.Rip = self.memory as u64;
 
         for (&register, &value) in &state.registers {
             write_register(context, register, value);
@@ -418,10 +443,10 @@ impl Executor {
             AddVectoredExceptionHandler(1, Some(native_handler));
         });
 
-        NATIVE_REGISTRY
-            .lock()
-            .unwrap()
-            .insert(thread_id, (context as *mut CONTEXT as usize, limit));
+        NATIVE_REGISTRY.lock().unwrap().insert(
+            thread_id,
+            (context as *mut CONTEXT as usize, base, limit, None),
+        );
 
         unsafe {
             SetThreadContext(thread, context).unwrap();
@@ -430,70 +455,48 @@ impl Executor {
             CloseHandle(thread).unwrap();
         }
 
-        NATIVE_REGISTRY.lock().unwrap().remove(&thread_id);
+        let exception = NATIVE_REGISTRY
+            .lock()
+            .unwrap()
+            .remove(&thread_id)
+            .and_then(|(_, _, _, exception)| exception);
 
         context.EFlags &= !(Flag::Interrupt.bit32() | Flag::Reserved1.bit32());
 
-        let registers = REGISTERS
+        let registers = VIRTUAL_REGISTERS
             .iter()
             .map(|&register| (register, read_register(context, register)))
             .collect();
         let vectors = unsafe { read_vectors(context) };
 
-        State { registers, vectors }
+        State {
+            registers,
+            vectors,
+            exception,
+        }
     }
 }
 
 impl Drop for Executor {
     fn drop(&mut self) {
         unsafe {
-            let _ = VirtualFree(self.mem, 0, MEM_RELEASE);
+            let _ = VirtualFree(self.memory, 0, MEM_RELEASE);
         }
     }
 }
 
-pub(crate) fn encrypt_block(block: &mut Vec<u8>) {
-    crypt::encrypt_block(
-        block,
-        Executor::TEST_KEY_SEED,
-        Executor::TEST_KEY_MUL,
-        Executor::TEST_KEY_ADD,
-        0,
-    );
+fn cipher() -> crypt::Cipher {
+    Cipher::new(Executor::TEST_KEY_MULTIPLIER, Executor::TEST_KEY_ADDEND)
 }
 
-pub(crate) fn decrypt_payload(block: &mut Vec<u8>) {
-    crypt::decrypt_payload(
-        block,
-        Executor::TEST_KEY_SEED,
-        Executor::TEST_KEY_MUL,
-        Executor::TEST_KEY_ADD,
-        0,
-    )
-}
-pub(crate) fn decrypt_block(block: &mut Vec<u8>) {
-    crypt::decrypt_block(
-        block,
-        Executor::TEST_KEY_SEED,
-        Executor::TEST_KEY_MUL,
-        Executor::TEST_KEY_ADD,
-        0,
-    )
+pub fn encrypt_block(block: &mut Vec<u8>) {
+    cipher().encrypt_block(block, Executor::TEST_KEY_INITIALIZER, 0);
 }
 
-macro_rules! instruction {
-    (branch $code:ident, $target:expr) => {
-        iced_x86::Instruction::with_branch(iced_x86::Code::$code, $target).unwrap()
-    };
-    ($code:ident, $a:expr) => {
-        iced_x86::Instruction::with1(iced_x86::Code::$code, $a).unwrap()
-    };
-    ($code:ident, $a:expr, $b:expr) => {
-        iced_x86::Instruction::with2(iced_x86::Code::$code, $a, $b).unwrap()
-    };
-    ($code:ident, $a:expr, $b:expr, $c:expr) => {
-        iced_x86::Instruction::with3(iced_x86::Code::$code, $a, $b, $c).unwrap()
-    };
+pub fn decrypt_payload(block: &mut Vec<u8>) {
+    cipher().decrypt_payload(block, Executor::TEST_KEY_INITIALIZER, 0);
 }
 
-pub(crate) use instruction;
+pub fn decrypt_block(block: &mut Vec<u8>) {
+    cipher().decrypt_block(block, Executor::TEST_KEY_INITIALIZER, 0);
+}

@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 
-use iced_x86::code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeAssembler, CodeLabel};
+use iced_x86::{
+    code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeAssembler, CodeLabel},
+    BlockEncoderOptions,
+};
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
     functions,
     mapper::{mapped, Mappable, Mapper},
-    obfuscation,
     vm::{
         self,
         bytecode::{VMReg, VMVec},
@@ -36,7 +38,6 @@ mapped! {
         VmVectorsCapture,
         VmVectorsRestore,
         VmVectorsCopy,
-        VmFlags,
         /* VM HANDLERS */
         VmHandlerJcc,
         VmHandlerRet,
@@ -51,6 +52,8 @@ mapped! {
         VmHandlerStoreExtend,
         VmHandlerAdd,
         VmHandlerSub,
+        VmHandlerAdc,
+        VmHandlerSbb,
         VmHandlerAnd,
         VmHandlerOr,
         VmHandlerXor,
@@ -85,6 +88,7 @@ mapped! {
         VmHandlerVectorMul,
         VmHandlerVectorDiv,
         VmHandlerTimestamp,
+        VmHandlerDispatch,
         /* VM VEH */
         VmVehInitialize,
         VmVehHandler,
@@ -111,12 +115,14 @@ mapped! {
         VmDebugTlsIndex,
         VmCleanupFlsIndex,
         VmTable,
-        VmCode,
+        VmCodeStart,
+        VmCodeEnd,
         VmAttestation,
         VmTrampolines,
-        VmKeySeed,
-        VmKeyMul,
-        VmKeyAdd,
+        VmKeyInitializer,
+        VmKeyMultiplier,
+        VmKeyMultiplierInverse,
+        VmKeyAddend,
         VehEnd,
         ImportAddresses,
         ImportNames,
@@ -237,6 +243,14 @@ enum EmissionTask {
     DispatchStub(usize, usize),
 }
 
+pub type Handler = Box<dyn FnOnce(&mut Runtime)>;
+
+struct DispatchCase {
+    label: CodeLabel,
+    epilogue: CodeLabel,
+    handler: Handler,
+}
+
 struct Dispatch {
     table: CodeLabel,
     stubs: Vec<(u8, CodeLabel, CodeLabel)>,
@@ -253,10 +267,32 @@ impl Dispatch {
     }
 }
 
+pub struct Keys {
+    pub initializer: u64,
+    pub multiplier: u64,
+    pub addend: u64,
+    pub secret: u64,
+}
+
+impl Default for Keys {
+    fn default() -> Self {
+        let mut rng = rand::thread_rng();
+
+        Self {
+            initializer: rng.gen::<u64>(),
+            multiplier: rng.gen::<u64>() | 1,
+            addend: rng.gen::<u64>(),
+            secret: rng.gen::<u64>(),
+        }
+    }
+}
+
 pub struct Runtime {
     pub asm: CodeAssembler,
 
     pub nonce: u64,
+
+    pub keys: Keys,
 
     pub function_labels: HashMap<FnDef, CodeLabel>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
@@ -272,6 +308,8 @@ pub struct Runtime {
     imports: HashMap<ImportDef, usize>,
 
     dispatches: Vec<Dispatch>,
+
+    cases: Vec<DispatchCase>,
 
     functions: HashMap<FnDef, (usize, usize)>,
 
@@ -328,6 +366,8 @@ impl Runtime {
 
             nonce,
 
+            keys: Keys::default(),
+
             function_labels,
             data_labels,
             bool_labels,
@@ -342,6 +382,8 @@ impl Runtime {
             imports,
 
             dispatches: Vec::new(),
+
+            cases: Vec::new(),
 
             functions: HashMap::new(),
 
@@ -448,6 +490,31 @@ impl Runtime {
         self.asm
             .call(self.function_labels[&FnDef::Resolve])
             .unwrap();
+    }
+
+    pub fn switch(
+        &mut self,
+        key: AsmRegister64,
+        epilogue: CodeLabel,
+        handlers: Vec<(Vec<u8>, Handler)>,
+    ) {
+        let mut cases = Vec::new();
+
+        for (indices, handler) in handlers {
+            let label = self.asm.create_label();
+
+            for index in indices {
+                cases.push((index, label));
+            }
+
+            self.cases.push(DispatchCase {
+                label,
+                epilogue,
+                handler,
+            });
+        }
+
+        self.dispatch(key, cases);
     }
 
     pub fn jumps(&mut self, key: AsmRegister64, cases: Vec<(u8, CodeLabel)>) {
@@ -612,6 +679,8 @@ impl Runtime {
             ),
             (FnDef::VmHandlerAdd, vm::handlers::add::build),
             (FnDef::VmHandlerSub, vm::handlers::sub::build),
+            (FnDef::VmHandlerAdc, vm::handlers::adc::build),
+            (FnDef::VmHandlerSbb, vm::handlers::sbb::build),
             (FnDef::VmHandlerAnd, vm::handlers::and::build),
             (FnDef::VmHandlerOr, vm::handlers::or::build),
             (FnDef::VmHandlerXor, vm::handlers::xor::build),
@@ -676,7 +745,7 @@ impl Runtime {
             (FnDef::VmHandlerVectorMul, vm::handlers::vector_mul::build),
             (FnDef::VmHandlerVectorDiv, vm::handlers::vector_div::build),
             (FnDef::VmHandlerTimestamp, vm::handlers::timestamp::build),
-            (FnDef::VmFlags, vm::handlers::flags::build),
+            (FnDef::VmHandlerDispatch, vm::handlers::dispatch::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (FnDef::Hash, functions::hash::build),
             (FnDef::Resolve, functions::resolve::build),
@@ -704,6 +773,14 @@ impl Runtime {
         self.define_data_bytes(DataDef::ImportNames, &vec![0u8; self.imports.len() * 16]);
 
         self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
+
+        self.define_data_qword(DataDef::VmKeyInitializer, self.keys.initializer);
+        self.define_data_qword(DataDef::VmKeyAddend, self.keys.addend);
+        self.define_data_qword(DataDef::VmKeyMultiplier, self.keys.multiplier);
+        self.define_data_qword(
+            DataDef::VmKeyMultiplierInverse,
+            crate::utils::invert_multiplier(self.keys.multiplier),
+        );
 
         self.define_bool(BoolDef::IsLocked, false);
         self.define_bool(BoolDef::HasAvx, false);
@@ -806,22 +883,50 @@ impl Runtime {
 
         let mut phase_two = Vec::new();
 
-        for i in 0..self.dispatches.len() {
-            phase_two.push(EmissionTask::DispatchTable(i));
+        phase_two.extend(data_phase_two.iter().cloned());
 
-            for j in 0..self.dispatches[i].stubs.len() {
-                phase_two.push(EmissionTask::DispatchStub(i, j));
+        // A case handler may register further dispatches (nested width/precision
+        // dispatch), so drain in shuffled waves until no new work remains.
+        let mut dispatched = 0;
+
+        loop {
+            for i in dispatched..self.dispatches.len() {
+                phase_two.push(EmissionTask::DispatchTable(i));
+
+                for j in 0..self.dispatches[i].stubs.len() {
+                    phase_two.push(EmissionTask::DispatchStub(i, j));
+                }
+            }
+            dispatched = self.dispatches.len();
+
+            let mut cases = std::mem::take(&mut self.cases);
+
+            if phase_two.is_empty() && cases.is_empty() {
+                break;
+            }
+
+            phase_two.shuffle(&mut rng);
+            self.emit(&phase_two);
+            phase_two = Vec::new();
+
+            cases.shuffle(&mut rng);
+
+            for case in cases {
+                let mut label = case.label;
+
+                self.asm.set_label(&mut label).unwrap();
+                (case.handler)(self);
+                // jmp ...
+                self.asm.jmp(case.epilogue).unwrap();
             }
         }
 
-        phase_two.extend(data_phase_two.iter().cloned());
-        phase_two.shuffle(&mut rng);
-
-        self.emit(&phase_two);
-
         self.emit(&[EmissionTask::Data(DataDef::VehEnd)]);
 
-        let (instructions, result) = obfuscation::obfuscate(&mut self.asm, ip);
+        let result = self
+            .asm
+            .assemble_options(ip, BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS)
+            .unwrap();
 
         let labels = self
             .function_labels
@@ -838,11 +943,11 @@ impl Runtime {
 
         let offsets = &result.inner.new_instruction_offsets;
 
-        for (def, (_, end)) in &self.functions {
+        for (def, &(_, end)) in &self.functions {
             let label = self.function_labels[def];
             let start = result.label_ip(&label).unwrap();
             let offset = offsets[end - 1] as u64;
-            let size = instructions[end - 1].len() as u64;
+            let size = (offsets[end] - offsets[end - 1]) as u64;
             self.sizes.insert(label, ip + offset + size - start);
         }
 

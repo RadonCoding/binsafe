@@ -17,11 +17,19 @@ impl Encode for PackedByteMask {
         self
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::PackedByteMask), mapper.index(self.width)]
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::PackedByteMask)
     }
 
-    fn depth(&self) -> i32 {
-        1 - self.width.slots()
+    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+        vec![mapper.index(self.width)]
+    }
+
+    fn consumes(&self) -> i32 {
+        1
+    }
+
+    fn produces(&self) -> i32 {
+        1
     }
 }

@@ -1,21 +1,22 @@
-use core::panic;
-use std::any::Any;
-
-use iced_x86::{Instruction, Mnemonic, Register};
-use strum_macros::EnumIter;
-
 use crate::mapper::{mapped, Mapper};
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
     arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, div, extend, integer, lea, multiply,
     pcmpeqb, pmovskb, rdtsc, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
-#[cfg(debug_assertions)]
 use crate::vm::snapshot::Snapshots;
 use crate::vm::transform::encrypt::Encrypt;
+use crate::vm::transform::indirect::Indirect;
 use crate::vm::transform::mutation::Mutation;
 use crate::vm::transform::peephole::Peephole;
-use crate::vm::transform::{permute, scramble, Transform};
+use crate::vm::transform::permute::Permute;
+use crate::vm::transform::scramble::Scramble;
+use crate::vm::transform::Transform;
+use core::panic;
+use iced_x86::{Instruction, Mnemonic, Register};
+use std::any::Any;
+use std::cell::RefCell;
+use strum_macros::EnumIter;
 
 mapped! {
     VMOp {
@@ -35,6 +36,8 @@ mapped! {
         // Arithmetic
         Add,
         Sub,
+        Adc,
+        Sbb,
         And,
         Or,
         Xor,
@@ -72,7 +75,8 @@ mapped! {
         VectorMul,
         VectorDiv,
         // Special
-        Timestamp
+        Timestamp,
+        Dispatch
     }
 }
 
@@ -269,7 +273,17 @@ impl VMWidth {
             VMWidth::Lower16 | VMWidth::SLower16 => VMWidth::SLower16,
             VMWidth::Lower32 | VMWidth::SLower32 => VMWidth::SLower32,
             VMWidth::Lower64 | VMWidth::SLower64 => VMWidth::SLower64,
-            other => other,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn mask(self) -> u64 {
+        let bits = (self.size() * 8).min(64);
+
+        if bits == 64 {
+            u64::MAX
+        } else {
+            (1u64 << bits) - 1
         }
     }
 }
@@ -330,6 +344,10 @@ impl Encode for VMMem {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn op(&self) -> Option<VMOp> {
+        None
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
@@ -429,6 +447,10 @@ impl Encode for VMCondition {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        None
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
         vec![mapper.index(self.test), self.lhs, self.rhs]
     }
@@ -442,6 +464,7 @@ pub enum Phase {
     Scramble,
     Encrypt,
     Peephole,
+    Indirect,
 }
 
 impl Phase {
@@ -453,6 +476,7 @@ impl Phase {
             Self::Scramble => "scramble",
             Self::Encrypt => "encrypt",
             Self::Peephole => "peephole",
+            Self::Indirect => "indirect",
         }
     }
 }
@@ -618,66 +642,67 @@ pub fn assemble(mapper: &mut Mapper, operations: &[Box<dyn Encode>]) -> Vec<u8> 
     let mut bytes = Vec::new();
 
     for operation in operations {
+        if let Some(op) = operation.op() {
+            bytes.push(mapper.index(op));
+        }
         bytes.extend(operation.encode(mapper));
     }
     bytes
 }
 
+fn transforms<'a>(
+    picker: &'a RefCell<&'a mut dyn FnMut(&[usize]) -> usize>,
+    offset: u64,
+) -> Vec<Box<dyn Transform + 'a>> {
+    vec![
+        Box::new(Peephole),
+        Box::new(Permute { picker }),
+        Box::new(Scramble),
+        Box::new(Mutation),
+        Box::new(Indirect),
+        Box::new(Encrypt { offset }),
+        Box::new(Permute { picker }),
+        Box::new(Peephole),
+    ]
+}
+
 pub fn transform<F>(
     mapper: &mut Mapper,
-    operations: Vec<Box<dyn Encode>>,
+    mut operations: Vec<Box<dyn Encode>>,
+    offset: u64,
     mut picker: F,
 ) -> Vec<Box<dyn Encode>>
 where
     F: FnMut(&[usize]) -> usize,
 {
-    let mut operations = operations;
+    let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
 
-    operations = Peephole.run(mapper, operations);
-    operations = permute::permute(operations, &mut picker);
-    operations = scramble::scramble(operations);
-    operations = Mutation.run(mapper, operations);
-    operations = Encrypt.run(mapper, operations);
-    operations = permute::permute(operations, &mut picker);
-    operations = Peephole.run(mapper, operations);
+    for transform in &transforms(&picker, offset) {
+        operations = transform.run(mapper, operations);
+    }
 
     operations
 }
 
-#[cfg(debug_assertions)]
 pub fn transform_with_snapshots<F>(
     mapper: &mut Mapper,
-    operations: Vec<Box<dyn Encode>>,
+    mut operations: Vec<Box<dyn Encode>>,
+    offset: u64,
     mut picker: F,
 ) -> (Vec<Box<dyn Encode>>, Snapshots)
 where
     F: FnMut(&[usize]) -> usize,
 {
-    let mut operations = operations;
+    let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
 
     let mut snapshots = Snapshots::new();
     snapshots.record(Phase::Lift, &operations);
 
-    operations = Peephole.run(mapper, operations);
-    snapshots.record(Phase::Peephole, &operations);
+    for transform in &transforms(&picker, offset) {
+        operations = transform.run(mapper, operations);
 
-    operations = permute::permute(operations, &mut picker);
-    snapshots.record(Phase::Permute, &operations);
-
-    operations = scramble::scramble(operations);
-    snapshots.record(Phase::Scramble, &operations);
-
-    operations = Mutation.run(mapper, operations);
-    snapshots.record(Mutation.phase(), &operations);
-
-    operations = Encrypt.run(mapper, operations);
-    snapshots.record(Encrypt.phase(), &operations);
-
-    operations = permute::permute(operations, &mut picker);
-    snapshots.record(Phase::Permute, &operations);
-
-    operations = Peephole.run(mapper, operations);
-    snapshots.record(Phase::Peephole, &operations);
+        snapshots.record(transform.phase(), &operations);
+    }
 
     (operations, snapshots)
 }

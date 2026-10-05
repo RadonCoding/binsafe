@@ -18,8 +18,12 @@ impl Encode for LoadImmediate {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::LoadImmediate)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        let mut bytes = vec![mapper.index(VMOp::LoadImmediate), mapper.index(self.width)];
+        let mut bytes = vec![mapper.index(self.width)];
         bytes.extend_from_slice(&self.source);
         bytes
     }
@@ -31,7 +35,11 @@ impl Encode for LoadImmediate {
         ]
     }
 
-    fn depth(&self) -> i32 {
+    fn consumes(&self) -> i32 {
+        0
+    }
+
+    fn produces(&self) -> i32 {
         1
     }
 }

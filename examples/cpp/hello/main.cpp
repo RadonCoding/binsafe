@@ -1,10 +1,13 @@
 #include <iostream>
-#include "../../../api/generated/binsafe.hpp"
+#include "../../../api/binsafe.hpp"
+
+BINSAFE void hello()
+{
+    std::cout << "Hello, world!" << std::endl;
+}
 
 int main()
 {
-    BINSAFE_BEGIN();
-    std::cout << "Hello, world!" << std::endl;
+    hello();
     return 0;
-    BINSAFE_END();
 }
