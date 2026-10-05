@@ -1,6 +1,5 @@
 use iced_x86::Instruction;
 
-
 use crate::vm::encoders::{trailing_zeros::TrailingZeros, Encode};
 use crate::vm::lifters::arithmetic::{self, Tail};
 

@@ -30,11 +30,19 @@ impl Encode for Timestamp {
         self
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::Timestamp)]
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::Timestamp)
     }
 
-    fn depth(&self) -> i32 {
+    fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {
+        vec![]
+    }
+
+    fn consumes(&self) -> i32 {
+        0
+    }
+
+    fn produces(&self) -> i32 {
         2
     }
 }

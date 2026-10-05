@@ -46,6 +46,7 @@ pub fn build(rt: &mut Runtime) {
             rt.asm.jge(convert_loop).unwrap();
         }
     }
+
     // mov [rax], 0x0
     rt.asm.mov(byte_ptr(rax), 0x0).unwrap();
     // ret

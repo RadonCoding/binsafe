@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{self, VMCondition, VMLogic, VMWidth};
+use crate::vm::bytecode::{self, VMCondition, VMLogic, VMOp, VMWidth};
 use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_immediate::LoadImmediate;
@@ -89,22 +89,18 @@ impl Block {
         for i in index + 1..self.body.len() {
             let operation = &self.body[i];
 
+            let consumes = operation.consumes() as usize;
+
             if operation.as_any().downcast_ref::<Jcc>().is_some() {
-                if stack.len() == 1 {
-                    return Some((stack[0], i));
-                }
+                return Some((stack[stack.len() - consumes], i));
             }
 
-            let delta = operation.depth();
+            for _ in 0..consumes {
+                stack.pop();
+            }
 
-            if delta > 0 {
-                for _ in 0..delta {
-                    stack.push(i);
-                }
-            } else {
-                for _ in 0..(-delta) {
-                    stack.pop();
-                }
+            for _ in 0..operation.produces() {
+                stack.push(i);
             }
         }
 
@@ -119,6 +115,10 @@ impl Encode for Block {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn op(&self) -> Option<VMOp> {
+        None
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
@@ -137,8 +137,12 @@ impl Encode for Block {
         self.body.iter().flat_map(|op| op.writes()).collect()
     }
 
-    fn depth(&self) -> i32 {
-        self.body.iter().map(|op| op.depth()).sum()
+    fn consumes(&self) -> i32 {
+        self.body.iter().map(|op| op.consumes()).sum()
+    }
+
+    fn produces(&self) -> i32 {
+        self.body.iter().map(|op| op.produces()).sum()
     }
 
     fn children_ref(&self) -> Option<&[Box<dyn Encode>]> {

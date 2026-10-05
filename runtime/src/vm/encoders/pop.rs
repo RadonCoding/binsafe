@@ -30,8 +30,12 @@ impl Encode for Pop {
         self
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::Pop)]
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::Pop)
+    }
+
+    fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {
+        vec![]
     }
 
     fn reads(&self) -> Vec<Effect> {
@@ -42,7 +46,11 @@ impl Encode for Pop {
         vec![Effect::Register(VMReg::Rsp)]
     }
 
-    fn depth(&self) -> i32 {
+    fn consumes(&self) -> i32 {
+        0
+    }
+
+    fn produces(&self) -> i32 {
         1
     }
 }

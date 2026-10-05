@@ -28,22 +28,22 @@ pub fn build(rt: &mut Runtime) {
         r8,
         &mut epilogue,
         Some(Box::new(|rt| {
+            // load ymm0
+            rt.asm.vmovups(ymm0, ptr(rax + r9)).unwrap();
             // load r8
             scratch::load(rt, r12, r8);
-            // vpxor ymm0, ymm0, ymm0
-            rt.asm.vpxor(xmm0, xmm0, xmm0).unwrap();
-            // vmovq xmm0, r8
-            rt.asm.vmovq(xmm0, r8).unwrap();
+            // movq xmm0, r8
+            rt.asm.movq(xmm0, r8).unwrap();
             // vmovups [rax + r9], ymm0
             rt.asm.vmovups(ptr(rax + r9), ymm0).unwrap();
         })),
         Some(Box::new(|rt| {
+            // load ymm0
+            rt.asm.vmovups(ymm0, ptr(rax + r9)).unwrap();
             // load r8
             scratch::load(rt, r12, r8);
-            // vpxor ymm0, ymm0, ymm0
-            rt.asm.vpxor(xmm0, xmm0, xmm0).unwrap();
-            // vmovd xmm0, r8d
-            rt.asm.vmovd(xmm0, r8d).unwrap();
+            // movd xmm0, r8d
+            rt.asm.movd(xmm0, r8d).unwrap();
             // vmovups [rax + r9], ymm0
             rt.asm.vmovups(ptr(rax + r9), ymm0).unwrap();
         })),

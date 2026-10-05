@@ -17,15 +17,23 @@ impl Encode for LoadMemory {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::LoadMemory)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(VMOp::LoadMemory), mapper.index(self.width)]
+        vec![mapper.index(self.width)]
     }
 
     fn reads(&self) -> Vec<super::Effect> {
         vec![Effect::Memory]
     }
 
-    fn depth(&self) -> i32 {
-        self.width.slots() - 1
+    fn consumes(&self) -> i32 {
+        1
+    }
+
+    fn produces(&self) -> i32 {
+        1
     }
 }

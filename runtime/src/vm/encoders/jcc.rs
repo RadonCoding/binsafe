@@ -52,12 +52,12 @@ impl Encode for Jcc {
         self
     }
 
+    fn op(&self) -> Option<VMOp> {
+        Some(VMOp::Jcc)
+    }
+
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        let mut bytes = vec![
-            mapper.index(VMOp::Jcc),
-            mapper.index(self.logic),
-            self.conditions.len() as u8,
-        ];
+        let mut bytes = vec![mapper.index(self.logic), self.conditions.len() as u8];
 
         for condition in &self.conditions {
             bytes.extend_from_slice(&condition.encode(mapper));
@@ -80,8 +80,12 @@ impl Encode for Jcc {
         }
     }
 
-    fn depth(&self) -> i32 {
-        -1
+    fn consumes(&self) -> i32 {
+        1
+    }
+
+    fn produces(&self) -> i32 {
+        0
     }
 
     fn is_branch(&self) -> bool {

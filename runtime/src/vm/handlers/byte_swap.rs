@@ -1,50 +1,121 @@
-use iced_x86::code_asm::{al, eax, r12, r8, r8d, rax, rcx};
-
 use crate::{
     runtime::Runtime,
     vm::{
         bytecode::VMWidth,
-        utils::{self, scratch},
+        handlers::semantic::{self, Effect, Expression, Flags, Operand, Operation},
     },
 };
 
-// unsigned char* (unsigned char*)
 pub fn build(rt: &mut Runtime) {
-    let mut wide = rt.asm.create_label();
-    let mut epilogue = rt.asm.create_label();
-
-    // eax -> width
-    utils::bytecode::read_byte_zx(rt, rcx, eax);
-
-    // load r8
-    scratch::load(rt, r12, r8);
-
-    // cmp al, ...
-    rt.asm
-        .cmp(al, rt.mapper.index(VMWidth::Lower64) as i32)
-        .unwrap();
-    // je ...
-    rt.asm.je(wide).unwrap();
-
-    // bswap r8d
-    rt.asm.bswap(r8d).unwrap();
-    // jmp ...
-    rt.asm.jmp(epilogue).unwrap();
-
-    rt.asm.set_label(&mut wide).unwrap();
-    {
-        // bswap r8
-        rt.asm.bswap(r8).unwrap();
-    }
-
-    rt.asm.set_label(&mut epilogue).unwrap();
-    {
-        // store r8
-        scratch::store(rt, r12, r8);
-
-        // mov rax, rcx
-        rt.asm.mov(rax, rcx).unwrap();
-        // ret
-        rt.asm.ret().unwrap();
-    }
+    semantic::compiler::compile(
+        rt,
+        &Operation {
+            effects: vec![
+                Effect::Assign(Expression::BitAnd(
+                    Box::new(Expression::BitShr(
+                        Box::new(Expression::Operand(Operand::Input(0))),
+                        Box::new(Expression::Sub(
+                            Box::new(Expression::BitSize),
+                            Box::new(Expression::Constant(8)),
+                        )),
+                    )),
+                    Box::new(Expression::Constant(0xFF)),
+                )),
+                Effect::Or(
+                    Expression::Operand(Operand::Output(0)),
+                    Expression::BitAnd(
+                        Box::new(Expression::BitShr(
+                            Box::new(Expression::Operand(Operand::Input(0))),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(24)),
+                            )),
+                        )),
+                        Box::new(Expression::Constant(0xFF00)),
+                    ),
+                ),
+                Effect::Or(
+                    Expression::Operand(Operand::Output(0)),
+                    Expression::BitAnd(
+                        Box::new(Expression::BitShr(
+                            Box::new(Expression::Operand(Operand::Input(0))),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(40)),
+                            )),
+                        )),
+                        Box::new(Expression::Constant(0xFF_0000)),
+                    ),
+                ),
+                Effect::Or(
+                    Expression::Operand(Operand::Output(0)),
+                    Expression::BitAnd(
+                        Box::new(Expression::BitShr(
+                            Box::new(Expression::Operand(Operand::Input(0))),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(56)),
+                            )),
+                        )),
+                        Box::new(Expression::Constant(0xFF_000000)),
+                    ),
+                ),
+                Effect::Or(
+                    Expression::Operand(Operand::Output(0)),
+                    Expression::BitAnd(
+                        Box::new(Expression::BitShl(
+                            Box::new(Expression::Operand(Operand::Input(0))),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(56)),
+                            )),
+                        )),
+                        Box::new(Expression::ByteMask(3)),
+                    ),
+                ),
+                Effect::Or(
+                    Expression::Operand(Operand::Output(0)),
+                    Expression::BitAnd(
+                        Box::new(Expression::BitShl(
+                            Box::new(Expression::Operand(Operand::Input(0))),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(40)),
+                            )),
+                        )),
+                        Box::new(Expression::ByteMask(2)),
+                    ),
+                ),
+                Effect::Or(
+                    Expression::Operand(Operand::Output(0)),
+                    Expression::BitAnd(
+                        Box::new(Expression::BitShl(
+                            Box::new(Expression::Operand(Operand::Input(0))),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(24)),
+                            )),
+                        )),
+                        Box::new(Expression::ByteMask(1)),
+                    ),
+                ),
+                Effect::Or(
+                    Expression::Operand(Operand::Output(0)),
+                    Expression::BitAnd(
+                        Box::new(Expression::BitShl(
+                            Box::new(Expression::Operand(Operand::Input(0))),
+                            Box::new(Expression::Sub(
+                                Box::new(Expression::BitSize),
+                                Box::new(Expression::Constant(8)),
+                            )),
+                        )),
+                        Box::new(Expression::ByteMask(0)),
+                    ),
+                ),
+            ],
+            flags: Flags::Always(vec![]),
+            stores: None,
+            widths: &[VMWidth::Lower64, VMWidth::Lower32],
+        },
+    );
 }

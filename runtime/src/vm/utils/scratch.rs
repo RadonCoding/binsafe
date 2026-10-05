@@ -2,7 +2,7 @@ use crate::{
     runtime::Runtime,
     vm::{bytecode::VMReg, utils::vreg},
 };
-use iced_x86::code_asm::{ptr, r10, AsmRegister64, AsmRegisterXmm, AsmRegisterYmm};
+use iced_x86::code_asm::{ptr, r10, AsmRegister32, AsmRegister64, AsmRegisterXmm, AsmRegisterYmm};
 
 pub fn store(rt: &mut Runtime, base: AsmRegister64, src: AsmRegister64) {
     // sub [...], 0x8
@@ -14,6 +14,15 @@ pub fn store(rt: &mut Runtime, base: AsmRegister64, src: AsmRegister64) {
 }
 
 pub fn load(rt: &mut Runtime, base: AsmRegister64, dst: AsmRegister64) {
+    // add [...], 0x8
+    vreg::add_imm(rt, base, 0x8, VMReg::VScratch);
+    // mov r10, [...]
+    vreg::load_reg(rt, base, VMReg::VScratch, r10);
+    // mov ..., [r10 - 0x8]
+    rt.asm.mov(dst, ptr(r10 - 0x8)).unwrap();
+}
+
+pub fn load_32(rt: &mut Runtime, base: AsmRegister64, dst: AsmRegister32) {
     // add [...], 0x8
     vreg::add_imm(rt, base, 0x8, VMReg::VScratch);
     // mov r10, [...]

@@ -1,8 +1,9 @@
 use iced_x86::code_asm::{AsmRegister64, CodeLabel};
 
-use crate::{runtime::Runtime, vm::bytecode::VMWidth};
-
-type Handler = Box<dyn FnOnce(&mut Runtime)>;
+use crate::{
+    runtime::{Handler, Runtime},
+    vm::bytecode::VMWidth,
+};
 
 pub fn dispatch(
     rt: &mut Runtime,
@@ -24,15 +25,12 @@ pub fn dispatch(
     let both8 = lower8.is_some() && higher8.is_some();
     let merged8 = lower8.is_some() != higher8.is_some();
 
-    let mut cases = Vec::new();
-    let mut emits = Vec::new();
+    let mut handlers = Vec::new();
 
     macro_rules! case {
         ($opt:expr, $tag:expr) => {
             if let Some(f) = $opt.take() {
-                let label = rt.asm.create_label();
-                cases.push((rt.mapper.index($tag) as u8, label));
-                emits.push((label, f));
+                handlers.push((vec![rt.mapper.index($tag) as u8], f));
             }
         };
     }
@@ -41,10 +39,13 @@ pub fn dispatch(
         case!(lower8, VMWidth::Lower8);
         case!(higher8, VMWidth::Higher8);
     } else if merged8 {
-        let label = rt.asm.create_label();
-        cases.push((rt.mapper.index(VMWidth::Lower8) as u8, label));
-        cases.push((rt.mapper.index(VMWidth::Higher8) as u8, label));
-        emits.push((label, lower8.take().or_else(|| higher8.take()).unwrap()));
+        handlers.push((
+            vec![
+                rt.mapper.index(VMWidth::Lower8) as u8,
+                rt.mapper.index(VMWidth::Higher8) as u8,
+            ],
+            lower8.take().or_else(|| higher8.take()).unwrap(),
+        ));
     }
 
     case!(lower16, VMWidth::Lower16);
@@ -58,12 +59,5 @@ pub fn dispatch(
     case!(lower128, VMWidth::Lower128);
     case!(lower256, VMWidth::Lower256);
 
-    rt.jumps(width, cases);
-
-    for (mut label, f) in emits {
-        rt.asm.set_label(&mut label).unwrap();
-        f(rt);
-        // jmp ...
-        rt.asm.jmp(*epilogue).unwrap();
-    }
+    rt.switch(width, *epilogue, handlers);
 }

@@ -1,5 +1,6 @@
 use iced_x86::code_asm::{
-    al, byte_ptr, cl, eax, ecx, ptr, qword_ptr, r12, r13, r14, r15, rax, rbx, rcx, rdx, word_ptr,
+    al, byte_ptr, cl, eax, ecx, edx, ptr, qword_ptr, r10, r10d, r11, r11d, r12, r13, r14, r15, r8,
+    r8d, r9d, rax, rbx, rcx, rdx, word_ptr,
 };
 
 use crate::{
@@ -8,6 +9,7 @@ use crate::{
         bytecode::VMReg,
         utils::{self},
     },
+    VM_CIPHER_ROUNDS,
 };
 
 // void (bool)
@@ -26,8 +28,9 @@ pub fn build(rt: &mut Runtime) {
     let mut derive_key = rt.asm.create_label();
     let mut start_key = rt.asm.create_label();
     let mut save_key = rt.asm.create_label();
+    let mut stream = rt.asm.create_label();
     let mut crypt_loop = rt.asm.create_label();
-    let mut continue_loop = rt.asm.create_label();
+    let mut round_loop = rt.asm.create_label();
     let mut unlock = rt.asm.create_label();
     let mut finish_encrypt = rt.asm.create_label();
     let mut finish_decrypt = rt.asm.create_label();
@@ -119,7 +122,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.mov(rcx, ptr(0x1480 + rcx * 8).gs()).unwrap();
 
         // jmp ...
-        rt.asm.jmp(crypt_loop).unwrap();
+        rt.asm.jmp(stream).unwrap();
     }
 
     // DECRYPTION
@@ -169,7 +172,7 @@ pub fn build(rt: &mut Runtime) {
         {
             // lea rax, [...]
             rt.asm
-                .lea(rax, ptr(rt.data_labels[&DataDef::VmCode]))
+                .lea(rax, ptr(rt.data_labels[&DataDef::VmCodeStart]))
                 .unwrap();
             // movsxd rcx, [rax]
             rt.asm.movsxd(rcx, ptr(rax)).unwrap();
@@ -213,7 +216,7 @@ pub fn build(rt: &mut Runtime) {
         {
             // lea rcx, [...]
             rt.asm
-                .lea(rcx, ptr(rt.data_labels[&DataDef::VmCode]))
+                .lea(rcx, ptr(rt.data_labels[&DataDef::VmAttestation]))
                 .unwrap();
             // movsxd rax, [rcx]
             rt.asm.movsxd(rax, ptr(rcx)).unwrap();
@@ -242,10 +245,21 @@ pub fn build(rt: &mut Runtime) {
 
         rt.asm.set_label(&mut start_key).unwrap();
         {
-            // mov rcx, [...]
+            // lea rcx, [...]
             rt.asm
-                .mov(rcx, ptr(rt.data_labels[&DataDef::VmKeySeed]))
+                .lea(rcx, ptr(rt.data_labels[&DataDef::VmAttestation]))
                 .unwrap();
+            // movsxd rax, [rcx]
+            rt.asm.movsxd(rax, ptr(rcx)).unwrap();
+            // add rcx, rax
+            rt.asm.add(rcx, rax).unwrap();
+            // mov rdx, r14
+            rt.asm.mov(rdx, r14).unwrap();
+            // call ...
+            rt.asm.call(rt.function_labels[&FnDef::VmInvoke]).unwrap();
+
+            // mov rcx, rax
+            rt.asm.mov(rcx, rax).unwrap();
         }
 
         rt.asm.set_label(&mut save_key).unwrap();
@@ -259,6 +273,12 @@ pub fn build(rt: &mut Runtime) {
         }
     }
 
+    rt.asm.set_label(&mut stream).unwrap();
+    {
+        // xor r8, r8
+        rt.asm.xor(r8, r8).unwrap();
+    }
+
     rt.asm.set_label(&mut crypt_loop).unwrap();
     {
         // cmp rbx, r15
@@ -266,42 +286,69 @@ pub fn build(rt: &mut Runtime) {
         // je ...
         rt.asm.je(unlock).unwrap();
 
-        // mov rax, [rbx]
-        rt.asm.mov(rax, ptr(rbx)).unwrap();
-        // xor [rbx], rcx
-        rt.asm.xor(ptr(rbx), rcx).unwrap();
+        // SPECK-64/128 keystream of the counter, keyed by the block key:
+        // mov r9d, ecx
+        rt.asm.mov(r9d, ecx).unwrap();
+        // mov r10, rcx
+        rt.asm.mov(r10, rcx).unwrap();
+        // shr r10, 0x20
+        rt.asm.shr(r10, 0x20).unwrap();
+        // mov r11, r8
+        rt.asm.mov(r11, r8).unwrap();
+        // shr r11, 0x20
+        rt.asm.shr(r11, 0x20).unwrap();
+        // mov edx, r8d
+        rt.asm.mov(edx, r8d).unwrap();
+        // xor eax, eax
+        rt.asm.xor(eax, eax).unwrap();
 
-        // test r13, r13
-        rt.asm.test(r13, r13).unwrap();
-        // jnz ...
-        rt.asm.jnz(continue_loop).unwrap();
-
-        // mov rax, [rbx]
-        rt.asm.mov(rax, ptr(rbx)).unwrap();
-
-        rt.asm.set_label(&mut continue_loop).unwrap();
+        rt.asm.set_label(&mut round_loop).unwrap();
         {
-            // xor rcx, rax
-            rt.asm.xor(rcx, rax).unwrap();
+            // ror r11d, 0x8
+            rt.asm.ror(r11d, 8u32).unwrap();
+            // add r11d, edx
+            rt.asm.add(r11d, edx).unwrap();
+            // xor r11d, r9d
+            rt.asm.xor(r11d, r9d).unwrap();
+            // rol edx, 0x3
+            rt.asm.rol(edx, 3u32).unwrap();
+            // xor edx, r11d
+            rt.asm.xor(edx, r11d).unwrap();
 
-            // mov rax, [...]
-            rt.asm
-                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyMul]))
-                .unwrap();
-            // imul rcx, rax
-            rt.asm.imul_2(rcx, rax).unwrap();
-            // mov rax, [...]
-            rt.asm
-                .mov(rax, ptr(rt.data_labels[&DataDef::VmKeyAdd]))
-                .unwrap();
-            // add rcx, rax
-            rt.asm.add(rcx, rax).unwrap();
+            // ror r10d, 0x8
+            rt.asm.ror(r10d, 8u32).unwrap();
+            // add r10d, r9d
+            rt.asm.add(r10d, r9d).unwrap();
+            // xor r10d, eax
+            rt.asm.xor(r10d, eax).unwrap();
+            // rol r9d, 0x3
+            rt.asm.rol(r9d, 3u32).unwrap();
+            // xor r9d, r10d
+            rt.asm.xor(r9d, r10d).unwrap();
 
-            // add rbx, 0x8
-            rt.asm.add(rbx, 0x8).unwrap();
-            // jmp ...
-            rt.asm.jmp(crypt_loop).unwrap();
+            // inc eax
+            rt.asm.inc(eax).unwrap();
+            // cmp eax, ...
+            rt.asm.cmp(eax, VM_CIPHER_ROUNDS as i32).unwrap();
+            // jb ...
+            rt.asm.jb(round_loop).unwrap();
         }
+
+        // shl r11, 0x20
+        rt.asm.shl(r11, 0x20).unwrap();
+        // mov eax, edx
+        rt.asm.mov(eax, edx).unwrap();
+        // or r11, rax
+        rt.asm.or(r11, rax).unwrap();
+        // xor [rbx], r11
+        rt.asm.xor(ptr(rbx), r11).unwrap();
+
+        // add rbx, 0x8
+        rt.asm.add(rbx, 0x8).unwrap();
+        // inc r8
+        rt.asm.inc(r8).unwrap();
+        // jmp ...
+        rt.asm.jmp(crypt_loop).unwrap();
     }
 
     rt.asm.set_label(&mut unlock).unwrap();
