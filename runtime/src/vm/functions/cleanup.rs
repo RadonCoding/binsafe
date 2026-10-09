@@ -19,7 +19,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r12, ptr(0x1480 + r12 * 8).gs()).unwrap();
 
     // mov rcx, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VShadow, rcx);
+    utils::register::load(rt, r12, rcx, VMReg::VShadow);
     // test rcx, rcx
     rt.asm.test(rcx, rcx).unwrap();
     // jz ...

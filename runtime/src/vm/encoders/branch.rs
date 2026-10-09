@@ -1,17 +1,18 @@
 use std::any::Any;
 use std::fmt::Debug;
+use std::slice;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{Flag, VMCondition, VMLogic, VMOp, VMReg};
+use crate::vm::bytecode::{Flag, VMCondition, VMLogic, VMCode, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]
-pub struct Jcc {
+pub struct Branch {
     pub logic: VMLogic,
     pub conditions: Vec<VMCondition>,
 }
 
-impl Jcc {
+impl Branch {
     pub fn jump() -> Self {
         Self::always(VMLogic::JAND)
     }
@@ -43,7 +44,7 @@ impl Jcc {
     }
 }
 
-impl Encode for Jcc {
+impl Encode for Branch {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -52,8 +53,8 @@ impl Encode for Jcc {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::Jcc)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::Branch)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
@@ -90,5 +91,12 @@ impl Encode for Jcc {
 
     fn is_branch(&self) -> bool {
         true
+    }
+
+    fn seal(&mut self, _mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
+        for condition in &mut self.conditions {
+            transform(slice::from_mut(&mut condition.lhs), 0);
+            transform(slice::from_mut(&mut condition.rhs), 0);
+        }
     }
 }

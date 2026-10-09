@@ -1,17 +1,17 @@
-use iced_x86::code_asm::{r12, rax, rcx};
-
 use crate::{
     runtime::Runtime,
-    vm::{bytecode::VMReg, utils::vreg},
+    vm::handlers::semantic::{self, Effect, Expression, Flags, Operand, Operation},
 };
 
-// unsigned char* (unsigned char*)
-pub fn build(rt: &mut Runtime) {
-    // add [r12 + ...], 0x8
-    vreg::add_imm(rt, r12, 0x8, VMReg::VScratch);
+pub fn operation() -> Operation {
+    Operation {
+        effects: vec![Effect::Drop(Expression::Operand(Operand::Input(0)))],
+        flags: Flags::Never,
+        stores: None,
+        widths: &[],
+    }
+}
 
-    // mov rax, rcx
-    rt.asm.mov(rax, rcx).unwrap();
-    // ret
-    rt.asm.ret().unwrap();
+pub fn build(rt: &mut Runtime) {
+    semantic::compiler::compile(rt, &operation());
 }

@@ -2,221 +2,196 @@ use std::i32;
 
 use crate::engine::Engine;
 use crate::protections::virtualization::{crypt, language::*};
-use rand::Rng;
-use runtime::runtime::DataDef;
+use runtime::runtime::{DataDef, ImportDef};
 use runtime::vm::bytecode::{Flag, VMCondition, VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::Encode;
 
 mod anti_debug;
+mod anti_emulation;
 mod anti_tamper;
 #[cfg(debug_assertions)]
 mod debug;
+mod debug_registers;
 
-// Masks lower 32 bits of timestamp, creating a ~1s window on a 3.5 GHz CPU
-const WINDOW: u64 = 0x20;
+// Masks the timestamp down to a ~1s tick on a 3.5 GHz CPU
+const TICK: u64 = 0x20;
 
-const MINIMUM_CYCLES: u64 = 1_000_000;
-const MAXIMUM_CYCLES: u64 = 100_000_000;
+const STALE: u64 = 1u64 << TICK;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Operation {
-    Add,
-    Sub,
-    Xor,
-}
-
-impl Operation {
-    pub fn random(rng: &mut impl Rng) -> Self {
-        match rng.gen_range(0..3) {
-            0 => Operation::Add,
-            1 => Operation::Sub,
-            _ => Operation::Xor,
-        }
-    }
-
-    fn inverse(self) -> Self {
-        match self {
-            Operation::Add => Operation::Sub,
-            Operation::Sub => Operation::Add,
-            Operation::Xor => Operation::Xor,
-        }
-    }
-}
-
-pub fn generate(engine: &mut Engine, key: u64) -> Vec<Vec<Box<dyn Encode>>> {
-    let mut rng = rand::thread_rng();
-
-    let mut blocks = Vec::<Vec<Box<dyn Encode>>>::new();
-
-    let mut block = Vec::<Box<dyn Encode>>::new();
-
-    let mut vp0 = 0;
-    let mut vp1 = 0;
-
-    let mix0 = Operation::random(&mut rng);
-    let mix1 = Operation::random(&mut rng);
-
-    block.extend(timestamp());
-    block.extend(mask(None, !((1u64 << WINDOW) - 1)));
-    block.extend(register_lcg(engine, None));
-    block.extend(store_register(VMReg::Vt0));
-
-    block.extend(sub(Some(VMReg::Vt0), Some(VMReg::Vt1)));
-
-    block.extend(store_register(VMReg::Rax));
-
-    block.extend(skip(
-        engine,
-        VMReg::Rax,
-        VMCondition::cmp(Flag::Zero, 1),
-        |engine| {
-            let mut b = Vec::<Box<dyn Encode>>::new();
-
-            b.extend(timestamp());
-
-            b.extend(anti_debug::generate(engine, &mut rng, &mut vp0));
-            b.extend(anti_tamper::generate(engine, &mut rng, &mut vp1));
-
-            b.extend(store_register(VMReg::Rax));
-
-            b.extend(timestamp());
-
-            b.extend(sub(Some(VMReg::Rax), None));
-
-            b.extend(store_register(VMReg::Rax));
-
-            b.extend(load_register(VMReg::Rax));
-            b.extend(immediate(MINIMUM_CYCLES));
-            b.extend(sub(None, None));
-            b.extend(discard());
-
-            b.extend(flag(Flag::Carry));
-
-            b.extend(store_register(VMReg::Rcx));
-
-            b.extend(accumulate_immediate(
-                &mut rng,
-                VMReg::Vp0,
-                Some(VMReg::Rcx),
-                0,
-                &mut vp0,
-            ));
-            b.extend(accumulate_immediate(
-                &mut rng,
-                VMReg::Vp1,
-                Some(VMReg::Rcx),
-                0,
-                &mut vp1,
-            ));
-
-            b.extend(immediate(MAXIMUM_CYCLES));
-            b.extend(load_register(VMReg::Rax));
-            b.extend(sub(None, None));
-            b.extend(discard());
-
-            b.extend(flag(Flag::Carry));
-
-            b.extend(store_register(VMReg::Rcx));
-
-            b.extend(accumulate_immediate(
-                &mut rng,
-                VMReg::Vp0,
-                Some(VMReg::Rcx),
-                0,
-                &mut vp0,
-            ));
-            b.extend(accumulate_immediate(
-                &mut rng,
-                VMReg::Vp1,
-                Some(VMReg::Rcx),
-                0,
-                &mut vp1,
-            ));
-
-            b.extend(register_operation(mix0, Some(VMReg::Vp0), Some(VMReg::Vt0)));
-            b.extend(register_lcg(engine, None));
-            b.extend(store_register(VMReg::Vp0));
-
-            b.extend(register_operation(mix1, Some(VMReg::Vp1), Some(VMReg::Vt0)));
-            b.extend(register_lcg(engine, None));
-            b.extend(store_register(VMReg::Vp1));
-
-            b.extend(copy(VMReg::Vt0, VMReg::Vt1));
-
-            b
-        },
-    ));
-
-    block.extend(correct(engine, &mut rng, key, vp0, vp1, mix0, mix1));
-
-    blocks.push(block);
-
-    blocks
-}
-
-fn correct(
-    engine: &mut Engine,
-    rng: &mut impl Rng,
-    key: u64,
-    vp0: u64,
-    vp1: u64,
-    mix0: Operation,
-    mix1: Operation,
-) -> Vec<Box<dyn Encode>> {
+pub fn service(engine: &mut Engine, expected: &mut u64) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
-    instructions.extend(load_absolute(engine, DataDef::VmCodeEnd, VMReg::Rax));
-    instructions.extend(load_absolute(engine, DataDef::VmAttestation, VMReg::Rcx));
-    instructions.extend(load_absolute(engine, DataDef::VmCodeStart, VMReg::R8));
+    instructions.extend(anti_debug::generate(engine, expected));
+    instructions.extend(anti_emulation::generate(engine, expected));
+    instructions.extend(debug_registers::generate(engine, expected));
+    instructions.extend(anti_tamper::generate(engine, expected));
 
+    instructions.extend(hash(engine));
+
+    instructions.extend(publish(engine));
+
+    instructions.extend(delay(engine));
+
+    forever(instructions)
+}
+
+pub fn program(engine: &mut Engine, key: u64, expected: u64) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+
+    instructions.extend(unlock(engine));
+
+    instructions.extend(correct(engine, key, expected));
+
+    instructions
+}
+
+fn delay(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+
+    instructions.extend(reserve(0x30));
+
+    instructions.extend(import(engine, ImportDef::NtDelayExecution));
+    // Alertable -> RCX
+    instructions.extend(set_register(VMReg::Rcx, 0));
+    // Interval -> RDX
+    instructions.extend(compute_memory(
+        VMReg::Rsp,
+        VMReg::None,
+        1,
+        0x20,
+        VMSeg::None,
+    ));
+    instructions.extend(store_register(VMReg::Rdx));
+    // Interval -> [RSP + ...]
+    instructions.extend(store_immediate(
+        VMReg::Rsp,
+        VMReg::None,
+        1,
+        0x20,
+        (-10000i64) as u64,
+    ));
+    // NtDelayExecution
+    instructions.extend(invoke(VMReg::Rax));
+
+    instructions.extend(release(0x30));
+
+    instructions
+}
+
+fn publish(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+
+    // Tick the current timestamp into RAX and write it as the freshness stamp:
+    instructions.extend(timestamp());
+    instructions.extend(mask(None, !((1u64 << TICK) - 1)));
+    instructions.extend(store_register(VMReg::Rax));
+
+    instructions.extend(load_register(VMReg::Rax));
+    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 0));
+
+    // Derive the keystream from the tick so the stored value is time-locked:
+    instructions.extend(load_register(VMReg::Rax));
+    instructions.extend(load_data(
+        engine,
+        DataDef::VmKeyInitializer,
+        VMWidth::Lower64,
+    ));
+    instructions.extend(xor(None, None));
+    instructions.extend(register_lcg(engine, None));
+    instructions.extend(store_register(VMReg::Rcx));
+
+    // Store the fingerprint XORed with the keystream:
+    instructions.extend(load_register(VMReg::Vp0));
+    instructions.extend(load_register(VMReg::Rcx));
+    instructions.extend(xor(None, None));
+    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 8));
+
+    instructions
+}
+
+fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+
+    // Load the value published by the service:
+    instructions.extend(load_data_at(
+        engine,
+        DataDef::VmServiceBox,
+        0,
+        VMWidth::Lower64,
+    ));
+    instructions.extend(store_register(VMReg::Rax));
+
+    // Derive the keystream from the stored tick:
+    instructions.extend(load_register(VMReg::Rax));
+    instructions.extend(load_data(
+        engine,
+        DataDef::VmKeyInitializer,
+        VMWidth::Lower64,
+    ));
+    instructions.extend(xor(None, None));
+    instructions.extend(register_lcg(engine, None));
+    instructions.extend(store_register(VMReg::Rcx));
+
+    // Recover the fingerprint into Vp0:
+    instructions.extend(load_data_at(
+        engine,
+        DataDef::VmServiceBox,
+        8,
+        VMWidth::Lower64,
+    ));
+    instructions.extend(load_register(VMReg::Rcx));
+    instructions.extend(xor(None, None));
+    instructions.extend(store_register(VMReg::Vp0));
+
+    // Measure how many ticks old the fingerprint is:
+    instructions.extend(timestamp());
+    instructions.extend(mask(None, !((1u64 << TICK) - 1)));
+    instructions.extend(load_register(VMReg::Rax));
+    instructions.extend(sub(None, None));
+    instructions.extend(store_register(VMReg::Rdx));
+
+    // Store CF into RDX (CF=0 if the service is not stale)
+    instructions.extend(immediate(STALE));
+    instructions.extend(load_register(VMReg::Rdx));
+    instructions.extend(sub(None, None));
+    instructions.extend(discard());
+    instructions.extend(flag(Flag::Carry));
+    instructions.extend(store_register(VMReg::Rdx));
+
+    // Flip the bits of RDX in-case it's non-zero to increase effectiveness:
+    instructions.extend(immediate(0));
+    instructions.extend(load_register(VMReg::Rdx));
+    instructions.extend(sub(None, None));
+    instructions.extend(store_register(VMReg::Rdx));
+
+    // XOR Vp0 with Rdx to corrupt it in-case RDX was non-zero:
+    instructions.extend(load_register(VMReg::Vp0));
+    instructions.extend(load_register(VMReg::Rdx));
+    instructions.extend(xor(None, None));
+    instructions.extend(store_register(VMReg::Vp0));
+
+    instructions
+}
+
+fn correct(engine: &mut Engine, key: u64, expected: u64) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+
+    let correction = expected ^ key;
+
+    // Offset of the block being decrypted (zero for the first block):
+    instructions.extend(load_absolute(engine, DataDef::VmCodeStart, VMReg::R8));
     instructions.extend(sub(Some(VMReg::Vg0), Some(VMReg::R8)));
     instructions.extend(store_register(VMReg::Rdx));
 
+    // First block chains off the initializer:
     instructions.extend(skip(
         engine,
         VMReg::Rdx,
         VMCondition::cmp(Flag::Zero, 0),
-        |engine| {
-            let mut b = Vec::new();
-
-            b.extend(sub(Some(VMReg::Rax), Some(VMReg::Rcx)));
-            b.extend(immediate((crypt::HEADER_SIZE + crypt::TRAILER_SIZE) as u64));
-            b.extend(sub(None, None));
-            b.extend(store_register(VMReg::R9));
-
-            b.extend(set_register(VMReg::R10, 0));
-
-            b.extend(foreach(
-                engine,
-                VMReg::R8,
-                Bound::Register(VMReg::R9),
-                8,
-                |engine| {
-                    let mut outer = Vec::new();
-
-                    outer.extend(load_register(VMReg::R10));
-                    outer.extend(load_memory(
-                        VMReg::Rcx,
-                        VMReg::R8,
-                        1,
-                        crypt::HEADER_SIZE as i32,
-                        VMSeg::None,
-                        VMWidth::Lower64,
-                    ));
-                    outer.extend(xor(None, None));
-                    outer.extend(register_lcg(engine, None));
-                    outer.extend(store_register(VMReg::R10));
-
-                    outer
-                },
-            ));
-
-            b.extend(load_register(VMReg::R10));
-
-            b
-        },
+        |engine| immediate(engine.rt.keys.initializer),
     ));
 
+    // Every other block chains off the previous block's trailing qword:
     instructions.extend(skip(
         engine,
         VMReg::Rdx,
@@ -233,25 +208,104 @@ fn correct(
         },
     ));
 
-    let operation = Operation::random(rng);
-    let combined = combine_operation(operation, vp0, vp1);
-    let correction = combined ^ key;
-
-    instructions.extend(register_lcg_inverse(engine, Some(VMReg::Vp0)));
-    instructions.extend(register_operation(mix0.inverse(), None, Some(VMReg::Vt1)));
-
-    instructions.extend(register_lcg_inverse(engine, Some(VMReg::Vp1)));
-    instructions.extend(register_operation(mix1.inverse(), None, Some(VMReg::Vt1)));
-
-    instructions.extend(register_operation(operation, None, None));
-    instructions.extend(immediate(correction));
+    instructions.extend(load_register(VMReg::Vp0));
     instructions.extend(xor(None, None));
-
+    instructions.extend(immediate(correction));
     instructions.extend(xor(None, None));
 
     instructions.extend(register_lcg(engine, None));
 
     instructions.extend(store_register(VMReg::Vg0));
+
+    instructions
+}
+
+fn hash(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+
+    instructions.extend(load_absolute(engine, DataDef::VmCodeEnd, VMReg::Rax));
+    instructions.extend(load_absolute(
+        engine,
+        DataDef::VmAttestationProgram,
+        VMReg::Rcx,
+    ));
+
+    instructions.extend(sub(Some(VMReg::Rax), Some(VMReg::Rcx)));
+    instructions.extend(immediate((crypt::HEADER_SIZE + crypt::TRAILER_SIZE) as u64));
+    instructions.extend(sub(None, None));
+    instructions.extend(store_register(VMReg::R9));
+
+    instructions.extend(mask(Some(VMReg::R9), size_of::<u64>() as u64 - 1));
+    instructions.extend(store_register(VMReg::R8));
+
+    instructions.extend(sub(Some(VMReg::R9), Some(VMReg::R8)));
+    instructions.extend(store_register(VMReg::R9));
+
+    instructions.extend(set_register(VMReg::R10, 0));
+
+    instructions.extend(foreach(
+        engine,
+        VMReg::Rax,
+        Bound::Register(VMReg::R9),
+        8,
+        |engine| {
+            let mut b = Vec::new();
+
+            b.extend(load_register(VMReg::R10));
+            b.extend(load_memory(
+                VMReg::Rcx,
+                VMReg::Rax,
+                1,
+                crypt::HEADER_SIZE as i32,
+                VMSeg::None,
+                VMWidth::Lower64,
+            ));
+            b.extend(xor(None, None));
+            b.extend(register_lcg(engine, None));
+            b.extend(store_register(VMReg::R10));
+
+            b
+        },
+    ));
+
+    instructions.extend(compute_memory(
+        VMReg::Rcx,
+        VMReg::R9,
+        1,
+        crypt::HEADER_SIZE as i32,
+        VMSeg::None,
+    ));
+    instructions.extend(store_register(VMReg::Rcx));
+
+    instructions.extend(foreach(
+        engine,
+        VMReg::Rax,
+        Bound::Register(VMReg::R8),
+        1,
+        |engine| {
+            let mut b = Vec::new();
+
+            b.extend(load_register(VMReg::R10));
+            b.extend(load_memory(
+                VMReg::Rcx,
+                VMReg::Rax,
+                1,
+                0,
+                VMSeg::None,
+                VMWidth::Lower8,
+            ));
+            b.extend(xor(None, None));
+            b.extend(register_lcg(engine, None));
+            b.extend(store_register(VMReg::R10));
+
+            b
+        },
+    ));
+
+    instructions.extend(load_register(VMReg::Vp0));
+    instructions.extend(load_register(VMReg::R10));
+    instructions.extend(xor(None, None));
+    instructions.extend(store_register(VMReg::Vp0));
 
     instructions
 }
@@ -276,60 +330,14 @@ fn register_lcg(engine: &mut Engine, register: Option<VMReg>) -> Vec<Box<dyn Enc
     instructions
 }
 
-fn register_lcg_inverse(engine: &mut Engine, register: Option<VMReg>) -> Vec<Box<dyn Encode>> {
-    let mut instructions = Vec::<Box<dyn Encode>>::new();
-
-    if let Some(register) = register {
-        instructions.extend(load_register(register));
-    }
-
-    instructions.extend(load_data(engine, DataDef::VmKeyAddend, VMWidth::Lower64));
-    instructions.extend(sub(None, None));
-
-    instructions.extend(load_data(
-        engine,
-        DataDef::VmKeyMultiplierInverse,
-        VMWidth::Lower64,
-    ));
-    instructions.extend(mul(None, None));
-
-    instructions
-}
-
 fn apply_lcg(engine: &Engine, value: u64) -> u64 {
     value
         .wrapping_mul(engine.rt.keys.multiplier)
         .wrapping_add(engine.rt.keys.addend)
 }
 
-fn combine_operation(operation: Operation, a: u64, b: u64) -> u64 {
-    let mut result = a;
-    apply_operation(operation, b, &mut result);
-    result
-}
-
-fn apply_operation(operation: Operation, value: u64, expected: &mut u64) {
-    match operation {
-        Operation::Add => *expected = expected.wrapping_add(value),
-        Operation::Sub => *expected = expected.wrapping_sub(value),
-        Operation::Xor => *expected ^= value,
-    }
-}
-
-fn register_operation(
-    operation: Operation,
-    a: Option<VMReg>,
-    b: Option<VMReg>,
-) -> Vec<Box<dyn Encode>> {
-    match operation {
-        Operation::Add => add(a, b),
-        Operation::Sub => sub(a, b),
-        Operation::Xor => xor(a, b),
-    }
-}
-
-fn accumulate<R: Rng>(
-    rng: &mut R,
+fn accumulate(
+    engine: &mut Engine,
     accumulator: VMReg,
     source: Vec<Box<dyn Encode>>,
     value: u64,
@@ -337,24 +345,19 @@ fn accumulate<R: Rng>(
 ) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
-    let operation = Operation::random(rng);
-
-    let mix = rng.gen::<u64>();
-
-    instructions.extend(load_register(accumulator));
     instructions.extend(source);
-    instructions.extend(immediate(mix));
+    instructions.extend(load_register(accumulator));
     instructions.extend(xor(None, None));
-    instructions.extend(register_operation(operation, None, None));
+    instructions.extend(register_lcg(engine, None));
     instructions.extend(store_register(accumulator));
 
-    apply_operation(operation, value ^ mix, expected);
+    *expected = apply_lcg(engine, value ^ *expected);
 
     instructions
 }
 
-pub fn accumulate_immediate<R: Rng>(
-    rng: &mut R,
+pub fn accumulate_immediate(
+    engine: &mut Engine,
     accumulator: VMReg,
     source: Option<VMReg>,
     value: u64,
@@ -364,11 +367,11 @@ pub fn accumulate_immediate<R: Rng>(
         Some(register) => load_register(register),
         None => Vec::new(),
     };
-    accumulate(rng, accumulator, source, value, expected)
+    accumulate(engine, accumulator, source, value, expected)
 }
 
-pub fn accumulate_memory<R: Rng>(
-    rng: &mut R,
+pub fn accumulate_memory(
+    engine: &mut Engine,
     accumulator: VMReg,
     base: VMReg,
     displacement: i32,
@@ -377,11 +380,11 @@ pub fn accumulate_memory<R: Rng>(
     expected: &mut u64,
 ) -> Vec<Box<dyn Encode>> {
     let source = load_memory(base, VMReg::None, 1, displacement, VMSeg::None, width);
-    accumulate(rng, accumulator, source, value, expected)
+    accumulate(engine, accumulator, source, value, expected)
 }
 
-fn accumulate_byte<R: Rng>(
-    rng: &mut R,
+fn accumulate_byte(
+    engine: &mut Engine,
     accumulator: VMReg,
     base: VMReg,
     displacement: i32,
@@ -389,7 +392,7 @@ fn accumulate_byte<R: Rng>(
     expected: &mut u64,
 ) -> Vec<Box<dyn Encode>> {
     accumulate_memory(
-        rng,
+        engine,
         accumulator,
         base,
         displacement,
@@ -399,8 +402,8 @@ fn accumulate_byte<R: Rng>(
     )
 }
 
-fn accumulate_prologue<R: Rng>(
-    rng: &mut R,
+fn accumulate_prologue(
+    engine: &mut Engine,
     accumulator: VMReg,
     base: VMReg,
     prologue: &[u8; 3],
@@ -410,7 +413,7 @@ fn accumulate_prologue<R: Rng>(
 
     for (offset, byte) in prologue.iter().enumerate() {
         instructions.extend(accumulate_byte(
-            rng,
+            engine,
             accumulator,
             base,
             offset as i32,

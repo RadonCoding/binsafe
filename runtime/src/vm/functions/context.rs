@@ -5,7 +5,7 @@ use crate::{
     runtime::{ImportDef, Runtime},
     vm::{
         bytecode::{VMReg, VMVec},
-        utils,
+        utils::register,
     },
     VM_SCRATCH_SIZE, VM_STACK_SIZE,
 };
@@ -53,7 +53,7 @@ pub fn create(rt: &mut Runtime) {
     // call r13
     rt.asm.call(r13).unwrap();
     // mov [r14 + ...], rax
-    utils::vreg::store_reg(rt, r14, rax, VMReg::VVector);
+    register::store(rt, r14, VMReg::VVector, rax);
 
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();
@@ -66,7 +66,7 @@ pub fn create(rt: &mut Runtime) {
     // add rax, ...
     rt.asm.add(rax, VM_STACK_SIZE as i32).unwrap();
     // mov [r14 + ...], rax
-    utils::vreg::store_reg(rt, r14, rax, VMReg::VStack);
+    register::store(rt, r14, VMReg::VStack, rax);
 
     // mov rcx, r12
     rt.asm.mov(rcx, r12).unwrap();
@@ -79,14 +79,14 @@ pub fn create(rt: &mut Runtime) {
     // add rax, ...
     rt.asm.add(rax, VM_SCRATCH_SIZE as i32).unwrap();
     // mov [r14 + ...], rax
-    utils::vreg::store_reg(rt, r14, rax, VMReg::VScratch);
+    register::store(rt, r14, VMReg::VScratch, rax);
 
     // mov rax, gs:[0x60] -> PEB *TEB->ProcessEnvironmentBlock
     rt.asm.mov(rax, ptr(0x60).gs()).unwrap();
     // mov rax, [rax + 0x10] -> PVOID PEB->ImageBaseAddress
     rt.asm.mov(rax, ptr(rax + 0x10)).unwrap();
     // mov [r14 + ...], rax
-    utils::vreg::store_reg(rt, r14, rax, VMReg::VImage);
+    register::store(rt, r14, VMReg::VImage, rax);
 
     // mov rax, r14
     rt.asm.mov(rax, r14).unwrap();
@@ -135,7 +135,7 @@ pub fn delete(rt: &mut Runtime) {
     // xor rdx, rdx
     rt.asm.xor(rdx, rdx).unwrap();
     // mov r8, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VStack, r8);
+    register::load(rt, r12, r8, VMReg::VStack);
     // sub r8, ...
     rt.asm.sub(r8, VM_STACK_SIZE as i32).unwrap();
     // call r14
@@ -146,7 +146,7 @@ pub fn delete(rt: &mut Runtime) {
     // xor rdx, rdx
     rt.asm.xor(rdx, rdx).unwrap();
     // mov r8, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VScratch, r8);
+    register::load(rt, r12, r8, VMReg::VScratch);
     // sub r8, ...
     rt.asm.sub(r8, VM_SCRATCH_SIZE as i32).unwrap();
     // call r14
@@ -157,7 +157,7 @@ pub fn delete(rt: &mut Runtime) {
     // xor rdx, rdx
     rt.asm.xor(rdx, rdx).unwrap();
     // mov r8, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VVector, r8);
+    register::load(rt, r12, r8, VMReg::VVector);
     // call r14
     rt.asm.call(r14).unwrap();
 

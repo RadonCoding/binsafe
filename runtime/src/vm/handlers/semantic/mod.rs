@@ -1,8 +1,9 @@
 use rand::Rng;
 
-use crate::vm::bytecode::{Flag, VMWidth};
+use crate::vm::bytecode::{Flag, VMReg, VMWidth};
 
 mod allocator;
+pub mod builder;
 pub mod compiler;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,10 +12,43 @@ pub enum Operand {
     Output(usize),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Register {
+    Fixed(VMReg),
+    Operand,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Immediate {
+    Fixed(u64),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Vector {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    And,
+    Or,
+    Xor,
+    AndNot,
+    ByteEqual,
+    ByteMask,
+    LoadVector,
+    StoreMerge,
+    StoreExtend,
+    LoadMemory,
+    StoreMemory,
+}
+
 #[derive(Debug, Clone)]
 pub enum Expression {
     Operand(Operand),
-    Constant(u64),
+    Register(Register),
+    Immediate(Immediate),
+    Local(usize),
+    Memory(Box<Expression>),
     BitAnd(Box<Expression>, Box<Expression>),
     BitOr(Box<Expression>, Box<Expression>),
     BitXor(Box<Expression>, Box<Expression>),
@@ -31,6 +65,8 @@ pub enum Expression {
     SignBit,
     BitSize,
     ByteMask(usize),
+    Segment,
+    Extend(Box<Expression>, VMWidth),
 }
 
 #[derive(Debug, Clone)]
@@ -46,13 +82,25 @@ pub enum Effect {
     Rol(Expression, Expression),
     Mul(Expression, Expression),
     Div(Expression, Expression, Expression),
-    Assign(Expression),
+    Push(Expression),
     Sar(Expression, Expression),
     Bsr(Expression),
     Tzcnt(Expression),
     Exchange(Expression, Expression),
     ExchangeAdd(Expression, Expression),
     CompareExchange(Expression, Expression, Expression),
+    Register(Register, Expression),
+    Memory(Expression, Expression),
+    Assign(usize, Expression),
+    Read(usize, VMWidth),
+    Advance(Expression),
+    Drop(Expression),
+    Vector(Vector),
+    Cpuid,
+    Timestamp,
+    Loop(usize, Vec<Effect>),
+    Select(Expression, Vec<(Vec<u64>, Vec<Effect>)>),
+    When(Expression, Vec<Effect>),
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +113,7 @@ pub enum Compare {
 
 #[derive(Debug, Clone)]
 pub enum Flags {
+    Never,
     Always(Vec<(Flag, Expression)>),
     When(Expression, Vec<(Flag, Expression)>),
 }
@@ -82,6 +131,7 @@ enum Value {
     Input(usize),
     Output(usize),
     Flags,
+    Local(usize),
     Temporary(usize),
 }
 
@@ -89,6 +139,38 @@ enum Value {
 enum Reference {
     Value(Value),
     Immediate(i64),
+}
+
+fn not(a: Box<Expression>) -> Box<Expression> {
+    Box::new(Expression::BitNot(a))
+}
+
+fn and(a: Box<Expression>, b: Box<Expression>) -> Box<Expression> {
+    Box::new(Expression::BitAnd(a, b))
+}
+
+fn or(a: Box<Expression>, b: Box<Expression>) -> Box<Expression> {
+    Box::new(Expression::BitOr(a, b))
+}
+
+fn xor(a: Box<Expression>, b: Box<Expression>) -> Box<Expression> {
+    Box::new(Expression::BitXor(a, b))
+}
+
+fn add(a: Box<Expression>, b: Box<Expression>) -> Box<Expression> {
+    Box::new(Expression::Add(a, b))
+}
+
+fn sub(a: Box<Expression>, b: Box<Expression>) -> Box<Expression> {
+    Box::new(Expression::Sub(a, b))
+}
+
+fn shl(a: Box<Expression>, b: Box<Expression>) -> Box<Expression> {
+    Box::new(Expression::BitShl(a, b))
+}
+
+fn imm(value: u64) -> Box<Expression> {
+    Box::new(Expression::Immediate(Immediate::Fixed(value)))
 }
 
 impl Expression {
@@ -127,6 +209,10 @@ impl Expression {
                 Box::new(b.obfuscate(rng, budget)),
             ),
             Expression::BitNot(a) => Expression::BitNot(Box::new(a.obfuscate(rng, budget))),
+            Expression::Extend(a, width) => {
+                Expression::Extend(Box::new(a.obfuscate(rng, budget)), width)
+            }
+            Expression::Memory(a) => Expression::Memory(Box::new(a.obfuscate(rng, budget))),
             Expression::LowByte(a) => Expression::LowByte(Box::new(a.obfuscate(rng, budget))),
             Expression::Parity(a) => Expression::Parity(Box::new(a.obfuscate(rng, budget))),
             Expression::Compare(compare) => {
@@ -135,61 +221,92 @@ impl Expression {
             leaf => leaf,
         };
 
-        if *budget == 0 || rng.gen() {
+        if *budget == 0 {
             return expression;
         }
 
         match expression {
-            // a ^ b = (a | b) - (a & b)
             Expression::BitXor(a, b) => {
                 *budget -= 1;
-                Expression::Sub(
-                    Box::new(Expression::BitOr(a.clone(), b.clone())),
-                    Box::new(Expression::BitAnd(a, b)),
-                )
+                match rng.gen_range(0..4) {
+                    // (a | b) - (a & b)
+                    0 => Expression::Sub(or(a.clone(), b.clone()), and(a, b)),
+                    // (a | b) & ~(a & b)
+                    1 => Expression::BitAnd(or(a.clone(), b.clone()), not(and(a, b))),
+                    // (a & ~b) | (~a & b)
+                    2 => Expression::BitOr(and(a.clone(), not(b.clone())), and(not(a), b)),
+                    // (a + b) - ((a & b) << 1)
+                    _ => Expression::Sub(add(a.clone(), b.clone()), shl(and(a, b), imm(1))),
+                }
             }
-            // a | b = ~(~a & ~b)
             Expression::BitOr(a, b) => {
                 *budget -= 1;
-                Expression::BitNot(Box::new(Expression::BitAnd(
-                    Box::new(Expression::BitNot(a)),
-                    Box::new(Expression::BitNot(b)),
-                )))
+                match rng.gen_range(0..4) {
+                    // ~(~a & ~b)
+                    0 => Expression::BitNot(and(not(a), not(b))),
+                    // (a & b) + (a ^ b)
+                    1 => Expression::Add(and(a.clone(), b.clone()), xor(a, b)),
+                    // a + (b & ~a)
+                    2 => Expression::Add(a.clone(), and(b, not(a))),
+                    // (a + b) - (a & b)
+                    _ => Expression::Sub(add(a.clone(), b.clone()), and(a, b)),
+                }
             }
-            // a & b = ~(~a | ~b)
             Expression::BitAnd(a, b) => {
                 *budget -= 1;
-                Expression::BitNot(Box::new(Expression::BitOr(
-                    Box::new(Expression::BitNot(a)),
-                    Box::new(Expression::BitNot(b)),
-                )))
+                match rng.gen_range(0..4) {
+                    // ~(~a | ~b)
+                    0 => Expression::BitNot(or(not(a), not(b))),
+                    // (a | b) - (a ^ b)
+                    1 => Expression::Sub(or(a.clone(), b.clone()), xor(a, b)),
+                    // a - (a & ~b)
+                    2 => Expression::Sub(a.clone(), and(a, not(b))),
+                    // (a + b) - (a | b)
+                    _ => Expression::Sub(add(a.clone(), b.clone()), or(a, b)),
+                }
             }
-            // ~a = -a - 1
             Expression::BitNot(a) => {
                 *budget -= 1;
-                Expression::Sub(
-                    Box::new(Expression::Sub(Box::new(Expression::Constant(0)), a)),
-                    Box::new(Expression::Constant(1)),
-                )
+                match rng.gen_range(0..2) {
+                    // -a - 1
+                    0 => Expression::Sub(sub(imm(0), a), imm(1)),
+                    // a ^ -1
+                    _ => Expression::BitXor(a, imm(u64::MAX)),
+                }
             }
-            // a + b = (a ^ b) + ((a & b) << 1)
             Expression::Add(a, b) => {
                 *budget -= 1;
-                Expression::Add(
-                    Box::new(Expression::BitXor(a.clone(), b.clone())),
-                    Box::new(Expression::BitShl(
-                        Box::new(Expression::BitAnd(a, b)),
-                        Box::new(Expression::Constant(1)),
-                    )),
-                )
+                match rng.gen_range(0..3) {
+                    // (a ^ b) + ((a & b) << 1)
+                    0 => Expression::Add(xor(a.clone(), b.clone()), shl(and(a, b), imm(1))),
+                    // (a | b) + (a & b)
+                    1 => Expression::Add(or(a.clone(), b.clone()), and(a, b)),
+                    // (a - ~b) - 1
+                    _ => Expression::Sub(sub(a, not(b)), imm(1)),
+                }
             }
-            // a - b = a + ~b + 1
             Expression::Sub(a, b) => {
                 *budget -= 1;
-                Expression::Add(
-                    Box::new(Expression::Add(a, Box::new(Expression::BitNot(b)))),
-                    Box::new(Expression::Constant(1)),
-                )
+                match rng.gen_range(0..3) {
+                    // (a + ~b) + 1
+                    0 => Expression::Add(add(a, not(b)), imm(1)),
+                    // a + (0 - b)
+                    1 => Expression::Add(a, sub(imm(0), b)),
+                    // (a ^ b) - ((~a & b) << 1)
+                    _ => Expression::Sub(xor(a.clone(), b.clone()), shl(and(not(a), b), imm(1))),
+                }
+            }
+            Expression::Immediate(Immediate::Fixed(value)) => {
+                *budget -= 1;
+                let key = rng.gen::<u64>();
+                match rng.gen_range(0..3) {
+                    // (value ^ key) ^ key
+                    0 => Expression::BitXor(imm(value ^ key), imm(key)),
+                    // (value + key) - key
+                    1 => Expression::Sub(imm(value.wrapping_add(key)), imm(key)),
+                    // (value - key) + key
+                    _ => Expression::Add(imm(value.wrapping_sub(key)), imm(key)),
+                }
             }
             other => other,
         }
@@ -233,7 +350,7 @@ impl Effect {
                 b.obfuscate(rng, budget),
                 c.obfuscate(rng, budget),
             ),
-            Effect::Assign(a) => Effect::Assign(a.obfuscate(rng, budget)),
+            Effect::Push(a) => Effect::Push(a.obfuscate(rng, budget)),
             Effect::Sar(a, b) => Effect::Sar(a.obfuscate(rng, budget), b.obfuscate(rng, budget)),
             Effect::Bsr(a) => Effect::Bsr(a.obfuscate(rng, budget)),
             Effect::Tzcnt(a) => Effect::Tzcnt(a.obfuscate(rng, budget)),
@@ -248,8 +365,37 @@ impl Effect {
                 b.obfuscate(rng, budget),
                 c.obfuscate(rng, budget),
             ),
+            Effect::Register(register, a) => Effect::Register(register, a.obfuscate(rng, budget)),
+            Effect::Memory(a, b) => {
+                Effect::Memory(a.obfuscate(rng, budget), b.obfuscate(rng, budget))
+            }
+            Effect::Assign(local, a) => Effect::Assign(local, a.obfuscate(rng, budget)),
+            Effect::Read(local, width) => Effect::Read(local, width),
+            Effect::Advance(a) => Effect::Advance(a.obfuscate(rng, budget)),
+            Effect::Drop(a) => Effect::Drop(a.obfuscate(rng, budget)),
+            Effect::Vector(vector) => Effect::Vector(vector),
+            Effect::Cpuid => Effect::Cpuid,
+            Effect::Timestamp => Effect::Timestamp,
+            Effect::Loop(counter, body) => Effect::Loop(counter, obfuscate(body, rng, budget)),
+            Effect::Select(selector, arms) => Effect::Select(
+                selector.obfuscate(rng, budget),
+                arms.into_iter()
+                    .map(|(keys, body)| (keys, obfuscate(body, rng, budget)))
+                    .collect(),
+            ),
+            Effect::When(condition, body) => Effect::When(
+                condition.obfuscate(rng, budget),
+                obfuscate(body, rng, budget),
+            ),
         }
     }
+}
+
+fn obfuscate(effects: Vec<Effect>, rng: &mut impl Rng, budget: &mut u32) -> Vec<Effect> {
+    effects
+        .into_iter()
+        .map(|effect| effect.obfuscate(rng, budget))
+        .collect()
 }
 
 impl Operation {
@@ -285,6 +431,24 @@ impl Operation {
         value
     }
 
+    fn locals(&self) -> usize {
+        let mut value = 0;
+
+        for effect in &self.effects {
+            effect.locals(&mut value);
+        }
+
+        self.flags.locals(&mut value);
+
+        if let Some(stores) = &self.stores {
+            for store in stores {
+                store.locals(&mut value);
+            }
+        }
+
+        value
+    }
+
     fn temporaries(&self) -> usize {
         let effects = self.effects.iter().map(Effect::temporary).sum::<usize>();
         let flags = self.flags.temporary();
@@ -301,13 +465,14 @@ impl Operation {
 impl Flags {
     fn values(&self) -> &[(Flag, Expression)] {
         match self {
+            Flags::Never => &[],
             Flags::Always(values) | Flags::When(_, values) => values,
         }
     }
 
     fn condition(&self) -> Option<&Expression> {
         match self {
-            Flags::Always(_) => None,
+            Flags::Never | Flags::Always(_) => None,
             Flags::When(condition, _) => Some(condition),
         }
     }
@@ -336,6 +501,16 @@ impl Flags {
 
         condition + values
     }
+
+    fn locals(&self, value: &mut usize) {
+        if let Some(condition) = self.condition() {
+            condition.locals(value);
+        }
+
+        for (_, expression) in self.values() {
+            expression.locals(value);
+        }
+    }
 }
 
 impl Expression {
@@ -345,11 +520,14 @@ impl Expression {
                 *value = (*value).max(*index + 1);
             }
             Expression::Operand(Operand::Output(_))
-            | Expression::Constant(_)
+            | Expression::Register(_)
+            | Expression::Immediate(_)
+            | Expression::Local(_)
             | Expression::Flag(_)
             | Expression::SignBit
             | Expression::BitSize
-            | Expression::ByteMask(_) => {}
+            | Expression::ByteMask(_)
+            | Expression::Segment => {}
             Expression::BitAnd(first, second)
             | Expression::BitOr(first, second)
             | Expression::BitXor(first, second)
@@ -361,7 +539,11 @@ impl Expression {
                 first.operands(value);
                 second.operands(value);
             }
-            Expression::BitNot(inner) | Expression::LowByte(inner) | Expression::Parity(inner) => {
+            Expression::BitNot(inner)
+            | Expression::LowByte(inner)
+            | Expression::Parity(inner)
+            | Expression::Extend(inner, _)
+            | Expression::Memory(inner) => {
                 inner.operands(value);
             }
             Expression::Compare(compare) => compare.operands(value),
@@ -371,11 +553,14 @@ impl Expression {
     fn temporary(&self) -> usize {
         match self {
             Expression::Operand(_)
-            | Expression::Constant(_)
+            | Expression::Immediate(Immediate::Fixed(_))
             | Expression::SignBit
             | Expression::BitSize
             | Expression::ByteMask(_) => 0,
-            Expression::Flag(_) => 1,
+            Expression::Register(_)
+            | Expression::Local(_)
+            | Expression::Flag(_)
+            | Expression::Segment => 1,
             Expression::BitAnd(first, second)
             | Expression::BitOr(first, second)
             | Expression::BitXor(first, second)
@@ -384,10 +569,47 @@ impl Expression {
             | Expression::Add(first, second)
             | Expression::Sub(first, second)
             | Expression::Mul(first, second) => 1 + first.temporary() + second.temporary(),
-            Expression::BitNot(inner) | Expression::LowByte(inner) | Expression::Parity(inner) => {
-                1 + inner.temporary()
-            }
+            Expression::BitNot(inner)
+            | Expression::LowByte(inner)
+            | Expression::Parity(inner)
+            | Expression::Extend(inner, _)
+            | Expression::Memory(inner) => 1 + inner.temporary(),
             Expression::Compare(compare) => 1 + compare.temporary(),
+        }
+    }
+
+    fn locals(&self, value: &mut usize) {
+        match self {
+            Expression::Local(index) => {
+                *value = (*value).max(*index + 1);
+            }
+            Expression::Operand(_)
+            | Expression::Register(_)
+            | Expression::Immediate(_)
+            | Expression::Flag(_)
+            | Expression::SignBit
+            | Expression::BitSize
+            | Expression::ByteMask(_)
+            | Expression::Segment => {}
+            Expression::BitAnd(first, second)
+            | Expression::BitOr(first, second)
+            | Expression::BitXor(first, second)
+            | Expression::BitShr(first, second)
+            | Expression::BitShl(first, second)
+            | Expression::Add(first, second)
+            | Expression::Sub(first, second)
+            | Expression::Mul(first, second) => {
+                first.locals(value);
+                second.locals(value);
+            }
+            Expression::BitNot(inner)
+            | Expression::LowByte(inner)
+            | Expression::Parity(inner)
+            | Expression::Extend(inner, _)
+            | Expression::Memory(inner) => {
+                inner.locals(value);
+            }
+            Expression::Compare(compare) => compare.locals(value),
         }
     }
 }
@@ -421,9 +643,102 @@ impl Effect {
                 second.operands(value);
                 third.operands(value);
             }
-            Effect::Assign(expression) | Effect::Bsr(expression) | Effect::Tzcnt(expression) => {
+            Effect::Memory(first, second) => {
+                first.operands(value);
+                second.operands(value);
+            }
+            Effect::Push(expression)
+            | Effect::Bsr(expression)
+            | Effect::Tzcnt(expression)
+            | Effect::Register(_, expression)
+            | Effect::Assign(_, expression)
+            | Effect::Advance(expression)
+            | Effect::Drop(expression) => {
                 expression.operands(value);
             }
+            Effect::Select(selector, arms) => {
+                selector.operands(value);
+                for (_, body) in arms {
+                    for effect in body {
+                        effect.operands(value);
+                    }
+                }
+            }
+            Effect::When(condition, body) => {
+                condition.operands(value);
+                for effect in body {
+                    effect.operands(value);
+                }
+            }
+            Effect::Loop(_, body) => {
+                for effect in body {
+                    effect.operands(value);
+                }
+            }
+            Effect::Read(..) | Effect::Vector(_) | Effect::Cpuid | Effect::Timestamp => {}
+        }
+    }
+
+    fn locals(&self, value: &mut usize) {
+        match self {
+            Effect::Assign(index, expression) => {
+                *value = (*value).max(*index + 1);
+                expression.locals(value);
+            }
+            Effect::Read(index, _) => {
+                *value = (*value).max(*index + 1);
+            }
+            Effect::Loop(counter, body) => {
+                *value = (*value).max(*counter + 1);
+                for effect in body {
+                    effect.locals(value);
+                }
+            }
+            Effect::Add(first, second)
+            | Effect::Sub(first, second)
+            | Effect::And(first, second)
+            | Effect::Or(first, second)
+            | Effect::Xor(first, second)
+            | Effect::Shr(first, second)
+            | Effect::Shl(first, second)
+            | Effect::Ror(first, second)
+            | Effect::Rol(first, second)
+            | Effect::Mul(first, second)
+            | Effect::Sar(first, second)
+            | Effect::Exchange(first, second)
+            | Effect::ExchangeAdd(first, second)
+            | Effect::Memory(first, second) => {
+                first.locals(value);
+                second.locals(value);
+            }
+            Effect::Div(first, second, third) | Effect::CompareExchange(first, second, third) => {
+                first.locals(value);
+                second.locals(value);
+                third.locals(value);
+            }
+            Effect::Push(expression)
+            | Effect::Bsr(expression)
+            | Effect::Tzcnt(expression)
+            | Effect::Register(_, expression)
+            | Effect::Advance(expression)
+            | Effect::Drop(expression) => {
+                expression.locals(value);
+            }
+            Effect::Select(selector, arms) => {
+                selector.locals(value);
+                for (_, body) in arms {
+                    for effect in body {
+                        effect.locals(value);
+                    }
+                }
+            }
+            Effect::When(condition, body) => {
+                condition.locals(value);
+                for effect in body {
+                    effect.locals(value);
+                }
+            }
+            Effect::Vector(_) | Effect::Cpuid | Effect::Timestamp => {}
         }
     }
 
@@ -439,7 +754,7 @@ impl Effect {
             | Effect::Ror(..)
             | Effect::Rol(..)
             | Effect::Sar(..)
-            | Effect::Assign(..)
+            | Effect::Push(..)
             | Effect::Bsr(..)
             | Effect::Tzcnt(..)
             | Effect::Exchange(..)
@@ -449,6 +764,27 @@ impl Effect {
             Effect::Mul(..) | Effect::Div(..) | Effect::ExchangeAdd(..) => {
                 *value = (*value).max(2);
             }
+            Effect::Select(_, arms) => {
+                for (_, body) in arms {
+                    for effect in body {
+                        effect.outputs(value);
+                    }
+                }
+            }
+            Effect::When(_, body) | Effect::Loop(_, body) => {
+                for effect in body {
+                    effect.outputs(value);
+                }
+            }
+            Effect::Register(..)
+            | Effect::Memory(..)
+            | Effect::Assign(..)
+            | Effect::Read(..)
+            | Effect::Advance(..)
+            | Effect::Drop(..)
+            | Effect::Vector(..)
+            | Effect::Cpuid
+            | Effect::Timestamp => {}
         }
     }
 
@@ -473,9 +809,27 @@ impl Effect {
             Effect::CompareExchange(first, second, third) => {
                 first.temporary() + second.temporary() + third.temporary()
             }
-            Effect::Assign(expression) | Effect::Bsr(expression) | Effect::Tzcnt(expression) => {
-                expression.temporary()
+            Effect::Memory(first, second) => first.temporary() + second.temporary(),
+            Effect::Push(expression)
+            | Effect::Bsr(expression)
+            | Effect::Tzcnt(expression)
+            | Effect::Register(_, expression)
+            | Effect::Assign(_, expression)
+            | Effect::Advance(expression)
+            | Effect::Drop(expression) => expression.temporary(),
+            Effect::Select(selector, arms) => {
+                selector.temporary()
+                    + arms
+                        .iter()
+                        .flat_map(|(_, body)| body)
+                        .map(Effect::temporary)
+                        .sum::<usize>()
             }
+            Effect::When(condition, body) => {
+                condition.temporary() + body.iter().map(Effect::temporary).sum::<usize>()
+            }
+            Effect::Loop(_, body) => body.iter().map(Effect::temporary).sum::<usize>(),
+            Effect::Read(..) | Effect::Vector(_) | Effect::Cpuid | Effect::Timestamp => 0,
         }
     }
 }
@@ -499,6 +853,18 @@ impl Compare {
             | Compare::LessThan(first, second)
             | Compare::GreaterThan(first, second)
             | Compare::BitSet(first, second) => first.temporary() + second.temporary(),
+        }
+    }
+
+    fn locals(&self, value: &mut usize) {
+        match self {
+            Compare::Equal(first, second)
+            | Compare::LessThan(first, second)
+            | Compare::GreaterThan(first, second)
+            | Compare::BitSet(first, second) => {
+                first.locals(value);
+                second.locals(value);
+            }
         }
     }
 }

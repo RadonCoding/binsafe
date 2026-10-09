@@ -46,14 +46,14 @@ switch ($language) {
         $manifest = [Path]::GetFullPath($manifest)
 
         $package = $metadata.packages |
-            Where-Object {
-                [Path]::GetFullPath($_.manifest_path) -eq $manifest
-            } |
-            Select-Object -First 1
+        Where-Object {
+            [Path]::GetFullPath($_.manifest_path) -eq $manifest
+        } |
+        Select-Object -First 1
 
         $target = $package.targets |
-            Where-Object { $_.kind -contains "bin" } |
-            Select-Object -First 1
+        Where-Object { $_.kind -contains "bin" } |
+        Select-Object -First 1
 
         $source = Join-Path `
             $metadata.target_directory `

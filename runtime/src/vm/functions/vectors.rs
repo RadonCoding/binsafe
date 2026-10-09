@@ -104,7 +104,7 @@ pub fn capture(rt: &mut Runtime) {
 
     for (vec, ymm, _) in VECTORS_TO_NATIVE {
         // vmovups [rax + ...], ...
-        utils::vvec::store_256(rt, r13, *ymm, *vec);
+        utils::vector::store_256(rt, r13, *ymm, *vec);
     }
     // pop r13
     rt.asm.pop(r13).unwrap();
@@ -115,7 +115,7 @@ pub fn capture(rt: &mut Runtime) {
     {
         for (vec, _, xmm) in VECTORS_TO_NATIVE {
             // movups [rax + ...], ...
-            utils::vvec::store_128(rt, r13, *xmm, *vec);
+            utils::vector::store_128(rt, r13, *xmm, *vec);
         }
         // pop r13
         rt.asm.pop(r13).unwrap();
@@ -137,11 +137,11 @@ pub fn restore(rt: &mut Runtime) {
     rt.asm.jz(sse).unwrap();
 
     // mov rax, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VVector, rax);
+    utils::register::load(rt, r12, rax, VMReg::VVector);
 
     for (src, dst, _) in VECTORS_TO_NATIVE {
         // vmovups ..., [rax + ...]
-        utils::vvec::load_256(rt, rax, *src, *dst);
+        utils::vector::load_256(rt, rax, *src, *dst);
     }
     // ret
     rt.asm.ret().unwrap();
@@ -149,11 +149,11 @@ pub fn restore(rt: &mut Runtime) {
     rt.asm.set_label(&mut sse).unwrap();
     {
         // mov rax, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::VVector, rax);
+        utils::register::load(rt, r12, rax, VMReg::VVector);
 
         for (src, _, dst) in VECTORS_TO_NATIVE {
             // movups ..., [rax + ...]
-            utils::vvec::load_128(rt, rax, *src, *dst);
+            utils::vector::load_128(rt, rax, *src, *dst);
         }
         // ret
         rt.asm.ret().unwrap();
@@ -183,9 +183,9 @@ pub fn copy(rt: &mut Runtime) {
 
     for (vec, ymm, _) in VECTORS_TO_NATIVE {
         // vmovups ymm0, [r13 + ...]
-        utils::vvec::load_256(rt, r13, *vec, ymm0);
+        utils::vector::load_256(rt, r13, *vec, ymm0);
         // vmovups [r14 + ...], ymm0
-        utils::vvec::store_256(rt, r14, *ymm, *vec);
+        utils::vector::store_256(rt, r14, *ymm, *vec);
     }
     // pop r14
     rt.asm.pop(r14).unwrap();
@@ -198,9 +198,9 @@ pub fn copy(rt: &mut Runtime) {
     {
         for (vec, _, xmm) in VECTORS_TO_NATIVE {
             // movups xmm0, [r13 + ...]
-            utils::vvec::load_128(rt, r13, *vec, xmm0);
+            utils::vector::load_128(rt, r13, *vec, xmm0);
             // movups [r14 + ...], xmm0
-            utils::vvec::store_128(rt, r14, *xmm, *vec);
+            utils::vector::store_128(rt, r14, *xmm, *vec);
         }
         // pop r14
         rt.asm.pop(r14).unwrap();

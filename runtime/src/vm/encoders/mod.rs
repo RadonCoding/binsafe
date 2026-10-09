@@ -2,25 +2,27 @@ use std::any::{type_name, Any};
 use std::fmt::{self, Debug};
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMReg, VMVec};
+use crate::vm::bytecode::{VMCode, VMReg, VMVec};
 
 pub mod adc;
 pub mod add;
 pub mod and;
+pub mod back;
 pub mod bit_scan_reverse;
 pub mod bit_test;
 pub mod bit_test_complement;
 pub mod bit_test_reset;
 pub mod bit_test_set;
 pub mod block;
+pub mod branch;
 pub mod byte_swap;
 pub mod compare_exchange;
+pub mod compound;
+pub mod cpuid;
 pub mod discard;
-pub mod dispatch;
 pub mod div;
 pub mod exchange;
 pub mod exchange_add;
-pub mod jcc;
 pub mod label;
 pub mod load_address;
 pub mod load_immediate;
@@ -33,7 +35,6 @@ pub mod packed_byte_equal;
 pub mod packed_byte_mask;
 pub mod pop;
 pub mod push;
-pub mod ret;
 pub mod rol;
 pub mod ror;
 pub mod sar;
@@ -86,12 +87,12 @@ pub trait Encode: Debug + Any {
         type_name::<Self>().rsplit("::").next().unwrap()
     }
 
-    fn op(&self) -> Option<VMOp>;
+    fn code(&self) -> Option<VMCode>;
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8>;
 
     fn size(&self, mapper: &mut Mapper) -> usize {
-        self.op().map_or(0, |_| 1) + self.encode(mapper).len()
+        self.code().map_or(0, |_| 1) + self.encode(mapper).len()
     }
 
     fn reads(&self) -> Vec<Effect> {

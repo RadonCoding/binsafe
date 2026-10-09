@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMVec, VMWidth};
+use crate::vm::bytecode::{VMCode, VMVec, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 
@@ -18,8 +18,8 @@ impl Encode for StoreMerge {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::StoreMerge)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::StoreMerge)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {

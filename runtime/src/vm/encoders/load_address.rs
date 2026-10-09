@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMMem, VMOp, VMReg};
+use crate::vm::bytecode::{VMMem, VMCode, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 
@@ -17,8 +17,8 @@ impl Encode for LoadAddress {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::LoadAddress)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::LoadAddress)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
@@ -40,5 +40,11 @@ impl Encode for LoadAddress {
 
     fn produces(&self) -> i32 {
         1
+    }
+
+    fn seal(&mut self, _mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
+        let mut displacement = self.source.displacement.to_le_bytes();
+        transform(&mut displacement, 0);
+        self.source.displacement = i32::from_le_bytes(displacement);
     }
 }

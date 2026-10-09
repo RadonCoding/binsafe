@@ -1,19 +1,21 @@
 pub mod adc;
 pub mod add;
 pub mod and;
+pub mod back;
 pub mod bit_scan_reverse;
 pub mod bit_test;
 pub mod bit_test_complement;
 pub mod bit_test_reset;
 pub mod bit_test_set;
+pub mod branch;
 pub mod byte_swap;
 pub mod compare_exchange;
+pub mod compound;
+pub mod cpuid;
 pub mod discard;
-pub mod dispatch;
 pub mod div;
 pub mod exchange;
 pub mod exchange_add;
-pub mod jcc;
 pub mod load_address;
 pub mod load_immediate;
 pub mod load_memory;
@@ -25,7 +27,6 @@ pub mod packed_byte_equal;
 pub mod packed_byte_mask;
 pub mod pop;
 pub mod push;
-pub mod ret;
 pub mod rol;
 pub mod ror;
 pub mod sar;
@@ -50,3 +51,119 @@ pub mod vector_or;
 pub mod vector_sub;
 pub mod vector_xor;
 pub mod xor;
+
+use crate::runtime::{FnDef, Runtime};
+use crate::vm::bytecode::VMCode;
+use crate::vm::handlers::semantic::Operation;
+
+pub fn handler(op: VMCode) -> FnDef {
+    match op {
+        VMCode::Branch => FnDef::VmHandlerBranch,
+        VMCode::Back => FnDef::VmHandlersBack,
+        VMCode::LoadImmediate => FnDef::VmHandlerLoadImmediate,
+        VMCode::LoadRegister => FnDef::VmHandlerLoadRegister,
+        VMCode::LoadMemory => FnDef::VmHandlerLoadMemory,
+        VMCode::LoadAddress => FnDef::VmHandlerLoadAddress,
+        VMCode::LoadVector => FnDef::VmHandlerLoadVector,
+        VMCode::StoreRegister => FnDef::VmHandlerStoreRegister,
+        VMCode::StoreMemory => FnDef::VmHandlerStoreMemory,
+        VMCode::StoreMerge => FnDef::VmHandlerStoreMerge,
+        VMCode::StoreExtend => FnDef::VmHandlerStoreExtend,
+        VMCode::Add => FnDef::VmHandlerAdd,
+        VMCode::Sub => FnDef::VmHandlerSub,
+        VMCode::Adc => FnDef::VmHandlerAdc,
+        VMCode::Sbb => FnDef::VmHandlerSbb,
+        VMCode::And => FnDef::VmHandlerAnd,
+        VMCode::Or => FnDef::VmHandlerOr,
+        VMCode::Xor => FnDef::VmHandlerXor,
+        VMCode::Rol => FnDef::VmHandlerRol,
+        VMCode::Ror => FnDef::VmHandlerRor,
+        VMCode::Shl => FnDef::VmHandlerShl,
+        VMCode::Shr => FnDef::VmHandlerShr,
+        VMCode::Sar => FnDef::VmHandlerSar,
+        VMCode::Mul => FnDef::VmHandlerMul,
+        VMCode::Div => FnDef::VmHandlerDiv,
+        VMCode::TrailingZeros => FnDef::VmHandlerTrailingZeros,
+        VMCode::BitScanReverse => FnDef::VmHandlerBitScanReverse,
+        VMCode::ByteSwap => FnDef::VmHandlerByteSwap,
+        VMCode::BitTest => FnDef::VmHandlerBitTest,
+        VMCode::BitTestSet => FnDef::VmHandlerBitTestSet,
+        VMCode::BitTestReset => FnDef::VmHandlerBitTestReset,
+        VMCode::BitTestComplement => FnDef::VmHandlerBitTestComplement,
+        VMCode::Push => FnDef::VmHandlerPush,
+        VMCode::Pop => FnDef::VmHandlerPop,
+        VMCode::Discard => FnDef::VmHandlerDiscard,
+        VMCode::Exchange => FnDef::VmHandlerExchange,
+        VMCode::ExchangeAdd => FnDef::VmHandlerExchangeAdd,
+        VMCode::CompareExchange => FnDef::VmHandlerCompareExchange,
+        VMCode::PackedByteMask => FnDef::VmHandlerPackedByteMask,
+        VMCode::PackedByteEqual => FnDef::VmHandlerPackedByteEqual,
+        VMCode::VectorAnd => FnDef::VmHandlerVectorAnd,
+        VMCode::VectorAndNot => FnDef::VmHandlerVectorAndNot,
+        VMCode::VectorOr => FnDef::VmHandlerVectorOr,
+        VMCode::VectorXor => FnDef::VmHandlerVectorXor,
+        VMCode::VectorAdd => FnDef::VmHandlerVectorAdd,
+        VMCode::VectorSub => FnDef::VmHandlerVectorSub,
+        VMCode::VectorMul => FnDef::VmHandlerVectorMul,
+        VMCode::VectorDiv => FnDef::VmHandlerVectorDiv,
+        VMCode::Timestamp => FnDef::VmHandlerTimestamp,
+        VMCode::Cpuid => FnDef::VmHandlerCpuid,
+        VMCode::Compound => FnDef::VmHandlerCompound,
+    }
+}
+
+pub fn operation(rt: &mut Runtime, op: VMCode) -> Option<Operation> {
+    Some(match op {
+        VMCode::Branch => branch::operation(rt),
+        VMCode::Back => back::operation(),
+        VMCode::LoadImmediate => load_immediate::operation(rt),
+        VMCode::LoadRegister => load_register::operation(),
+        VMCode::LoadMemory => load_memory::operation(),
+        VMCode::LoadAddress => load_address::operation(rt),
+        VMCode::LoadVector => load_vector::operation(),
+        VMCode::StoreRegister => store_register::operation(),
+        VMCode::StoreMemory => store_memory::operation(),
+        VMCode::StoreMerge => store_merge::operation(),
+        VMCode::StoreExtend => store_extend::operation(),
+        VMCode::Add => add::operation(),
+        VMCode::Sub => sub::operation(),
+        VMCode::Adc => adc::operation(),
+        VMCode::Sbb => sbb::operation(),
+        VMCode::And => and::operation(),
+        VMCode::Or => or::operation(),
+        VMCode::Xor => xor::operation(),
+        VMCode::Rol => rol::operation(),
+        VMCode::Ror => ror::operation(),
+        VMCode::Shl => shl::operation(),
+        VMCode::Shr => shr::operation(),
+        VMCode::Sar => sar::operation(),
+        VMCode::Mul => mul::operation(),
+        VMCode::Div => div::operation(),
+        VMCode::TrailingZeros => trailing_zeros::operation(),
+        VMCode::BitScanReverse => bit_scan_reverse::operation(),
+        VMCode::ByteSwap => byte_swap::operation(),
+        VMCode::BitTest => bit_test::operation(),
+        VMCode::BitTestSet => bit_test_set::operation(),
+        VMCode::BitTestReset => bit_test_reset::operation(),
+        VMCode::BitTestComplement => bit_test_complement::operation(),
+        VMCode::Push => push::operation(),
+        VMCode::Pop => pop::operation(),
+        VMCode::Discard => discard::operation(),
+        VMCode::Exchange => exchange::operation(),
+        VMCode::ExchangeAdd => exchange_add::operation(),
+        VMCode::CompareExchange => compare_exchange::operation(),
+        VMCode::PackedByteMask => packed_byte_mask::operation(),
+        VMCode::PackedByteEqual => packed_byte_equal::operation(),
+        VMCode::VectorAnd => vector_and::operation(),
+        VMCode::VectorAndNot => vector_and_not::operation(),
+        VMCode::VectorOr => vector_or::operation(),
+        VMCode::VectorXor => vector_xor::operation(),
+        VMCode::VectorAdd => vector_add::operation(),
+        VMCode::VectorSub => vector_sub::operation(),
+        VMCode::VectorMul => vector_mul::operation(),
+        VMCode::VectorDiv => vector_div::operation(),
+        VMCode::Timestamp => timestamp::operation(),
+        VMCode::Cpuid => cpuid::operation(),
+        VMCode::Compound => return None,
+    })
+}

@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMReg, VMWidth};
+use crate::vm::bytecode::{VMCode, VMReg, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 
@@ -18,8 +18,8 @@ impl Encode for LoadRegister {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::LoadRegister)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::LoadRegister)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {

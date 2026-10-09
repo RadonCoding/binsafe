@@ -1,4 +1,4 @@
-mod jcc;
+mod branch;
 
 use crate::mapper::Mapper;
 use crate::vm::encoders::Encode;
@@ -15,7 +15,7 @@ impl Transform for Mutation {
         let mut operations = operations;
         let mut rng = rand::thread_rng();
 
-        jcc::mutate(&mut operations, &mut rng);
+        branch::mutate(&mut operations, &mut rng);
 
         operations
     }

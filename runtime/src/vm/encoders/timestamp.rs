@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::VMOp;
+use crate::vm::bytecode::VMCode;
 use crate::vm::encoders::Encode;
 use std::any::Any;
 use std::fmt::{Debug, Formatter, Result};
@@ -30,8 +30,8 @@ impl Encode for Timestamp {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::Timestamp)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::Timestamp)
     }
 
     fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {

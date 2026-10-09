@@ -1,12 +1,12 @@
-use std::{matches, slice};
+use std::matches;
 
 use rand::Rng;
 
 use crate::mapper::Mapper;
 use crate::utils::invert_multiplier;
 use crate::vm::bytecode::{VMReg, VMWidth};
+use crate::vm::encoders::branch::Branch;
 use crate::vm::encoders::discard::Discard;
-use crate::vm::encoders::jcc::Jcc;
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::load_register::LoadRegister;
@@ -196,7 +196,7 @@ fn walk(
             }
         }
 
-        if leaf(&mut operations[i], *addend, *multiplier) {
+        if leaf(&mut operations[i], mapper, *addend, *multiplier) {
             skip -= 1;
 
             if !operations[i].is_branch() {
@@ -223,29 +223,18 @@ fn walk(
     trace
 }
 
-/// Encrypts the leaf in place when it matches [`LoadImmediate`] or [`LoadAddress`], returning whether a match was found.
-fn leaf(operation: &mut Box<dyn Encode>, addend: u64, multiplier: u64) -> bool {
-    if let Some(load) = operation.as_any_mut().downcast_mut::<LoadImmediate>() {
-        encrypt(&mut load.source, addend, multiplier);
-        return true;
-    }
+/// Seals the operation against the current keys, returning whether it rolls the keystream afterwards.
+fn leaf(
+    operation: &mut Box<dyn Encode>,
+    mapper: &mut Mapper,
+    addend: u64,
+    multiplier: u64,
+) -> bool {
+    operation.seal(mapper, &mut |source, _| encrypt(source, addend, multiplier));
 
-    if let Some(load) = operation.as_any_mut().downcast_mut::<LoadAddress>() {
-        let mut displacement = load.source.displacement.to_le_bytes();
-        encrypt(&mut displacement, addend, multiplier);
-        load.source.displacement = i32::from_le_bytes(displacement);
-        return true;
-    }
-
-    if let Some(jcc) = operation.as_any_mut().downcast_mut::<Jcc>() {
-        for condition in &mut jcc.conditions {
-            encrypt(slice::from_mut(&mut condition.lhs), addend, multiplier);
-            encrypt(slice::from_mut(&mut condition.rhs), addend, multiplier);
-        }
-        return true;
-    }
-
-    false
+    operation.as_any().downcast_ref::<LoadImmediate>().is_some()
+        || operation.as_any().downcast_ref::<LoadAddress>().is_some()
+        || operation.as_any().downcast_ref::<Branch>().is_some()
 }
 
 /// Encrypts `source` against `addend` and `multiplier`.

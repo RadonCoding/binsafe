@@ -1,74 +1,17 @@
-use crate::{runtime::Runtime, vm::handlers::vector};
-use iced_x86::code_asm::{xmm0, xmm1, ymm0, ymm1};
+use crate::{
+    runtime::Runtime,
+    vm::handlers::semantic::{self, Effect, Flags, Operation, Vector},
+};
 
-// unsigned char* (unsigned char*)
+pub fn operation() -> Operation {
+    Operation {
+        effects: vec![Effect::Vector(Vector::Add)],
+        flags: Flags::Never,
+        stores: None,
+        widths: &[],
+    }
+}
+
 pub fn build(rt: &mut Runtime) {
-    vector::with_precision(
-        rt,
-        |rt| {
-            // paddb xmm0, xmm1
-            rt.asm.paddb(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // paddw xmm0, xmm1
-            rt.asm.paddw(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // paddd xmm0, xmm1
-            rt.asm.paddd(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // paddq xmm0, xmm1
-            rt.asm.paddq(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // addps xmm0, xmm1
-            rt.asm.addps(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // addps xmm0, xmm1
-            rt.asm.addps(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // addps xmm0, xmm1
-            rt.asm.addps(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // addpd xmm0, xmm1
-            rt.asm.addpd(xmm0, xmm1).unwrap();
-        },
-        // avx_int
-        |rt| {
-            // vpaddb ymm0, ymm0, ymm1
-            rt.asm.vpaddb(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vpaddw ymm0, ymm0, ymm1
-            rt.asm.vpaddw(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vpaddd ymm0, ymm0, ymm1
-            rt.asm.vpaddd(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vpaddq ymm0, ymm0, ymm1
-            rt.asm.vpaddq(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vaddps ymm0, ymm0, ymm1
-            rt.asm.vaddps(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vaddps ymm0, ymm0, ymm1
-            rt.asm.vaddps(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vaddps ymm0, ymm0, ymm1
-            rt.asm.vaddps(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vaddpd ymm0, ymm0, ymm1
-            rt.asm.vaddpd(ymm0, ymm0, ymm1).unwrap();
-        },
-    );
+    semantic::compiler::compile(rt, &operation());
 }

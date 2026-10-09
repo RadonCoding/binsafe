@@ -3,22 +3,13 @@ use std::convert::TryInto;
 use crate::engine::Engine;
 use crate::protections::virtualization::attestation::*;
 use exe::{Buffer, PE, RVA};
-use rand::Rng;
 use runtime::mapper::Mappable;
 use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::bytecode::{VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::Encode;
 
-pub fn generate(
-    engine: &mut Engine,
-    rng: &mut impl Rng,
-    expected: &mut u64,
-) -> Vec<Box<dyn Encode>> {
-    let operation = Operation::random(rng);
-
-    let seed = engine.rt.keys.initializer;
-
-    let mut hash = seed;
+pub fn generate(engine: &mut Engine, expected: &mut u64) -> Vec<Box<dyn Encode>> {
+    let mut hash = *expected;
 
     for &function in FnDef::VARIANTS.iter() {
         let rva = engine.rt.lookup(engine.rt.function_labels[&function]) as u32;
@@ -31,13 +22,11 @@ pub fn generate(
 
         for chunk in &mut chunks {
             let word = u64::from_le_bytes(chunk.try_into().unwrap());
-            apply_operation(operation, word, &mut hash);
-            hash = apply_lcg(engine, hash);
+            hash = apply_lcg(engine, hash ^ word);
         }
 
         for &byte in chunks.remainder() {
-            apply_operation(operation, byte as u64, &mut hash);
-            hash = apply_lcg(engine, hash);
+            hash = apply_lcg(engine, hash ^ byte as u64);
         }
     }
 
@@ -48,8 +37,6 @@ pub fn generate(
     let functions = engine.rt.lookup(engine.rt.data_labels[&DataDef::Functions]) as i32;
 
     let mut instructions = Vec::<Box<dyn Encode>>::new();
-
-    instructions.extend(set_register(VMReg::Vp1, seed));
 
     instructions.extend(foreach(
         engine,
@@ -92,7 +79,7 @@ pub fn generate(
                 |engine| {
                     let mut inner = Vec::<Box<dyn Encode>>::new();
 
-                    inner.extend(load_register(VMReg::Vp1));
+                    inner.extend(load_register(VMReg::Vp0));
                     inner.extend(load_memory(
                         VMReg::Rcx,
                         VMReg::R10,
@@ -101,9 +88,9 @@ pub fn generate(
                         VMSeg::None,
                         VMWidth::Lower64,
                     ));
-                    inner.extend(register_operation(operation, None, None));
+                    inner.extend(xor(None, None));
                     inner.extend(register_lcg(engine, None));
-                    inner.extend(store_register(VMReg::Vp1));
+                    inner.extend(store_register(VMReg::Vp0));
 
                     inner
                 },
@@ -120,7 +107,7 @@ pub fn generate(
                 |engine| {
                     let mut inner = Vec::<Box<dyn Encode>>::new();
 
-                    inner.extend(load_register(VMReg::Vp1));
+                    inner.extend(load_register(VMReg::Vp0));
                     inner.extend(load_memory(
                         VMReg::Rdx,
                         VMReg::R9,
@@ -129,9 +116,9 @@ pub fn generate(
                         VMSeg::None,
                         VMWidth::Lower8,
                     ));
-                    inner.extend(register_operation(operation, None, None));
+                    inner.extend(xor(None, None));
                     inner.extend(register_lcg(engine, None));
-                    inner.extend(store_register(VMReg::Vp1));
+                    inner.extend(store_register(VMReg::Vp0));
 
                     inner
                 },

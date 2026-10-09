@@ -14,19 +14,21 @@ pub struct Allocator {
     temporary: usize,
     inputs: usize,
     outputs: usize,
+    locals: usize,
     flags: bool,
 }
 
 impl Allocator {
     const REGISTERS: [AsmRegister64; 5] = [rax, rcx, rdx, r8, r9];
 
-    pub fn new(inputs: usize, outputs: usize, flags: bool) -> Self {
+    pub fn new(inputs: usize, outputs: usize, locals: usize, flags: bool) -> Self {
         Self {
             tracked: Vec::new(),
             dirty: HashSet::new(),
             temporary: 0,
             inputs,
             outputs,
+            locals,
             flags,
         }
     }
@@ -82,7 +84,8 @@ impl Allocator {
             Value::Input(index) => index,
             Value::Output(index) => self.inputs + index,
             Value::Flags => self.inputs + self.outputs,
-            Value::Temporary(index) => self.inputs + self.outputs + flags + index,
+            Value::Local(index) => self.inputs + self.outputs + flags + index,
+            Value::Temporary(index) => self.inputs + self.outputs + flags + self.locals + index,
         };
         (slot as i32 + 1) * 8
     }

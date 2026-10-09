@@ -1,6 +1,6 @@
 use crate::{
     mapper::Mapper,
-    vm::{bytecode::VMOp, encoders::Encode},
+    vm::{bytecode::VMCode, encoders::Encode},
 };
 use std::{
     any::Any,
@@ -50,7 +50,7 @@ impl Encode for Label {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
+    fn code(&self) -> Option<VMCode> {
         None
     }
 

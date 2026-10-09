@@ -1,12 +1,12 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMReg};
+use crate::vm::bytecode::{VMCode, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 
 #[derive(Debug)]
-pub struct Ret;
+pub struct Back;
 
-impl Encode for Ret {
+impl Encode for Back {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -15,8 +15,8 @@ impl Encode for Ret {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::Ret)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::Back)
     }
 
     fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {
