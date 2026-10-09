@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMReg};
+use crate::vm::bytecode::{VMCode, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 use std::fmt::{Debug, Formatter, Result};
@@ -30,8 +30,8 @@ impl Encode for Push {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::Push)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::Push)
     }
 
     fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {

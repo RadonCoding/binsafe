@@ -1,8 +1,8 @@
 use std::any::Any;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{self, VMCondition, VMLogic, VMOp, VMWidth};
-use crate::vm::encoders::jcc::Jcc;
+use crate::vm::bytecode::{self, VMCode, VMCondition, VMLogic, VMWidth};
+use crate::vm::encoders::branch::Branch;
 use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::{Effect, Encode};
@@ -45,7 +45,7 @@ impl Block {
                 source: vec![0],
             }),
         );
-        body.insert(2, Box::new(Jcc { logic, conditions }));
+        body.insert(2, Box::new(Branch { logic, conditions }));
 
         let jumps = vec![Jump {
             source,
@@ -91,7 +91,7 @@ impl Block {
 
             let consumes = operation.consumes() as usize;
 
-            if operation.as_any().downcast_ref::<Jcc>().is_some() {
+            if operation.as_any().downcast_ref::<Branch>().is_some() {
                 return Some((stack[stack.len() - consumes], i));
             }
 
@@ -117,7 +117,7 @@ impl Encode for Block {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
+    fn code(&self) -> Option<VMCode> {
         None
     }
 

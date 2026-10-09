@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMVec, VMWidth};
+use crate::vm::bytecode::{VMCode, VMVec, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 
@@ -18,8 +18,8 @@ impl Encode for StoreExtend {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::StoreExtend)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::StoreExtend)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {

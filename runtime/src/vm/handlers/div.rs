@@ -6,27 +6,28 @@ use crate::{
     },
 };
 
+pub fn operation() -> Operation {
+    Operation {
+        effects: vec![Effect::Div(
+            Expression::Operand(Operand::Input(0)),
+            Expression::Operand(Operand::Input(1)),
+            Expression::Operand(Operand::Input(2)),
+        )],
+        flags: Flags::Never,
+        stores: None,
+        widths: &[
+            VMWidth::Lower64,
+            VMWidth::Lower32,
+            VMWidth::Lower16,
+            VMWidth::Lower8,
+            VMWidth::SLower64,
+            VMWidth::SLower32,
+            VMWidth::SLower16,
+            VMWidth::SLower8,
+        ],
+    }
+}
+
 pub fn build(rt: &mut Runtime) {
-    semantic::compiler::compile(
-        rt,
-        &Operation {
-            effects: vec![Effect::Div(
-                Expression::Operand(Operand::Input(0)),
-                Expression::Operand(Operand::Input(1)),
-                Expression::Operand(Operand::Input(2)),
-            )],
-            flags: Flags::Always(vec![]),
-            stores: None,
-            widths: &[
-                VMWidth::Lower64,
-                VMWidth::Lower32,
-                VMWidth::Lower16,
-                VMWidth::Lower8,
-                VMWidth::SLower64,
-                VMWidth::SLower32,
-                VMWidth::SLower16,
-                VMWidth::SLower8,
-            ],
-        },
-    );
+    semantic::compiler::compile(rt, &operation());
 }

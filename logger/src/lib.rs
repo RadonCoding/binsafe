@@ -54,10 +54,7 @@ pub fn error(fmt: impl fmt::Display) {
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => {{
-        #[cfg(debug_assertions)]
         $crate::debug(format_args!($($arg)*));
-        #[cfg(not(debug_assertions))]
-        let _ = format_args!($($arg)*);
     }};
 }
 

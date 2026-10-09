@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMWidth};
+use crate::vm::bytecode::{VMCode, VMWidth};
 use crate::vm::encoders::Encode;
 use std::any::Any;
 
@@ -17,8 +17,8 @@ impl Encode for PackedByteMask {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::PackedByteMask)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::PackedByteMask)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {

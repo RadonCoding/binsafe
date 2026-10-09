@@ -9,7 +9,7 @@ Type "eco zenburn"
 Enter
 Type "aa"
 Enter
-Sleep 5s
+Sleep 2.5s
 Type "s section..binsafe"
 Enter
 Type "pdui add byte [rax], al~:0..-1"
@@ -24,7 +24,7 @@ Type "eco zenburn"
 Enter
 Type "aa"
 Enter
-Sleep 5s
+Sleep 2.5s
 Type "s section..binsafe"
 Enter
 Type "pdui add byte [rax], al~:0..-1"

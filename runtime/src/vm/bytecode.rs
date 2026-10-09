@@ -1,17 +1,17 @@
 use crate::mapper::{mapped, Mapper};
+use crate::runtime::Runtime;
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, div, extend, integer, lea, multiply,
+    arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, cpuid, div, extend, integer, lea, multiply,
     pcmpeqb, pmovskb, rdtsc, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
 use crate::vm::snapshot::Snapshots;
 use crate::vm::transform::encrypt::Encrypt;
-use crate::vm::transform::indirect::Indirect;
 use crate::vm::transform::mutation::Mutation;
 use crate::vm::transform::peephole::Peephole;
 use crate::vm::transform::permute::Permute;
 use crate::vm::transform::scramble::Scramble;
-use crate::vm::transform::Transform;
+use crate::vm::transform::{compound, Transform};
 use core::panic;
 use iced_x86::{Instruction, Mnemonic, Register};
 use std::any::Any;
@@ -19,9 +19,9 @@ use std::cell::RefCell;
 use strum_macros::EnumIter;
 
 mapped! {
-    VMOp {
-        Jcc,
-        Ret,
+    VMCode {
+        Branch,
+        Back,
         // Load
         LoadImmediate,
         LoadRegister,
@@ -76,7 +76,8 @@ mapped! {
         VectorDiv,
         // Special
         Timestamp,
-        Dispatch
+        Cpuid,
+        Compound
     }
 }
 
@@ -346,7 +347,7 @@ impl Encode for VMMem {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
+    fn code(&self) -> Option<VMCode> {
         None
     }
 
@@ -447,7 +448,7 @@ impl Encode for VMCondition {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
+    fn code(&self) -> Option<VMCode> {
         None
     }
 
@@ -464,7 +465,6 @@ pub enum Phase {
     Scramble,
     Encrypt,
     Peephole,
-    Indirect,
 }
 
 impl Phase {
@@ -476,7 +476,6 @@ impl Phase {
             Self::Scramble => "scramble",
             Self::Encrypt => "encrypt",
             Self::Peephole => "peephole",
-            Self::Indirect => "indirect",
         }
     }
 }
@@ -626,6 +625,7 @@ pub fn lift(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
             | Mnemonic::Setp
             | Mnemonic::Sets => set::encode(instruction)?,
             Mnemonic::Rdtsc => rdtsc::encode(instruction)?,
+            Mnemonic::Cpuid => cpuid::encode(instruction)?,
             Mnemonic::Nop | Mnemonic::Int | Mnemonic::Int3 | Mnemonic::Ud2 | Mnemonic::Pause => {
                 continue
             }
@@ -642,7 +642,7 @@ pub fn assemble(mapper: &mut Mapper, operations: &[Box<dyn Encode>]) -> Vec<u8> 
     let mut bytes = Vec::new();
 
     for operation in operations {
-        if let Some(op) = operation.op() {
+        if let Some(op) = operation.code() {
             bytes.push(mapper.index(op));
         }
         bytes.extend(operation.encode(mapper));
@@ -659,11 +659,14 @@ fn transforms<'a>(
         Box::new(Permute { picker }),
         Box::new(Scramble),
         Box::new(Mutation),
-        Box::new(Indirect),
         Box::new(Encrypt { offset }),
         Box::new(Permute { picker }),
         Box::new(Peephole),
     ]
+}
+
+pub fn fuse(rt: &mut Runtime, operations: &mut Vec<Box<dyn Encode>>, register: bool) {
+    compound::fuse(rt, operations, register);
 }
 
 pub fn transform<F>(

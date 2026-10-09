@@ -49,9 +49,9 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r13, rcx).unwrap();
 
     // mov r14, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::BPointer, r14);
+    utils::register::load(rt, r12, r14, VMReg::BPointer);
     // mov r15, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::BLength, r15);
+    utils::register::load(rt, r12, r15, VMReg::BLength);
 
     // lea rbx, [r14 + 0x2]
     rt.asm.lea(rbx, ptr(r14 + 0x2)).unwrap();
@@ -216,7 +216,7 @@ pub fn build(rt: &mut Runtime) {
         {
             // lea rcx, [...]
             rt.asm
-                .lea(rcx, ptr(rt.data_labels[&DataDef::VmAttestation]))
+                .lea(rcx, ptr(rt.data_labels[&DataDef::VmAttestationProgram]))
                 .unwrap();
             // movsxd rax, [rcx]
             rt.asm.movsxd(rax, ptr(rcx)).unwrap();
@@ -247,7 +247,7 @@ pub fn build(rt: &mut Runtime) {
         {
             // lea rcx, [...]
             rt.asm
-                .lea(rcx, ptr(rt.data_labels[&DataDef::VmAttestation]))
+                .lea(rcx, ptr(rt.data_labels[&DataDef::VmAttestationProgram]))
                 .unwrap();
             // movsxd rax, [rcx]
             rt.asm.movsxd(rax, ptr(rcx)).unwrap();

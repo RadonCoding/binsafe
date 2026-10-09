@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMReg, VMWidth};
+use crate::vm::bytecode::{VMCode, VMReg, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 
@@ -17,8 +17,8 @@ impl Encode for Shl {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::Shl)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::Shl)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {

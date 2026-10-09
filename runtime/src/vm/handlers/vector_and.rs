@@ -1,18 +1,17 @@
-use iced_x86::code_asm::{xmm0, xmm1, ymm0, ymm1};
+use crate::{
+    runtime::Runtime,
+    vm::handlers::semantic::{self, Effect, Flags, Operation, Vector},
+};
 
-use crate::{runtime::Runtime, vm::handlers::vector};
+pub fn operation() -> Operation {
+    Operation {
+        effects: vec![Effect::Vector(Vector::And)],
+        flags: Flags::Never,
+        stores: None,
+        widths: &[],
+    }
+}
 
-// unsigned char* (unsigned char*)
 pub fn build(rt: &mut Runtime) {
-    vector::with_width(
-        rt,
-        |rt| {
-            // pand xmm0, xmm1
-            rt.asm.pand(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // vpand ymm0, ymm0, ymm1
-            rt.asm.vpand(ymm0, ymm0, ymm1).unwrap();
-        },
-    );
+    semantic::compiler::compile(rt, &operation());
 }

@@ -167,7 +167,7 @@ pub fn handler(rt: &mut Runtime) {
 
     for (register, offset) in VM_TO_CONTEXT {
         // mov rax, [rax + ...]
-        utils::vreg::load_reg(rt, r12, *register, rax);
+        utils::register::load(rt, r12, rax, *register);
 
         if *register == VMReg::Flags {
             // mov [r15 + ...], eax
