@@ -6,23 +6,24 @@ use crate::{
     },
 };
 
+pub fn operation() -> Operation {
+    Operation {
+        effects: vec![],
+        flags: Flags::Always(vec![(
+            Flag::Carry,
+            Expression::Compare(Box::new(Compare::BitSet(
+                Expression::Operand(Operand::Input(0)),
+                Expression::BitAnd(
+                    Box::new(Expression::Operand(Operand::Input(1))),
+                    Box::new(Expression::SignBit),
+                ),
+            ))),
+        )]),
+        stores: Some(vec![Expression::Operand(Operand::Input(0))]),
+        widths: &[VMWidth::Lower64, VMWidth::Lower32, VMWidth::Lower16],
+    }
+}
+
 pub fn build(rt: &mut Runtime) {
-    semantic::compiler::compile(
-        rt,
-        &Operation {
-            effects: vec![],
-            flags: Flags::Always(vec![(
-                Flag::Carry,
-                Expression::Compare(Box::new(Compare::BitSet(
-                    Expression::Operand(Operand::Input(0)),
-                    Expression::BitAnd(
-                        Box::new(Expression::Operand(Operand::Input(1))),
-                        Box::new(Expression::SignBit),
-                    ),
-                ))),
-            )]),
-            stores: Some(vec![Expression::Operand(Operand::Input(0))]),
-            widths: &[VMWidth::Lower64, VMWidth::Lower32, VMWidth::Lower16],
-        },
-    );
+    semantic::compiler::compile(rt, &operation());
 }

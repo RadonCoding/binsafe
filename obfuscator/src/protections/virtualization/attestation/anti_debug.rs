@@ -1,6 +1,5 @@
 use crate::engine::Engine;
 use crate::protections::virtualization::attestation::*;
-use rand::Rng;
 use runtime::runtime::ImportDef;
 use runtime::vm::bytecode::{VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::Encode;
@@ -22,32 +21,24 @@ const THREAD_HIDE_FROM_DEBUGGER: u64 = 0x11;
 const STATUS_PORT_NOT_SET: u64 = 0xc0000353;
 const STATUS_SUCCESS: u64 = 0;
 
-pub fn generate(
-    engine: &mut Engine,
-    rng: &mut impl Rng,
-    expected: &mut u64,
-) -> Vec<Box<dyn Encode>> {
+pub fn generate(engine: &mut Engine, expected: &mut u64) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
     instructions.extend(reserve(0x30));
 
     instructions.extend(set_register(VMReg::Vp0, 0));
 
-    instructions.extend(query_kd_debugger_enabled(engine, rng, expected));
-    instructions.extend(query_process_debug_object_handle(engine, rng, expected));
-    instructions.extend(set_hide_from_debugger(engine, rng, expected));
-    instructions.extend(query_hide_from_debbuger(engine, rng, expected));
+    instructions.extend(query_kd_debugger_enabled(engine, expected));
+    instructions.extend(query_process_debug_object_handle(engine, expected));
+    instructions.extend(set_hide_from_debugger(engine, expected));
+    instructions.extend(query_hide_from_debbuger(engine, expected));
 
     instructions.extend(release(0x30));
 
     instructions
 }
 
-fn query_kd_debugger_enabled(
-    engine: &mut Engine,
-    rng: &mut impl Rng,
-    expected: &mut u64,
-) -> Vec<Box<dyn Encode>> {
+fn query_kd_debugger_enabled(engine: &mut Engine, expected: &mut u64) -> Vec<Box<dyn Encode>> {
     let mut b = Vec::new();
 
     b.extend(load_memory(
@@ -59,7 +50,7 @@ fn query_kd_debugger_enabled(
         VMWidth::Lower8,
     ));
     b.extend(accumulate_immediate(
-        rng,
+        engine,
         VMReg::Vp0,
         None,
         0,
@@ -68,7 +59,7 @@ fn query_kd_debugger_enabled(
 
     b.extend(import(engine, ImportDef::NtQuerySystemInformation));
     b.extend(accumulate_prologue(
-        rng,
+        engine,
         VMReg::Vp0,
         VMReg::Rax,
         &NT_QUERY_INFORMATION_PROCESS_PROLOGUE,
@@ -94,16 +85,16 @@ fn query_kd_debugger_enabled(
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
-        rng,
+        engine,
         VMReg::Vp0,
         Some(VMReg::Rax),
         STATUS_SUCCESS,
         expected,
     ));
 
-    // READ KernelDebuggerEnabled + KernelDebuggerNotPresent
+    // KernelDebuggerEnabled + KernelDebuggerNotPresent
     b.extend(accumulate_memory(
-        rng,
+        engine,
         VMReg::Vp0,
         VMReg::Rsp,
         0x20,
@@ -117,14 +108,13 @@ fn query_kd_debugger_enabled(
 
 fn query_process_debug_object_handle(
     engine: &mut Engine,
-    rng: &mut impl Rng,
     expected: &mut u64,
 ) -> Vec<Box<dyn Encode>> {
     let mut b = Vec::new();
 
     b.extend(import(engine, ImportDef::NtQueryInformationProcess));
     b.extend(accumulate_prologue(
-        rng,
+        engine,
         VMReg::Vp0,
         VMReg::Rax,
         &NT_QUERY_INFORMATION_PROCESS_PROLOGUE,
@@ -152,16 +142,16 @@ fn query_process_debug_object_handle(
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
-        rng,
+        engine,
         VMReg::Vp0,
         Some(VMReg::Rax),
         STATUS_PORT_NOT_SET,
         expected,
     ));
 
-    // READ ProcessDebugObjectHandle
+    // ProcessDebugObjectHandle
     b.extend(accumulate_memory(
-        rng,
+        engine,
         VMReg::Vp0,
         VMReg::Rsp,
         0x28,
@@ -173,16 +163,12 @@ fn query_process_debug_object_handle(
     b
 }
 
-fn set_hide_from_debugger(
-    engine: &mut Engine,
-    rng: &mut impl Rng,
-    expected: &mut u64,
-) -> Vec<Box<dyn Encode>> {
+fn set_hide_from_debugger(engine: &mut Engine, expected: &mut u64) -> Vec<Box<dyn Encode>> {
     let mut b = Vec::new();
 
     b.extend(import(engine, ImportDef::NtSetInformationThread));
     b.extend(accumulate_prologue(
-        rng,
+        engine,
         VMReg::Vp0,
         VMReg::Rax,
         &NT_SET_INFORMATION_THREAD_PROLOGUE,
@@ -200,7 +186,7 @@ fn set_hide_from_debugger(
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
-        rng,
+        engine,
         VMReg::Vp0,
         Some(VMReg::Rax),
         STATUS_SUCCESS,
@@ -210,16 +196,12 @@ fn set_hide_from_debugger(
     b
 }
 
-fn query_hide_from_debbuger(
-    engine: &mut Engine,
-    rng: &mut impl Rng,
-    expected: &mut u64,
-) -> Vec<Box<dyn Encode>> {
+fn query_hide_from_debbuger(engine: &mut Engine, expected: &mut u64) -> Vec<Box<dyn Encode>> {
     let mut b = Vec::new();
 
     b.extend(import(engine, ImportDef::NtQueryInformationThread));
     b.extend(accumulate_prologue(
-        rng,
+        engine,
         VMReg::Vp0,
         VMReg::Rax,
         &NT_QUERY_INFORMATION_THREAD_PROLOGUE,
@@ -248,16 +230,16 @@ fn query_hide_from_debbuger(
     b.extend(invoke(VMReg::Rax));
 
     b.extend(accumulate_immediate(
-        rng,
+        engine,
         VMReg::Vp0,
         Some(VMReg::Rax),
         STATUS_SUCCESS,
         expected,
     ));
 
-    // READ ThreadHideFromDebugger
+    // ThreadHideFromDebugger
     b.extend(accumulate_byte(
-        rng,
+        engine,
         VMReg::Vp0,
         VMReg::Rsp,
         0x28,

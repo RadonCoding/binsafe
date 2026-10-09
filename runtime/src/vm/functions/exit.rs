@@ -10,7 +10,7 @@ pub fn build(rt: &mut Runtime) {
     let mut epilogue = rt.asm.create_label();
 
     // mov rsp, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::Rsp, rsp);
+    utils::register::load(rt, r12, rsp, VMReg::Rsp);
 
     // call ...
     rt.asm
@@ -22,30 +22,30 @@ pub fn build(rt: &mut Runtime) {
         .unwrap();
 
     // cmp [r12 + ...], 0x0
-    utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
+    utils::register::cmp_with_native(rt, r12, VMReg::NBranch, 0x0);
     // je ...
     rt.asm.je(no_branch).unwrap();
 
     // push [r12 + ...]
-    utils::vreg::push(rt, r12, VMReg::NBranch);
+    utils::register::push(rt, r12, VMReg::NBranch);
     // jmp ...
     rt.asm.jmp(epilogue).unwrap();
 
     rt.asm.set_label(&mut no_branch).unwrap();
     {
         // push [r12 + ...]
-        utils::vreg::push(rt, r12, VMReg::NExit);
+        utils::register::push(rt, r12, VMReg::NExit);
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();
     {
         // push [r12 + ...]
-        utils::vreg::push(rt, r12, VMReg::Flags);
+        utils::register::push(rt, r12, VMReg::Flags);
         // popfq
         rt.asm.popfq().unwrap();
 
         // mov r12, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::R12, r12);
+        utils::register::load(rt, r12, r12, VMReg::R12);
 
         // ret
         rt.asm.ret().unwrap();

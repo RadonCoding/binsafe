@@ -11,7 +11,8 @@ use crate::{
     mapper::{mapped, Mappable, Mapper},
     vm::{
         self,
-        bytecode::{VMReg, VMVec},
+        bytecode::{VMCode, VMReg, VMVec},
+        handlers::semantic,
     },
 };
 
@@ -29,6 +30,7 @@ mapped! {
         VmInvoke,
         VmLookup,
         VmCleanup,
+        VmService,
         VmRegistersCapture,
         VmRegistersCaptureVolatile,
         VmRegistersCaptureNonvolatile,
@@ -39,8 +41,8 @@ mapped! {
         VmVectorsRestore,
         VmVectorsCopy,
         /* VM HANDLERS */
-        VmHandlerJcc,
-        VmHandlerRet,
+        VmHandlerBranch,
+        VmHandlersBack,
         VmHandlerLoadImmediate,
         VmHandlerLoadRegister,
         VmHandlerLoadMemory,
@@ -88,7 +90,8 @@ mapped! {
         VmHandlerVectorMul,
         VmHandlerVectorDiv,
         VmHandlerTimestamp,
-        VmHandlerDispatch,
+        VmHandlerCpuid,
+        VmHandlerCompound,
         /* VM VEH */
         VmVehInitialize,
         VmVehHandler,
@@ -117,7 +120,9 @@ mapped! {
         VmTable,
         VmCodeStart,
         VmCodeEnd,
-        VmAttestation,
+        VmAttestationProgram,
+        VmAttestationService,
+        VmServiceBox,
         VmTrampolines,
         VmKeyInitializer,
         VmKeyMultiplier,
@@ -165,6 +170,9 @@ mapped! {
         NtQueryInformationProcess,
         NtSetInformationThread,
         NtQueryInformationThread,
+        NtGetContextThread,
+        CreateThread,
+        NtDelayExecution,
         MessageBoxA,
         NtTerminateProcess,
         #[cfg(debug_assertions)]
@@ -188,6 +196,9 @@ mapped! {
         NtQueryInformationProcess,
         NtSetInformationThread,
         NtQueryInformationThread,
+        NtGetContextThread,
+        CreateThread,
+        NtDelayExecution,
         MessageBoxA,
         NtTerminateProcess,
         #[cfg(debug_assertions)]
@@ -222,6 +233,9 @@ impl ImportDef {
             ImportDef::NtQueryInformationThread { .. } => {
                 (HashDef::Ntdll, HashDef::NtQueryInformationThread)
             }
+            ImportDef::NtGetContextThread { .. } => (HashDef::Ntdll, HashDef::NtGetContextThread),
+            ImportDef::CreateThread { .. } => (HashDef::Kernel32, HashDef::CreateThread),
+            ImportDef::NtDelayExecution { .. } => (HashDef::Ntdll, HashDef::NtDelayExecution),
             ImportDef::MessageBoxA { .. } => (HashDef::User32, HashDef::MessageBoxA),
             ImportDef::NtTerminateProcess { .. } => (HashDef::Ntdll, HashDef::NtTerminateProcess),
             #[cfg(debug_assertions)]
@@ -241,6 +255,7 @@ enum EmissionTask {
     Hash(HashDef),
     DispatchTable(usize),
     DispatchStub(usize, usize),
+    Compound(usize),
 }
 
 pub type Handler = Box<dyn FnOnce(&mut Runtime)>;
@@ -316,6 +331,9 @@ pub struct Runtime {
     addresses: HashMap<CodeLabel, u64>,
     sizes: HashMap<CodeLabel, u64>,
 
+    pub compounds: Vec<Vec<VMCode>>,
+    pub compound_labels: Vec<CodeLabel>,
+
     pub mapper: Mapper,
 }
 
@@ -390,8 +408,27 @@ impl Runtime {
             addresses: HashMap::new(),
             sizes: HashMap::new(),
 
+            compounds: Vec::new(),
+            compound_labels: Vec::new(),
+
             mapper: Mapper::new(),
         }
+    }
+
+    pub fn compound(&mut self, operations: Vec<VMCode>) -> u8 {
+        if let Some(index) = self
+            .compounds
+            .iter()
+            .position(|existing| *existing == operations)
+        {
+            return index as u8;
+        }
+
+        let index = self.compounds.len();
+
+        self.compounds.push(operations);
+
+        index as u8
     }
 
     fn set_function_label(&mut self, def: FnDef) {
@@ -420,11 +457,11 @@ impl Runtime {
     }
 
     pub fn lookup(&self, label: CodeLabel) -> u64 {
-        self.addresses[&label]
+        self.addresses.get(&label).copied().unwrap_or(0)
     }
 
     pub fn size(&self, label: CodeLabel) -> u64 {
-        self.sizes[&label]
+        self.sizes.get(&label).copied().unwrap_or(0)
     }
 
     fn hash(&self, value: &str) -> u64 {
@@ -595,9 +632,17 @@ impl Runtime {
 
                     self.asm.set_label(&mut dispatch.table).unwrap();
 
+                    self.asm.zero_bytes().unwrap();
+
                     for _ in 0..dispatch.slots() {
                         self.asm.dq(&[0u64]).unwrap();
                     }
+                }
+                EmissionTask::Compound(index) => {
+                    let members = self.compounds[index].clone();
+                    let mut label = self.compound_labels[index];
+                    self.asm.set_label(&mut label).unwrap();
+                    semantic::compiler::compile_compound(self, &members);
                 }
                 EmissionTask::DispatchStub(table, entry) => {
                     let (index, stub, target) =
@@ -633,6 +678,7 @@ impl Runtime {
             (FnDef::VmInvoke, vm::functions::invoke::build),
             (FnDef::VmLookup, vm::functions::lookup::build),
             (FnDef::VmCleanup, vm::functions::cleanup::build),
+            (FnDef::VmService, vm::functions::service::build),
             (FnDef::VmRegistersCapture, vm::functions::registers::capture),
             (
                 FnDef::VmRegistersCaptureVolatile,
@@ -648,8 +694,8 @@ impl Runtime {
             (FnDef::VmVectorsCapture, vm::functions::vectors::capture),
             (FnDef::VmVectorsRestore, vm::functions::vectors::restore),
             (FnDef::VmVectorsCopy, vm::functions::vectors::copy),
-            (FnDef::VmHandlerJcc, vm::handlers::jcc::build),
-            (FnDef::VmHandlerRet, vm::handlers::ret::build),
+            (FnDef::VmHandlerBranch, vm::handlers::branch::build),
+            (FnDef::VmHandlersBack, vm::handlers::back::build),
             (
                 FnDef::VmHandlerLoadImmediate,
                 vm::handlers::load_immediate::build,
@@ -745,7 +791,8 @@ impl Runtime {
             (FnDef::VmHandlerVectorMul, vm::handlers::vector_mul::build),
             (FnDef::VmHandlerVectorDiv, vm::handlers::vector_div::build),
             (FnDef::VmHandlerTimestamp, vm::handlers::timestamp::build),
-            (FnDef::VmHandlerDispatch, vm::handlers::dispatch::build),
+            (FnDef::VmHandlerCompound, vm::handlers::compound::build),
+            (FnDef::VmHandlerCpuid, vm::handlers::cpuid::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
             (FnDef::Hash, functions::hash::build),
             (FnDef::Resolve, functions::resolve::build),
@@ -773,6 +820,9 @@ impl Runtime {
         self.define_data_bytes(DataDef::ImportNames, &vec![0u8; self.imports.len() * 16]);
 
         self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
+
+        // [ tick ][ locked vp0 ][ locked vp1 ]
+        self.define_data_bytes(DataDef::VmServiceBox, &[0u8; 16]);
 
         self.define_data_qword(DataDef::VmKeyInitializer, self.keys.initializer);
         self.define_data_qword(DataDef::VmKeyAddend, self.keys.addend);
@@ -822,6 +872,9 @@ impl Runtime {
             HashDef::NtQueryInformationThread,
             "NtQueryInformationThread",
         );
+        self.define_hash(HashDef::NtGetContextThread, "NtGetContextThread");
+        self.define_hash(HashDef::CreateThread, "CreateThread");
+        self.define_hash(HashDef::NtDelayExecution, "NtDelayExecution");
         self.define_hash(HashDef::MessageBoxA, "MessageBoxA");
         self.define_hash(HashDef::NtTerminateProcess, "NtTerminateProcess");
         #[cfg(debug_assertions)]
@@ -830,6 +883,10 @@ impl Runtime {
         self.define_hash(HashDef::NtWriteFile, "NtWriteFile");
 
         let mut rng = rand::thread_rng();
+
+        self.compound_labels = (0..self.compounds.len())
+            .map(|_| self.asm.create_label())
+            .collect();
 
         let mut data_tasks = Vec::new();
 
@@ -876,6 +933,10 @@ impl Runtime {
             phase_one.push(EmissionTask::Function(def, builder));
         }
 
+        for index in 0..self.compounds.len() {
+            phase_one.push(EmissionTask::Compound(index));
+        }
+
         phase_one.extend(data_phase_one.iter().cloned());
         phase_one.shuffle(&mut rng);
 
@@ -885,8 +946,6 @@ impl Runtime {
 
         phase_two.extend(data_phase_two.iter().cloned());
 
-        // A case handler may register further dispatches (nested width/precision
-        // dispatch), so drain in shuffled waves until no new work remains.
         let mut dispatched = 0;
 
         loop {

@@ -6,7 +6,7 @@ use rand::Rng;
 use crate::mapper::Mapper;
 use crate::vm::bytecode::VMWidth;
 use crate::vm::encoders::block::{Block, Jump, Target};
-use crate::vm::encoders::jcc::Jcc;
+use crate::vm::encoders::branch::Branch;
 use crate::vm::encoders::label::Label;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::Encode;
@@ -169,9 +169,9 @@ fn placeholder(fallthrough: bool) -> (Label, Vec<Box<dyn Encode>>) {
         source: vec![0],
     }));
     procedure.push(Box::new(if fallthrough {
-        Jcc::fallthrough()
+        Branch::fallthrough()
     } else {
-        Jcc::skip()
+        Branch::skip()
     }));
 
     (source, procedure)

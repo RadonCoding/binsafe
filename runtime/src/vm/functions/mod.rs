@@ -8,6 +8,7 @@ pub mod ginit;
 pub mod invoke;
 pub mod lookup;
 pub mod registers;
+pub mod service;
 pub mod tinit;
 pub mod vectors;
 pub mod veh;

@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMPrecision, VMWidth};
+use crate::vm::bytecode::{VMCode, VMPrecision, VMWidth};
 use crate::vm::encoders::Encode;
 use std::any::Any;
 
@@ -19,8 +19,8 @@ impl Encode for VectorAdd {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::VectorAdd)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::VectorAdd)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {

@@ -94,11 +94,23 @@ pub fn derive_hash(bytes: &[u8], multiplier: u64, addend: u64) -> u64 {
     let start = HEADER_SIZE;
     let end = bytes.len() - TRAILER_SIZE;
     let payload = &bytes[start..end];
-    payload.chunks_exact(8).fold(0, |hash, chunk| {
-        (hash ^ u64::from_le_bytes(chunk.try_into().unwrap()))
+
+    let mut chunks = payload.chunks_exact(size_of::<u64>());
+    let mut hash = 0u64;
+
+    for chunk in &mut chunks {
+        hash = (hash ^ u64::from_le_bytes(chunk.try_into().unwrap()))
             .wrapping_mul(multiplier)
-            .wrapping_add(addend)
-    })
+            .wrapping_add(addend);
+    }
+
+    for &byte in chunks.remainder() {
+        hash = (hash ^ byte as u64)
+            .wrapping_mul(multiplier)
+            .wrapping_add(addend);
+    }
+
+    hash
 }
 
 pub fn derive_key(bytes: &[u8]) -> u64 {

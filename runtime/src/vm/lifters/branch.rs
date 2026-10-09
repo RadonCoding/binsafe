@@ -1,12 +1,12 @@
 use iced_x86::{Code, Instruction, OpKind};
 
 use crate::vm::bytecode::{Flag, VMCondition, VMLogic, VMMem, VMReg, VMSeg, VMWidth};
+use crate::vm::encoders::back::Back;
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_immediate::LoadImmediate;
 use crate::vm::encoders::load_memory::LoadMemory;
 use crate::vm::encoders::load_register::LoadRegister;
-use crate::vm::encoders::ret::Ret;
-use crate::vm::encoders::{jcc::Jcc, Encode};
+use crate::vm::encoders::{branch::Branch, Encode};
 use crate::vm::lifters::operation_width;
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
@@ -21,7 +21,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                         width: VMWidth::Lower64,
                         source: source_register,
                     }),
-                    Box::new(Jcc::jump()),
+                    Box::new(Branch::jump()),
                 ])
             }
             OpKind::Memory => Some(vec![
@@ -31,7 +31,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 Box::new(LoadMemory {
                     width: VMWidth::Lower64,
                 }),
-                Box::new(Jcc::jump()),
+                Box::new(Branch::jump()),
             ]),
             _ => unreachable!(),
         },
@@ -49,7 +49,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Box::new(Jcc::jump()),
+                Box::new(Branch::jump()),
             ])
         }
 
@@ -66,7 +66,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Box::new(Jcc::call()),
+                Box::new(Branch::call()),
             ])
         }
 
@@ -76,17 +76,19 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
             } else {
                 VMWidth::Lower8
             };
+
             let immediate_source = if instruction.op_count() > 0 {
                 instruction.immediate16()
             } else {
                 0
             };
+
             Some(vec![
                 Box::new(LoadImmediate {
                     width: immediate_width,
                     source: immediate_source.to_le_bytes()[..immediate_width.size()].to_vec(),
                 }),
-                Box::new(Ret),
+                Box::new(Back),
             ])
         }
 
@@ -98,7 +100,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                         width: VMWidth::Lower64,
                         source: source_register,
                     }),
-                    Box::new(Jcc::call()),
+                    Box::new(Branch::call()),
                 ])
             }
             OpKind::Memory => Some(vec![
@@ -108,7 +110,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                 Box::new(LoadMemory {
                     width: VMWidth::Lower64,
                 }),
-                Box::new(Jcc::call()),
+                Box::new(Branch::call()),
             ]),
             _ => unreachable!(),
         },
@@ -212,7 +214,7 @@ pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
                         segment: VMSeg::None,
                     },
                 }),
-                Box::new(Jcc { logic, conditions }),
+                Box::new(Branch { logic, conditions }),
             ])
         }
     }

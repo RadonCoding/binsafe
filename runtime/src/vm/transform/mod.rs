@@ -10,8 +10,8 @@ use crate::vm::{
     encoders::{Effect, Encode},
 };
 
+pub mod compound;
 pub mod encrypt;
-pub mod indirect;
 pub mod mutation;
 pub mod peephole;
 pub mod permute;

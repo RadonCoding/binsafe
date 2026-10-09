@@ -10,7 +10,7 @@ use crate::{
 pub fn capture(rt: &mut Runtime) {
     for (dst, src) in REGISTERS_TO_NATIVE {
         // mov [r12 + ...], ...
-        utils::vreg::store_reg(rt, r12, src, dst);
+        utils::register::store(rt, r12, dst, src);
     }
     // ret
     rt.asm.ret().unwrap();
@@ -19,7 +19,7 @@ pub fn capture(rt: &mut Runtime) {
 pub fn capture_volatile(rt: &mut Runtime) {
     for &(dst, src) in REGISTERS_TO_NATIVE_VOLATILE {
         // mov [r12 + ...], ...
-        utils::vreg::store_reg(rt, r12, src, dst);
+        utils::register::store(rt, r12, dst, src);
     }
     // ret
     rt.asm.ret().unwrap();
@@ -28,7 +28,7 @@ pub fn capture_volatile(rt: &mut Runtime) {
 pub fn capture_nonvolatile(rt: &mut Runtime) {
     for &(dst, src) in REGISTERS_TO_NATIVE_NONVOLATILE {
         // mov [r12 + ...], ...
-        utils::vreg::store_reg(rt, r12, src, dst);
+        utils::register::store(rt, r12, dst, src);
     }
     // ret
     rt.asm.ret().unwrap();
@@ -37,7 +37,7 @@ pub fn capture_nonvolatile(rt: &mut Runtime) {
 pub fn restore(rt: &mut Runtime) {
     for (src, dst) in REGISTERS_TO_NATIVE {
         // mov ..., [r12 + ...]
-        utils::vreg::load_reg(rt, r12, src, dst);
+        utils::register::load(rt, r12, dst, src);
     }
     // ret
     rt.asm.ret().unwrap();
@@ -46,9 +46,9 @@ pub fn restore(rt: &mut Runtime) {
 pub fn copy(rt: &mut Runtime) {
     for (reg, _) in REGISTERS_TO_NATIVE {
         // mov rax, [rcx + ...]
-        utils::vreg::load_reg(rt, rcx, reg, rax);
+        utils::register::load(rt, rcx, rax, reg);
         // mov [rdx + ...], rax
-        utils::vreg::store_reg(rt, rdx, rax, reg);
+        utils::register::store(rt, rdx, reg, rax);
     }
     // ret
     rt.asm.ret().unwrap();
