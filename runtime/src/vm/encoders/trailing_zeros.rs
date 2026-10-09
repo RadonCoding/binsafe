@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMReg, VMWidth};
+use crate::vm::bytecode::{VMCode, VMReg, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 
@@ -17,8 +17,8 @@ impl Encode for TrailingZeros {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::TrailingZeros)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::TrailingZeros)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {

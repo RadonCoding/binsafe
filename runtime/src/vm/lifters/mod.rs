@@ -15,6 +15,7 @@ pub mod bswap;
 pub mod bt;
 pub mod cmov;
 pub mod cmpxchg;
+pub mod cpuid;
 pub mod div;
 pub mod extend;
 pub mod integer;

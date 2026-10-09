@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMOp, VMWidth};
+use crate::vm::bytecode::{VMCode, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 
@@ -17,8 +17,8 @@ impl Encode for Exchange {
         self
     }
 
-    fn op(&self) -> Option<VMOp> {
-        Some(VMOp::Exchange)
+    fn code(&self) -> Option<VMCode> {
+        Some(VMCode::Exchange)
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {

@@ -14,7 +14,7 @@ pub fn build(rt: &mut Runtime) {
     // mov r8, rcx
     rt.asm.mov(r8, rcx).unwrap();
     // sub r8, [r12 + ...]
-    utils::vreg::reg_sub(rt, r12, VMReg::VImage, r8);
+    utils::register::sub_from_native(rt, r12, r8, VMReg::VImage);
 
     // Resolve the table entry using the index:
     // xor edx, r8d
@@ -49,7 +49,7 @@ pub fn build(rt: &mut Runtime) {
     // add rax, rcx
     rt.asm.add(rax, rcx).unwrap();
     // mov [r12 + ...], rax
-    utils::vreg::store_reg(rt, r12, rax, VMReg::NExit);
+    utils::register::store(rt, r12, VMReg::NExit, rax);
 
     // Apply the entry displacement of the caller stub to the return address:
     // movsxd rax, [r8 + 0x4]
@@ -57,7 +57,7 @@ pub fn build(rt: &mut Runtime) {
     // add rax, rcx
     rt.asm.add(rax, rcx).unwrap();
     // mov [r12 + ...], rax
-    utils::vreg::store_reg(rt, r12, rax, VMReg::NEntry);
+    utils::register::store(rt, r12, VMReg::NEntry, rax);
 
     // Read the offset into bytecode from the table:
     // mov edx, [r8 + 0x8]

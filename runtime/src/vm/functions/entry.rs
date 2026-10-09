@@ -106,7 +106,7 @@ pub fn build(rt: &mut Runtime) {
         .lea(rcx, ptr(rt.data_labels[&DataDef::VmGlobalVectors]))
         .unwrap();
     // mov rdx, [r12 + ...]
-    utils::vreg::load_reg(rt, r12, VMReg::VVector, rdx);
+    utils::register::load(rt, r12, rdx, VMReg::VVector);
     // call ...
     rt.asm
         .call(rt.function_labels[&FnDef::VmVectorsCopy])
@@ -124,7 +124,7 @@ pub fn build(rt: &mut Runtime) {
             .unwrap();
 
         // mov rcx, [...]
-        utils::vreg::load_reg(rt, r12, VMReg::VVector, rcx);
+        utils::register::load(rt, r12, rcx, VMReg::VVector);
         // call ...
         rt.asm
             .call(rt.function_labels[&FnDef::VmVectorsCapture])
@@ -136,12 +136,12 @@ pub fn build(rt: &mut Runtime) {
         // pop rax
         rt.asm.pop(rax).unwrap();
         // mov [r12 + ...], rax
-        utils::vreg::store_reg(rt, r12, rax, VMReg::R12);
+        utils::register::store(rt, r12, VMReg::R12, rax);
 
         // pop rax
         rt.asm.pop(rax).unwrap();
         // mov [r12 + ...], rax
-        utils::vreg::store_reg(rt, r12, rax, VMReg::Flags);
+        utils::register::store(rt, r12, VMReg::Flags, rax);
 
         // Pop the return address from the stack:
         // pop rcx
@@ -155,14 +155,14 @@ pub fn build(rt: &mut Runtime) {
         // call ...
         rt.asm.call(rt.function_labels[&FnDef::VmLookup]).unwrap();
         // mov [r12 + ...], rax
-        utils::vreg::store_reg(rt, r12, rax, VMReg::BPointer);
+        utils::register::store(rt, r12, VMReg::BPointer, rax);
 
         // Stack now points to where it was before the caller stub:
         // mov [r12 + ...], rsp
-        utils::vreg::store_reg(rt, r12, rsp, VMReg::Rsp);
+        utils::register::store(rt, r12, VMReg::Rsp, rsp);
 
         // mov rsp, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::VStack, rsp);
+        utils::register::load(rt, r12, rsp, VMReg::VStack);
     }
 
     #[cfg(feature = "profile")]

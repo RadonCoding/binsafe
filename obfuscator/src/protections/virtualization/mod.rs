@@ -14,6 +14,7 @@ use logger::{debug, info};
 use rand::Rng;
 use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::bytecode::{self};
+use runtime::vm::encoders::Encode;
 use runtime::{VM_DISPATCH_SIZE, VM_REDIRECT_SIZE, VM_TRAMPOLINE_SIZE};
 
 mod attestation;
@@ -53,9 +54,9 @@ fn resolve(engine: &Engine, label: DataDef) -> (u32, usize) {
     (rva, offset)
 }
 
-fn write_displacement(engine: &mut Engine, label: DataDef, target: u32) {
+fn write_displacement(engine: &mut Engine, label: DataDef, value: u32) {
     let (rva, offset) = resolve(engine, label);
-    let displacement = (target as i64 - rva as i64) as i32;
+    let displacement = (value as i64 - rva as i64) as i32;
     engine
         .pe
         .write(offset, &displacement.to_le_bytes())
@@ -91,60 +92,56 @@ pub struct Virtualization {
 }
 
 impl Virtualization {
-    fn attestation(&self, engine: &mut Engine, base: u64) -> Vec<u8> {
-        let mut code = Vec::new();
+    fn assemble(
+        &self,
+        engine: &mut Engine,
+        operations: Vec<Box<dyn Encode>>,
+        offset: u64,
+        register: bool,
+    ) -> Vec<u8> {
+        let mut rng = rand::thread_rng();
 
-        let mut log = Vec::new();
+        let mut operations = operations;
+        bytecode::fuse(&mut engine.rt, &mut operations, register);
 
-        let blocks = attestation::generate(engine, engine.rt.keys.secret);
+        let transformed = if engine.args.verbose {
+            let (transformed, snapshots) = bytecode::transform_with_snapshots(
+                &mut engine.rt.mapper,
+                operations,
+                offset,
+                |ready| rng.gen_range(0..ready.len()),
+            );
+
+            if !register {
+                debug!("ATTESTATION @ 0x{:08X}:\n{}", offset, snapshots);
+            }
+
+            transformed
+        } else {
+            bytecode::transform(&mut engine.rt.mapper, operations, offset, |ready| {
+                rng.gen_range(0..ready.len())
+            })
+        };
+
+        let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
 
         let cipher = Cipher::new(engine.rt.keys.multiplier, engine.rt.keys.addend);
+        cipher.encrypt_block(&mut bytes, 0, 0);
+        cipher.decrypt_payload(&mut bytes, 0, 0);
 
-        for (index, operations) in blocks.into_iter().enumerate() {
-            let mut rng = rand::thread_rng();
+        bytes
+    }
 
-            let offset = base + code.len() as u64;
+    fn attestation(&self, engine: &mut Engine, base: u64, register: bool) -> (Vec<u8>, Vec<u8>) {
+        let mut expected = 0;
 
-            let transformed = if engine.args.verbose {
-                let (transformed, snapshots) = bytecode::transform_with_snapshots(
-                    &mut engine.rt.mapper,
-                    operations,
-                    offset,
-                    |ready| rng.gen_range(0..ready.len()),
-                );
+        let service = attestation::service(engine, &mut expected);
+        let program = attestation::program(engine, engine.rt.keys.secret, expected);
 
-                log.push(format!("{}BLOCK {}:\n{}", " ".repeat(4), index, snapshots));
+        let program = self.assemble(engine, program, base, register);
+        let service = self.assemble(engine, service, base + program.len() as u64, register);
 
-                transformed
-            } else {
-                bytecode::transform(&mut engine.rt.mapper, operations, offset, |ready| {
-                    rng.gen_range(0..ready.len())
-                })
-            };
-
-            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
-
-            let key = if code.is_empty() {
-                engine.rt.keys.initializer
-            } else {
-                crypt::derive_key(&code)
-            };
-
-            cipher.encrypt_block(&mut bytes, key, 0);
-            cipher.decrypt_payload(&mut bytes, key, 0);
-
-            code.extend_from_slice(&bytes);
-        }
-
-        if engine.args.verbose {
-            debug!(
-                "ATTESTATION @ 0x{:016X}:\n{}",
-                engine.rt.keys.secret,
-                log.join("\n")
-            );
-        }
-
-        code
+        (program, service)
     }
 }
 
@@ -159,6 +156,8 @@ impl Protection for Virtualization {
         let mut code = Vec::new();
 
         let cipher = Cipher::new(engine.rt.keys.multiplier, engine.rt.keys.addend);
+
+        let mut operations = Vec::new();
 
         'outer: for block in &mut engine.blocks {
             if block.size < VM_TRAMPOLINE_SIZE {
@@ -192,45 +191,50 @@ impl Protection for Virtualization {
             let hash = hasher.finish();
 
             if lookup.get(&hash).is_none() {
-                let mut rng = rand::thread_rng();
-
-                let offset = code.len() as u64;
-
-                let transformed = if engine.args.verbose {
-                    let (transformed, snapshots) = bytecode::transform_with_snapshots(
-                        &mut engine.rt.mapper,
-                        lifted,
-                        offset,
-                        |ready| rng.gen_range(0..ready.len()),
-                    );
-
-                    log.push((block.rva, format!("{}", snapshots)));
-
-                    transformed
-                } else {
-                    bytecode::transform(&mut engine.rt.mapper, lifted, offset, |ready| {
-                        rng.gen_range(0..ready.len())
-                    })
-                };
-
-                let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
-
-                cipher.encrypt_block(&mut bytes, 0, 0);
-                cipher.decrypt_payload(&mut bytes, 0, 0);
-
-                code.extend_from_slice(&bytes);
-
-                let index = self.programs.len();
-                self.programs.push(bytes);
-
+                let index = operations.len();
+                operations.push(lifted);
                 self.groups.push(vec![block.rva]);
-
                 lookup.insert(hash, index);
             } else {
                 self.duplicates += 1;
                 let index = lookup[&hash];
                 self.groups[index].push(block.rva);
             }
+        }
+
+        let mut rng = rand::thread_rng();
+
+        for (index, operations) in operations.into_iter().enumerate() {
+            let offset = code.len() as u64;
+
+            let mut operations = operations;
+            bytecode::fuse(&mut engine.rt, &mut operations, true);
+
+            let transformed = if engine.args.verbose {
+                let (transformed, snapshots) = bytecode::transform_with_snapshots(
+                    &mut engine.rt.mapper,
+                    operations,
+                    offset,
+                    |ready| rng.gen_range(0..ready.len()),
+                );
+
+                log.push((self.groups[index][0], format!("{}", snapshots)));
+
+                transformed
+            } else {
+                bytecode::transform(&mut engine.rt.mapper, operations, offset, |ready| {
+                    rng.gen_range(0..ready.len())
+                })
+            };
+
+            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
+
+            cipher.encrypt_block(&mut bytes, 0, 0);
+            cipher.decrypt_payload(&mut bytes, 0, 0);
+
+            code.extend_from_slice(&bytes);
+
+            self.programs.push(bytes);
         }
 
         for (_, group) in self.programs.iter().zip(&self.groups) {
@@ -244,7 +248,7 @@ impl Protection for Virtualization {
             }
         }
 
-        // Reserve a trampoline slot for each block too small for an inline stub
+        // Reserve a trampoline slot for each block too small for an inline stub:
         for block in &engine.blocks {
             if self.virtualized.contains_key(&block.rva) && block.size < VM_DISPATCH_SIZE {
                 self.redirects.insert(block.rva, self.redirects.len());
@@ -266,7 +270,12 @@ impl Protection for Virtualization {
 
         engine.rt.define_data_dword(DataDef::VmCodeStart, 0);
         engine.rt.define_data_dword(DataDef::VmCodeEnd, 0);
-        engine.rt.define_data_dword(DataDef::VmAttestation, 0);
+        engine
+            .rt
+            .define_data_dword(DataDef::VmAttestationProgram, 0);
+        engine
+            .rt
+            .define_data_dword(DataDef::VmAttestationService, 0);
 
         engine
             .rt
@@ -277,6 +286,8 @@ impl Protection for Virtualization {
         engine
             .rt
             .define_data_qword(DataDef::VmKeyAddend, engine.rt.keys.addend);
+
+        self.attestation(engine, 0, true);
     }
 
     fn apply(&self, engine: &mut Engine) {
@@ -292,17 +303,17 @@ impl Protection for Virtualization {
             }
         }
 
-        let attestation = self.attestation(engine, code.len() as u64);
+        let attestation = code.len();
+
+        let (program, service) = self.attestation(engine, attestation as u64, false);
 
         let cipher = Cipher::new(engine.rt.keys.multiplier, engine.rt.keys.addend);
 
-        let secret = engine.rt.keys.secret;
+        let region = [program.as_slice(), service.as_slice()].concat();
+        let hash = crypt::derive_hash(&region, engine.rt.keys.multiplier, engine.rt.keys.addend);
 
-        let mut key = crypt::derive_hash(
-            &attestation,
-            engine.rt.keys.multiplier,
-            engine.rt.keys.addend,
-        );
+        let secret = engine.rt.keys.secret ^ hash;
+        let mut key = engine.rt.keys.initializer;
 
         let mut position = 0;
 
@@ -316,7 +327,8 @@ impl Protection for Virtualization {
             position += bytes.len();
         }
 
-        code.extend_from_slice(&attestation);
+        code.extend_from_slice(&program);
+        code.extend_from_slice(&service);
 
         let section = engine.create_section(
             Some("☠️"),
@@ -331,8 +343,13 @@ impl Protection for Virtualization {
         write_displacement(engine, DataDef::VmCodeEnd, base + code.len() as u32);
         write_displacement(
             engine,
-            DataDef::VmAttestation,
-            base + (code.len() - attestation.len()) as u32,
+            DataDef::VmAttestationProgram,
+            base + attestation as u32,
+        );
+        write_displacement(
+            engine,
+            DataDef::VmAttestationService,
+            base + (attestation + program.len()) as u32,
         );
 
         let entry_rva = engine.rt.lookup(engine.rt.function_labels[&FnDef::VmEntry]);
@@ -370,7 +387,7 @@ impl Protection for Virtualization {
 
                 asm.reset();
 
-                // Stub has to be assembled twice so that the runtime return address can be calculated
+                // Stub has to be assembled twice so that the runtime return address can be calculated:
                 let return_address = rva as i32 + first.len() as i32;
 
                 asm.push(token ^ return_address).unwrap();

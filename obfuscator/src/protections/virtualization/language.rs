@@ -4,8 +4,9 @@ use runtime::vm::bytecode::{Flag, VMCondition, VMLogic, VMMem, VMReg, VMSeg, VMW
 use runtime::vm::encoders::add::Add;
 use runtime::vm::encoders::and::And;
 use runtime::vm::encoders::block::{Block, Jump, Target};
+use runtime::vm::encoders::branch::Branch;
+use runtime::vm::encoders::cpuid::Cpuid;
 use runtime::vm::encoders::discard::Discard;
-use runtime::vm::encoders::jcc::Jcc;
 use runtime::vm::encoders::label::Label;
 use runtime::vm::encoders::load_address::LoadAddress;
 use runtime::vm::encoders::load_immediate::LoadImmediate;
@@ -108,7 +109,7 @@ pub fn foreach<F: FnOnce(&mut Engine) -> Vec<Box<dyn Encode>>>(
         width: VMWidth::SLower16,
         source: vec![0, 0],
     }));
-    operations.push(Box::new(Jcc {
+    operations.push(Box::new(Branch {
         logic: VMLogic::SAND,
         conditions: vec![VMCondition::cmp(Flag::Carry, 1)],
     }));
@@ -130,6 +131,39 @@ pub fn foreach<F: FnOnce(&mut Engine) -> Vec<Box<dyn Encode>>>(
     }
 }
 
+pub fn forever(body: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+    let destination = Label::destination();
+    let source = Label::source();
+
+    let mut operations = Vec::<Box<dyn Encode>>::new();
+
+    operations.push(Box::new(destination));
+    operations.extend(body);
+
+    operations.extend(immediate(0));
+    operations.extend(immediate(1));
+    operations.extend(sub(None, None));
+    operations.push(Box::new(Discard::new()));
+
+    operations.push(Box::new(source));
+    operations.push(Box::new(LoadImmediate {
+        width: VMWidth::SLower16,
+        source: vec![0, 0],
+    }));
+    operations.push(Box::new(Branch {
+        logic: VMLogic::SAND,
+        conditions: vec![VMCondition::cmp(Flag::Carry, 1)],
+    }));
+
+    vec![Box::new(Block::new(
+        operations,
+        vec![Jump {
+            source,
+            destination: Target::Label(destination),
+        }],
+    ))]
+}
+
 pub fn compute_data(engine: &mut Engine, def: DataDef) -> Vec<Box<dyn Encode>> {
     let displacement = engine.rt.lookup(engine.rt.data_labels[&def]) as i32;
     compute_memory(VMReg::VImage, VMReg::None, 1, displacement, VMSeg::None)
@@ -145,6 +179,39 @@ pub fn load_data(engine: &mut Engine, def: DataDef, width: VMWidth) -> Vec<Box<d
         VMSeg::None,
         width,
     )
+}
+
+pub fn load_data_at(
+    engine: &mut Engine,
+    def: DataDef,
+    offset: i32,
+    width: VMWidth,
+) -> Vec<Box<dyn Encode>> {
+    let displacement = engine.rt.lookup(engine.rt.data_labels[&def]) as i32 + offset;
+    load_memory(
+        VMReg::VImage,
+        VMReg::None,
+        1,
+        displacement,
+        VMSeg::None,
+        width,
+    )
+}
+
+pub fn store_data_at(engine: &mut Engine, def: DataDef, offset: i32) -> Vec<Box<dyn Encode>> {
+    let displacement = engine.rt.lookup(engine.rt.data_labels[&def]) as i32 + offset;
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+    instructions.extend(compute_memory(
+        VMReg::VImage,
+        VMReg::None,
+        1,
+        displacement,
+        VMSeg::None,
+    ));
+    instructions.push(Box::new(StoreMemory {
+        width: VMWidth::Lower64,
+    }));
+    instructions
 }
 
 pub fn load_absolute(engine: &mut Engine, def: DataDef, register: VMReg) -> Vec<Box<dyn Encode>> {
@@ -184,6 +251,14 @@ pub fn timestamp() -> Vec<Box<dyn Encode>> {
     ]
 }
 
+pub fn cpuid(leaf: u32, subleaf: u32) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+    instructions.extend(immediate(leaf as u64));
+    instructions.extend(immediate(subleaf as u64));
+    instructions.push(Box::new(Cpuid::new()));
+    instructions
+}
+
 pub fn set_register(register: VMReg, value: u64) -> Vec<Box<dyn Encode>> {
     vec![
         Box::new(LoadImmediate {
@@ -193,19 +268,6 @@ pub fn set_register(register: VMReg, value: u64) -> Vec<Box<dyn Encode>> {
         Box::new(StoreRegister {
             width: VMWidth::Lower64,
             destination: register,
-        }),
-    ]
-}
-
-pub fn copy(source: VMReg, destination: VMReg) -> Vec<Box<dyn Encode>> {
-    vec![
-        Box::new(LoadRegister {
-            width: VMWidth::Lower64,
-            source: source,
-        }),
-        Box::new(StoreRegister {
-            width: VMWidth::Lower64,
-            destination: destination,
         }),
     ]
 }
@@ -276,7 +338,7 @@ pub fn invoke(target: VMReg) -> Vec<Box<dyn Encode>> {
             width: VMWidth::Lower64,
             source: target,
         }),
-        Box::new(Jcc::call()),
+        Box::new(Branch::call()),
     ]
 }
 
@@ -299,7 +361,7 @@ pub fn call(engine: &mut Engine, def: FnDef) -> Vec<Box<dyn Encode>> {
                 segment: VMSeg::None,
             },
         }),
-        Box::new(Jcc::call()),
+        Box::new(Branch::call()),
     ]
 }
 
@@ -419,6 +481,48 @@ pub fn xor(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
         }));
     }
     instructions.push(Box::new(Xor {
+        width: VMWidth::Lower64,
+    }));
+    instructions
+}
+
+pub fn and(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+
+    if let Some(reg) = a {
+        instructions.push(Box::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: reg,
+        }));
+    }
+    if let Some(reg) = b {
+        instructions.push(Box::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: reg,
+        }));
+    }
+    instructions.push(Box::new(And {
+        width: VMWidth::Lower64,
+    }));
+    instructions
+}
+
+pub fn or(a: Option<VMReg>, b: Option<VMReg>) -> Vec<Box<dyn Encode>> {
+    let mut instructions = Vec::<Box<dyn Encode>>::new();
+
+    if let Some(reg) = a {
+        instructions.push(Box::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: reg,
+        }));
+    }
+    if let Some(reg) = b {
+        instructions.push(Box::new(LoadRegister {
+            width: VMWidth::Lower64,
+            source: reg,
+        }));
+    }
+    instructions.push(Box::new(Or {
         width: VMWidth::Lower64,
     }));
     instructions

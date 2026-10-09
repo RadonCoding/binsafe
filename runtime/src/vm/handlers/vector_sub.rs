@@ -1,73 +1,17 @@
-use crate::{runtime::Runtime, vm::handlers::vector};
-use iced_x86::code_asm::{xmm0, xmm1, ymm0, ymm1};
+use crate::{
+    runtime::Runtime,
+    vm::handlers::semantic::{self, Effect, Flags, Operation, Vector},
+};
+
+pub fn operation() -> Operation {
+    Operation {
+        effects: vec![Effect::Vector(Vector::Sub)],
+        flags: Flags::Never,
+        stores: None,
+        widths: &[],
+    }
+}
 
 pub fn build(rt: &mut Runtime) {
-    vector::with_precision(
-        rt,
-        |rt| {
-            // psubb xmm0, xmm1
-            rt.asm.psubb(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // psubw xmm0, xmm1
-            rt.asm.psubw(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // psubd xmm0, xmm1
-            rt.asm.psubd(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // psubq xmm0, xmm1
-            rt.asm.psubq(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // subps xmm0, xmm1
-            rt.asm.subps(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // subps xmm0, xmm1
-            rt.asm.subps(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // subps xmm0, xmm1
-            rt.asm.subps(xmm0, xmm1).unwrap();
-        },
-        |rt| {
-            // subpd xmm0, xmm1
-            rt.asm.subpd(xmm0, xmm1).unwrap();
-        },
-        // avx_int
-        |rt| {
-            // vpsubb ymm0, ymm0, ymm1
-            rt.asm.vpsubb(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vpsubw ymm0, ymm0, ymm1
-            rt.asm.vpsubw(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vpsubd ymm0, ymm0, ymm1
-            rt.asm.vpsubd(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vpsubq ymm0, ymm0, ymm1
-            rt.asm.vpsubq(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vsubps ymm0, ymm0, ymm1
-            rt.asm.vsubps(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vsubps ymm0, ymm0, ymm1
-            rt.asm.vsubps(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vsubps ymm0, ymm0, ymm1
-            rt.asm.vsubps(ymm0, ymm0, ymm1).unwrap();
-        },
-        |rt| {
-            // vsubpd ymm0, ymm0, ymm1
-            rt.asm.vsubpd(ymm0, ymm0, ymm1).unwrap();
-        },
-    );
+    semantic::compiler::compile(rt, &operation());
 }

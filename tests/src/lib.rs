@@ -254,7 +254,7 @@ impl Executor {
         // add rax, size_of::<i32>()
         self.rt.asm.add(rax, size_of::<i32>() as i32).unwrap();
         // mov [r12 + ...], rax
-        utils::vreg::store_reg(&mut self.rt, r12, rax, VMReg::BPointer);
+        utils::register::store(&mut self.rt, r12, VMReg::BPointer, rax);
 
         // call ...
         self.rt

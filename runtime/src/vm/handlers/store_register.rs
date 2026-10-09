@@ -1,68 +1,29 @@
-use iced_x86::code_asm::{eax, ptr, r12, r8, r8d, r9, r9b, r9d, r9w, rax, rcx};
-
 use crate::{
     runtime::Runtime,
-    vm::utils::{self, scratch},
+    vm::{
+        bytecode::VMWidth,
+        handlers::semantic::{self, Effect, Expression, Flags, Operand, Operation, Register},
+    },
 };
 
-// unsigned char* (unsigned char*)
-pub fn build(rt: &mut Runtime) {
-    let mut epilogue = rt.asm.create_label();
-
-    // eax -> width
-    utils::bytecode::read_byte_zx(rt, rcx, eax);
-
-    // r8d -> destination
-    utils::bytecode::read_byte_zx(rt, rcx, r8d);
-
-    utils::width::dispatch(
-        rt,
-        rax,
-        &mut epilogue,
-        Some(Box::new(|rt| {
-            // load r9
-            scratch::load(rt, r12, r9);
-            // mov [r12 + r8*8], r9
-            rt.asm.mov(ptr(r12 + r8 * 8), r9).unwrap();
-        })),
-        Some(Box::new(|rt| {
-            // load r9d
-            scratch::load_32(rt, r12, r9d);
-            // mov [r12 + r8*8], r9
-            rt.asm.mov(ptr(r12 + r8 * 8), r9).unwrap();
-        })),
-        None,
-        Some(Box::new(|rt| {
-            // load r9
-            scratch::load(rt, r12, r9);
-            // mov [r12 + r8*8], r9w
-            rt.asm.mov(ptr(r12 + r8 * 8), r9w).unwrap();
-        })),
-        Some(Box::new(|rt| {
-            // load r9
-            scratch::load(rt, r12, r9);
-            // mov [r12 + r8*8 + 0x1], r9b
-            rt.asm.mov(ptr(r12 + r8 * 8 + 0x1), r9b).unwrap();
-        })),
-        Some(Box::new(|rt| {
-            // load r9
-            scratch::load(rt, r12, r9);
-            // mov [r12 + r8*8], r9b
-            rt.asm.mov(ptr(r12 + r8 * 8), r9b).unwrap();
-        })),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    );
-
-    rt.asm.set_label(&mut epilogue).unwrap();
-    {
-        // mov rax, rcx
-        rt.asm.mov(rax, rcx).unwrap();
-        // ret
-        rt.asm.ret().unwrap();
+pub fn operation() -> Operation {
+    Operation {
+        effects: vec![Effect::Register(
+            Register::Operand,
+            Expression::Operand(Operand::Input(0)),
+        )],
+        flags: Flags::Never,
+        stores: None,
+        widths: &[
+            VMWidth::Lower64,
+            VMWidth::Lower32,
+            VMWidth::Lower16,
+            VMWidth::Higher8,
+            VMWidth::Lower8,
+        ],
     }
+}
+
+pub fn build(rt: &mut Runtime) {
+    semantic::compiler::compile(rt, &operation());
 }

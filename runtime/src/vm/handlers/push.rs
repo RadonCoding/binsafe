@@ -1,23 +1,34 @@
-use iced_x86::code_asm::{r12, r8, r9, rax, rcx};
-
 use crate::{
     runtime::Runtime,
-    vm::bytecode::VMReg,
-    vm::utils::{self, scratch},
+    vm::{
+        bytecode::VMReg,
+        handlers::semantic::{
+            self, Effect, Expression, Flags, Immediate, Operand, Operation, Register,
+        },
+    },
 };
 
-// unsigned char* (unsigned char*)
+pub fn operation() -> Operation {
+    Operation {
+        effects: vec![
+            Effect::Register(
+                Register::Fixed(VMReg::Rsp),
+                Expression::Sub(
+                    Box::new(Expression::Register(Register::Fixed(VMReg::Rsp))),
+                    Box::new(Expression::Immediate(Immediate::Fixed(8))),
+                ),
+            ),
+            Effect::Memory(
+                Expression::Register(Register::Fixed(VMReg::Rsp)),
+                Expression::Operand(Operand::Input(0)),
+            ),
+        ],
+        flags: Flags::Never,
+        stores: None,
+        widths: &[],
+    }
+}
+
 pub fn build(rt: &mut Runtime) {
-    // load r9
-    scratch::load(rt, r12, r9);
-
-    // sub [r12 + ...], 0x8
-    utils::vreg::sub_imm(rt, r12, 0x8, VMReg::Rsp);
-    // mov r8, [r12 + ...]; mov [r8], r9
-    utils::vreg::store_mem(rt, r12, VMReg::Rsp, r8, r9);
-
-    // mov rax, rcx
-    rt.asm.mov(rax, rcx).unwrap();
-    // ret
-    rt.asm.ret().unwrap();
+    semantic::compiler::compile(rt, &operation());
 }

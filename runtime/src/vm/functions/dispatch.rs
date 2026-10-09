@@ -7,67 +7,15 @@ use crate::{
     mapper::Mappable,
     runtime::{DataDef, FnDef, ImportDef, Runtime, StringDef},
     vm::{
-        bytecode::{VMOp, VMReg},
-        utils::{self, lock},
+        bytecode::{VMCode, VMReg},
+        handlers,
+        utils::{bytecode, lock, register},
     },
     VM_DISPATCH_SIZE, VM_INTEGRITY_QWORD, VM_REDIRECT_SIZE, VM_TRAMPOLINE_SIZE,
 };
 
 #[cfg(feature = "profile")]
 use crate::debug::{start_profiling, stop_profiling};
-
-pub const HANDLERS: [(VMOp, FnDef); VMOp::COUNT] = [
-    (VMOp::Jcc, FnDef::VmHandlerJcc),
-    (VMOp::Ret, FnDef::VmHandlerRet),
-    (VMOp::LoadImmediate, FnDef::VmHandlerLoadImmediate),
-    (VMOp::LoadRegister, FnDef::VmHandlerLoadRegister),
-    (VMOp::LoadMemory, FnDef::VmHandlerLoadMemory),
-    (VMOp::LoadAddress, FnDef::VmHandlerLoadAddress),
-    (VMOp::StoreRegister, FnDef::VmHandlerStoreRegister),
-    (VMOp::StoreMemory, FnDef::VmHandlerStoreMemory),
-    (VMOp::LoadVector, FnDef::VmHandlerLoadVector),
-    (VMOp::StoreMerge, FnDef::VmHandlerStoreMerge),
-    (VMOp::StoreExtend, FnDef::VmHandlerStoreExtend),
-    (VMOp::Add, FnDef::VmHandlerAdd),
-    (VMOp::Sub, FnDef::VmHandlerSub),
-    (VMOp::Adc, FnDef::VmHandlerAdc),
-    (VMOp::Sbb, FnDef::VmHandlerSbb),
-    (VMOp::Exchange, FnDef::VmHandlerExchange),
-    (VMOp::ExchangeAdd, FnDef::VmHandlerExchangeAdd),
-    (VMOp::CompareExchange, FnDef::VmHandlerCompareExchange),
-    (VMOp::And, FnDef::VmHandlerAnd),
-    (VMOp::Or, FnDef::VmHandlerOr),
-    (VMOp::Xor, FnDef::VmHandlerXor),
-    (VMOp::Rol, FnDef::VmHandlerRol),
-    (VMOp::Ror, FnDef::VmHandlerRor),
-    (VMOp::Shl, FnDef::VmHandlerShl),
-    (VMOp::Shr, FnDef::VmHandlerShr),
-    (VMOp::Sar, FnDef::VmHandlerSar),
-    (VMOp::Mul, FnDef::VmHandlerMul),
-    (VMOp::Div, FnDef::VmHandlerDiv),
-    (VMOp::TrailingZeros, FnDef::VmHandlerTrailingZeros),
-    (VMOp::BitScanReverse, FnDef::VmHandlerBitScanReverse),
-    (VMOp::ByteSwap, FnDef::VmHandlerByteSwap),
-    (VMOp::BitTest, FnDef::VmHandlerBitTest),
-    (VMOp::BitTestSet, FnDef::VmHandlerBitTestSet),
-    (VMOp::BitTestReset, FnDef::VmHandlerBitTestReset),
-    (VMOp::BitTestComplement, FnDef::VmHandlerBitTestComplement),
-    (VMOp::Push, FnDef::VmHandlerPush),
-    (VMOp::Pop, FnDef::VmHandlerPop),
-    (VMOp::Discard, FnDef::VmHandlerDiscard),
-    (VMOp::PackedByteMask, FnDef::VmHandlerPackedByteMask),
-    (VMOp::PackedByteEqual, FnDef::VmHandlerPackedByteEqual),
-    (VMOp::VectorAnd, FnDef::VmHandlerVectorAnd),
-    (VMOp::VectorAndNot, FnDef::VmHandlerVectorAndNot),
-    (VMOp::VectorOr, FnDef::VmHandlerVectorOr),
-    (VMOp::VectorXor, FnDef::VmHandlerVectorXor),
-    (VMOp::VectorAdd, FnDef::VmHandlerVectorAdd),
-    (VMOp::VectorSub, FnDef::VmHandlerVectorSub),
-    (VMOp::VectorMul, FnDef::VmHandlerVectorMul),
-    (VMOp::VectorDiv, FnDef::VmHandlerVectorDiv),
-    (VMOp::Timestamp, FnDef::VmHandlerTimestamp),
-    (VMOp::Dispatch, FnDef::VmHandlerDispatch),
-];
 
 pub fn build(rt: &mut Runtime) {
     let mut setup_block = rt.asm.create_label();
@@ -97,11 +45,11 @@ pub fn build(rt: &mut Runtime) {
     {
         // Initialize block pointer and block length:
         // mov r13, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
+        register::load(rt, r12, r13, VMReg::BPointer);
         // eax = length
-        utils::bytecode::read_word_zx(rt, r13, eax);
+        bytecode::read_word_zx(rt, r13, eax);
         // mov [r12 + ...], rax
-        utils::vreg::store_reg(rt, r12, rax, VMReg::BLength);
+        register::store(rt, r12, VMReg::BLength, rax);
 
         // Store the end of the block:
         // lea r14, [r13 + rax]
@@ -109,7 +57,7 @@ pub fn build(rt: &mut Runtime) {
 
         // Check if this is a fresh execution:
         // cmp [r12 + ...], 0x0
-        utils::vreg::cmp_imm(rt, r12, VMReg::BResume, 0x0);
+        register::cmp_with_native(rt, r12, VMReg::BResume, 0x0);
         // je ...
         rt.asm.je(decrypt_block).unwrap();
     }
@@ -117,12 +65,12 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut resume_block).unwrap();
     {
         // mov r13, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::BResume, r13);
+        register::load(rt, r12, r13, VMReg::BResume);
 
         // mov [r12 + ...], 0x0
-        utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
+        register::store(rt, r12, VMReg::NBranch, 0x0);
         // mov [r12 + ...], 0x0
-        utils::vreg::store_imm(rt, r12, 0x0, VMReg::BResume);
+        register::store(rt, r12, VMReg::BResume, 0x0);
 
         // jmp ...
         rt.asm.jmp(execute_loop).unwrap();
@@ -153,7 +101,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut start_block).unwrap();
     {
         // mov [r12 + ...], 0x0
-        utils::vreg::store_imm(rt, r12, 0x0, VMReg::NBranch);
+        register::store(rt, r12, VMReg::NBranch, 0x0);
 
         // lea rax, [...]
         rt.asm
@@ -170,11 +118,11 @@ pub fn build(rt: &mut Runtime) {
         // sub rcx, rax
         rt.asm.sub(rcx, rax).unwrap();
         // mov [r12 + ...], rcx
-        utils::vreg::store_reg(rt, r12, rcx, VMReg::VImmAdd);
+        register::store(rt, r12, VMReg::VImmAdd, rcx);
         // or rcx, 0x1
         rt.asm.or(rcx, 0x1).unwrap();
         // mov [r12 + ...], rcx
-        utils::vreg::store_reg(rt, r12, rcx, VMReg::VImmMul);
+        register::store(rt, r12, VMReg::VImmMul, rcx);
     }
 
     rt.asm.set_label(&mut execute_loop).unwrap();
@@ -185,12 +133,12 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.je(check_loop).unwrap();
 
         // cmp [r12 + ...], 0x0
-        utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
+        register::cmp_with_native(rt, r12, VMReg::NBranch, 0x0);
         // jne ...
         rt.asm.jne(check_suspend).unwrap();
 
         // r8d -> operation
-        utils::bytecode::read_byte_zx(rt, r13, r8d);
+        bytecode::read_byte_zx(rt, r13, r8d);
 
         #[cfg(feature = "profile")]
         {
@@ -200,13 +148,13 @@ pub fn build(rt: &mut Runtime) {
 
             let mut cases = Vec::new();
 
-            for op in VMOp::VARIANTS {
+            for op in VMCode::VARIANTS {
                 cases.push((rt.mapper.index(*op), rt.asm.create_label()));
             }
 
             rt.jumps(r8, cases.clone());
 
-            for (op, (_, mut label)) in VMOp::VARIANTS.iter().zip(cases) {
+            for (op, (_, mut label)) in VMCode::VARIANTS.iter().zip(cases) {
                 rt.asm.set_label(&mut label).unwrap();
 
                 print_thread_message(rt, &format!("{:?}", op), None, None);
@@ -220,9 +168,12 @@ pub fn build(rt: &mut Runtime) {
         // mov rcx, r13
         rt.asm.mov(rcx, r13).unwrap();
 
-        let cases = HANDLERS
+        let cases = VMCode::VARIANTS
             .iter()
-            .map(|&(op, def)| (rt.mapper.index(op), rt.function_labels[&def]))
+            .map(|&op| {
+                let label = rt.function_labels[&handlers::handler(op)];
+                (rt.mapper.index(op), label)
+            })
             .collect::<Vec<(u8, CodeLabel)>>();
 
         rt.calls(r8, cases);
@@ -238,25 +189,25 @@ pub fn build(rt: &mut Runtime) {
     {
         // Skip if the native branch is zero:
         // cmp [r12 + ...], 0x0
-        utils::vreg::cmp_imm(rt, r12, VMReg::NBranch, 0x0);
+        register::cmp_with_native(rt, r12, VMReg::NBranch, 0x0);
         // je ...
         rt.asm.je(check_exit).unwrap();
 
         // Skip if the native entry is not equal to the native branch:
         // mov rax, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::NEntry, rax);
+        register::load(rt, r12, rax, VMReg::NEntry);
         // cmp [r12 + ...],
-        utils::vreg::cmp_reg(rt, r12, VMReg::NBranch, rax);
+        register::cmp_with_native(rt, r12, VMReg::NBranch, rax);
         // jne ...
         rt.asm.jne(check_exit).unwrap();
 
         // Native branch points to the native entry so re-execute the block:
         // mov r13, [...]
-        utils::vreg::load_reg(rt, r12, VMReg::BPointer, r13);
+        register::load(rt, r12, r13, VMReg::BPointer);
         // eax = length
-        utils::bytecode::read_word_zx(rt, r13, eax);
+        bytecode::read_word_zx(rt, r13, eax);
         // mov [r12 + ...], rax
-        utils::vreg::store_reg(rt, r12, rax, VMReg::BLength);
+        register::store(rt, r12, VMReg::BLength, rax);
         // jmp ...
         rt.asm.jmp(start_block).unwrap();
     }
@@ -269,7 +220,7 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.je(check_exit).unwrap();
 
         // mov [r12 + ...], r13
-        utils::vreg::store_reg(rt, r12, r13, VMReg::BResume);
+        register::store(rt, r12, VMReg::BResume, r13);
         // jmp ...
         rt.asm.jmp(epilogue).unwrap();
     }
@@ -290,9 +241,9 @@ pub fn build(rt: &mut Runtime) {
 
         // Compute the address where execution will continue:
         // mov rax, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::NExit, rax);
+        register::load(rt, r12, rax, VMReg::NExit);
         // mov rcx, [r12 + ...]
-        utils::vreg::load_reg(rt, r12, VMReg::NBranch, rcx);
+        register::load(rt, r12, rcx, VMReg::NBranch);
         // test rcx, rcx
         rt.asm.test(rcx, rcx).unwrap();
         // cmovnz rax, rcx
@@ -349,7 +300,7 @@ pub fn build(rt: &mut Runtime) {
             // call ...
             rt.asm.call(rt.function_labels[&FnDef::VmLookup]).unwrap();
             // mov [r12 + ...], rax
-            utils::vreg::store_reg(rt, r12, rax, VMReg::BPointer);
+            register::store(rt, r12, VMReg::BPointer, rax);
 
             // jmp ...
             rt.asm.jmp(setup_block).unwrap();
