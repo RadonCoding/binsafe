@@ -104,7 +104,7 @@ impl Virtualization {
         let mut operations = operations;
         bytecode::fuse(&mut engine.rt, &mut operations, register);
 
-        let mut transformed = if engine.args.verbose {
+        let transformed = if engine.args.verbose {
             let (transformed, snapshots) = bytecode::transform_with_snapshots(
                 &mut engine.rt.mapper,
                 operations,
@@ -122,8 +122,6 @@ impl Virtualization {
                 rng.gen_range(0..ready.len())
             })
         };
-
-        bytecode::fuse(&mut engine.rt, &mut transformed, register);
 
         let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
 
@@ -212,7 +210,7 @@ impl Protection for Virtualization {
             let mut operations = operations;
             bytecode::fuse(&mut engine.rt, &mut operations, true);
 
-            let mut transformed = if engine.args.verbose {
+            let transformed = if engine.args.verbose {
                 let (transformed, snapshots) = bytecode::transform_with_snapshots(
                     &mut engine.rt.mapper,
                     operations,
@@ -228,8 +226,6 @@ impl Protection for Virtualization {
                     rng.gen_range(0..ready.len())
                 })
             };
-
-            bytecode::fuse(&mut engine.rt, &mut transformed, true);
 
             let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
 
