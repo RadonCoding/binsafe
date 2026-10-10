@@ -79,18 +79,18 @@ pub fn operation(rt: &mut Runtime) -> Operation {
 
             b.dispatch(logic, |s| {
                 s.on(all.clone(), |b| {
-                    let acc = b.get(accumulator);
-                    let folded = b.and(acc, condition);
+                    let accumulator = b.get(accumulator);
+                    let folded = b.and(accumulator, condition);
                     fold(b, folded);
                 });
                 s.on(any.clone(), |b| {
-                    let acc = b.get(accumulator);
-                    let folded = b.or(acc, condition);
+                    let accumulator = b.get(accumulator);
+                    let folded = b.or(accumulator, condition);
                     fold(b, folded);
                 });
                 s.on(parity.clone(), |b| {
-                    let acc = b.get(accumulator);
-                    let folded = b.xor(acc, condition);
+                    let accumulator = b.get(accumulator);
+                    let folded = b.xor(accumulator, condition);
                     fold(b, folded);
                 });
             });
