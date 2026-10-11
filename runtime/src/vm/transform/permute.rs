@@ -3,7 +3,8 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::mem;
 
-use crate::mapper::{Mappable, Mapper};
+use crate::mapper::Mappable;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::{VMMem, VMReg, VMVec, VMWidth};
 use crate::vm::encoders::load_address::LoadAddress;
 use crate::vm::encoders::load_memory::LoadMemory;
@@ -39,7 +40,7 @@ impl<'a> Transform for Permute<'a> {
         Phase::Permute
     }
 
-    fn run(&self, _rt: &mut Mapper, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+    fn run(&self, _rt: &mut Runtime, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
         let mut picker = self.picker.borrow_mut();
 
         descend(&mut operations, |operations| {

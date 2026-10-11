@@ -3,6 +3,7 @@ use std::matches;
 use rand::Rng;
 
 use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::utils::invert_multiplier;
 use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::branch::Branch;
@@ -35,13 +36,13 @@ impl Transform for Encrypt {
         Phase::Encrypt
     }
 
-    fn run(&self, mapper: &mut Mapper, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+    fn run(&self, rt: &mut Runtime, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
         let mut operations = operations;
 
         let addend = rand::thread_rng().gen::<u64>();
         let multiplier = rand::thread_rng().gen::<u64>() | 1;
 
-        let mut encryptor = Encryptor::new(mapper, &mut operations, addend, multiplier);
+        let mut encryptor = Encryptor::new(&mut rt.mapper, &mut operations, addend, multiplier);
 
         encryptor.process();
 

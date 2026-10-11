@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::encoders::load_register::LoadRegister;
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::Encode;
@@ -11,11 +11,7 @@ impl Transform for Peephole {
         Phase::Peephole
     }
 
-    fn run(
-        &self,
-        _mapper: &mut Mapper,
-        mut operations: Vec<Box<dyn Encode>>,
-    ) -> Vec<Box<dyn Encode>> {
+    fn run(&self, _rt: &mut Runtime, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
         optimize(&mut operations);
         operations
     }

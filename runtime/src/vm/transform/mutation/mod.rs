@@ -1,6 +1,6 @@
 mod branch;
 
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::encoders::Encode;
 use crate::vm::transform::{Phase, Transform};
 
@@ -11,7 +11,7 @@ impl Transform for Mutation {
         Phase::Mutation
     }
 
-    fn run(&self, _mapper: &mut Mapper, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+    fn run(&self, _rt: &mut Runtime, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
         let mut operations = operations;
         let mut rng = rand::thread_rng();
 

@@ -101,14 +101,12 @@ impl Virtualization {
     ) -> Vec<u8> {
         let mut rng = rand::thread_rng();
 
-        let mut operations = operations;
-        bytecode::fuse(&mut engine.rt, &mut operations, register);
-
         let transformed = if engine.args.verbose {
             let (transformed, snapshots) = bytecode::transform_with_snapshots(
-                &mut engine.rt.mapper,
+                &mut engine.rt,
                 operations,
                 offset,
+                register,
                 |ready| rng.gen_range(0..ready.len()),
             );
 
@@ -118,7 +116,7 @@ impl Virtualization {
 
             transformed
         } else {
-            bytecode::transform(&mut engine.rt.mapper, operations, offset, |ready| {
+            bytecode::transform(&mut engine.rt, operations, offset, register, |ready| {
                 rng.gen_range(0..ready.len())
             })
         };
@@ -207,14 +205,12 @@ impl Protection for Virtualization {
         for (index, operations) in operations.into_iter().enumerate() {
             let offset = code.len() as u64;
 
-            let mut operations = operations;
-            bytecode::fuse(&mut engine.rt, &mut operations, true);
-
             let transformed = if engine.args.verbose {
                 let (transformed, snapshots) = bytecode::transform_with_snapshots(
-                    &mut engine.rt.mapper,
+                    &mut engine.rt,
                     operations,
                     offset,
+                    true,
                     |ready| rng.gen_range(0..ready.len()),
                 );
 
@@ -222,7 +218,7 @@ impl Protection for Virtualization {
 
                 transformed
             } else {
-                bytecode::transform(&mut engine.rt.mapper, operations, offset, |ready| {
+                bytecode::transform(&mut engine.rt, operations, offset, true, |ready| {
                     rng.gen_range(0..ready.len())
                 })
             };
