@@ -16,6 +16,7 @@ Obfuscator for compiled 64-bit portable executables.
 - **Scrambling**: operations are placed in a randomized physical layout connected by jumps that follow their original execution order.
 - **Mutation**: operations are rewritten into logically equivalent forms whose structure varies between builds.
 - **Encryption**: immediate values are encrypted using key(s) that evolve in the execution order of the block.
+- **Fusing**: operations are scanned for fusible sequences and combined into compound operations.
 - **Patching**: virtualized blocks are replaced with dispatch stubs that transfer control to the VM.
 
 ### 2. Runtime

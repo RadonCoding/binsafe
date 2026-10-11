@@ -7,11 +7,12 @@ use crate::vm::lifters::{
 };
 use crate::vm::snapshot::Snapshots;
 use crate::vm::transform::encrypt::Encrypt;
+use crate::vm::transform::fuse::Fuse;
 use crate::vm::transform::mutation::Mutation;
 use crate::vm::transform::peephole::Peephole;
 use crate::vm::transform::permute::Permute;
 use crate::vm::transform::scramble::Scramble;
-use crate::vm::transform::{compound, Transform};
+use crate::vm::transform::Transform;
 use core::panic;
 use iced_x86::{Instruction, Mnemonic, Register};
 use std::any::Any;
@@ -465,6 +466,7 @@ pub enum Phase {
     Scramble,
     Encrypt,
     Peephole,
+    Fuse,
 }
 
 impl Phase {
@@ -476,6 +478,7 @@ impl Phase {
             Self::Scramble => "scramble",
             Self::Encrypt => "encrypt",
             Self::Peephole => "peephole",
+            Self::Fuse => "fuse",
         }
     }
 }
@@ -653,26 +656,26 @@ pub fn assemble(mapper: &mut Mapper, operations: &[Box<dyn Encode>]) -> Vec<u8> 
 fn transforms<'a>(
     picker: &'a RefCell<&'a mut dyn FnMut(&[usize]) -> usize>,
     offset: u64,
+    register: bool,
 ) -> Vec<Box<dyn Transform + 'a>> {
     vec![
+        Box::new(Fuse { register }),
         Box::new(Peephole),
         Box::new(Permute { picker }),
         Box::new(Scramble),
         Box::new(Mutation),
+        Box::new(Fuse { register }),
         Box::new(Encrypt { offset }),
         Box::new(Permute { picker }),
         Box::new(Peephole),
     ]
 }
 
-pub fn fuse(rt: &mut Runtime, operations: &mut Vec<Box<dyn Encode>>, register: bool) {
-    compound::fuse(rt, operations, register);
-}
-
 pub fn transform<F>(
-    mapper: &mut Mapper,
+    rt: &mut Runtime,
     mut operations: Vec<Box<dyn Encode>>,
     offset: u64,
+    register: bool,
     mut picker: F,
 ) -> Vec<Box<dyn Encode>>
 where
@@ -680,17 +683,18 @@ where
 {
     let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
 
-    for transform in &transforms(&picker, offset) {
-        operations = transform.run(mapper, operations);
+    for transform in &transforms(&picker, offset, register) {
+        operations = transform.run(rt, operations);
     }
 
     operations
 }
 
 pub fn transform_with_snapshots<F>(
-    mapper: &mut Mapper,
+    rt: &mut Runtime,
     mut operations: Vec<Box<dyn Encode>>,
     offset: u64,
+    register: bool,
     mut picker: F,
 ) -> (Vec<Box<dyn Encode>>, Snapshots)
 where
@@ -701,8 +705,8 @@ where
     let mut snapshots = Snapshots::new();
     snapshots.record(Phase::Lift, &operations);
 
-    for transform in &transforms(&picker, offset) {
-        operations = transform.run(mapper, operations);
+    for transform in &transforms(&picker, offset, register) {
+        operations = transform.run(rt, operations);
 
         snapshots.record(transform.phase(), &operations);
     }

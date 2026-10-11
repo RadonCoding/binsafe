@@ -3,7 +3,7 @@ use std::mem;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::VMWidth;
 use crate::vm::encoders::block::{Block, Jump, Target};
 use crate::vm::encoders::branch::Branch;
@@ -20,11 +20,7 @@ impl Transform for Scramble {
         Phase::Scramble
     }
 
-    fn run(
-        &self,
-        _mapper: &mut Mapper,
-        mut operations: Vec<Box<dyn Encode>>,
-    ) -> Vec<Box<dyn Encode>> {
+    fn run(&self, _rt: &mut Runtime, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
         walk(&mut operations, true);
 
         operations

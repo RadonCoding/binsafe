@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::mem;
 
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::{VMReg, VMWidth};
 use crate::vm::encoders::store_register::StoreRegister;
 use crate::vm::encoders::Depth;
@@ -10,8 +10,8 @@ use crate::vm::{
     encoders::{Effect, Encode},
 };
 
-pub mod compound;
 pub mod encrypt;
+pub mod fuse;
 pub mod mutation;
 pub mod peephole;
 pub mod permute;
@@ -20,7 +20,7 @@ pub mod scramble;
 pub trait Transform {
     fn phase(&self) -> Phase;
 
-    fn run(&self, mapper: &mut Mapper, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>>;
+    fn run(&self, rt: &mut Runtime, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>>;
 }
 
 /// Groups operations into depth-balanced atoms, appending any trailing unbalanced run as a final atom.
