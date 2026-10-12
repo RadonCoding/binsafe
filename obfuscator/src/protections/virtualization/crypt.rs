@@ -59,7 +59,6 @@ impl Cipher {
             chunk.copy_from_slice(&cipher.to_le_bytes());
         }
 
-        // byte  - state
         block[block.len() - TRAILER_SIZE] = ENCRYPTED;
     }
 
@@ -130,16 +129,12 @@ fn align_payload(block: &mut Vec<u8>) {
 }
 
 fn finalize_encrypt(block: &mut Vec<u8>, length: u16) {
-    // word  - length
     block.splice(0..0, length.to_le_bytes());
-    // byte  - state
     block.push(ENCRYPTED);
-    // byte  - lock
     block.push(0);
 }
 
 fn finalize_decrypt(block: &mut [u8]) {
-    // byte  - state
     block[block.len() - TRAILER_SIZE] = DECRYPTED;
 }
 
