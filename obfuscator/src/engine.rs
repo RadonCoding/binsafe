@@ -60,16 +60,22 @@ impl<'a> Engine<'a> {
     pub fn new(args: &'a Args) -> Self {
         let pe = VecPE::from_disk_file(&args.input).unwrap();
 
+        let engine = Self::wrap(pe, args);
+
+        info!(
+            "Loaded {}-bit binary ({:.2} MB)",
+            engine.bitness,
+            engine.pe.len() as f64 / 1_000_000.0,
+        );
+
+        engine
+    }
+
+    pub fn wrap(pe: VecPE, args: &'a Args) -> Self {
         let bitness = match pe.get_arch().unwrap() {
             Arch::X64 => 64,
             _ => panic!("only 64-bit binaries are supported"),
         };
-
-        info!(
-            "Loaded {}-bit binary ({:.2} MB)",
-            bitness,
-            pe.len() as f64 / 1_000_000.0,
-        );
 
         Self {
             pe,
@@ -83,6 +89,10 @@ impl<'a> Engine<'a> {
 
     pub fn apply<T: Protection + Default + 'static>(&mut self) {
         self.protections.push(Box::<T>::default());
+    }
+
+    pub fn attach(&mut self, protection: impl Protection + 'static) {
+        self.protections.push(Box::new(protection));
     }
 
     pub fn junk(&mut self, offset: usize, size: usize) {
@@ -130,10 +140,6 @@ impl<'a> Engine<'a> {
             .get_section_by_name(BINSAFE_SECTION)
             .unwrap_or(self.pe.get_section_by_rva(entry_point).unwrap());
 
-        info!(
-            "Section VA: 0x{:X}, file offset: 0x{:X}",
-            code_section.virtual_address.0, code_section.pointer_to_raw_data.0
-        );
         info!(
             "Protecting section '{}' at 0x{:08X}",
             Self::get_section_name(&code_section),
@@ -476,11 +482,17 @@ impl<'a> Engine<'a> {
 
     pub fn get_end_of_sections(&self) -> u32 {
         let sections = self.pe.get_section_table().unwrap();
-        let end_section = sections[sections.len() - 1];
-        self.pe
-            .align_to_section(RVA(end_section.virtual_address.0 + end_section.virtual_size))
-            .unwrap()
-            .0
+        let end = match sections.last() {
+            Some(section) => section.virtual_address.0 + section.virtual_size,
+            None => {
+                self.pe
+                    .get_nt_headers_64()
+                    .unwrap()
+                    .optional_header
+                    .section_alignment
+            }
+        };
+        self.pe.align_to_section(RVA(end)).unwrap().0
     }
 
     pub fn get_section_name(section: &ImageSectionHeader) -> String {
