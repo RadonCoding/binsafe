@@ -33,6 +33,9 @@ pub fn build(rt: &mut Runtime) {
     // push r15
     rt.asm.push(r15).unwrap();
 
+    // sub rsp, 0x28
+    rt.asm.sub(rsp, 0x28).unwrap();
+
     // mov r14, rcx
     rt.asm.mov(r14, rcx).unwrap();
     // mov r15, rdx
@@ -126,6 +129,9 @@ pub fn build(rt: &mut Runtime) {
     {
         // mov rax, [r12 + ...]
         register::load(rt, r12, rax, VMReg::Vg0);
+
+        // add rsp, 0x28
+        rt.asm.add(rsp, 0x28).unwrap();
 
         // pop r15
         rt.asm.pop(r15).unwrap();
