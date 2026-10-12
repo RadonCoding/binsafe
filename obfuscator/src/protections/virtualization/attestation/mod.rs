@@ -17,29 +17,28 @@ const TICK: u64 = 0x20;
 const STALE: u64 = 1u64 << TICK;
 
 pub fn service(engine: &mut Engine, expected: &mut u64) -> Vec<Box<dyn Encode>> {
-    let mut instructions = Vec::<Box<dyn Encode>>::new();
+    forever(engine, |engine| {
+        let mut instructions = Vec::<Box<dyn Encode>>::new();
 
-    instructions.extend(anti_debug::generate(engine, expected));
-    instructions.extend(anti_emulation::generate(engine, expected));
-    instructions.extend(debug_registers::generate(engine, expected));
-    instructions.extend(anti_tamper::generate(engine, expected));
+        instructions.extend(anti_debug::generate(engine, expected));
+        instructions.extend(anti_emulation::generate(engine, expected));
+        instructions.extend(debug_registers::generate(engine, expected));
+        instructions.extend(anti_tamper::generate(engine, expected));
 
-    instructions.extend(hash(engine));
+        instructions.extend(hash(engine));
 
-    instructions.extend(publish(engine));
+        instructions.extend(publish(engine));
 
-    instructions.extend(delay(engine));
+        instructions.extend(delay(engine));
 
-    forever(instructions)
+        instructions
+    })
 }
 
 pub fn program(engine: &mut Engine, key: u64, expected: u64) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
-
     instructions.extend(unlock(engine));
-
     instructions.extend(correct(engine, key, expected));
-
     instructions
 }
 
@@ -79,13 +78,10 @@ fn delay(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
 fn publish(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
-    // Tick the current timestamp into RAX and write it as the freshness stamp:
+    // Tick the current timestamp as the freshness stamp:
     instructions.extend(timestamp());
     instructions.extend(mask(None, !((1u64 << TICK) - 1)));
     instructions.extend(store_register(VMReg::Rax));
-
-    instructions.extend(load_register(VMReg::Rax));
-    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 0));
 
     // Derive the keystream from the tick so the stored value is time-locked:
     instructions.extend(load_register(VMReg::Rax));
@@ -98,11 +94,32 @@ fn publish(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
     instructions.extend(register_lcg(engine, None));
     instructions.extend(store_register(VMReg::Rcx));
 
-    // Store the fingerprint XORed with the keystream:
+    // Load the sequence and mark the box busy with an odd value:
+    instructions.extend(load_data_at(
+        engine,
+        DataDef::VmServiceBox,
+        16,
+        VMWidth::Lower64,
+    ));
+    instructions.extend(store_register(VMReg::Rdx));
+    instructions.extend(load_register(VMReg::Rdx));
+    instructions.extend(immediate(1));
+    instructions.extend(add(None, None));
+    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 16));
+
+    // Store the stamp and the fingerprint XORed with the keystream:
+    instructions.extend(load_register(VMReg::Rax));
+    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 0));
     instructions.extend(load_register(VMReg::Vp0));
     instructions.extend(load_register(VMReg::Rcx));
     instructions.extend(xor(None, None));
     instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 8));
+
+    // Mark the box ready with an even sequence:
+    instructions.extend(load_register(VMReg::Rdx));
+    instructions.extend(immediate(2));
+    instructions.extend(add(None, None));
+    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 16));
 
     instructions
 }
@@ -110,61 +127,98 @@ fn publish(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
 fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
     let mut instructions = Vec::<Box<dyn Encode>>::new();
 
-    // Load the value published by the service:
-    instructions.extend(load_data_at(
+    // Retry until the snapshot is from a single, completed publication:
+    instructions.extend(repeat(
         engine,
-        DataDef::VmServiceBox,
-        0,
-        VMWidth::Lower64,
-    ));
-    instructions.extend(store_register(VMReg::Rax));
+        VMReg::Rax,
+        VMCondition::cmp(Flag::Zero, 0),
+        |engine| {
+            let mut body = Vec::<Box<dyn Encode>>::new();
 
-    // Derive the keystream from the stored tick:
-    instructions.extend(load_register(VMReg::Rax));
-    instructions.extend(load_data(
-        engine,
-        DataDef::VmKeyInitializer,
-        VMWidth::Lower64,
-    ));
-    instructions.extend(xor(None, None));
-    instructions.extend(register_lcg(engine, None));
-    instructions.extend(store_register(VMReg::Rcx));
+            // Read the sequence before the snapshot:
+            body.extend(load_data_at(
+                engine,
+                DataDef::VmServiceBox,
+                16,
+                VMWidth::Lower64,
+            ));
+            body.extend(store_register(VMReg::Rax));
 
-    // Recover the fingerprint into Vp0:
-    instructions.extend(load_data_at(
-        engine,
-        DataDef::VmServiceBox,
-        8,
-        VMWidth::Lower64,
+            // Load the stamp published by the service:
+            body.extend(load_data_at(
+                engine,
+                DataDef::VmServiceBox,
+                0,
+                VMWidth::Lower64,
+            ));
+            body.extend(store_register(VMReg::Rcx));
+
+            // Derive the keystream from the stored tick:
+            body.extend(load_register(VMReg::Rcx));
+            body.extend(load_data(
+                engine,
+                DataDef::VmKeyInitializer,
+                VMWidth::Lower64,
+            ));
+            body.extend(xor(None, None));
+            body.extend(register_lcg(engine, None));
+            body.extend(store_register(VMReg::Rdx));
+
+            // Recover the fingerprint:
+            body.extend(load_data_at(
+                engine,
+                DataDef::VmServiceBox,
+                8,
+                VMWidth::Lower64,
+            ));
+            body.extend(load_register(VMReg::Rdx));
+            body.extend(xor(None, None));
+            body.extend(store_register(VMReg::Vp0));
+
+            // Read the sequence after the snapshot:
+            body.extend(load_data_at(
+                engine,
+                DataDef::VmServiceBox,
+                16,
+                VMWidth::Lower64,
+            ));
+            body.extend(store_register(VMReg::Rdx));
+
+            // Fail the check while the sequence changed or was mid-publish:
+            body.extend(xor(Some(VMReg::Rax), Some(VMReg::Rdx)));
+            body.extend(immediate(1));
+            body.extend(and(Some(VMReg::Rax), None));
+            body.extend(or(None, None));
+            body.extend(store_register(VMReg::Rax));
+
+            body
+        },
     ));
-    instructions.extend(load_register(VMReg::Rcx));
-    instructions.extend(xor(None, None));
-    instructions.extend(store_register(VMReg::Vp0));
 
     // Measure how many ticks old the fingerprint is:
     instructions.extend(timestamp());
     instructions.extend(mask(None, !((1u64 << TICK) - 1)));
-    instructions.extend(load_register(VMReg::Rax));
+    instructions.extend(load_register(VMReg::Rcx));
     instructions.extend(sub(None, None));
-    instructions.extend(store_register(VMReg::Rdx));
+    instructions.extend(store_register(VMReg::Rax));
 
-    // Store CF into RDX (CF=0 if the service is not stale)
+    // Capture whether the published fingerprint is stale:
     instructions.extend(immediate(STALE));
-    instructions.extend(load_register(VMReg::Rdx));
+    instructions.extend(load_register(VMReg::Rax));
     instructions.extend(sub(None, None));
     instructions.extend(discard());
     instructions.extend(flag(Flag::Carry));
-    instructions.extend(store_register(VMReg::Rdx));
+    instructions.extend(store_register(VMReg::Rax));
 
-    // Flip the bits of RDX in-case it's non-zero to increase effectiveness:
+    // Negate so a stale result fills every bit:
     instructions.extend(immediate(0));
-    instructions.extend(load_register(VMReg::Rdx));
+    instructions.extend(load_register(VMReg::Rax));
     instructions.extend(sub(None, None));
-    instructions.extend(store_register(VMReg::Rdx));
+    instructions.extend(store_register(VMReg::Rax));
 
-    // XOR Vp0 with Rdx to corrupt it in-case RDX was non-zero:
+    // Corrupt the fingerprint when the service is stale:
     instructions.extend(load_register(VMReg::Vp0));
-    instructions.extend(load_register(VMReg::Rdx));
+    instructions.extend(load_register(VMReg::Rax));
     instructions.extend(xor(None, None));
     instructions.extend(store_register(VMReg::Vp0));
 
@@ -176,12 +230,10 @@ fn correct(engine: &mut Engine, key: u64, expected: u64) -> Vec<Box<dyn Encode>>
 
     let correction = expected ^ key;
 
-    // Offset of the block being decrypted (zero for the first block):
     instructions.extend(load_absolute(engine, DataDef::VmCodeStart, VMReg::R8));
     instructions.extend(sub(Some(VMReg::Vg0), Some(VMReg::R8)));
     instructions.extend(store_register(VMReg::Rdx));
 
-    // First block chains off the initializer:
     instructions.extend(skip(
         engine,
         VMReg::Rdx,
@@ -189,7 +241,6 @@ fn correct(engine: &mut Engine, key: u64, expected: u64) -> Vec<Box<dyn Encode>>
         |engine| immediate(engine.rt.keys.initializer),
     ));
 
-    // Every other block chains off the previous block's trailing qword:
     instructions.extend(skip(
         engine,
         VMReg::Rdx,
