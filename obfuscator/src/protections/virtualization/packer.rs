@@ -389,7 +389,6 @@ fn generate_loader(engine: &mut Engine, image: &Image) -> Vec<Box<dyn Encode>> {
         // GetProcAddress
         instructions.extend(invoke(VMReg::Rax));
 
-        // Write the resolved address to its slot:
         instructions.extend(load_register(VMReg::Rax));
         instructions.extend(compute_memory(
             VMReg::R13,
@@ -471,7 +470,13 @@ fn generate_loader(engine: &mut Engine, image: &Image) -> Vec<Box<dyn Encode>> {
     ));
     instructions.extend(store_register(VMReg::Rax));
     instructions.extend(load_register(VMReg::R13));
-    instructions.extend(compute_memory(VMReg::Rax, VMReg::None, 1, 0x10, VMSeg::None));
+    instructions.extend(compute_memory(
+        VMReg::Rax,
+        VMReg::None,
+        1,
+        0x10,
+        VMSeg::None,
+    ));
     instructions.push(Box::new(StoreMemory {
         width: VMWidth::Lower64,
     }));
@@ -531,7 +536,9 @@ impl Protection for Packer {
             .define_data_qword(DataDef::VmKeyAddend, engine.rt.keys.addend);
 
         let operations = generate_loader(engine, &self.image);
+
         assemble_bytecode(engine, operations, 0, true);
+
         create_attestation(engine, 0, true);
     }
 
