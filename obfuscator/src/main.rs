@@ -2,7 +2,11 @@ use clap::Parser;
 use logger::info;
 use std::{fs, path};
 
-use obfuscator::{args::Args, engine::Engine, protections::virtualization::Virtualization};
+use obfuscator::{
+    args::Args,
+    engine::Engine,
+    protections::virtualization::{packer, Virtualization},
+};
 
 fn main() {
     let args = Args::parse();
@@ -16,6 +20,12 @@ fn main() {
     }
 
     let protected = engine.execute();
+
+    let protected = if args.packing {
+        packer::pack(&engine)
+    } else {
+        protected
+    };
 
     let output = if let Some(extension) = args.input.extension() {
         args.input.with_extension("").with_file_name(format!(

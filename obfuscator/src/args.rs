@@ -10,6 +10,9 @@ pub struct Args {
     #[arg(long = "virtualization")]
     pub virtualization: bool,
 
+    #[arg(long = "packing")]
+    pub packing: bool,
+
     #[arg(short = 'v', long = "verbose")]
     pub verbose: bool,
 }

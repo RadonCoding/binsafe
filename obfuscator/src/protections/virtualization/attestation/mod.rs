@@ -9,8 +9,6 @@ use runtime::vm::encoders::Encode;
 mod anti_debug;
 mod anti_emulation;
 mod anti_tamper;
-#[cfg(debug_assertions)]
-mod debug;
 mod debug_registers;
 
 // Masks the timestamp down to a ~1s tick on a 3.5 GHz CPU
