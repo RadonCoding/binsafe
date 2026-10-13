@@ -1,7 +1,7 @@
 use std::i32;
 
 use crate::engine::Engine;
-use crate::protections::virtualization::{crypt, language::*};
+use crate::protections::virtualization::language::*;
 use runtime::runtime::{DataDef, ImportDef};
 use runtime::vm::bytecode::{Flag, VMCondition, VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::Encode;
@@ -83,17 +83,6 @@ fn publish(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
     instructions.extend(mask(None, !((1u64 << TICK) - 1)));
     instructions.extend(store_register(VMReg::Rax));
 
-    // Derive the keystream from the tick so the stored value is time-locked:
-    instructions.extend(load_register(VMReg::Rax));
-    instructions.extend(load_data(
-        engine,
-        DataDef::VmKeyInitializer,
-        VMWidth::Lower64,
-    ));
-    instructions.extend(xor(None, None));
-    instructions.extend(register_lcg(engine, None));
-    instructions.extend(store_register(VMReg::Rcx));
-
     // Load the sequence and mark the box busy with an odd value:
     instructions.extend(load_data_at(
         engine,
@@ -101,22 +90,20 @@ fn publish(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
         16,
         VMWidth::Lower64,
     ));
-    instructions.extend(store_register(VMReg::Rdx));
-    instructions.extend(load_register(VMReg::Rdx));
+    instructions.extend(store_register(VMReg::Rcx));
+    instructions.extend(load_register(VMReg::Rcx));
     instructions.extend(immediate(1));
     instructions.extend(add(None, None));
     instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 16));
 
-    // Store the stamp and the fingerprint XORed with the keystream:
+    // Store the stamp and the fingerprint:
     instructions.extend(load_register(VMReg::Rax));
     instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 0));
     instructions.extend(load_register(VMReg::Vp0));
-    instructions.extend(load_register(VMReg::Rcx));
-    instructions.extend(xor(None, None));
     instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 8));
 
     // Mark the box ready with an even sequence:
-    instructions.extend(load_register(VMReg::Rdx));
+    instructions.extend(load_register(VMReg::Rcx));
     instructions.extend(immediate(2));
     instructions.extend(add(None, None));
     instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 16));
@@ -153,17 +140,6 @@ fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
             ));
             body.extend(store_register(VMReg::Rcx));
 
-            // Derive the keystream from the stored tick:
-            body.extend(load_register(VMReg::Rcx));
-            body.extend(load_data(
-                engine,
-                DataDef::VmKeyInitializer,
-                VMWidth::Lower64,
-            ));
-            body.extend(xor(None, None));
-            body.extend(register_lcg(engine, None));
-            body.extend(store_register(VMReg::Rdx));
-
             // Recover the fingerprint:
             body.extend(load_data_at(
                 engine,
@@ -171,8 +147,6 @@ fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
                 8,
                 VMWidth::Lower64,
             ));
-            body.extend(load_register(VMReg::Rdx));
-            body.extend(xor(None, None));
             body.extend(store_register(VMReg::Vp0));
 
             // Read the sequence after the snapshot:
@@ -280,8 +254,6 @@ fn hash(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
     ));
 
     instructions.extend(sub(Some(VMReg::Rax), Some(VMReg::Rcx)));
-    instructions.extend(immediate((crypt::HEADER_SIZE + crypt::TRAILER_SIZE) as u64));
-    instructions.extend(sub(None, None));
     instructions.extend(store_register(VMReg::R9));
 
     instructions.extend(mask(Some(VMReg::R9), size_of::<u64>() as u64 - 1));
@@ -305,7 +277,7 @@ fn hash(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
                 VMReg::Rcx,
                 VMReg::Rax,
                 1,
-                crypt::HEADER_SIZE as i32,
+                0,
                 VMSeg::None,
                 VMWidth::Lower64,
             ));
@@ -321,7 +293,7 @@ fn hash(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
         VMReg::Rcx,
         VMReg::R9,
         1,
-        crypt::HEADER_SIZE as i32,
+        0,
         VMSeg::None,
     ));
     instructions.extend(store_register(VMReg::Rcx));
