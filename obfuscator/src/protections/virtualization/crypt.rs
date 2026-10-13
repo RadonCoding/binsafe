@@ -90,11 +90,7 @@ impl Cipher {
 }
 
 pub fn derive_hash(bytes: &[u8], multiplier: u64, addend: u64) -> u64 {
-    let start = HEADER_SIZE;
-    let end = bytes.len() - TRAILER_SIZE;
-    let payload = &bytes[start..end];
-
-    let mut chunks = payload.chunks_exact(size_of::<u64>());
+    let mut chunks = bytes.chunks_exact(size_of::<u64>());
     let mut hash = 0u64;
 
     for chunk in &mut chunks {
