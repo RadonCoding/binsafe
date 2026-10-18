@@ -45,7 +45,7 @@ The `tests` crate spins up an instrumented VM and compares its behavior against 
 - **Instructions**: each instruction is executed through the VM and the resulting register and vector state is compared against native execution.
 
 ## Usage
-`cargo run --release --bin obfuscator -- <filename> --virtualization`
+`cargo run --release --bin obfuscator -- <filename> --virtualization --packing`
 
 ## Contributing
 1. Fork it
