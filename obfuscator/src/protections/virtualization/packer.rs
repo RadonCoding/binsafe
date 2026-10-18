@@ -12,6 +12,7 @@ use runtime::{
     },
 };
 
+use crate::protections::virtualization::compress::compress;
 use crate::protections::virtualization::language::*;
 use crate::protections::virtualization::{
     assemble_bytecode, create_attestation, create_bytecode, write_displacement,
@@ -23,6 +24,8 @@ const SIZE_OF_HEADERS: usize = 0x400;
 
 const MEM_COMMIT: u64 = 0x1000;
 const MEM_RESERVE: u64 = 0x2000;
+
+const COMPRESSION_FORMAT_LZNT1: u64 = 0x0002;
 
 const PAGE_NOACCESS: u64 = 0x01;
 const PAGE_READONLY: u64 = 0x02;
@@ -41,6 +44,7 @@ struct Section {
     virtual_size: u32,
     offset: u32,
     size: u32,
+    packed: u32,
     characteristics: SectionCharacteristics,
 }
 
@@ -110,16 +114,19 @@ impl Image {
         let mut sections = Vec::new();
 
         for section in pe.get_section_table().unwrap() {
-            let offset = blob.len() as u32;
-            let size = section.size_of_raw_data;
+            let raw = section.read(pe).unwrap();
+            let compressed = compress(raw);
 
-            blob.extend_from_slice(section.read(pe).unwrap());
+            let offset = blob.len() as u32;
+
+            blob.extend_from_slice(&compressed);
 
             sections.push(Section {
                 rva: section.virtual_address.0,
                 virtual_size: section.virtual_size,
                 offset,
-                size,
+                size: raw.len() as u32,
+                packed: compressed.len() as u32,
                 characteristics: section.characteristics,
             });
         }
@@ -262,7 +269,7 @@ fn generate_loader(engine: &mut Engine, image: &Image) -> Vec<Box<dyn Encode>> {
         },
     ));
 
-    // Copy sections:
+    // Decompress sections:
     let blob = engine
         .rt
         .lookup(engine.rt.data_labels[&DataDef::VmLoaderSections]) as i32;
@@ -272,15 +279,10 @@ fn generate_loader(engine: &mut Engine, image: &Image) -> Vec<Box<dyn Encode>> {
             continue;
         }
 
-        instructions.extend(compute_memory(
-            VMReg::VImage,
-            VMReg::None,
-            1,
-            blob + section.offset as i32,
-            VMSeg::None,
-        ));
-        instructions.extend(store_register(VMReg::Rdx));
-
+        instructions.extend(import(engine, ImportDef::RtlDecompressBuffer));
+        // CompressionFormat -> RCX
+        instructions.extend(set_register(VMReg::Rcx, COMPRESSION_FORMAT_LZNT1));
+        // UncompressedBuffer -> RDX
         instructions.extend(compute_memory(
             VMReg::R13,
             VMReg::None,
@@ -288,30 +290,34 @@ fn generate_loader(engine: &mut Engine, image: &Image) -> Vec<Box<dyn Encode>> {
             section.rva as i32,
             VMSeg::None,
         ));
-        instructions.extend(store_register(VMReg::R8));
-
-        instructions.extend(foreach(
-            engine,
-            VMReg::Rax,
-            Bound::Immediate(section.size as usize),
-            8,
-            |_| {
-                let mut body = Vec::<Box<dyn Encode>>::new();
-                body.extend(load_memory(
-                    VMReg::Rdx,
-                    VMReg::Rax,
-                    1,
-                    0,
-                    VMSeg::None,
-                    VMWidth::Lower64,
-                ));
-                body.extend(compute_memory(VMReg::R8, VMReg::Rax, 1, 0, VMSeg::None));
-                body.push(Box::new(StoreMemory {
-                    width: VMWidth::Lower64,
-                }));
-                body
-            },
+        instructions.extend(store_register(VMReg::Rdx));
+        // UncompressedBufferSize -> R8
+        instructions.extend(set_register(VMReg::R8, section.size as u64));
+        // CompressedBuffer -> R9
+        instructions.extend(compute_memory(
+            VMReg::VImage,
+            VMReg::None,
+            1,
+            blob + section.offset as i32,
+            VMSeg::None,
         ));
+        instructions.extend(store_register(VMReg::R9));
+        // CompressedBufferSize -> [RSP + ...]
+        instructions.extend(store_immediate(
+            VMReg::Rsp,
+            VMReg::None,
+            1,
+            0x20,
+            section.packed as u64,
+        ));
+        // FinalUncompressedSize -> [RSP + ...]
+        instructions.extend(compute_memory(VMReg::Rsp, VMReg::None, 1, 0x30, VMSeg::None));
+        instructions.extend(compute_memory(VMReg::Rsp, VMReg::None, 1, 0x28, VMSeg::None));
+        instructions.push(Box::new(StoreMemory {
+            width: VMWidth::Lower64,
+        }));
+        // RtlDecompressBuffer
+        instructions.extend(invoke(VMReg::Rax));
     }
 
     // Compute relocation delta:

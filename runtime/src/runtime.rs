@@ -184,6 +184,7 @@ mapped! {
         VirtualProtect,
         GetProcAddress,
         RtlAddFunctionTable,
+        RtlDecompressBuffer,
         #[cfg(debug_assertions)]
         AllocConsole,
         #[cfg(debug_assertions)]
@@ -214,6 +215,7 @@ mapped! {
         VirtualProtect,
         GetProcAddress,
         RtlAddFunctionTable,
+        RtlDecompressBuffer,
         #[cfg(debug_assertions)]
         AllocConsole,
         #[cfg(debug_assertions)]
@@ -256,6 +258,9 @@ impl ImportDef {
             ImportDef::GetProcAddress { .. } => (HashDef::KernelBase, HashDef::GetProcAddress),
             ImportDef::RtlAddFunctionTable { .. } => {
                 (HashDef::Ntdll, HashDef::RtlAddFunctionTable)
+            }
+            ImportDef::RtlDecompressBuffer { .. } => {
+                (HashDef::Ntdll, HashDef::RtlDecompressBuffer)
             }
             #[cfg(debug_assertions)]
             ImportDef::AllocConsole { .. } => (HashDef::KernelBase, HashDef::AllocConsole),
@@ -900,6 +905,7 @@ impl Runtime {
         self.define_hash(HashDef::VirtualProtect, "VirtualProtect");
         self.define_hash(HashDef::GetProcAddress, "GetProcAddress");
         self.define_hash(HashDef::RtlAddFunctionTable, "RtlAddFunctionTable");
+        self.define_hash(HashDef::RtlDecompressBuffer, "RtlDecompressBuffer");
         #[cfg(debug_assertions)]
         self.define_hash(HashDef::AllocConsole, "AllocConsole");
         #[cfg(debug_assertions)]

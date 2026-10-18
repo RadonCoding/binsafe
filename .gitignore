@@ -23,3 +23,5 @@ Cargo.lock
 .vscode/
 
 /examples/*.exe
+
+/examples/**/crack-me

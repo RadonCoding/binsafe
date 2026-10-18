@@ -103,6 +103,8 @@ Bts_rm32_imm8
 Bts_rm32_r32
 Bts_rm64_imm8
 Bts_rm64_r64
+Cbw
+Cdqe
 Cmp_r16_rm16
 Cmp_r32_rm32
 Cmp_r64_rm64
@@ -170,6 +172,7 @@ Cmovp_r64_rm64
 Cmovs_r16_rm16
 Cmovs_r32_rm32
 Cmovs_r64_rm64
+Cwde
 Dec_rm16
 Dec_rm32
 Dec_rm64

@@ -18,6 +18,7 @@ use runtime::vm::encoders::Encode;
 use runtime::{VM_DISPATCH_SIZE, VM_REDIRECT_SIZE, VM_TRAMPOLINE_SIZE};
 
 mod attestation;
+pub mod compress;
 pub mod crypt;
 #[cfg(debug_assertions)]
 mod debug;
