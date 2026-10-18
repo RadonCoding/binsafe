@@ -53,8 +53,8 @@ pub fn build(rt: &mut Runtime) {
     // mov r15, [r12 + ...]
     utils::register::load(rt, r12, r15, VMReg::BLength);
 
-    // lea rbx, [r14 + 0x2]
-    rt.asm.lea(rbx, ptr(r14 + 0x2)).unwrap();
+    // lea rbx, [r14 + 0x4]
+    rt.asm.lea(rbx, ptr(r14 + 0x4)).unwrap();
 
     // +8 for integrity +7 for alignment:
     // add r15, 0x8 + 0x7

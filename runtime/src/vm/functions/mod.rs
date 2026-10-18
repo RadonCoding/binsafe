@@ -6,6 +6,7 @@ pub mod entry;
 pub mod exit;
 pub mod ginit;
 pub mod invoke;
+pub mod loader;
 pub mod lookup;
 pub mod registers;
 pub mod service;

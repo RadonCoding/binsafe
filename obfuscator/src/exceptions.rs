@@ -2,7 +2,7 @@ use exe::{Buffer, ImageDirectoryEntry, PETranslation, VecPE, PE};
 use std::{collections::HashSet, mem::size_of};
 
 #[repr(C, packed)]
-struct RuntimeFunction {
+pub(crate) struct RuntimeFunction {
     begin_address: u32,
     end_address: u32,
     unwind_info_address: u32,

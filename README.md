@@ -34,6 +34,10 @@ Obfuscator for compiled 64-bit portable executables.
 #### Protection
 - **Attestation**: anti-debug and integrity checks run as bytecode and feed directly into block decryption, corrupting execution on tampering or debugging.
 
+#### Packer
+- **Stub**: the protected binary is embedded in a freshly assembled executable carrying its own runtime.
+- **Loader**: the embedded binary is mapped into memory by bytecode as a headerless image and transfers control, so a dump yields no runnable binary.
+
 ## Testing
 
 The `tests` crate spins up an instrumented VM and compares its behavior against the CPU.
@@ -41,7 +45,7 @@ The `tests` crate spins up an instrumented VM and compares its behavior against 
 - **Instructions**: each instruction is executed through the VM and the resulting register and vector state is compared against native execution.
 
 ## Usage
-`cargo run --release --bin obfuscator -- <filename> --virtualization`
+`cargo run --release --bin obfuscator -- <filename> --virtualization --packing`
 
 ## Contributing
 1. Fork it

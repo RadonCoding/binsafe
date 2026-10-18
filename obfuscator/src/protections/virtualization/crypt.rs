@@ -1,7 +1,7 @@
 use rand::Rng;
 use runtime::{VM_CIPHER_ROUNDS, VM_INTEGRITY_QWORD};
 
-pub const HEADER_SIZE: usize = size_of::<u16>();
+pub const HEADER_SIZE: usize = size_of::<u32>();
 pub const TRAILER_SIZE: usize = size_of::<u8>() + size_of::<u8>();
 
 const ENCRYPTED: u8 = 0;
@@ -40,13 +40,13 @@ impl Cipher {
     }
 
     pub fn decrypt_block(&self, block: &mut Vec<u8>, key: u64, secret: u64) {
-        let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
+        let length = u32::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
         self.decrypt_payload(block, key, secret);
         unprepare_block(block, length);
     }
 
     pub fn encrypt_payload(&self, block: &mut [u8], key: u64, secret: u64) {
-        let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
+        let length = u32::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
         let payload = &mut block[HEADER_SIZE..HEADER_SIZE + ((length + 8 + 7) & !7)];
 
         let key = (key ^ secret)
@@ -59,12 +59,11 @@ impl Cipher {
             chunk.copy_from_slice(&cipher.to_le_bytes());
         }
 
-        // byte  - state
         block[block.len() - TRAILER_SIZE] = ENCRYPTED;
     }
 
     pub fn decrypt_payload(&self, block: &mut [u8], key: u64, secret: u64) {
-        let length = u16::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
+        let length = u32::from_le_bytes(block[..HEADER_SIZE].try_into().unwrap()) as usize;
         let payload = &mut block[HEADER_SIZE..HEADER_SIZE + ((length + 8 + 7) & !7)];
 
         let key = (key ^ secret)
@@ -91,12 +90,9 @@ impl Cipher {
 }
 
 pub fn derive_hash(bytes: &[u8], multiplier: u64, addend: u64) -> u64 {
-    let start = HEADER_SIZE;
-    let end = bytes.len() - TRAILER_SIZE;
-    let payload = &bytes[start..end];
+    let mut chunks = bytes.chunks_exact(size_of::<u64>());
 
-    let mut chunks = payload.chunks_exact(size_of::<u64>());
-    let mut hash = 0u64;
+    let mut hash = 0;
 
     for chunk in &mut chunks {
         hash = (hash ^ u64::from_le_bytes(chunk.try_into().unwrap()))
@@ -129,22 +125,18 @@ fn align_payload(block: &mut Vec<u8>) {
     }
 }
 
-fn finalize_encrypt(block: &mut Vec<u8>, length: u16) {
-    // word  - length
+fn finalize_encrypt(block: &mut Vec<u8>, length: u32) {
     block.splice(0..0, length.to_le_bytes());
-    // byte  - state
     block.push(ENCRYPTED);
-    // byte  - lock
     block.push(0);
 }
 
 fn finalize_decrypt(block: &mut [u8]) {
-    // byte  - state
     block[block.len() - TRAILER_SIZE] = DECRYPTED;
 }
 
-fn prepare_block(block: &mut Vec<u8>) -> u16 {
-    let length = TryInto::<u16>::try_into(block.len()).unwrap();
+fn prepare_block(block: &mut Vec<u8>) -> u32 {
+    let length = TryInto::<u32>::try_into(block.len()).unwrap();
     align_payload(block);
     length
 }

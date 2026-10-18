@@ -131,14 +131,63 @@ pub fn foreach<F: FnOnce(&mut Engine) -> Vec<Box<dyn Encode>>>(
     }
 }
 
-pub fn forever(body: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+pub fn repeat<F: FnOnce(&mut Engine) -> Vec<Box<dyn Encode>>>(
+    engine: &mut Engine,
+    register: VMReg,
+    condition: VMCondition,
+    body: F,
+) -> Vec<Box<dyn Encode>> {
     let destination = Label::destination();
     let source = Label::source();
 
     let mut operations = Vec::<Box<dyn Encode>>::new();
 
     operations.push(Box::new(destination));
-    operations.extend(body);
+    operations.extend(body(engine));
+
+    operations.push(Box::new(LoadRegister {
+        width: VMWidth::Lower64,
+        source: register,
+    }));
+    operations.push(Box::new(LoadRegister {
+        width: VMWidth::Lower64,
+        source: register,
+    }));
+    operations.push(Box::new(And {
+        width: VMWidth::Lower64,
+    }));
+    operations.push(Box::new(Discard::new()));
+
+    operations.push(Box::new(source));
+    operations.push(Box::new(LoadImmediate {
+        width: VMWidth::SLower16,
+        source: vec![0, 0],
+    }));
+    operations.push(Box::new(Branch {
+        logic: VMLogic::SAND,
+        conditions: vec![condition],
+    }));
+
+    vec![Box::new(Block::new(
+        operations,
+        vec![Jump {
+            source,
+            destination: Target::Label(destination),
+        }],
+    ))]
+}
+
+pub fn forever<F: FnOnce(&mut Engine) -> Vec<Box<dyn Encode>>>(
+    engine: &mut Engine,
+    body: F,
+) -> Vec<Box<dyn Encode>> {
+    let destination = Label::destination();
+    let source = Label::source();
+
+    let mut operations = Vec::<Box<dyn Encode>>::new();
+
+    operations.push(Box::new(destination));
+    operations.extend(body(engine));
 
     operations.extend(immediate(0));
     operations.extend(immediate(1));

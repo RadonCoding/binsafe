@@ -4,7 +4,7 @@ use crate::{
     runtime::{DataDef, FnDef, Runtime},
     vm::{
         bytecode::VMReg,
-        utils::{self, scratch},
+        utils::{register, scratch},
     },
 };
 
@@ -33,13 +33,16 @@ pub fn build(rt: &mut Runtime) {
     // push r15
     rt.asm.push(r15).unwrap();
 
+    // sub rsp, 0x28
+    rt.asm.sub(rsp, 0x28).unwrap();
+
     // mov r14, rcx
     rt.asm.mov(r14, rcx).unwrap();
     // mov r15, rdx
     rt.asm.mov(r15, rdx).unwrap();
 
     // mov r13, [r12 + ...]
-    utils::register::load(rt, r12, r13, VMReg::VShadow);
+    register::load(rt, r12, r13, VMReg::VShadow);
     // test r13, r13
     rt.asm.test(r13, r13).unwrap();
     // jnz ...
@@ -53,7 +56,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r13, rax).unwrap();
 
     // mov [r12 + ...], r13
-    utils::register::store(rt, r12, VMReg::VShadow, r13);
+    register::store(rt, r12, VMReg::VShadow, r13);
 
     rt.asm.set_label(&mut initialized).unwrap();
 
@@ -61,22 +64,22 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r12, r13).unwrap();
 
     // mov [r12 + ...], r12
-    utils::register::store(rt, r12, VMReg::R12, r12);
+    register::store(rt, r12, VMReg::R12, r12);
 
     // mov [r12 + ...], r14
-    utils::register::store(rt, r12, VMReg::BPointer, r14);
+    register::store(rt, r12, VMReg::BPointer, r14);
     // mov [r12 + ...], r15
-    utils::register::store(rt, r12, VMReg::Vg0, r15);
+    register::store(rt, r12, VMReg::Vg0, r15);
 
     // lea rax, [...]
     rt.asm.lea(rax, ptr(execute_continue)).unwrap();
     // mov [r12 + ...], rax
-    utils::register::store(rt, r12, VMReg::NExit, rax);
+    register::store(rt, r12, VMReg::NExit, rax);
 
     // push [r12 + ...]
-    utils::register::push(rt, r12, VMReg::VStack);
+    register::push(rt, r12, VMReg::VStack);
     // pop [r12 + ...]
-    utils::register::pop(rt, r12, VMReg::Rsp);
+    register::pop(rt, r12, VMReg::Rsp);
 
     rt.asm.set_label(&mut execute_loop).unwrap();
     {
@@ -104,7 +107,7 @@ pub fn build(rt: &mut Runtime) {
             .unwrap();
 
         // mov [r12 + ...], rsp
-        utils::register::store(rt, r12, VMReg::Rsp, rsp);
+        register::store(rt, r12, VMReg::Rsp, rsp);
 
         // mov r13d, [...]
         rt.asm
@@ -117,7 +120,7 @@ pub fn build(rt: &mut Runtime) {
         scratch::load(rt, r13, rsp);
 
         // cmp [r12 + ...], 0x0
-        utils::register::cmp_with_native(rt, r12, VMReg::BResume, 0x0);
+        register::cmp_with_native(rt, r12, VMReg::BResume, 0x0);
         // jne ...
         rt.asm.jne(execute_loop).unwrap();
     }
@@ -125,7 +128,10 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.set_label(&mut epilogue).unwrap();
     {
         // mov rax, [r12 + ...]
-        utils::register::load(rt, r12, rax, VMReg::Vg0);
+        register::load(rt, r12, rax, VMReg::Vg0);
+
+        // add rsp, 0x28
+        rt.asm.add(rsp, 0x28).unwrap();
 
         // pop r15
         rt.asm.pop(r15).unwrap();

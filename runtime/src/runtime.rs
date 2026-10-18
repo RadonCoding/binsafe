@@ -95,6 +95,7 @@ mapped! {
         /* VM VEH */
         VmVehInitialize,
         VmVehHandler,
+        VmLoader,
         /* CORE */
         Hash,
         Resolve,
@@ -123,6 +124,10 @@ mapped! {
         VmAttestationProgram,
         VmAttestationService,
         VmServiceBox,
+        VmLoaderProgram,
+        VmLoaderHeader,
+        VmLoaderSections,
+        VmLoaderNames,
         VmTrampolines,
         VmKeyInitializer,
         VmKeyMultiplier,
@@ -175,6 +180,11 @@ mapped! {
         NtDelayExecution,
         MessageBoxA,
         NtTerminateProcess,
+        VirtualAlloc,
+        VirtualProtect,
+        GetProcAddress,
+        RtlAddFunctionTable,
+        RtlDecompressBuffer,
         #[cfg(debug_assertions)]
         AllocConsole,
         #[cfg(debug_assertions)]
@@ -201,6 +211,11 @@ mapped! {
         NtDelayExecution,
         MessageBoxA,
         NtTerminateProcess,
+        VirtualAlloc,
+        VirtualProtect,
+        GetProcAddress,
+        RtlAddFunctionTable,
+        RtlDecompressBuffer,
         #[cfg(debug_assertions)]
         AllocConsole,
         #[cfg(debug_assertions)]
@@ -238,6 +253,15 @@ impl ImportDef {
             ImportDef::NtDelayExecution { .. } => (HashDef::Ntdll, HashDef::NtDelayExecution),
             ImportDef::MessageBoxA { .. } => (HashDef::User32, HashDef::MessageBoxA),
             ImportDef::NtTerminateProcess { .. } => (HashDef::Ntdll, HashDef::NtTerminateProcess),
+            ImportDef::VirtualAlloc { .. } => (HashDef::KernelBase, HashDef::VirtualAlloc),
+            ImportDef::VirtualProtect { .. } => (HashDef::KernelBase, HashDef::VirtualProtect),
+            ImportDef::GetProcAddress { .. } => (HashDef::KernelBase, HashDef::GetProcAddress),
+            ImportDef::RtlAddFunctionTable { .. } => {
+                (HashDef::Ntdll, HashDef::RtlAddFunctionTable)
+            }
+            ImportDef::RtlDecompressBuffer { .. } => {
+                (HashDef::Ntdll, HashDef::RtlDecompressBuffer)
+            }
             #[cfg(debug_assertions)]
             ImportDef::AllocConsole { .. } => (HashDef::KernelBase, HashDef::AllocConsole),
             #[cfg(debug_assertions)]
@@ -794,6 +818,7 @@ impl Runtime {
             (FnDef::VmHandlerCompound, vm::handlers::compound::build),
             (FnDef::VmHandlerCpuid, vm::handlers::cpuid::build),
             (FnDef::VmVehInitialize, vm::functions::veh::initialize),
+            (FnDef::VmLoader, vm::functions::loader::build),
             (FnDef::Hash, functions::hash::build),
             (FnDef::Resolve, functions::resolve::build),
             #[cfg(debug_assertions)]
@@ -821,7 +846,7 @@ impl Runtime {
 
         self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
 
-        self.define_data_bytes(DataDef::VmServiceBox, &[0u8; 16]);
+        self.define_data_bytes(DataDef::VmServiceBox, &[0u8; 24]);
 
         self.define_data_qword(DataDef::VmKeyInitializer, self.keys.initializer);
         self.define_data_qword(DataDef::VmKeyAddend, self.keys.addend);
@@ -876,6 +901,11 @@ impl Runtime {
         self.define_hash(HashDef::NtDelayExecution, "NtDelayExecution");
         self.define_hash(HashDef::MessageBoxA, "MessageBoxA");
         self.define_hash(HashDef::NtTerminateProcess, "NtTerminateProcess");
+        self.define_hash(HashDef::VirtualAlloc, "VirtualAlloc");
+        self.define_hash(HashDef::VirtualProtect, "VirtualProtect");
+        self.define_hash(HashDef::GetProcAddress, "GetProcAddress");
+        self.define_hash(HashDef::RtlAddFunctionTable, "RtlAddFunctionTable");
+        self.define_hash(HashDef::RtlDecompressBuffer, "RtlDecompressBuffer");
         #[cfg(debug_assertions)]
         self.define_hash(HashDef::AllocConsole, "AllocConsole");
         #[cfg(debug_assertions)]

@@ -4,6 +4,9 @@ use std::i32;
 
 use crate::engine::Engine;
 use crate::protections::virtualization::attestation::*;
+use crate::protections::virtualization::language::{
+    call, compute_memory, load_register, release, reserve, store_register,
+};
 use runtime::runtime::FnDef;
 use runtime::vm::bytecode::{VMMem, VMReg, VMSeg, VMWidth};
 use runtime::vm::encoders::load_address::LoadAddress;

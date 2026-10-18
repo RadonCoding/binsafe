@@ -60,16 +60,22 @@ impl<'a> Engine<'a> {
     pub fn new(args: &'a Args) -> Self {
         let pe = VecPE::from_disk_file(&args.input).unwrap();
 
+        let engine = Self::wrap(pe, args);
+
+        info!(
+            "Loaded {}-bit binary ({:.2} MB)",
+            engine.bitness,
+            engine.pe.len() as f64 / 1_000_000.0,
+        );
+
+        engine
+    }
+
+    pub fn wrap(pe: VecPE, args: &'a Args) -> Self {
         let bitness = match pe.get_arch().unwrap() {
             Arch::X64 => 64,
             _ => panic!("only 64-bit binaries are supported"),
         };
-
-        info!(
-            "Loaded {}-bit binary ({:.2} MB)",
-            bitness,
-            pe.len() as f64 / 1_000_000.0,
-        );
 
         Self {
             pe,
@@ -83,6 +89,10 @@ impl<'a> Engine<'a> {
 
     pub fn apply<T: Protection + Default + 'static>(&mut self) {
         self.protections.push(Box::<T>::default());
+    }
+
+    pub fn attach(&mut self, protection: impl Protection + 'static) {
+        self.protections.push(Box::new(protection));
     }
 
     pub fn junk(&mut self, offset: usize, size: usize) {
@@ -131,10 +141,6 @@ impl<'a> Engine<'a> {
             .unwrap_or(self.pe.get_section_by_rva(entry_point).unwrap());
 
         info!(
-            "Section VA: 0x{:X}, file offset: 0x{:X}",
-            code_section.virtual_address.0, code_section.pointer_to_raw_data.0
-        );
-        info!(
             "Protecting section '{}' at 0x{:08X}",
             Self::get_section_name(&code_section),
             code_section.virtual_address.0
@@ -143,11 +149,27 @@ impl<'a> Engine<'a> {
         let ip = code_section.virtual_address.0 as u64;
         let code = code_section.read(&self.pe).unwrap().to_vec();
 
-        let data_references = self.collect_data_references(&code, ip);
-        let code_references =
-            self.collect_code_references(&code, ip, &code_section, &data_references);
+        let data_references = self.collect_data_references();
+        let code_references = self.collect_code_references(&data_references);
 
         self.scan_blocks(ip, &code, &code_references);
+    }
+
+    fn code_sections(&self) -> Vec<ImageSectionHeader> {
+        self.pe
+            .get_section_table()
+            .map(|sections| {
+                sections
+                    .iter()
+                    .filter(|section| {
+                        section
+                            .characteristics
+                            .contains(SectionCharacteristics::CNT_CODE)
+                    })
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn capture_block(&mut self, block: &mut Vec<Instruction>, end: u32) {
@@ -229,36 +251,45 @@ impl<'a> Engine<'a> {
         info!("Found {} blocks", self.blocks.len());
     }
 
-    fn collect_data_references(&self, code: &[u8], ip: u64) -> HashSet<u32> {
+    fn collect_data_references(&self) -> HashSet<u32> {
         let mut data_references = HashSet::new();
-        let mut cursor = 0;
 
-        while cursor < code.len() {
-            let mut decoder = Decoder::with_ip(
-                self.bitness,
-                &code[cursor..],
-                ip + cursor as u64,
-                DecoderOptions::NONE,
-            );
-            let mut instruction = Instruction::default();
-            decoder.decode_out(&mut instruction);
+        for section in self.code_sections() {
+            let ip = section.virtual_address.0 as u64;
+            let code = match section.read(&self.pe) {
+                Ok(code) => code,
+                Err(_) => continue,
+            };
 
-            if instruction.is_invalid() {
-                cursor += 1;
-                continue;
+            let mut cursor = 0;
+
+            while cursor < code.len() {
+                let mut decoder = Decoder::with_ip(
+                    self.bitness,
+                    &code[cursor..],
+                    ip + cursor as u64,
+                    DecoderOptions::NONE,
+                );
+                let mut instruction = Instruction::default();
+                decoder.decode_out(&mut instruction);
+
+                if instruction.is_invalid() {
+                    cursor += 1;
+                    continue;
+                }
+
+                if instruction.is_ip_rel_memory_operand() {
+                    data_references.insert(instruction.ip_rel_memory_address() as u32);
+                }
+
+                cursor += instruction.len();
             }
-
-            if instruction.is_ip_rel_memory_operand() {
-                data_references.insert(instruction.ip_rel_memory_address() as u32);
-            }
-
-            cursor += instruction.len();
         }
 
         data_references
     }
 
-    fn collect_static_references(&self, code_section: &ImageSectionHeader) -> HashSet<u32> {
+    fn collect_static_references(&self) -> HashSet<u32> {
         let image_base = self.pe.get_image_base().unwrap();
         let entry_point = self.pe.get_entrypoint().unwrap();
 
@@ -266,9 +297,7 @@ impl<'a> Engine<'a> {
         references.insert(entry_point.0);
 
         for handler in exceptions::get_exception_handlers(&self.pe) {
-            if code_section.has_rva(RVA(handler)) {
-                references.insert(handler);
-            }
+            references.insert(handler);
         }
 
         if let Ok(exports) = ExportDirectory::parse(&self.pe) {
@@ -279,9 +308,7 @@ impl<'a> Engine<'a> {
                 if let Ok(functions) = exports.get_functions(&self.pe) {
                     for function in functions {
                         if let ThunkData::Function(rva) = function.parse_export(start, end) {
-                            if code_section.has_rva(rva) {
-                                references.insert(rva.0);
-                            }
+                            references.insert(rva.0);
                         }
                     }
                 }
@@ -298,9 +325,7 @@ impl<'a> Engine<'a> {
                     };
                     let target_rva = (target_va - image_base) as u32;
 
-                    if code_section.has_rva(RVA(target_rva)) {
-                        references.insert(target_rva);
-                    }
+                    references.insert(target_rva);
                 }
             }
         }
@@ -308,77 +333,76 @@ impl<'a> Engine<'a> {
         references
     }
 
-    fn collect_code_references(
-        &self,
-        code: &[u8],
-        ip: u64,
-        code_section: &ImageSectionHeader,
-        data_references: &HashSet<u32>,
-    ) -> HashSet<u32> {
-        let mut references = self.collect_static_references(code_section);
-        let mut cursor = 0;
-        let mut previous = Vec::new();
+    fn collect_code_references(&self, data_references: &HashSet<u32>) -> HashSet<u32> {
+        let mut references = self.collect_static_references();
 
-        while cursor < code.len() {
-            let mut decoder = Decoder::with_ip(
-                self.bitness,
-                &code[cursor..],
-                ip + cursor as u64,
-                DecoderOptions::NONE,
-            );
-            let mut instruction = Instruction::default();
-            decoder.decode_out(&mut instruction);
+        for section in self.code_sections() {
+            let ip = section.virtual_address.0 as u64;
+            let code = match section.read(&self.pe) {
+                Ok(code) => code,
+                Err(_) => continue,
+            };
 
-            if instruction.is_invalid() {
-                cursor += 1;
-                previous.clear();
-                continue;
-            }
+            let mut cursor = 0;
+            let mut previous = Vec::new();
 
-            match instruction.flow_control() {
-                FlowControl::ConditionalBranch
-                | FlowControl::UnconditionalBranch
-                | FlowControl::Call => {
-                    let target = instruction.near_branch_target() as u32;
+            while cursor < code.len() {
+                let mut decoder = Decoder::with_ip(
+                    self.bitness,
+                    &code[cursor..],
+                    ip + cursor as u64,
+                    DecoderOptions::NONE,
+                );
+                let mut instruction = Instruction::default();
+                decoder.decode_out(&mut instruction);
 
-                    if code_section.has_rva(RVA(target)) {
+                if instruction.is_invalid() {
+                    cursor += 1;
+                    previous.clear();
+                    continue;
+                }
+
+                match instruction.flow_control() {
+                    FlowControl::ConditionalBranch
+                    | FlowControl::UnconditionalBranch
+                    | FlowControl::Call => {
+                        references.insert(instruction.near_branch_target() as u32);
+                    }
+                    _ => {}
+                }
+
+                if matches!(
+                    instruction.flow_control(),
+                    FlowControl::ConditionalBranch | FlowControl::Call | FlowControl::IndirectCall
+                ) {
+                    references.insert(instruction.next_ip() as u32);
+                }
+
+                let flow = instruction.flow_control();
+                previous.push(instruction);
+
+                if !matches!(
+                    flow,
+                    FlowControl::IndirectBranch
+                        | FlowControl::UnconditionalBranch
+                        | FlowControl::Return
+                ) {
+                    cursor += instruction.len();
+                    continue;
+                }
+
+                if flow == FlowControl::IndirectBranch {
+                    let targets = self.collect_switch_table(&previous, data_references);
+
+                    for target in targets {
                         references.insert(target);
                     }
                 }
-                _ => {}
-            }
 
-            if matches!(
-                instruction.flow_control(),
-                FlowControl::ConditionalBranch | FlowControl::Call | FlowControl::IndirectCall
-            ) {
-                references.insert(instruction.next_ip() as u32);
-            }
+                previous.clear();
 
-            let flow = instruction.flow_control();
-            previous.push(instruction);
-
-            if !matches!(
-                flow,
-                FlowControl::IndirectBranch
-                    | FlowControl::UnconditionalBranch
-                    | FlowControl::Return
-            ) {
                 cursor += instruction.len();
-                continue;
             }
-
-            if flow == FlowControl::IndirectBranch {
-                let targets = self.collect_switch_table(&previous, data_references);
-
-                for target in targets {
-                    references.insert(target);
-                }
-            }
-
-            previous.clear();
-
-            cursor += instruction.len();
         }
 
         references
@@ -476,11 +500,17 @@ impl<'a> Engine<'a> {
 
     pub fn get_end_of_sections(&self) -> u32 {
         let sections = self.pe.get_section_table().unwrap();
-        let end_section = sections[sections.len() - 1];
-        self.pe
-            .align_to_section(RVA(end_section.virtual_address.0 + end_section.virtual_size))
-            .unwrap()
-            .0
+        let end = match sections.last() {
+            Some(section) => section.virtual_address.0 + section.virtual_size,
+            None => {
+                self.pe
+                    .get_nt_headers_64()
+                    .unwrap()
+                    .optional_header
+                    .section_alignment
+            }
+        };
+        self.pe.align_to_section(RVA(end)).unwrap().0
     }
 
     pub fn get_section_name(section: &ImageSectionHeader) -> String {

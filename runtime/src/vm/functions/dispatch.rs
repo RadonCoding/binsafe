@@ -47,7 +47,7 @@ pub fn build(rt: &mut Runtime) {
         // mov r13, [r12 + ...]
         register::load(rt, r12, r13, VMReg::BPointer);
         // eax = length
-        bytecode::read_word_zx(rt, r13, eax);
+        bytecode::read_dword(rt, r13, eax);
         // mov [r12 + ...], rax
         register::store(rt, r12, VMReg::BLength, rax);
 
@@ -113,8 +113,8 @@ pub fn build(rt: &mut Runtime) {
         rt.asm.add(rax, rcx).unwrap();
         // mov rcx, r13
         rt.asm.mov(rcx, r13).unwrap();
-        // sub rcx, 0x2
-        rt.asm.sub(rcx, 0x2).unwrap();
+        // sub rcx, 0x4
+        rt.asm.sub(rcx, 0x4).unwrap();
         // sub rcx, rax
         rt.asm.sub(rcx, rax).unwrap();
         // mov [r12 + ...], rcx
@@ -205,7 +205,7 @@ pub fn build(rt: &mut Runtime) {
         // mov r13, [...]
         register::load(rt, r12, r13, VMReg::BPointer);
         // eax = length
-        bytecode::read_word_zx(rt, r13, eax);
+        bytecode::read_dword(rt, r13, eax);
         // mov [r12 + ...], rax
         register::store(rt, r12, VMReg::BLength, rax);
         // jmp ...
