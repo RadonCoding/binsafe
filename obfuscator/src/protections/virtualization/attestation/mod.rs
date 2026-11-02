@@ -14,8 +14,6 @@ mod debug_registers;
 // Masks the timestamp down to a ~1s tick on a 3.5 GHz CPU
 const TICK: u64 = 0x20;
 
-const STALE: u64 = 1u64 << TICK;
-
 pub fn service(engine: &mut Engine, expected: &mut u64) -> Vec<Box<dyn Encode>> {
     forever(engine, |engine| {
         let mut instructions = Vec::<Box<dyn Encode>>::new();
@@ -87,26 +85,26 @@ fn publish(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
     instructions.extend(load_data_at(
         engine,
         DataDef::VmServiceBox,
-        16,
+        8,
         VMWidth::Lower64,
     ));
     instructions.extend(store_register(VMReg::Rcx));
     instructions.extend(load_register(VMReg::Rcx));
     instructions.extend(immediate(1));
     instructions.extend(add(None, None));
-    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 16));
-
-    // Store the stamp and the fingerprint:
-    instructions.extend(load_register(VMReg::Rax));
-    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 0));
-    instructions.extend(load_register(VMReg::Vp0));
     instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 8));
+
+    // Blind the fingerprint with the stamp:
+    instructions.extend(load_register(VMReg::Vp0));
+    instructions.extend(load_register(VMReg::Rax));
+    instructions.extend(xor(None, None));
+    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 0));
 
     // Mark the box ready with an even sequence:
     instructions.extend(load_register(VMReg::Rcx));
     instructions.extend(immediate(2));
     instructions.extend(add(None, None));
-    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 16));
+    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 8));
 
     instructions
 }
@@ -126,25 +124,16 @@ fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
             body.extend(load_data_at(
                 engine,
                 DataDef::VmServiceBox,
-                16,
+                8,
                 VMWidth::Lower64,
             ));
             body.extend(store_register(VMReg::Rax));
 
-            // Load the stamp published by the service:
+            // Recover the blinded fingerprint:
             body.extend(load_data_at(
                 engine,
                 DataDef::VmServiceBox,
                 0,
-                VMWidth::Lower64,
-            ));
-            body.extend(store_register(VMReg::Rcx));
-
-            // Recover the fingerprint:
-            body.extend(load_data_at(
-                engine,
-                DataDef::VmServiceBox,
-                8,
                 VMWidth::Lower64,
             ));
             body.extend(store_register(VMReg::Vp0));
@@ -153,7 +142,7 @@ fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
             body.extend(load_data_at(
                 engine,
                 DataDef::VmServiceBox,
-                16,
+                8,
                 VMWidth::Lower64,
             ));
             body.extend(store_register(VMReg::Rdx));
@@ -169,30 +158,10 @@ fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
         },
     ));
 
-    // Measure how many ticks old the fingerprint is:
+    // Unblind with our own tick, corrupting a stale fingerprint:
     instructions.extend(timestamp());
     instructions.extend(mask(None, !((1u64 << TICK) - 1)));
-    instructions.extend(load_register(VMReg::Rcx));
-    instructions.extend(sub(None, None));
-    instructions.extend(store_register(VMReg::Rax));
-
-    // Capture whether the published fingerprint is stale:
-    instructions.extend(immediate(STALE));
-    instructions.extend(load_register(VMReg::Rax));
-    instructions.extend(sub(None, None));
-    instructions.extend(discard());
-    instructions.extend(flag(Flag::Carry));
-    instructions.extend(store_register(VMReg::Rax));
-
-    // Negate so a stale result fills every bit:
-    instructions.extend(immediate(0));
-    instructions.extend(load_register(VMReg::Rax));
-    instructions.extend(sub(None, None));
-    instructions.extend(store_register(VMReg::Rax));
-
-    // Corrupt the fingerprint when the service is stale:
     instructions.extend(load_register(VMReg::Vp0));
-    instructions.extend(load_register(VMReg::Rax));
     instructions.extend(xor(None, None));
     instructions.extend(store_register(VMReg::Vp0));
 
