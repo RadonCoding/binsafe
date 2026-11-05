@@ -2,8 +2,8 @@ use crate::mapper::{mapped, Mapper};
 use crate::runtime::Runtime;
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
-    arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, convert, cpuid, divide, extend, integer, lea,
-    multiply, pcmpeqb, pmovskb, rdtsc, scalar, set, stack, transfer, tzcnt, xadd, xchg,
+    arithmetic, branch, bsr, bswap, bt, cmov, cmpxchg, convert, cpuid, divide, extend, integer,
+    lea, multiply, pcmpeqb, pmovskb, rdtsc, scalar, set, stack, transfer, tzcnt, xadd, xchg,
 };
 use crate::vm::snapshot::Snapshots;
 use crate::vm::transform::encrypt::Encrypt;

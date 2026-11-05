@@ -2,20 +2,13 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::VMWidth,
-        handlers::semantic::{self, Effect, Expression, Flags, Operand, Operation},
+        handlers::semantic::{self, builder, Operation},
     },
 };
 
 pub fn operation() -> Operation {
-    Operation {
-        effects: vec![Effect::Div(
-            Expression::Operand(Operand::Input(0)),
-            Expression::Operand(Operand::Input(1)),
-            Expression::Operand(Operand::Input(2)),
-        )],
-        flags: Flags::Never,
-        stores: None,
-        widths: &[
+    builder::build(|b| {
+        b.widths(&[
             VMWidth::Lower64,
             VMWidth::Lower32,
             VMWidth::Lower16,
@@ -24,8 +17,12 @@ pub fn operation() -> Operation {
             VMWidth::SLower32,
             VMWidth::SLower16,
             VMWidth::SLower8,
-        ],
-    }
+        ]);
+
+        let (quotient, remainder) = b.div(b.input(0), b.input(1), b.input(2));
+
+        b.outputs(vec![remainder, quotient]);
+    })
 }
 
 pub fn build(rt: &mut Runtime) {

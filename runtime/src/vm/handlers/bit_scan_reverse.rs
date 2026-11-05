@@ -2,28 +2,18 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{Flag, VMWidth},
-        handlers::semantic::{
-            self, Compare, Effect, Expression, Flags, Immediate, Operand, Operation,
-        },
+        handlers::semantic::{self, builder, Operation},
     },
 };
 
 pub fn operation() -> Operation {
-    Operation {
-        effects: vec![
-            Effect::Push(Expression::Operand(Operand::Input(0))),
-            Effect::Bsr(Expression::Operand(Operand::Input(1))),
-        ],
-        flags: Flags::Always(vec![(
-            Flag::Zero,
-            Expression::Compare(Box::new(Compare::Equal(
-                Expression::Operand(Operand::Input(1)),
-                Expression::Immediate(Immediate::Fixed(0)),
-            ))),
-        )]),
-        stores: None,
-        widths: &[VMWidth::Lower64, VMWidth::Lower32, VMWidth::Lower16],
-    }
+    builder::build(|b| {
+        b.widths(&[VMWidth::Lower64, VMWidth::Lower32, VMWidth::Lower16]);
+
+        b.outputs(vec![b.bsr(b.input(0), b.input(1))]);
+
+        b.flags_always(vec![(Flag::Zero, b.equal(b.input(1), b.constant(0)))]);
+    })
 }
 
 pub fn build(rt: &mut Runtime) {

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::slice;
 
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{Flag, VMCondition, VMLogic, VMCode, VMReg};
+use crate::vm::bytecode::{Flag, VMCode, VMCondition, VMLogic, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 
 #[derive(Debug)]

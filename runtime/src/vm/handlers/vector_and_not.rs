@@ -1,15 +1,17 @@
 use crate::{
     runtime::Runtime,
-    vm::handlers::semantic::{self, Effect, Flags, Operation, Vector},
+    vm::{
+        bytecode::VMWidth,
+        handlers::semantic::{self, builder, Operation},
+    },
 };
 
 pub fn operation() -> Operation {
-    Operation {
-        effects: vec![Effect::Vector(Vector::AndNot)],
-        flags: Flags::Never,
-        stores: None,
-        widths: &[],
-    }
+    builder::build(|b| {
+        b.widths(&[VMWidth::Lower128, VMWidth::Lower256]);
+
+        b.outputs(vec![b.vector_and_not(b.input(0), b.input(1))]);
+    })
 }
 
 pub fn build(rt: &mut Runtime) {

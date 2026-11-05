@@ -1,15 +1,12 @@
 use crate::{
     runtime::Runtime,
-    vm::handlers::semantic::{self, Effect, Expression, Flags, Operand, Operation},
+    vm::handlers::semantic::{self, builder, Operation},
 };
 
 pub fn operation() -> Operation {
-    Operation {
-        effects: vec![Effect::Drop(Expression::Operand(Operand::Input(0)))],
-        flags: Flags::Never,
-        stores: None,
-        widths: &[],
-    }
+    builder::build(|b| {
+        b.drop(b.input(0));
+    })
 }
 
 pub fn build(rt: &mut Runtime) {

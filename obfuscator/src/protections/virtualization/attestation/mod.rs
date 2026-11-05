@@ -258,13 +258,7 @@ fn hash(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
         },
     ));
 
-    instructions.extend(compute_memory(
-        VMReg::Rcx,
-        VMReg::R9,
-        1,
-        0,
-        VMSeg::None,
-    ));
+    instructions.extend(compute_memory(VMReg::Rcx, VMReg::R9, 1, 0, VMSeg::None));
     instructions.extend(store_register(VMReg::Rcx));
 
     instructions.extend(foreach(

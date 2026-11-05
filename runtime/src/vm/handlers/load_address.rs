@@ -11,8 +11,8 @@ pub fn operation(rt: &mut Runtime) -> Operation {
     let gs = vec![rt.mapper.index(VMSeg::Gs) as u64];
 
     builder::build(|b| {
-        let base = b.register_operand();
-        let index = b.register_operand();
+        let base = b.read_register();
+        let index = b.read_register();
         let scale = b.read(VMWidth::Lower8);
         let displacement = b.immediate(VMWidth::SLower32);
 
@@ -22,12 +22,12 @@ pub fn operation(rt: &mut Runtime) -> Operation {
             s.on(gs, |b| b.segment());
         });
 
-        let scaled = b.mul(index, scale);
-        let address = b.add(base, scaled);
-        let address = b.add(address, displacement);
-        let address = b.add(address, segment);
+        let output = b.add(
+            b.add(b.add(base, b.mul(index, scale)), displacement),
+            segment,
+        );
 
-        b.produce(address);
+        b.outputs(vec![output]);
     })
 }
 

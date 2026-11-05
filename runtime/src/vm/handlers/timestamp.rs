@@ -1,15 +1,14 @@
 use crate::{
     runtime::Runtime,
-    vm::handlers::semantic::{self, Effect, Flags, Operation},
+    vm::handlers::semantic::{self, builder, Operation},
 };
 
 pub fn operation() -> Operation {
-    Operation {
-        effects: vec![Effect::Timestamp],
-        flags: Flags::Never,
-        stores: None,
-        widths: &[],
-    }
+    builder::build(|b| {
+        let (low, high) = b.timestamp();
+
+        b.outputs(vec![high, low]);
+    })
 }
 
 pub fn build(rt: &mut Runtime) {

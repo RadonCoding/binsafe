@@ -2,100 +2,53 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::{Flag, VMWidth},
-        handlers::semantic::{
-            self, Compare, Effect, Expression, Flags, Immediate, Operand, Operation,
-        },
+        handlers::semantic::{self, builder, Operation},
     },
 };
 
 pub fn operation() -> Operation {
-    Operation {
-        effects: vec![Effect::Sar(
-            Expression::Operand(Operand::Input(0)),
-            Expression::Operand(Operand::Input(1)),
-        )],
-        flags: Flags::When(
-            Expression::BitAnd(
-                Box::new(Expression::Operand(Operand::Input(1))),
-                Box::new(Expression::BitOr(
-                    Box::new(Expression::SignBit),
-                    Box::new(Expression::Immediate(Immediate::Fixed(0x1f))),
-                )),
-            ),
-            vec![
-                (
-                    Flag::Carry,
-                    Expression::Compare(Box::new(Compare::BitSet(
-                        Expression::Operand(Operand::Input(0)),
-                        Expression::Sub(
-                            Box::new(Expression::SignBit),
-                            Box::new(Expression::BitAnd(
-                                Box::new(Expression::Sub(
-                                    Box::new(Expression::BitSize),
-                                    Box::new(Expression::BitAnd(
-                                        Box::new(Expression::Operand(Operand::Input(1))),
-                                        Box::new(Expression::BitOr(
-                                            Box::new(Expression::SignBit),
-                                            Box::new(Expression::Immediate(Immediate::Fixed(0x1f))),
-                                        )),
-                                    )),
-                                )),
-                                Box::new(Expression::BitShr(
-                                    Box::new(Expression::BitNot(Box::new(Expression::Immediate(
-                                        Immediate::Fixed(0),
-                                    )))),
-                                    Box::new(Expression::Sub(
-                                        Box::new(Expression::BitAnd(
-                                            Box::new(Expression::Operand(Operand::Input(1))),
-                                            Box::new(Expression::BitOr(
-                                                Box::new(Expression::SignBit),
-                                                Box::new(Expression::Immediate(Immediate::Fixed(
-                                                    0x1f,
-                                                ))),
-                                            )),
-                                        )),
-                                        Box::new(Expression::Immediate(Immediate::Fixed(1))),
-                                    )),
-                                )),
-                            )),
-                        ),
-                    ))),
-                ),
-                (
-                    Flag::Overflow,
-                    Expression::Compare(Box::new(Compare::Equal(
-                        Expression::Immediate(Immediate::Fixed(1)),
-                        Expression::Immediate(Immediate::Fixed(0)),
-                    ))),
-                ),
-                (
-                    Flag::Sign,
-                    Expression::Compare(Box::new(Compare::BitSet(
-                        Expression::Operand(Operand::Output(0)),
-                        Expression::SignBit,
-                    ))),
-                ),
-                (
-                    Flag::Zero,
-                    Expression::Compare(Box::new(Compare::Equal(
-                        Expression::Operand(Operand::Output(0)),
-                        Expression::Immediate(Immediate::Fixed(0)),
-                    ))),
-                ),
-                (
-                    Flag::Parity,
-                    Expression::Parity(Box::new(Expression::Operand(Operand::Output(0)))),
-                ),
-            ],
-        ),
-        stores: None,
-        widths: &[
+    builder::build(|b| {
+        b.widths(&[
             VMWidth::Lower64,
             VMWidth::Lower32,
             VMWidth::Lower16,
             VMWidth::Lower8,
-        ],
-    }
+        ]);
+
+        let value = b.input(0);
+        let amount = b.input(1);
+
+        let output = b.bind(b.bit_sar(value, amount));
+
+        b.outputs(vec![output]);
+        let count = b.bit_and(amount, b.bit_or(b.sign_bit(), b.constant(0x1f)));
+
+        let carry = b.bit_set(
+            value,
+            b.sub(
+                b.sign_bit(),
+                b.bit_and(
+                    b.sub(b.bit_size(), count),
+                    b.bit_shr(b.bit_not(b.constant(0)), b.sub(count, b.constant(1))),
+                ),
+            ),
+        );
+        let overflow = b.constant(0);
+        let sign = b.bit_set(output, b.sign_bit());
+        let zero = b.equal(output, b.constant(0));
+        let parity = b.parity(output);
+
+        b.flags_when(
+            count,
+            vec![
+                (Flag::Carry, carry),
+                (Flag::Overflow, overflow),
+                (Flag::Sign, sign),
+                (Flag::Zero, zero),
+                (Flag::Parity, parity),
+            ],
+        );
+    })
 }
 
 pub fn build(rt: &mut Runtime) {

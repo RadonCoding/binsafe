@@ -1,15 +1,22 @@
 use crate::{
     runtime::Runtime,
-    vm::handlers::semantic::{self, Effect, Flags, Operation, Vector},
+    vm::{
+        bytecode::VMWidth,
+        handlers::semantic::{self, builder, Operation},
+    },
 };
 
 pub fn operation() -> Operation {
-    Operation {
-        effects: vec![Effect::Vector(Vector::LoadVector)],
-        flags: Flags::Never,
-        stores: None,
-        widths: &[],
-    }
+    builder::build(|b| {
+        b.widths(&[
+            VMWidth::Lower64,
+            VMWidth::Lower32,
+            VMWidth::Lower128,
+            VMWidth::Lower256,
+        ]);
+
+        b.outputs(vec![b.load_vector()]);
+    })
 }
 
 pub fn build(rt: &mut Runtime) {

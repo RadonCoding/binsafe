@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use std::fmt::Write;
 
 use iced_x86::{
     code_asm::{ptr, r10, r11, rcx, AsmRegister64, CodeAssembler, CodeLabel},
-    BlockEncoderOptions,
+    BlockEncoderOptions, Decoder, DecoderOptions, Formatter, Instruction, IntelFormatter,
 };
 use rand::{seq::SliceRandom, Rng};
 
@@ -256,12 +257,8 @@ impl ImportDef {
             ImportDef::VirtualAlloc { .. } => (HashDef::KernelBase, HashDef::VirtualAlloc),
             ImportDef::VirtualProtect { .. } => (HashDef::KernelBase, HashDef::VirtualProtect),
             ImportDef::GetProcAddress { .. } => (HashDef::KernelBase, HashDef::GetProcAddress),
-            ImportDef::RtlAddFunctionTable { .. } => {
-                (HashDef::Ntdll, HashDef::RtlAddFunctionTable)
-            }
-            ImportDef::RtlDecompressBuffer { .. } => {
-                (HashDef::Ntdll, HashDef::RtlDecompressBuffer)
-            }
+            ImportDef::RtlAddFunctionTable { .. } => (HashDef::Ntdll, HashDef::RtlAddFunctionTable),
+            ImportDef::RtlDecompressBuffer { .. } => (HashDef::Ntdll, HashDef::RtlDecompressBuffer),
             #[cfg(debug_assertions)]
             ImportDef::AllocConsole { .. } => (HashDef::KernelBase, HashDef::AllocConsole),
             #[cfg(debug_assertions)]
@@ -326,12 +323,30 @@ impl Default for Keys {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct Hash {
+    pub initializer: u64,
+    pub multiplier: u64,
+    pub finalizers: [u64; 2],
+}
+
+impl Default for Hash {
+    fn default() -> Self {
+        let mut rng = rand::thread_rng();
+
+        Self {
+            initializer: rng.gen(),
+            multiplier: rng.gen::<u64>() | 1,
+            finalizers: [rng.gen::<u64>() | 1, rng.gen::<u64>() | 1],
+        }
+    }
+}
+
 pub struct Runtime {
     pub asm: CodeAssembler,
 
-    pub nonce: u64,
-
     pub keys: Keys,
+    pub hash: Hash,
 
     pub function_labels: HashMap<FnDef, CodeLabel>,
     pub data_labels: HashMap<DataDef, CodeLabel>,
@@ -364,8 +379,6 @@ pub struct Runtime {
 impl Runtime {
     pub fn new(bitness: u32) -> Self {
         let mut asm = CodeAssembler::new(bitness).unwrap();
-
-        let nonce = rand::thread_rng().gen::<u64>();
 
         let mut function_labels = HashMap::new();
 
@@ -406,9 +419,8 @@ impl Runtime {
         Self {
             asm,
 
-            nonce,
-
             keys: Keys::default(),
+            hash: Hash::default(),
 
             function_labels,
             data_labels,
@@ -489,17 +501,19 @@ impl Runtime {
     }
 
     fn hash(&self, value: &str) -> u64 {
-        let mut hash = 14695981039346656037u64 ^ self.nonce;
+        let mut hash = self.hash.initializer;
 
         for byte in value.bytes().map(|b| b.to_ascii_lowercase()) {
             hash ^= byte as u64;
-            hash = hash.wrapping_mul(0x100000001b3);
+            hash = hash.wrapping_mul(self.hash.multiplier);
         }
 
         hash ^= hash >> 0x21;
-        hash = hash.wrapping_mul(0xff51afd7ed558ccd);
+        hash = hash.wrapping_mul(self.hash.finalizers[0]);
+
         hash ^= hash >> 0x21;
-        hash = hash.wrapping_mul(0xc4ceb9fe1a85ec53);
+        hash = hash.wrapping_mul(self.hash.finalizers[1]);
+
         hash ^= hash >> 0x21;
 
         hash
@@ -1069,5 +1083,46 @@ impl Runtime {
         }
 
         code
+    }
+
+    pub fn disassemble(&self, code: &[u8], ip: u64) -> String {
+        let mut functions = self
+            .functions
+            .keys()
+            .map(|def| {
+                let label = self.function_labels[def];
+                (
+                    format!("{def:?}"),
+                    self.addresses[&label],
+                    self.sizes[&label],
+                )
+            })
+            .collect::<Vec<(String, u64, u64)>>();
+        functions.sort_by_key(|(_, rva, _)| *rva);
+
+        let mut formatter = IntelFormatter::new();
+        let mut instruction = Instruction::default();
+        let mut line = String::new();
+        let mut output = String::new();
+
+        for (name, rva, size) in functions {
+            let start = (rva - ip) as usize;
+            let bytes = &code[start..start + size as usize];
+
+            writeln!(output, "{name}").unwrap();
+
+            let mut decoder = Decoder::with_ip(64, bytes, rva, DecoderOptions::NONE);
+
+            while decoder.can_decode() {
+                decoder.decode_out(&mut instruction);
+                line.clear();
+                formatter.format(&instruction, &mut line);
+                writeln!(output, "{}{:08X}  {line}", " ".repeat(4), instruction.ip()).unwrap();
+            }
+
+            writeln!(output).unwrap();
+        }
+
+        output
     }
 }

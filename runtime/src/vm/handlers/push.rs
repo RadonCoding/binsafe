@@ -1,32 +1,12 @@
 use crate::{
     runtime::Runtime,
-    vm::{
-        bytecode::VMReg,
-        handlers::semantic::{
-            self, Effect, Expression, Flags, Immediate, Operand, Operation, Register,
-        },
-    },
+    vm::handlers::semantic::{self, builder, Operation},
 };
 
 pub fn operation() -> Operation {
-    Operation {
-        effects: vec![
-            Effect::Register(
-                Register::Fixed(VMReg::Rsp),
-                Expression::Sub(
-                    Box::new(Expression::Register(Register::Fixed(VMReg::Rsp))),
-                    Box::new(Expression::Immediate(Immediate::Fixed(8))),
-                ),
-            ),
-            Effect::Memory(
-                Expression::Register(Register::Fixed(VMReg::Rsp)),
-                Expression::Operand(Operand::Input(0)),
-            ),
-        ],
-        flags: Flags::Never,
-        stores: None,
-        widths: &[],
-    }
+    builder::build(|b| {
+        b.push(b.input(0));
+    })
 }
 
 pub fn build(rt: &mut Runtime) {

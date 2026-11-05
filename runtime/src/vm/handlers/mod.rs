@@ -41,7 +41,6 @@ pub mod store_register;
 pub mod sub;
 pub mod timestamp;
 pub mod trailing_zeros;
-pub mod vector;
 pub mod vector_add;
 pub mod vector_and;
 pub mod vector_and_not;

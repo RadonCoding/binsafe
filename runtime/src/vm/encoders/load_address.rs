@@ -1,5 +1,5 @@
 use crate::mapper::Mapper;
-use crate::vm::bytecode::{VMMem, VMCode, VMReg};
+use crate::vm::bytecode::{VMCode, VMMem, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
 

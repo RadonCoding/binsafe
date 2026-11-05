@@ -18,7 +18,7 @@ pub fn build(rt: &mut Runtime) {
     rt.asm.mov(r13, rdx).unwrap();
 
     // mov rax, ...
-    rt.asm.mov(rax, 0xcbf29ce484222325u64 ^ rt.nonce).unwrap();
+    rt.asm.mov(rax, rt.hash.initializer).unwrap();
 
     // test r13, r13
     rt.asm.test(r13, r13).unwrap();
@@ -56,8 +56,8 @@ pub fn build(rt: &mut Runtime) {
         // xor rax, rdx
         rt.asm.xor(rax, rdx).unwrap();
 
-        // mov r8, 0x100000001b3
-        rt.asm.mov(r8, 0x100000001b3u64).unwrap();
+        // mov r8, ...
+        rt.asm.mov(r8, rt.hash.multiplier).unwrap();
         // imul rax, r8
         rt.asm.imul_2(rax, r8).unwrap();
 
@@ -96,8 +96,8 @@ pub fn build(rt: &mut Runtime) {
         // xor rax, rdx
         rt.asm.xor(rax, rdx).unwrap();
 
-        // mov r8, 0x100000001b3
-        rt.asm.mov(r8, 0x100000001b3u64).unwrap();
+        // mov r8, ...
+        rt.asm.mov(r8, rt.hash.multiplier).unwrap();
         // mul r8
         rt.asm.mul(r8).unwrap();
 
@@ -117,8 +117,8 @@ pub fn build(rt: &mut Runtime) {
         // xor rax, rdx
         rt.asm.xor(rax, rdx).unwrap();
 
-        // mov r8, 0xff51afd7ed558ccd
-        rt.asm.mov(r8, 0xff51afd7ed558ccdu64).unwrap();
+        // mov r8, ...
+        rt.asm.mov(r8, rt.hash.finalizers[0]).unwrap();
         // mul r8
         rt.asm.mul(r8).unwrap();
 
@@ -129,8 +129,8 @@ pub fn build(rt: &mut Runtime) {
         // xor rax, rdx
         rt.asm.xor(rax, rdx).unwrap();
 
-        // mov r8, 0xc4ceb9fe1a85ec53
-        rt.asm.mov(r8, 0xc4ceb9fe1a85ec53u64).unwrap();
+        // mov r8, ...<<s
+        rt.asm.mov(r8, rt.hash.finalizers[1]).unwrap();
         // mul r8
         rt.asm.mul(r8).unwrap();
 

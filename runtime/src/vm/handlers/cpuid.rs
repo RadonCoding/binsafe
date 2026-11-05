@@ -1,15 +1,14 @@
 use crate::{
     runtime::Runtime,
-    vm::handlers::semantic::{self, Effect, Flags, Operation},
+    vm::handlers::semantic::{self, builder, Operation},
 };
 
 pub fn operation() -> Operation {
-    Operation {
-        effects: vec![Effect::Cpuid],
-        flags: Flags::Never,
-        stores: None,
-        widths: &[],
-    }
+    builder::build(|b| {
+        let (eax, ebx, ecx, edx) = b.cpuid(b.input(0), b.input(1));
+
+        b.outputs(vec![edx, ecx, ebx, eax]);
+    })
 }
 
 pub fn build(rt: &mut Runtime) {

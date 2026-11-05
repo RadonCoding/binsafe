@@ -2,16 +2,13 @@ use crate::{
     runtime::Runtime,
     vm::{
         bytecode::VMWidth,
-        handlers::semantic::{self, Effect, Expression, Flags, Operation, Register},
+        handlers::semantic::{self, builder, Operation},
     },
 };
 
 pub fn operation() -> Operation {
-    Operation {
-        effects: vec![Effect::Push(Expression::Register(Register::Operand))],
-        flags: Flags::Never,
-        stores: None,
-        widths: &[
+    builder::build(|b| {
+        b.widths(&[
             VMWidth::Lower64,
             VMWidth::Lower32,
             VMWidth::Lower16,
@@ -21,8 +18,10 @@ pub fn operation() -> Operation {
             VMWidth::SLower32,
             VMWidth::SLower16,
             VMWidth::SLower8,
-        ],
-    }
+        ]);
+
+        b.outputs(vec![b.read_register()]);
+    })
 }
 
 pub fn build(rt: &mut Runtime) {

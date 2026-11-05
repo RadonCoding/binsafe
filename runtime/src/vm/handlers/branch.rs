@@ -41,13 +41,9 @@ pub fn operation(rt: &mut Runtime) -> Operation {
         let accumulator = b.variable();
 
         b.dispatch(logic, |s| {
-            s.on(all.clone(), |b| {
-                let value = b.constant(1);
-                b.set(accumulator, value);
-            });
+            s.on(all.clone(), |b| b.set(accumulator, b.constant(1)));
             s.on([any.clone(), parity.clone()].concat(), |b| {
-                let value = b.constant(0);
-                b.set(accumulator, value);
+                b.set(accumulator, b.constant(0))
             });
         });
 
@@ -59,61 +55,34 @@ pub fn operation(rt: &mut Runtime) -> Operation {
             let rhs = b.decrypt(rhs);
 
             let condition = b.select(test, |s| {
-                s.on(compare, |b| {
-                    let lhs = b.flag(lhs);
-                    b.equal(lhs, rhs)
-                });
-                s.on(equal, |b| {
-                    let lhs = b.flag(lhs);
-                    let rhs = b.flag(rhs);
-                    b.equal(lhs, rhs)
-                });
-                s.on(unequal, |b| {
-                    let lhs = b.flag(lhs);
-                    let rhs = b.flag(rhs);
-                    b.unequal(lhs, rhs)
-                });
+                s.on(compare, |b| b.equal(b.flag_set(lhs), rhs));
+                s.on(equal, |b| b.equal(b.flag_set(lhs), b.flag_set(rhs)));
+                s.on(unequal, |b| b.unequal(b.flag_set(lhs), b.flag_set(rhs)));
             });
 
-            let fold = |b: &mut Builder, folded: Value| b.set(accumulator, folded);
+            let fold = |b: &Builder, folded: Value| b.set(accumulator, folded);
 
             b.dispatch(logic, |s| {
                 s.on(all.clone(), |b| {
-                    let accumulator = b.get(accumulator);
-                    let folded = b.and(accumulator, condition);
-                    fold(b, folded);
+                    fold(b, b.bit_and(b.get(accumulator), condition))
                 });
                 s.on(any.clone(), |b| {
-                    let accumulator = b.get(accumulator);
-                    let folded = b.or(accumulator, condition);
-                    fold(b, folded);
+                    fold(b, b.bit_or(b.get(accumulator), condition))
                 });
                 s.on(parity.clone(), |b| {
-                    let accumulator = b.get(accumulator);
-                    let folded = b.xor(accumulator, condition);
-                    fold(b, folded);
+                    fold(b, b.bit_xor(b.get(accumulator), condition))
                 });
             });
         });
 
-        let taken = b.get(accumulator);
-
-        b.when(taken, |b| {
+        b.when(b.get(accumulator), |b| {
             b.dispatch(logic, |s| {
-                s.on(jump, |b| {
-                    let target = b.input(0);
-                    b.store(VMReg::NBranch, target);
-                });
+                s.on(jump, |b| b.write_register(VMReg::NBranch, b.input(0)));
                 s.on(call, |b| {
-                    let target = b.input(0);
-                    b.store(VMReg::NBranch, target);
-                    let exit = b.register(VMReg::NExit);
-                    b.push(exit);
+                    b.write_register(VMReg::NBranch, b.input(0));
+                    b.push(b.register(VMReg::NExit));
                 });
-                s.on(skip, |b| {
-                    let distance = b.input(0);
-                    b.advance(distance);
-                });
+                s.on(skip, |b| b.advance(b.input(0)));
             });
         });
     })

@@ -1,9 +1,7 @@
 use iced_x86::{Instruction, Mnemonic};
 
 use crate::vm::bytecode::{VMReg, VMWidth};
-use crate::vm::encoders::{
-    load_register::LoadRegister, store_register::StoreRegister, Encode,
-};
+use crate::vm::encoders::{load_register::LoadRegister, store_register::StoreRegister, Encode};
 
 pub fn encode(instruction: &Instruction) -> Option<Vec<Box<dyn Encode>>> {
     let (source, destination) = match instruction.mnemonic() {
