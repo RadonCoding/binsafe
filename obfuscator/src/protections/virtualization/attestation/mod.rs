@@ -148,7 +148,7 @@ fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
                 16,
                 VMWidth::Lower64,
             ));
-            body.extend(store_register(VMReg::R8));
+            body.extend(store_register(VMReg::Rcx));
 
             // Read the sequence after the snapshot:
             body.extend(load_data_at(
@@ -172,13 +172,13 @@ fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
 
     // Unblind the fingerprint with the publication stamp:
     instructions.extend(load_register(VMReg::Vp0));
-    instructions.extend(load_register(VMReg::R8));
+    instructions.extend(load_register(VMReg::Rcx));
     instructions.extend(xor(None, None));
     instructions.extend(store_register(VMReg::Vp0));
 
     // Corrupt the fingerprint by any staleness beyond one tick:
     instructions.extend(timestamp());
-    instructions.extend(sub(None, Some(VMReg::R8)));
+    instructions.extend(sub(None, Some(VMReg::Rcx)));
     instructions.extend(mask(None, !((1u64 << TICK) - 1)));
     instructions.extend(load_register(VMReg::Vp0));
     instructions.extend(xor(None, None));
