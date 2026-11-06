@@ -78,7 +78,6 @@ fn publish(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
 
     // Tick the current timestamp as the freshness stamp:
     instructions.extend(timestamp());
-    instructions.extend(mask(None, !((1u64 << TICK) - 1)));
     instructions.extend(store_register(VMReg::Rax));
 
     // Load the sequence and mark the box busy with an odd value:
@@ -99,6 +98,10 @@ fn publish(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
     instructions.extend(load_register(VMReg::Rax));
     instructions.extend(xor(None, None));
     instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 0));
+
+    // Record the raw stamp for the staleness delta:
+    instructions.extend(load_register(VMReg::Rax));
+    instructions.extend(store_data_at(engine, DataDef::VmServiceBox, 16));
 
     // Mark the box ready with an even sequence:
     instructions.extend(load_register(VMReg::Rcx));
@@ -138,6 +141,15 @@ fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
             ));
             body.extend(store_register(VMReg::Vp0));
 
+            // Read the publication stamp:
+            body.extend(load_data_at(
+                engine,
+                DataDef::VmServiceBox,
+                16,
+                VMWidth::Lower64,
+            ));
+            body.extend(store_register(VMReg::R8));
+
             // Read the sequence after the snapshot:
             body.extend(load_data_at(
                 engine,
@@ -158,8 +170,15 @@ fn unlock(engine: &mut Engine) -> Vec<Box<dyn Encode>> {
         },
     ));
 
-    // Unblind with our own tick, corrupting a stale fingerprint:
+    // Unblind the fingerprint with the publication stamp:
+    instructions.extend(load_register(VMReg::Vp0));
+    instructions.extend(load_register(VMReg::R8));
+    instructions.extend(xor(None, None));
+    instructions.extend(store_register(VMReg::Vp0));
+
+    // Corrupt the fingerprint by any staleness beyond one tick:
     instructions.extend(timestamp());
+    instructions.extend(sub(None, Some(VMReg::R8)));
     instructions.extend(mask(None, !((1u64 << TICK) - 1)));
     instructions.extend(load_register(VMReg::Vp0));
     instructions.extend(xor(None, None));

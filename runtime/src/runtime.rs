@@ -860,7 +860,7 @@ impl Runtime {
 
         self.define_data_bytes(DataDef::Functions, &vec![0u8; FnDef::COUNT * 8]);
 
-        self.define_data_bytes(DataDef::VmServiceBox, &[0u8; 16]);
+        self.define_data_bytes(DataDef::VmServiceBox, &[0u8; 32]);
 
         self.define_data_qword(DataDef::VmKeyInitializer, self.keys.initializer);
         self.define_data_qword(DataDef::VmKeyAddend, self.keys.addend);
