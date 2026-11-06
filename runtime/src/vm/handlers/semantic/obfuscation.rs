@@ -394,7 +394,9 @@ impl Rewriter {
             &Statement::Drop(value) => Statement::Drop(self.value(value)),
             Statement::Loop(counter, body) => Statement::Loop(
                 *counter,
-                body.iter().map(|statement| self.statement(statement)).collect(),
+                body.iter()
+                    .map(|statement| self.statement(statement))
+                    .collect(),
             ),
             Statement::Select(selector, arms) => Statement::Select(
                 self.value(*selector),
@@ -402,14 +404,18 @@ impl Rewriter {
                     .map(|(keys, body)| {
                         (
                             keys.clone(),
-                            body.iter().map(|statement| self.statement(statement)).collect(),
+                            body.iter()
+                                .map(|statement| self.statement(statement))
+                                .collect(),
                         )
                     })
                     .collect(),
             ),
             Statement::When(condition, body) => Statement::When(
                 self.value(*condition),
-                body.iter().map(|statement| self.statement(statement)).collect(),
+                body.iter()
+                    .map(|statement| self.statement(statement))
+                    .collect(),
             ),
         }
     }

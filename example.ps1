@@ -1,4 +1,5 @@
 using namespace System.IO
+using namespace System.Collections.Generic
 
 param(
     [Parameter(Mandatory, Position = 0)]
@@ -12,7 +13,7 @@ $ErrorActionPreference = "Stop"
 
 $Configuration = "debug"
 
-$Parameters = [System.Collections.Generic.List[string]]::new()
+$Parameters = [List[string]]::new()
 
 foreach ($argument in $Arguments) {
     if ($argument -in @("debug", "release")) {

@@ -8,7 +8,10 @@ use crate::{
 
 pub fn operation() -> Operation {
     builder::build(|b| {
-        b.outputs(vec![b.memory(b.register(VMReg::Rsp))]);
+        let output = b.bind(b.memory(b.register(VMReg::Rsp)));
+
+        b.outputs(vec![output]);
+
         b.write_register(VMReg::Rsp, b.add(b.register(VMReg::Rsp), b.constant(8)));
     })
 }

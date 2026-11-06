@@ -21,11 +21,15 @@ pub fn operation() -> Operation {
         let output = b.bind(b.bit_rol(value, amount));
 
         b.outputs(vec![output]);
+
         let rotated = b.bit_and(amount, b.bit_or(b.sign_bit(), b.constant(0x1f)));
 
         let carry = b.bit_set(output, b.constant(0));
         let overflow = b.greater_than(
-            b.bit_xor(b.bit_shr(output, b.sign_bit()), b.bit_and(output, b.constant(1))),
+            b.bit_xor(
+                b.bit_shr(output, b.sign_bit()),
+                b.bit_and(output, b.constant(1)),
+            ),
             b.constant(0),
         );
 

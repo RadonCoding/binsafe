@@ -7,7 +7,7 @@ pub fn operation() -> Operation {
     builder::build(|b| {
         let (low, high) = b.timestamp();
 
-        b.outputs(vec![high, low]);
+        b.outputs(vec![low, high]);
     })
 }
 
