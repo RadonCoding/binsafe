@@ -660,7 +660,6 @@ fn transforms<'a>(
     register: bool,
 ) -> Vec<Box<dyn Transform + 'a>> {
     vec![
-        Box::new(Fuse { register }),
         Box::new(Peephole),
         Box::new(Permute { picker }),
         Box::new(Scramble),

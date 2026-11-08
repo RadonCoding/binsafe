@@ -608,6 +608,10 @@ impl<'a> Engine<'a> {
         let ip = self.get_end_of_sections() as u64;
         let code = self.rt.assemble(ip);
 
+        if self.args.verbose {
+            println!("{}", self.rt.disassemble(&code, ip));
+        }
+
         let new_section = self.create_section(
             Some("💀"),
             &code,

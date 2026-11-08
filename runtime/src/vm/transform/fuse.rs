@@ -1,14 +1,10 @@
 use std::mem;
 
-use rand::Rng;
-
 use crate::runtime::Runtime;
 use crate::vm::bytecode::VMCode;
 use crate::vm::encoders::compound::Compound;
 use crate::vm::encoders::Encode;
 use crate::vm::transform::{descend, Phase, Transform};
-
-const LIMIT: usize = u8::MAX as usize + 1;
 
 pub struct Fuse {
     pub register: bool,
@@ -20,8 +16,6 @@ impl Transform for Fuse {
     }
 
     fn run(&self, rt: &mut Runtime, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
-        let mut rng = rand::thread_rng();
-
         descend(&mut operations, |operations| {
             let fusible = operations
                 .iter()
@@ -38,20 +32,15 @@ impl Transform for Fuse {
                 .map(|operation| operation.code())
                 .collect::<Vec<Option<VMCode>>>();
 
-            let mut planned = Vec::<(usize, Option<u8>)>::new();
-
+            let mut planned = Vec::new();
             let mut cursor = 0;
 
             while cursor < codes.len() {
                 let mut chosen = None;
 
-                let window = rng.gen_range(2..=6);
+                let limit = codes.len() - cursor;
 
-                for length in (2..=window).rev() {
-                    if cursor + length > codes.len() {
-                        continue;
-                    }
-
+                for length in (2..=limit).rev() {
                     if !fusible[cursor..cursor + length]
                         .iter()
                         .all(|&fusible| fusible)
@@ -65,11 +54,11 @@ impl Transform for Fuse {
                         .collect::<Vec<VMCode>>();
 
                     if let Some(index) = rt.compounds.iter().position(|entry| *entry == members) {
-                        chosen = Some((length, index as u8));
+                        chosen = Some((length, index));
                         break;
                     }
 
-                    if self.register && rt.compounds.len() < LIMIT {
+                    if self.register {
                         chosen = Some((length, rt.compound(members)));
                         break;
                     }
@@ -93,7 +82,6 @@ impl Transform for Fuse {
                 match index {
                     Some(index) => {
                         let members = (0..length).map(|_| source.next().unwrap()).collect();
-
                         operations.push(Box::new(Compound { index, members }));
                     }
                     None => operations.push(source.next().unwrap()),

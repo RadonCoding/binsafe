@@ -32,7 +32,7 @@ impl Snapshot {
         if let Some(children) = operation.children_ref() {
             flattened.push((
                 identity(operation),
-                format!("{}{}", "  ".repeat(depth), operation.name()),
+                format!("{}{}", "  ".repeat(depth), operation.name()).to_string(),
             ));
 
             for child in children {
@@ -41,7 +41,7 @@ impl Snapshot {
         } else {
             flattened.push((
                 identity(operation),
-                format!("{}{}", "  ".repeat(depth), operation),
+                format!("{}{}", "  ".repeat(depth), operation).to_string(),
             ));
         }
     }
@@ -65,49 +65,45 @@ impl Snapshots {
 }
 
 impl Snapshots {
-    fn trace(&self, target: usize) -> (Option<usize>, String) {
-        let mut original = None;
-        let mut markers = String::new();
-        let mut previous = None;
-        let mut closing = None;
+    fn traces(&self) -> HashMap<usize, (Option<usize>, String)> {
+        let mut traces = HashMap::new();
+        let mut previous = HashMap::new();
+        let mut closing = HashMap::new();
 
         for (index, snapshot) in self.snapshots.iter().enumerate() {
-            let Some((position, (_, current))) = snapshot
-                .operations
-                .iter()
-                .enumerate()
-                .find(|(_, (other, _))| *other == target)
-            else {
-                continue;
-            };
+            for (position, (address, current)) in snapshot.operations.iter().enumerate() {
+                let entry = traces.entry(*address).or_insert_with(|| {
+                    let original = if index == 0 { Some(position) } else { None };
+                    (original, String::new())
+                });
 
-            match previous {
-                None => {
-                    if index == 0 {
-                        original = Some(position);
-                    } else {
-                        markers.extend(letter(snapshot.phase));
+                match previous.get(address) {
+                    None => {
+                        if index != 0 {
+                            entry.1.extend(letter(snapshot.phase));
+                        }
                     }
+                    Some(prior) if *prior != current.as_str() => {
+                        entry.1.extend(letter(snapshot.phase));
+                    }
+                    _ => {}
                 }
-                Some(prior) if prior != current.as_str() => {
-                    markers.extend(letter(snapshot.phase));
-                }
-                _ => {}
-            }
 
-            previous = Some(current.as_str());
-            closing = Some(index);
+                previous.insert(*address, current.as_str());
+                closing.insert(*address, index);
+            }
         }
 
-        if let Some(closing) = closing {
-            let remover = closing + 1;
-
+        for (address, index) in closing {
+            let remover = index + 1;
             if remover < self.snapshots.len() {
-                markers.extend(letter(self.snapshots[remover].phase));
+                if let Some((_, markers)) = traces.get_mut(&address) {
+                    markers.extend(letter(self.snapshots[remover].phase));
+                }
             }
         }
 
-        (original, markers)
+        traces
     }
 
     fn before(&self, remover: usize, address: usize) -> Option<usize> {
@@ -121,26 +117,25 @@ impl Snapshots {
             .position(|(other, _)| *other == address)
     }
 
-    fn born(&self, remover: usize) -> Vec<usize> {
+    fn born(&self, remover: usize) -> HashSet<usize> {
         if remover >= self.snapshots.len() {
-            return Vec::new();
+            return HashSet::new();
         }
 
-        let seen = |address: usize| {
-            self.snapshots[..remover].iter().any(|snapshot| {
-                snapshot
-                    .operations
-                    .iter()
-                    .any(|(other, _)| *other == address)
-            })
-        };
+        let mut seen = HashSet::new();
+
+        for snapshot in &self.snapshots[..remover] {
+            for (address, _) in &snapshot.operations {
+                seen.insert(*address);
+            }
+        }
 
         self.snapshots[remover]
             .operations
             .iter()
             .map(|(address, _)| *address)
-            .filter(|&address| !seen(address))
-            .collect::<Vec<usize>>()
+            .filter(|address| !seen.contains(address))
+            .collect::<HashSet<usize>>()
     }
 }
 
@@ -161,32 +156,29 @@ impl fmt::Display for Snapshots {
             .map(|(address, _)| *address)
             .collect::<HashSet<usize>>();
 
-        let width = self
-            .snapshots
-            .iter()
-            .flat_map(|snapshot| {
-                snapshot
-                    .operations
-                    .iter()
-                    .map(|(target, _)| self.trace(*target).1.len())
-            })
+        let traces = self.traces();
+
+        let width = traces
+            .values()
+            .map(|(_, markers)| markers.len())
             .max()
             .unwrap_or(0);
 
         let render = |original: Option<usize>, markers: &str, display: &str| {
             let original = match original {
-                Some(value) => format!("{:>3}", value),
+                Some(value) => format!("{:>3}", value).to_string(),
                 None => "   ".to_string(),
             };
             let display = display.replace('\n', "\n         ");
-            format!("{} {:<width$} {}", original, markers, display)
+            format!("{} {:<width$} {}", original, markers, display).to_string()
         };
 
         let mut lines = last
             .operations
             .iter()
             .map(|(target, display)| {
-                let (original, markers) = self.trace(*target);
+                let (original, markers) =
+                    traces.get(target).cloned().unwrap_or((None, String::new()));
                 render(original, &markers, display)
             })
             .collect::<Vec<String>>();
@@ -211,14 +203,22 @@ impl fmt::Display for Snapshots {
 
         removed.sort_by_key(|(remover, position, _, _)| (*remover, *position));
 
+        let mut cache = HashMap::new();
+
         for (remover, position, address, content) in &removed {
             let before = self.before(*remover, *address);
 
-            if before == Some(*position) && !self.born(*remover).is_empty() {
+            let born = cache.entry(*remover).or_insert_with(|| self.born(*remover));
+
+            if before == Some(*position) && !born.is_empty() {
                 continue;
             }
 
-            let (original, markers) = self.trace(*address);
+            let (original, markers) = traces
+                .get(address)
+                .cloned()
+                .unwrap_or((None, String::new()));
+
             lines.push(render(original, &markers, content));
         }
 

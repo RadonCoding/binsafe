@@ -5,7 +5,7 @@ use std::any::Any;
 
 #[derive(Debug)]
 pub struct Compound {
-    pub index: u8,
+    pub index: usize,
     pub members: Vec<Box<dyn Encode>>,
 }
 
@@ -38,7 +38,8 @@ impl Encode for Compound {
     }
 
     fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        let mut bytes = vec![self.index];
+        let mut bytes = Vec::new();
+        bytes.extend(self.index.to_le_bytes());
 
         for member in &self.members {
             bytes.extend(member.encode(mapper));

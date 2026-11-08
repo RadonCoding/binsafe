@@ -289,14 +289,14 @@ struct DispatchCase {
 
 struct Dispatch {
     table: CodeLabel,
-    stubs: Vec<(u8, CodeLabel, CodeLabel)>,
+    stubs: Vec<(usize, CodeLabel, CodeLabel)>,
 }
 
 impl Dispatch {
     fn slots(&self) -> usize {
         self.stubs
             .iter()
-            .map(|(i, _, _)| *i as usize)
+            .map(|(i, _, _)| *i)
             .max()
             .map(|m| m + 1)
             .unwrap_or(0)
@@ -451,20 +451,20 @@ impl Runtime {
         }
     }
 
-    pub fn compound(&mut self, operations: Vec<VMCode>) -> u8 {
+    pub fn compound(&mut self, operations: Vec<VMCode>) -> usize {
         if let Some(index) = self
             .compounds
             .iter()
             .position(|existing| *existing == operations)
         {
-            return index as u8;
+            return index;
         }
 
         let index = self.compounds.len();
 
         self.compounds.push(operations);
 
-        index as u8
+        index
     }
 
     fn set_function_label(&mut self, def: FnDef) {
@@ -567,11 +567,11 @@ impl Runtime {
             .unwrap();
     }
 
-    pub fn switch(
+    pub fn switch<I: Into<usize>>(
         &mut self,
         key: AsmRegister64,
         epilogue: CodeLabel,
-        handlers: Vec<(Vec<u8>, Handler)>,
+        handlers: Vec<(Vec<I>, Handler)>,
     ) {
         let mut cases = Vec::new();
 
@@ -579,7 +579,7 @@ impl Runtime {
             let label = self.asm.create_label();
 
             for index in indices {
-                cases.push((index, label));
+                cases.push((index.into(), label));
             }
 
             self.cases.push(DispatchCase {
@@ -592,25 +592,35 @@ impl Runtime {
         self.dispatch(key, cases);
     }
 
-    pub fn jumps(&mut self, key: AsmRegister64, cases: Vec<(u8, CodeLabel)>) {
-        self.dispatch(key, cases);
+    pub fn jumps<I: Into<usize>>(&mut self, key: AsmRegister64, cases: Vec<(I, CodeLabel)>) {
+        self.dispatch(
+            key,
+            cases
+                .into_iter()
+                .map(|(index, label)| (index.into(), label))
+                .collect(),
+        );
     }
 
-    pub fn calls(&mut self, key: AsmRegister64, cases: Vec<(u8, CodeLabel)>) {
+    pub fn calls<I: Into<usize>>(&mut self, key: AsmRegister64, cases: Vec<(I, CodeLabel)>) {
         let mut fallback = self.asm.create_label();
 
-        // lea r10, [....]
         self.asm.lea(r10, ptr(fallback)).unwrap();
-        // push r10
         self.asm.push(r10).unwrap();
 
-        self.dispatch(key, cases);
+        self.dispatch(
+            key,
+            cases
+                .into_iter()
+                .map(|(index, label)| (index.into(), label))
+                .collect(),
+        );
 
         self.asm.set_label(&mut fallback).unwrap();
         self.asm.zero_bytes().unwrap();
     }
 
-    fn dispatch(&mut self, key: AsmRegister64, cases: Vec<(u8, CodeLabel)>) {
+    fn dispatch(&mut self, key: AsmRegister64, cases: Vec<(usize, CodeLabel)>) {
         let table = self.asm.create_label();
 
         let mut stubs = Vec::new();
@@ -1117,10 +1127,8 @@ impl Runtime {
                 decoder.decode_out(&mut instruction);
                 line.clear();
                 formatter.format(&instruction, &mut line);
-                writeln!(output, "{}{:08X}  {line}", " ".repeat(4), instruction.ip()).unwrap();
+                writeln!(output, "{}{line}", " ".repeat(4)).unwrap();
             }
-
-            writeln!(output).unwrap();
         }
 
         output

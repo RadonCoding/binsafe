@@ -1,4 +1,4 @@
-use iced_x86::code_asm::{r8, r8d, rcx, CodeLabel};
+use iced_x86::code_asm::{r8, rcx, CodeLabel};
 
 use crate::{runtime::Runtime, vm::utils};
 
@@ -7,11 +7,11 @@ pub fn build(rt: &mut Runtime) {
         .compound_labels
         .iter()
         .enumerate()
-        .map(|(index, &label)| (index as u8, label))
-        .collect::<Vec<(u8, CodeLabel)>>();
+        .map(|(index, &label)| (index, label))
+        .collect::<Vec<(usize, CodeLabel)>>();
 
-    // r8d -> index
-    utils::bytecode::read_byte_zx(rt, rcx, r8d);
+    // r8 -> index
+    utils::bytecode::read_qword(rt, rcx, r8);
 
     rt.calls(r8, cases);
 
