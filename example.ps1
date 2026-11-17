@@ -93,9 +93,10 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $destination = [Path]::ChangeExtension($source, ".protected.exe")
 
 & $destination
+
 $code = $LASTEXITCODE
 
-Remove-Item $source -Force -ErrorAction SilentlyContinue
-Remove-Item $destination -Force -ErrorAction SilentlyContinue
+# Remove-Item $source -Force -ErrorAction SilentlyContinue
+# Remove-Item $destination -Force -ErrorAction SilentlyContinue
 
 exit $code

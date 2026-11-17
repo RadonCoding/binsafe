@@ -149,10 +149,7 @@ impl Node {
     fn results(&self) -> usize {
         match self {
             Node::Cpuid(..) => 4,
-            Node::WideMul(..)
-            | Node::Div(..)
-            | Node::Timestamp
-            | Node::ExchangeAdd(..) => 2,
+            Node::WideMul(..) | Node::Div(..) | Node::Timestamp | Node::ExchangeAdd(..) => 2,
             _ => 1,
         }
     }
@@ -184,14 +181,15 @@ impl Node {
             | &Node::Exchange(first, second)
             | &Node::ExchangeAdd(first, second)
             | &Node::Vector(_, first, second) => vec![first, second],
-            &Node::Div(first, second, third)
-            | &Node::CompareExchange(first, second, third) => vec![first, second, third],
+            &Node::Div(first, second, third) | &Node::CompareExchange(first, second, third) => {
+                vec![first, second, third]
+            }
         }
     }
 }
 
 impl Operation {
-    fn operands_count(&self) -> usize {
+    fn operands(&self) -> usize {
         let mut value = 0;
         for node in &self.nodes {
             if let &Node::Input(index) = node {
@@ -235,7 +233,7 @@ impl Operation {
         value
     }
 
-    fn node_slots(&self) -> usize {
+    fn nodes(&self) -> usize {
         self.nodes
             .iter()
             .filter(|node| node.results() > 1)
@@ -243,54 +241,91 @@ impl Operation {
             .sum()
     }
 
-    fn subtree(&self, value: Value) -> usize {
+    fn result(&self, value: Value) -> usize {
         let node = &self.nodes[value.node];
-        let base = if node.results() > 1 { 0 } else { 1 };
-        base + node
-            .operands()
-            .into_iter()
-            .map(|operand| self.subtree(operand))
-            .sum::<usize>()
+        match node {
+            Node::Input(_)
+            | Node::Immediate(_)
+            | Node::SignBit
+            | Node::BitSize
+            | Node::ByteMask(_) => 0,
+            _ if node.results() > 1 => 0,
+            _ => 1,
+        }
+    }
+
+    fn pressure(&self, value: Value, done: &mut HashSet<usize>) -> usize {
+        let node = &self.nodes[value.node];
+
+        if node.results() > 1 && !done.insert(value.node) {
+            return 0;
+        }
+
+        let mut held = 0;
+        let mut peak = 0;
+
+        for operand in node.operands() {
+            peak = peak.max(held + self.pressure(operand, done));
+            held += self.result(operand);
+        }
+
+        peak.max(held).max(self.result(value))
+    }
+
+    fn sequence(&self, values: &[Value], done: &mut HashSet<usize>) -> usize {
+        let mut held = 0;
+        let mut peak = 0;
+
+        for &value in values {
+            peak = peak.max(held + self.pressure(value, done));
+            held += self.result(value);
+        }
+
+        peak.max(held)
+    }
+
+    fn block(&self, statements: &[Statement], done: &mut HashSet<usize>) -> usize {
+        let mut peak = 0;
+
+        for statement in statements {
+            let mut current = self.sequence(&statement.values(), done);
+
+            current = current.max(match statement {
+                Statement::Loop(_, body) | Statement::When(_, body) => self.block(body, done),
+                Statement::Select(_, arms) => arms
+                    .iter()
+                    .map(|(_, body)| self.block(body, done))
+                    .max()
+                    .unwrap_or(0),
+                _ => 0,
+            });
+
+            peak = peak.max(current);
+        }
+
+        peak
     }
 
     fn temporaries(&self) -> usize {
-        fn walk(operation: &Operation, statements: &[Statement], total: &mut usize) {
-            for statement in statements {
-                for value in statement.values() {
-                    *total += operation.subtree(value);
-                }
-                match statement {
-                    Statement::Loop(_, body) | Statement::When(_, body) => {
-                        walk(operation, body, total)
-                    }
-                    Statement::Select(_, arms) => {
-                        for (_, body) in arms {
-                            walk(operation, body, total);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
+        let mut done = HashSet::new();
 
-        let mut total = 0;
-        walk(self, &self.statements, &mut total);
+        let mut peak = self.block(&self.statements, &mut done);
 
         for &(_, value) in self.flags.values() {
-            total += self.subtree(value);
+            peak = peak.max(self.pressure(value, &mut done));
         }
 
         if let Some(&condition) = self.flags.condition() {
-            total += self.subtree(condition);
+            peak = peak.max(self.pressure(condition, &mut done));
         }
 
         if let Some(outputs) = &self.outputs {
             for &value in outputs {
-                total += self.subtree(value);
+                peak = peak.max(self.pressure(value, &mut done));
             }
         }
 
-        total
+        peak
     }
 
     fn pointers(&self) -> HashSet<usize> {

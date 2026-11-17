@@ -27,6 +27,7 @@ pub struct Allocator {
     vectors: Vec<(AsmRegisterYmm, Slot)>,
     dirty: HashSet<Slot>,
     temporary: usize,
+    free: Vec<usize>,
     inputs: usize,
     locals: usize,
     nodes: usize,
@@ -44,6 +45,7 @@ impl Allocator {
             vectors: Vec::new(),
             dirty: HashSet::new(),
             temporary: 0,
+            free: Vec::new(),
             inputs,
             locals,
             nodes,
@@ -131,9 +133,20 @@ impl Allocator {
     }
 
     pub fn temporary(&mut self) -> Slot {
-        let value = Slot::Temporary(self.temporary);
-        self.temporary += 1;
-        value
+        let index = self.free.pop().unwrap_or_else(|| {
+            let index = self.temporary;
+            self.temporary += 1;
+            index
+        });
+        Slot::Temporary(index)
+    }
+
+    fn cell(&self) -> i32 {
+        match self.width {
+            VMWidth::Lower256 => 32,
+            VMWidth::Lower128 => 16,
+            _ => 8,
+        }
     }
 
     pub fn offset(&self, value: Slot) -> i32 {
@@ -145,7 +158,7 @@ impl Allocator {
             Slot::Node(index) => self.inputs + flags + self.locals + index,
             Slot::Temporary(index) => self.inputs + flags + self.locals + self.nodes + index,
         };
-        (slot as i32 + 1) * 32
+        (slot as i32 + 1) * self.cell()
     }
 
     pub fn is_vector(&self, reference: Reference) -> bool {
@@ -354,7 +367,7 @@ impl Allocator {
             return;
         };
 
-        if matches!(value, Slot::Temporary(_)) {
+        if let Slot::Temporary(index) = value {
             if let Some(register) = self.tracked_register(value) {
                 self.untrack_register(register);
             }
@@ -362,6 +375,7 @@ impl Allocator {
                 self.untrack_vector(register);
             }
             self.dirty.remove(&value);
+            self.free.push(index);
         }
     }
 }

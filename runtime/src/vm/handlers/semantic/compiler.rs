@@ -1,9 +1,13 @@
-use iced_x86::code_asm::{
-    ah, ax, byte_ptr, cl, dl, dword_ptr, dx, eax, get_gpr16, get_gpr32, get_gpr8, ptr, qword_ptr,
-    r12, r13, r14, r14d, r8, r8d, r9, r9b, r9d, r9w, rax, rbp, rbx, rcx, rdx, rsp, word_ptr, xmm0,
-    ymm0, AsmRegister64, CodeLabel,
+use iced_x86::{
+    code_asm::{
+        ah, ax, byte_ptr, cl, dl, dword_ptr, dx, eax, get_gpr16, get_gpr32, get_gpr8, ptr,
+        qword_ptr, r12, r13, r14, r14d, r8, r8d, r9, r9b, r9d, r9w, rax, rbp, rbx, rcx, rdx, rsp,
+        word_ptr, xmm0, ymm0, AsmRegister64, CodeLabel,
+    },
+    Formatter, IntelFormatter,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 
 use crate::{
     runtime::Runtime,
@@ -107,13 +111,15 @@ fn mask(rt: &mut Runtime, register: AsmRegister64, width: VMWidth) {
     }
 }
 
-fn node_slot(nodes: &[Node], value: Value) -> usize {
+fn slot(nodes: &[Node], value: Value) -> usize {
     let mut slot = 0;
+
     for node in &nodes[..value.node] {
         if node.results() > 1 {
             slot += node.results();
         }
     }
+
     slot + value.output
 }
 
@@ -834,7 +840,7 @@ impl Lowering<'_> {
             &Node::PackedByteMask(value) => self.compile_packed_byte_mask(rt, value, width),
             &Node::WideMul(first, second) => {
                 if self.compiled.insert(value.node) {
-                    let base = node_slot(
+                    let base = slot(
                         nodes,
                         Value {
                             node: value.node,
@@ -865,11 +871,11 @@ impl Lowering<'_> {
                     self.store_node(rt, base + 1, rdx);
                 }
 
-                Reference::Value(Slot::Node(node_slot(nodes, value)))
+                Reference::Value(Slot::Node(slot(nodes, value)))
             }
             &Node::Div(first, second, third) => {
                 if self.compiled.insert(value.node) {
-                    let base = node_slot(
+                    let base = slot(
                         nodes,
                         Value {
                             node: value.node,
@@ -907,11 +913,11 @@ impl Lowering<'_> {
                     self.store_node(rt, base + 1, rdx);
                 }
 
-                Reference::Value(Slot::Node(node_slot(nodes, value)))
+                Reference::Value(Slot::Node(slot(nodes, value)))
             }
             &Node::Cpuid(leaf, subleaf) => {
                 if self.compiled.insert(value.node) {
-                    let base = node_slot(
+                    let base = slot(
                         nodes,
                         Value {
                             node: value.node,
@@ -941,11 +947,11 @@ impl Lowering<'_> {
                     self.store_node(rt, base + 3, rdx);
                 }
 
-                Reference::Value(Slot::Node(node_slot(nodes, value)))
+                Reference::Value(Slot::Node(slot(nodes, value)))
             }
             &Node::Timestamp => {
                 if self.compiled.insert(value.node) {
-                    let base = node_slot(
+                    let base = slot(
                         nodes,
                         Value {
                             node: value.node,
@@ -962,11 +968,11 @@ impl Lowering<'_> {
                     self.store_node(rt, base + 1, rdx);
                 }
 
-                Reference::Value(Slot::Node(node_slot(nodes, value)))
+                Reference::Value(Slot::Node(slot(nodes, value)))
             }
             &Node::ExchangeAdd(first, second) => {
                 if self.compiled.insert(value.node) {
-                    let base = node_slot(
+                    let base = slot(
                         nodes,
                         Value {
                             node: value.node,
@@ -1016,7 +1022,7 @@ impl Lowering<'_> {
                     self.allocator.consume(second);
                 }
 
-                Reference::Value(Slot::Node(node_slot(nodes, value)))
+                Reference::Value(Slot::Node(slot(nodes, value)))
             }
         }
     }
@@ -1738,47 +1744,187 @@ impl Lowering<'_> {
 
 pub fn compile(rt: &mut Runtime, operation: &Operation) {
     let operation = obfuscation::operation(operation);
-    compile_scalar(rt, &operation);
-    rt.asm.ret().unwrap();
-}
+    let size = frame(&operation);
 
-pub fn compile_fragment(rt: &mut Runtime, operation: &Operation) {
-    compile_scalar(rt, &obfuscation::operation(operation));
+    let inputs = vec![None; operation.operands()];
+    let outputs = vec![None; operation.outputs.as_ref().map_or(0, |values| values.len())];
+
+    prologue(rt, size);
+    rt.asm.mov(r13, rcx).unwrap();
+
+    compile_member(rt, &operation, &inputs, &outputs);
+
+    rt.asm.mov(rax, r13).unwrap();
+    epilogue(rt, size);
+
+    rt.asm.ret().unwrap();
 }
 
 pub fn compile_compound(rt: &mut Runtime, members: &[VMCode]) {
-    for (index, member) in members.iter().enumerate() {
-        if index > 0 {
-            rt.asm.mov(rcx, rax).unwrap();
+    let start = rt.asm.instructions().len();
+
+    let operations = members
+        .iter()
+        .map(|&member| obfuscation::operation(&handlers::operation(rt, member).unwrap()))
+        .collect::<Vec<Operation>>();
+
+    let mut stack = Vec::<usize>::new();
+    let mut consumed = HashSet::<usize>::new();
+    let mut sources = Vec::<Vec<Option<usize>>>::new();
+    let mut products = Vec::<Vec<usize>>::new();
+
+    let mut counter = 0;
+
+    for operation in &operations {
+        let consumes = operation.operands();
+        let produces = operation.outputs.as_ref().map_or(0, |values| values.len());
+
+        let mut inputs = vec![None; consumes];
+
+        for index in (0..consumes).rev() {
+            if let Some(value) = stack.pop() {
+                inputs[index] = Some(value);
+                consumed.insert(value);
+            }
         }
 
-        let operation = handlers::operation(rt, *member).unwrap();
-        compile_fragment(rt, &operation);
+        sources.push(inputs);
+
+        let mut outputs = Vec::with_capacity(produces);
+
+        for _ in 0..produces {
+            let value = counter;
+            counter += 1;
+            stack.push(value);
+            outputs.push(value);
+        }
+
+        products.push(outputs);
     }
+
+    let mut offsets = HashMap::<usize, i32>::new();
+
+    let mut pool = Vec::<i32>::new();
+
+    let mut peak = 0;
+
+    let base = operations.iter().map(frame).max().unwrap_or(0);
+
+    let region = operations
+        .iter()
+        .map(|operation| cell(operation.widths))
+        .max()
+        .unwrap_or(8);
+
+    for index in 0..operations.len() {
+        for value in sources[index].iter().flatten() {
+            if let Some(offset) = offsets.get(value).copied() {
+                pool.push(offset);
+            }
+        }
+
+        for &value in &products[index] {
+            if consumed.contains(&value) {
+                let offset = pool.pop().unwrap_or_else(|| {
+                    peak += 1;
+                    base + peak * region
+                });
+                offsets.insert(value, offset);
+            }
+        }
+    }
+
+    let size = base + peak * region;
+
+    prologue(rt, size);
+    rt.asm.mov(r13, rcx).unwrap();
+
+    for (index, operation) in operations.iter().enumerate() {
+        let inputs = sources[index]
+            .iter()
+            .map(|value| value.map(|value| offsets[&value]))
+            .collect::<Vec<Option<i32>>>();
+
+        let outputs = products[index]
+            .iter()
+            .map(|value| consumed.contains(value).then(|| offsets[value]))
+            .collect::<Vec<Option<i32>>>();
+
+        compile_member(rt, operation, &inputs, &outputs);
+    }
+
+    rt.asm.mov(rax, r13).unwrap();
+    epilogue(rt, size);
+
     rt.asm.ret().unwrap();
+
+    let end = rt.asm.instructions().len();
+
+    let mut formatter = IntelFormatter::new();
+
+    let mut line = String::new();
+    let mut output = String::new();
+
+    writeln!(output, "Compound: {members:?}").unwrap();
+
+    for instruction in &rt.asm.instructions()[start..end] {
+        line.clear();
+        formatter.format(instruction, &mut line);
+        writeln!(output, "{}{line}", " ".repeat(4)).unwrap();
+    }
+
+    print!("{output}");
 }
 
-fn compile_scalar(rt: &mut Runtime, operation: &Operation) {
-    let mut epilogue = rt.asm.create_label();
-    let operands = operation.operands_count();
+fn frame(operation: &Operation) -> i32 {
+    let operands = operation.operands();
     let flags = !operation.flags.is_empty();
     let locals = operation.locals();
-    let node_slots = operation.node_slots();
+    let node_slots = operation.nodes();
     let temporaries = operation.temporaries();
-    let pointers = operation.pointers();
-    let slots = operands + flags as usize + locals + node_slots + temporaries;
-    let size = ((slots as i32 * 32) + 15) & !15;
 
+    let slots = operands + flags as usize + locals + node_slots + temporaries;
+
+    ((slots as i32 * cell(operation.widths)) + 15) & !15
+}
+
+fn cell(widths: &[VMWidth]) -> i32 {
+    if widths.contains(&VMWidth::Lower256) {
+        32
+    } else if widths.contains(&VMWidth::Lower128) {
+        16
+    } else {
+        8
+    }
+}
+
+fn prologue(rt: &mut Runtime, size: i32) {
     rt.asm.push(r13).unwrap();
     rt.asm.push(r14).unwrap();
     rt.asm.push(rbp).unwrap();
     rt.asm.mov(rbp, rsp).unwrap();
     rt.asm.sub(rsp, size).unwrap();
+}
 
-    rt.asm.mov(r13, rcx).unwrap();
+fn epilogue(rt: &mut Runtime, size: i32) {
+    rt.asm.add(rsp, size).unwrap();
+    rt.asm.pop(rbp).unwrap();
+    rt.asm.pop(r14).unwrap();
+    rt.asm.pop(r13).unwrap();
+}
+
+fn compile_member(
+    rt: &mut Runtime,
+    operation: &Operation,
+    inputs: &[Option<i32>],
+    outputs: &[Option<i32>],
+) {
+    let mut epilogue = rt.asm.create_label();
+
+    let pointers = operation.pointers();
 
     if operation.widths.is_empty() {
-        compile_body(rt, operation, &pointers, VMWidth::Lower64);
+        compile_body(rt, operation, &pointers, VMWidth::Lower64, inputs, outputs);
     } else {
         bytecode::read_byte_zx(rt, r13, r14d);
 
@@ -1799,19 +1945,12 @@ fn compile_scalar(rt: &mut Runtime, operation: &Operation) {
 
         for (&width, mut label) in operation.widths.iter().zip(labels) {
             rt.asm.set_label(&mut label).unwrap();
-            compile_body(rt, operation, &pointers, width);
+            compile_body(rt, operation, &pointers, width, inputs, outputs);
             rt.asm.jmp(epilogue).unwrap();
         }
     }
 
     rt.asm.set_label(&mut epilogue).unwrap();
-
-    rt.asm.mov(rax, r13).unwrap();
-
-    rt.asm.add(rsp, size).unwrap();
-    rt.asm.pop(rbp).unwrap();
-    rt.asm.pop(r14).unwrap();
-    rt.asm.pop(r13).unwrap();
 }
 
 fn compile_body(
@@ -1819,15 +1958,17 @@ fn compile_body(
     operation: &Operation,
     pointers: &HashSet<usize>,
     width: VMWidth,
+    inputs: &[Option<i32>],
+    outputs: &[Option<i32>],
 ) {
-    let operands = operation.operands_count();
+    let operands = operation.operands();
     let flags = !operation.flags.is_empty();
     let locals = operation.locals();
-    let node_slots = operation.node_slots();
+    let nodes = operation.nodes();
 
     let mut lowering = Lowering {
         nodes: &operation.nodes,
-        allocator: Allocator::new(operands, locals, node_slots, width, flags),
+        allocator: Allocator::new(operands, locals, nodes, width, flags),
         compiled: HashSet::new(),
     };
 
@@ -1841,15 +1982,24 @@ fn compile_body(
 
         match width {
             VMWidth::Lower256 => {
-                scratch::load_256(rt, r12, ymm0);
+                match inputs[index] {
+                    Some(offset) => rt.asm.vmovups(ymm0, ptr(rbp - offset)).unwrap(),
+                    None => scratch::load_256(rt, r12, ymm0),
+                }
                 rt.asm.vmovups(ptr(rbp - slot), ymm0).unwrap();
             }
             VMWidth::Lower128 => {
-                scratch::load_128(rt, r12, xmm0);
+                match inputs[index] {
+                    Some(offset) => rt.asm.movups(xmm0, ptr(rbp - offset)).unwrap(),
+                    None => scratch::load_128(rt, r12, xmm0),
+                }
                 rt.asm.movups(ptr(rbp - slot), xmm0).unwrap();
             }
             _ => {
-                scratch::load(rt, r12, rax);
+                match inputs[index] {
+                    Some(offset) => rt.asm.mov(rax, qword_ptr(rbp - offset)).unwrap(),
+                    None => scratch::load(rt, r12, rax),
+                }
                 rt.asm.mov(qword_ptr(rbp - slot), rax).unwrap();
             }
         }
@@ -1863,28 +2013,37 @@ fn compile_body(
 
     lowering.allocator.dump(rt);
 
-    lowering.allocator = Allocator::new(operands, locals, node_slots, width, flags);
+    lowering.allocator = Allocator::new(operands, locals, nodes, width, flags);
 
-    let Some(outputs) = &operation.outputs else {
+    let Some(values) = &operation.outputs else {
         return;
     };
 
-    for &value in outputs {
+    for (index, &value) in values.iter().enumerate() {
         let src = lowering.compile_node(rt, value, width);
 
         match width {
             VMWidth::Lower256 if lowering.allocator.is_vector(src) => {
                 lowering.allocator.copy_vector(rt, src, ymm0);
-                scratch::store_256(rt, r12, ymm0);
+                match outputs[index] {
+                    Some(offset) => rt.asm.vmovups(ptr(rbp - offset), ymm0).unwrap(),
+                    None => scratch::store_256(rt, r12, ymm0),
+                }
             }
             VMWidth::Lower128 if lowering.allocator.is_vector(src) => {
                 lowering.allocator.copy_vector(rt, src, ymm0);
-                scratch::store_128(rt, r12, xmm0);
+                match outputs[index] {
+                    Some(offset) => rt.asm.movups(ptr(rbp - offset), xmm0).unwrap(),
+                    None => scratch::store_128(rt, r12, xmm0),
+                }
             }
             _ => {
                 let dst = lowering.allocator.acquire(rt, &[], &[]);
                 lowering.allocator.copy_register(rt, src, dst);
-                scratch::store(rt, r12, dst);
+                match outputs[index] {
+                    Some(offset) => rt.asm.mov(qword_ptr(rbp - offset), dst).unwrap(),
+                    None => scratch::store(rt, r12, dst),
+                }
                 lowering.allocator.spill(rt, dst);
             }
         }
