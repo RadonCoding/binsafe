@@ -1,13 +1,9 @@
-use iced_x86::{
-    code_asm::{
-        ah, ax, byte_ptr, cl, dl, dword_ptr, dx, eax, get_gpr16, get_gpr32, get_gpr8, ptr,
-        qword_ptr, r12, r13, r14, r14d, r8, r8d, r9, r9b, r9d, r9w, rax, rbp, rbx, rcx, rdx, rsp,
-        word_ptr, xmm0, ymm0, AsmRegister64, CodeLabel,
-    },
-    Formatter, IntelFormatter,
+use iced_x86::code_asm::{
+    ah, ax, byte_ptr, cl, dl, dword_ptr, dx, eax, get_gpr16, get_gpr32, get_gpr8, ptr, qword_ptr,
+    r12, r13, r14, r14d, r8, r8d, r9, r9b, r9d, r9w, rax, rbp, rbx, rcx, rdx, rsp, word_ptr, xmm0,
+    ymm0, AsmRegister64, CodeLabel,
 };
 use std::collections::{HashMap, HashSet};
-use std::fmt::Write;
 
 use crate::{
     runtime::Runtime,
@@ -1761,8 +1757,6 @@ pub fn compile(rt: &mut Runtime, operation: &Operation) {
 }
 
 pub fn compile_compound(rt: &mut Runtime, members: &[VMCode]) {
-    let start = rt.asm.instructions().len();
-
     let operations = members
         .iter()
         .map(|&member| obfuscation::operation(&handlers::operation(rt, member).unwrap()))
@@ -1857,23 +1851,6 @@ pub fn compile_compound(rt: &mut Runtime, members: &[VMCode]) {
     epilogue(rt, size);
 
     rt.asm.ret().unwrap();
-
-    let end = rt.asm.instructions().len();
-
-    let mut formatter = IntelFormatter::new();
-
-    let mut line = String::new();
-    let mut output = String::new();
-
-    writeln!(output, "Compound: {members:?}").unwrap();
-
-    for instruction in &rt.asm.instructions()[start..end] {
-        line.clear();
-        formatter.format(instruction, &mut line);
-        writeln!(output, "{}{line}", " ".repeat(4)).unwrap();
-    }
-
-    print!("{output}");
 }
 
 fn frame(operation: &Operation) -> i32 {
@@ -2025,6 +2002,7 @@ fn compile_body(
         match width {
             VMWidth::Lower256 if lowering.allocator.is_vector(src) => {
                 lowering.allocator.copy_vector(rt, src, ymm0);
+
                 match outputs[index] {
                     Some(offset) => rt.asm.vmovups(ptr(rbp - offset), ymm0).unwrap(),
                     None => scratch::store_256(rt, r12, ymm0),
@@ -2032,6 +2010,7 @@ fn compile_body(
             }
             VMWidth::Lower128 if lowering.allocator.is_vector(src) => {
                 lowering.allocator.copy_vector(rt, src, ymm0);
+
                 match outputs[index] {
                     Some(offset) => rt.asm.movups(ptr(rbp - offset), xmm0).unwrap(),
                     None => scratch::store_128(rt, r12, xmm0),
@@ -2040,6 +2019,7 @@ fn compile_body(
             _ => {
                 let dst = lowering.allocator.acquire(rt, &[], &[]);
                 lowering.allocator.copy_register(rt, src, dst);
+
                 match outputs[index] {
                     Some(offset) => rt.asm.mov(qword_ptr(rbp - offset), dst).unwrap(),
                     None => scratch::store(rt, r12, dst),
