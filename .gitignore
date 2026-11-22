@@ -24,4 +24,4 @@ Cargo.lock
 
 /examples/*.exe
 
-/examples/**/crack-me
+/harness/

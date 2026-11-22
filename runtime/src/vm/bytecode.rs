@@ -674,10 +674,9 @@ pub fn transform(
     offset: u64,
     rng: Option<&mut dyn rand::RngCore>,
 ) -> Vec<Box<dyn Encode>> {
-    let mut thread = rand::thread_rng();
     let rng: &mut dyn rand::RngCore = match rng {
         Some(rng) => rng,
-        None => &mut thread,
+        None => &mut rand::thread_rng(),
     };
 
     for transform in &transforms(offset) {
@@ -693,10 +692,9 @@ pub fn transform_with_snapshots(
     offset: u64,
     rng: Option<&mut dyn rand::RngCore>,
 ) -> (Vec<Box<dyn Encode>>, Snapshots) {
-    let mut thread = rand::thread_rng();
     let rng: &mut dyn rand::RngCore = match rng {
         Some(rng) => rng,
-        None => &mut thread,
+        None => &mut rand::thread_rng(),
     };
 
     let mut snapshots = Snapshots::new();
