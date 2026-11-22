@@ -20,52 +20,55 @@ impl Transform for Scramble {
         Phase::Scramble
     }
 
-    fn run(&self, _rt: &mut Runtime, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
-        walk(&mut operations, true);
+    fn run(
+        &self,
+        _rt: &mut Runtime,
+        mut operations: Vec<Box<dyn Encode>>,
+        rng: &mut dyn rand::RngCore,
+    ) -> Vec<Box<dyn Encode>> {
+        walk(&mut operations, true, rng);
 
         operations
     }
 }
 
 /// Recurses into existing blocks and scrambles the current level.
-fn walk(operations: &mut Vec<Box<dyn Encode>>, wrap: bool) {
+fn walk(operations: &mut Vec<Box<dyn Encode>>, wrap: bool, rng: &mut dyn rand::RngCore) {
     for operation in operations.iter_mut() {
         let block = operation.as_any_mut().downcast_mut::<Block>();
 
         let wrap = block.is_none();
 
         if let Some(block) = block {
-            reorder(block);
+            reorder(block, rng);
         }
 
         if let Some(children) = operation.children_mut() {
-            walk(children, wrap);
+            walk(children, wrap, rng);
         }
     }
 
     if wrap {
         let mut block = Block::new(mem::take(operations), vec![]);
-        reorder(&mut block);
+        reorder(&mut block, rng);
         operations.push(Box::new(block));
     }
 }
 
 /// Atomizes and chains a [`Block`]'s children, rewriting it in place.
-fn reorder(block: &mut Block) {
+fn reorder(block: &mut Block, rng: &mut dyn rand::RngCore) {
     let mut atoms = atomize(mem::take(block.children_mut().unwrap()));
 
     if atoms.len() > 1 {
-        block.jumps.extend(chain(&mut atoms));
+        block.jumps.extend(chain(&mut atoms, rng));
     }
 
     *block.children_mut().unwrap() = atoms.into_iter().flatten().collect();
 }
 
 /// Places atoms in physical order with a [`Jump`] chain, falling through where order already agrees.
-fn chain(atoms: &mut Vec<Vec<Box<dyn Encode>>>) -> Vec<Jump> {
+fn chain(atoms: &mut Vec<Vec<Box<dyn Encode>>>, rng: &mut dyn rand::RngCore) -> Vec<Jump> {
     let count = atoms.len();
-
-    let mut rng = rand::thread_rng();
 
     let mut groups = Vec::new();
 
@@ -80,7 +83,7 @@ fn chain(atoms: &mut Vec<Vec<Box<dyn Encode>>>) -> Vec<Jump> {
     }
 
     let end = groups.pop().unwrap();
-    groups.shuffle(&mut rng);
+    groups.shuffle(&mut *rng);
     groups.push(end);
 
     let order = groups.into_iter().flatten().collect::<Vec<usize>>();

@@ -1,8 +1,8 @@
+use crate::runtime::Runtime;
 use std::any::Any;
 use std::fmt::Debug;
 use std::slice;
 
-use crate::mapper::Mapper;
 use crate::vm::bytecode::{Flag, VMCode, VMCondition, VMLogic, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 
@@ -57,11 +57,11 @@ impl Encode for Branch {
         Some(VMCode::Branch)
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        let mut bytes = vec![mapper.index(self.logic), self.conditions.len() as u8];
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
+        let mut bytes = vec![rt.mapper.index(self.logic), self.conditions.len() as u8];
 
         for condition in &self.conditions {
-            bytes.extend_from_slice(&condition.encode(mapper));
+            bytes.extend_from_slice(&condition.encode(rt));
         }
         bytes
     }
@@ -93,7 +93,7 @@ impl Encode for Branch {
         true
     }
 
-    fn seal(&mut self, _mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
+    fn seal(&mut self, _rt: &mut Runtime, transform: &mut dyn FnMut(&mut [u8], usize)) {
         for condition in &mut self.conditions {
             transform(slice::from_mut(&mut condition.lhs), 0);
             transform(slice::from_mut(&mut condition.rhs), 0);

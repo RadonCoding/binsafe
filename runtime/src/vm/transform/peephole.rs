@@ -11,7 +11,12 @@ impl Transform for Peephole {
         Phase::Peephole
     }
 
-    fn run(&self, _rt: &mut Runtime, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+    fn run(
+        &self,
+        _rt: &mut Runtime,
+        mut operations: Vec<Box<dyn Encode>>,
+        _rng: &mut dyn rand::RngCore,
+    ) -> Vec<Box<dyn Encode>> {
         optimize(&mut operations);
         operations
     }

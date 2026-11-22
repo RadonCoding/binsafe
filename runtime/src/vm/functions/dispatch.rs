@@ -168,7 +168,13 @@ pub fn build(rt: &mut Runtime) {
         // mov rcx, r13
         rt.asm.mov(rcx, r13).unwrap();
 
-        let cases = VMCode::VARIANTS
+        let required = VMCode::VARIANTS
+            .iter()
+            .copied()
+            .filter(|op| rt.handlers.contains(op))
+            .collect::<Vec<VMCode>>();
+
+        let cases = required
             .iter()
             .map(|&op| {
                 let label = rt.function_labels[&handlers::handler(op)];

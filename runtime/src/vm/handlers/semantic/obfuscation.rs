@@ -9,14 +9,22 @@ struct Rewriter {
     map: Vec<usize>,
     rng: ThreadRng,
     budget: u32,
+    depth: u32,
 }
 
+const PROBABILITY: f64 = 0.75;
+
+const DEPTH: u32 = 6;
+
 pub fn operation(operation: &Operation) -> Operation {
+    let count = operation.nodes.len().max(4) as u32;
+
     let mut rewriter = Rewriter {
         nodes: Vec::new(),
         map: vec![0; operation.nodes.len()],
         rng: rand::thread_rng(),
-        budget: rand::thread_rng().gen_range(1..4),
+        budget: rand::thread_rng().gen_range(count * 2..count * 6),
+        depth: 0,
     };
 
     for (index, node) in operation.nodes.iter().enumerate() {
@@ -59,7 +67,7 @@ impl Rewriter {
 
     fn define(&mut self, node: Node) -> Value {
         Value {
-            node: self.push(node),
+            node: self.emit(node),
             output: 0,
         }
     }
@@ -132,11 +140,22 @@ impl Rewriter {
 
     fn rewrite(&mut self, node: &Node) -> usize {
         let node = self.reconstruct(node);
+        self.emit(node)
+    }
 
-        if self.budget == 0 {
+    fn emit(&mut self, node: Node) -> usize {
+        if self.budget == 0 || self.depth >= DEPTH || !self.rng.gen_bool(PROBABILITY) {
             return self.push(node);
         }
 
+        self.depth += 1;
+        let index = self.expand(node);
+        self.depth -= 1;
+
+        index
+    }
+
+    fn expand(&mut self, node: Node) -> usize {
         match node {
             Node::Binary(Binary::Xor, a, b) => {
                 self.budget -= 1;
@@ -285,29 +304,6 @@ impl Rewriter {
                         let one = self.immediate(1);
                         let shifted = self.shift(Shift::Shl, and, one);
                         self.push(Node::Binary(Binary::Sub, xor, shifted))
-                    }
-                }
-            }
-            Node::Immediate(value) => {
-                self.budget -= 1;
-
-                let key = self.rng.gen::<u64>();
-
-                match self.rng.gen_range(0..3) {
-                    0 => {
-                        let masked = self.immediate(value ^ key);
-                        let key = self.immediate(key);
-                        self.push(Node::Binary(Binary::Xor, masked, key))
-                    }
-                    1 => {
-                        let offset = self.immediate(value.wrapping_add(key));
-                        let key = self.immediate(key);
-                        self.push(Node::Binary(Binary::Sub, offset, key))
-                    }
-                    _ => {
-                        let offset = self.immediate(value.wrapping_sub(key));
-                        let key = self.immediate(key);
-                        self.push(Node::Binary(Binary::Add, offset, key))
                     }
                 }
             }

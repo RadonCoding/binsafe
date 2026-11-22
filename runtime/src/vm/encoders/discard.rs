@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::VMCode;
 use crate::vm::encoders::Encode;
 use std::any::Any;
@@ -34,7 +34,7 @@ impl Encode for Discard {
         Some(VMCode::Discard)
     }
 
-    fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, _rt: &mut Runtime) -> Vec<u8> {
         vec![]
     }
 

@@ -1,4 +1,4 @@
-use crate::mapper::{mapped, Mapper};
+use crate::mapper::mapped;
 use crate::runtime::Runtime;
 use crate::vm::encoders::Encode;
 use crate::vm::lifters::{
@@ -16,7 +16,6 @@ use crate::vm::transform::Transform;
 use core::panic;
 use iced_x86::{Instruction, Mnemonic, Register};
 use std::any::Any;
-use std::cell::RefCell;
 use strum_macros::EnumIter;
 
 mapped! {
@@ -352,13 +351,13 @@ impl Encode for VMMem {
         None
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
         let mut bytes = Vec::new();
-        bytes.push(mapper.index(self.base));
-        bytes.push(mapper.index(self.index));
+        bytes.push(rt.mapper.index(self.base));
+        bytes.push(rt.mapper.index(self.index));
         bytes.push(self.scale);
         bytes.extend_from_slice(&self.displacement.to_le_bytes());
-        bytes.push(mapper.index(self.segment));
+        bytes.push(rt.mapper.index(self.segment));
         bytes
     }
 }
@@ -453,8 +452,8 @@ impl Encode for VMCondition {
         None
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(self.test), self.lhs, self.rhs]
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
+        vec![rt.mapper.index(self.test), self.lhs, self.rhs]
     }
 }
 
@@ -642,71 +641,69 @@ pub fn lift(instructions: &[Instruction]) -> Option<Vec<Box<dyn Encode>>> {
     Some(output)
 }
 
-pub fn assemble(mapper: &mut Mapper, operations: &[Box<dyn Encode>]) -> Vec<u8> {
+pub fn assemble(rt: &mut Runtime, operations: &[Box<dyn Encode>]) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     for operation in operations {
         if let Some(op) = operation.code() {
-            bytes.push(mapper.index(op));
+            rt.handle(op);
+
+            bytes.push(rt.mapper.index(op));
         }
-        bytes.extend(operation.encode(mapper));
+        bytes.extend(operation.encode(rt));
     }
     bytes
 }
 
-fn transforms<'a>(
-    picker: &'a RefCell<&'a mut dyn FnMut(&[usize]) -> usize>,
-    offset: u64,
-    register: bool,
-) -> Vec<Box<dyn Transform + 'a>> {
+fn transforms(offset: u64) -> Vec<Box<dyn Transform>> {
     vec![
         Box::new(Peephole),
-        Box::new(Permute { picker }),
+        Box::new(Permute),
         Box::new(Scramble),
         Box::new(Mutation),
-        Box::new(Fuse { register }),
+        Box::new(Fuse),
         Box::new(Encrypt { offset }),
-        Box::new(Permute { picker }),
+        Box::new(Permute),
         Box::new(Peephole),
     ]
 }
 
-pub fn transform<F>(
+pub fn transform(
     rt: &mut Runtime,
     mut operations: Vec<Box<dyn Encode>>,
     offset: u64,
-    register: bool,
-    mut picker: F,
-) -> Vec<Box<dyn Encode>>
-where
-    F: FnMut(&[usize]) -> usize,
-{
-    let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
+    rng: Option<&mut dyn rand::RngCore>,
+) -> Vec<Box<dyn Encode>> {
+    let mut thread = rand::thread_rng();
+    let rng: &mut dyn rand::RngCore = match rng {
+        Some(rng) => rng,
+        None => &mut thread,
+    };
 
-    for transform in &transforms(&picker, offset, register) {
-        operations = transform.run(rt, operations);
+    for transform in &transforms(offset) {
+        operations = transform.run(rt, operations, rng);
     }
 
     operations
 }
 
-pub fn transform_with_snapshots<F>(
+pub fn transform_with_snapshots(
     rt: &mut Runtime,
     mut operations: Vec<Box<dyn Encode>>,
     offset: u64,
-    register: bool,
-    mut picker: F,
-) -> (Vec<Box<dyn Encode>>, Snapshots)
-where
-    F: FnMut(&[usize]) -> usize,
-{
-    let picker = RefCell::<&mut dyn FnMut(&[usize]) -> usize>::new(&mut picker);
+    rng: Option<&mut dyn rand::RngCore>,
+) -> (Vec<Box<dyn Encode>>, Snapshots) {
+    let mut thread = rand::thread_rng();
+    let rng: &mut dyn rand::RngCore = match rng {
+        Some(rng) => rng,
+        None => &mut thread,
+    };
 
     let mut snapshots = Snapshots::new();
     snapshots.record(Phase::Lift, &operations);
 
-    for transform in &transforms(&picker, offset, register) {
-        operations = transform.run(rt, operations);
+    for transform in &transforms(offset) {
+        operations = transform.run(rt, operations, rng);
 
         snapshots.record(transform.phase(), &operations);
     }

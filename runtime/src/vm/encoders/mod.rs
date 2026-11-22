@@ -1,7 +1,7 @@
 use std::any::{type_name, Any};
 use std::fmt::{self, Debug};
 
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::{VMCode, VMReg, VMVec};
 
 pub mod adc;
@@ -89,10 +89,10 @@ pub trait Encode: Debug + Any {
 
     fn code(&self) -> Option<VMCode>;
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8>;
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8>;
 
-    fn size(&self, mapper: &mut Mapper) -> usize {
-        self.code().map_or(0, |_| 1) + self.encode(mapper).len()
+    fn size(&self, rt: &mut Runtime) -> usize {
+        self.code().map_or(0, |_| 1) + self.encode(rt).len()
     }
 
     fn reads(&self) -> Vec<Effect> {
@@ -131,7 +131,7 @@ pub trait Encode: Debug + Any {
         None
     }
 
-    fn seal(&mut self, _mapper: &mut Mapper, _transform: &mut dyn FnMut(&mut [u8], usize)) {}
+    fn seal(&mut self, _rt: &mut Runtime, _transform: &mut dyn FnMut(&mut [u8], usize)) {}
 }
 
 impl fmt::Display for dyn Encode {

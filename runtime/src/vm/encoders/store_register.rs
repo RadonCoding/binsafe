@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::{VMCode, VMReg, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
@@ -22,8 +22,8 @@ impl Encode for StoreRegister {
         Some(VMCode::StoreRegister)
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(self.width), mapper.index(self.destination)]
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
+        vec![rt.mapper.index(self.width), rt.mapper.index(self.destination)]
     }
 
     fn writes(&self) -> Vec<super::Effect> {

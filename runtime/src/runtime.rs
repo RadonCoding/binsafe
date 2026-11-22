@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use iced_x86::{
@@ -373,7 +373,11 @@ pub struct Runtime {
     pub compounds: Vec<Vec<VMCode>>,
     pub compound_labels: Vec<CodeLabel>,
 
+    pub handlers: HashSet<VMCode>,
+
     pub mapper: Mapper,
+
+    compiled: bool,
 }
 
 impl Runtime {
@@ -447,8 +451,16 @@ impl Runtime {
             compounds: Vec::new(),
             compound_labels: Vec::new(),
 
+            handlers: HashSet::new(),
+
             mapper: Mapper::new(),
+
+            compiled: false,
         }
+    }
+
+    pub fn handle(&mut self, code: VMCode) {
+        self.handlers.insert(code);
     }
 
     pub fn compound(&mut self, operations: Vec<VMCode>) -> usize {
@@ -458,6 +470,22 @@ impl Runtime {
             .position(|existing| *existing == operations)
         {
             return index;
+        }
+
+        let index = self.compounds.len();
+
+        self.compounds.push(operations);
+
+        index
+    }
+
+    pub fn compiled(&self) -> bool {
+        self.compiled
+    }
+
+    pub fn variant(&mut self, operations: Vec<VMCode>) -> usize {
+        if self.compiled {
+            panic!("compound registration after compilation");
         }
 
         let index = self.compounds.len();
@@ -714,6 +742,8 @@ impl Runtime {
     }
 
     pub fn assemble(&mut self, ip: u64) -> Vec<u8> {
+        self.compiled = true;
+
         let functions: [(FnDef, fn(&mut Runtime)); FnDef::COUNT - 1] = [
             (FnDef::VmContextCreate, vm::functions::context::create),
             (FnDef::VmContextDelete, vm::functions::context::delete),
@@ -980,9 +1010,28 @@ impl Runtime {
 
         let (data_phase_one, data_phase_two) = data_tasks.split_at(data_tasks.len() / 2);
 
+        for op in self.compounds.clone().into_iter().flatten() {
+            self.handle(op);
+        }
+
+        let handlers = VMCode::VARIANTS
+            .iter()
+            .map(|&op| vm::handlers::handler(op))
+            .collect::<HashSet<FnDef>>();
+
+        let required = VMCode::VARIANTS
+            .iter()
+            .filter(|op| self.handlers.contains(op))
+            .map(|&op| vm::handlers::handler(op))
+            .collect::<HashSet<FnDef>>();
+
         let mut phase_one = Vec::new();
 
         for (def, builder) in functions {
+            if handlers.contains(&def) && !required.contains(&def) {
+                continue;
+            }
+
             phase_one.push(EmissionTask::Function(def, builder));
         }
 
@@ -1084,8 +1133,10 @@ impl Runtime {
         for (i, def) in FnDef::VARIANTS.iter().enumerate() {
             let entry = offset + i * size_of::<u64>();
 
-            let rva = self.addresses[&self.function_labels[def]] as u32;
-            let size = self.sizes[&self.function_labels[def]] as u32;
+            let label = self.function_labels[def];
+
+            let rva = self.addresses.get(&label).copied().unwrap_or(0) as u32;
+            let size = self.sizes.get(&label).copied().unwrap_or(0) as u32;
 
             code[entry..entry + size_of::<u32>()].copy_from_slice(&rva.to_le_bytes());
             code[entry + size_of::<u32>()..entry + size_of::<u64>()]

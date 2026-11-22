@@ -11,7 +11,8 @@ use exe::{PE, RVA};
 use iced_x86::code_asm::{dword_ptr, rsp, CodeAssembler};
 use iced_x86::Mnemonic;
 use logger::{debug, info};
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use runtime::runtime::{DataDef, FnDef};
 use runtime::vm::bytecode::{self};
 use runtime::vm::encoders::Encode;
@@ -95,35 +96,34 @@ pub struct Virtualization {
     missing: HashMap<Mnemonic, usize>,
 }
 
-pub(super) fn assemble_bytecode(
+pub(super) fn compile_attestation(
     engine: &mut Engine,
     operations: Vec<Box<dyn Encode>>,
     offset: u64,
-    register: bool,
 ) -> Vec<u8> {
-    let mut rng = rand::thread_rng();
+    let state = engine.rt.keys.initializer;
 
     let transformed = if engine.args.verbose {
         let (transformed, snapshots) = bytecode::transform_with_snapshots(
             &mut engine.rt,
             operations,
             offset,
-            register,
-            |ready| rng.gen_range(0..ready.len()),
+            Some(&mut StdRng::seed_from_u64(state)),
         );
 
-        if !register {
-            debug!("ATTESTATION @ 0x{:08X}:\n{}", offset, snapshots);
-        }
+        debug!("ATTESTATION @ 0x{:08X}:\n{}", offset, snapshots);
 
         transformed
     } else {
-        bytecode::transform(&mut engine.rt, operations, offset, register, |ready| {
-            rng.gen_range(0..ready.len())
-        })
+        bytecode::transform(
+            &mut engine.rt,
+            operations,
+            offset,
+            Some(&mut StdRng::seed_from_u64(state)),
+        )
     };
 
-    let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
+    let mut bytes = bytecode::assemble(&mut engine.rt, &transformed);
 
     let cipher = Cipher::new(engine.rt.keys.multiplier, engine.rt.keys.addend);
     cipher.encrypt_block(&mut bytes, 0, 0);
@@ -132,18 +132,14 @@ pub(super) fn assemble_bytecode(
     bytes
 }
 
-pub(super) fn create_attestation(
-    engine: &mut Engine,
-    base: u64,
-    register: bool,
-) -> (Vec<u8>, Vec<u8>) {
+pub(super) fn create_attestation(engine: &mut Engine, base: u64) -> (Vec<u8>, Vec<u8>) {
     let mut expected = 0;
 
     let service = attestation::service(engine, &mut expected);
     let program = attestation::program(engine, engine.rt.keys.secret, expected);
 
-    let program = assemble_bytecode(engine, program, base, register);
-    let service = assemble_bytecode(engine, service, base + program.len() as u64, register);
+    let program = compile_attestation(engine, program, base);
+    let service = compile_attestation(engine, service, base + program.len() as u64);
 
     (program, service)
 }
@@ -160,7 +156,7 @@ pub(super) fn create_bytecode(engine: &mut Engine, programs: &[Vec<u8>]) -> (u32
 
     let boundary = code.len();
 
-    let (program, service) = create_attestation(engine, boundary as u64, false);
+    let (program, service) = create_attestation(engine, boundary as u64);
 
     let cipher = Cipher::new(engine.rt.keys.multiplier, engine.rt.keys.addend);
 
@@ -254,7 +250,7 @@ impl Protection for Virtualization {
             };
 
             let mut hasher = DefaultHasher::new();
-            bytecode::assemble(&mut engine.rt.mapper, &lifted).hash(&mut hasher);
+            bytecode::assemble(&mut engine.rt, &lifted).hash(&mut hasher);
             let hash = hasher.finish();
 
             if lookup.get(&hash).is_none() {
@@ -269,30 +265,21 @@ impl Protection for Virtualization {
             }
         }
 
-        let mut rng = rand::thread_rng();
-
         for (index, operations) in operations.into_iter().enumerate() {
             let offset = code.len() as u64;
 
             let transformed = if engine.args.verbose {
-                let (transformed, snapshots) = bytecode::transform_with_snapshots(
-                    &mut engine.rt,
-                    operations,
-                    offset,
-                    true,
-                    |ready| rng.gen_range(0..ready.len()),
-                );
+                let (transformed, snapshots) =
+                    bytecode::transform_with_snapshots(&mut engine.rt, operations, offset, None);
 
                 log.push((self.groups[index][0], format!("{}", snapshots)));
 
                 transformed
             } else {
-                bytecode::transform(&mut engine.rt, operations, offset, true, |ready| {
-                    rng.gen_range(0..ready.len())
-                })
+                bytecode::transform(&mut engine.rt, operations, offset, None)
             };
 
-            let mut bytes = bytecode::assemble(&mut engine.rt.mapper, &transformed);
+            let mut bytes = bytecode::assemble(&mut engine.rt, &transformed);
 
             cipher.encrypt_block(&mut bytes, 0, 0);
             cipher.decrypt_payload(&mut bytes, 0, 0);
@@ -352,7 +339,7 @@ impl Protection for Virtualization {
             .rt
             .define_data_qword(DataDef::VmKeyAddend, engine.rt.keys.addend);
 
-        create_attestation(engine, 0, true);
+        create_attestation(engine, 0);
     }
 
     fn apply(&self, engine: &mut Engine) {

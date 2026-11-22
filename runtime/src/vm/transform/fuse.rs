@@ -1,21 +1,28 @@
 use std::mem;
 
+use rand::Rng;
+
 use crate::runtime::Runtime;
 use crate::vm::bytecode::VMCode;
 use crate::vm::encoders::compound::Compound;
 use crate::vm::encoders::Encode;
 use crate::vm::transform::{descend, Phase, Transform};
 
-pub struct Fuse {
-    pub register: bool,
-}
+const VARIANTS: usize = 4;
+
+pub struct Fuse;
 
 impl Transform for Fuse {
     fn phase(&self) -> Phase {
         Phase::Fuse
     }
 
-    fn run(&self, rt: &mut Runtime, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+    fn run(
+        &self,
+        rt: &mut Runtime,
+        mut operations: Vec<Box<dyn Encode>>,
+        rng: &mut dyn rand::RngCore,
+    ) -> Vec<Box<dyn Encode>> {
         descend(&mut operations, |operations| {
             let fusible = operations
                 .iter()
@@ -53,13 +60,26 @@ impl Transform for Fuse {
                         .map(|code| code.unwrap())
                         .collect::<Vec<VMCode>>();
 
-                    if let Some(index) = rt.compounds.iter().position(|entry| *entry == members) {
-                        chosen = Some((length, index));
-                        break;
+                    let mut variants = rt
+                        .compounds
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, entry)| **entry == members)
+                        .map(|(index, _)| index)
+                        .collect::<Vec<usize>>();
+
+                    while variants.len() < VARIANTS && !rt.compiled() {
+                        variants.push(rt.variant(members.clone()));
                     }
 
-                    if self.register {
-                        chosen = Some((length, rt.compound(members)));
+                    let index = if variants.is_empty() {
+                        None
+                    } else {
+                        Some(variants[rng.gen_range(0..variants.len())])
+                    };
+
+                    if let Some(index) = index {
+                        chosen = Some((length, index));
                         break;
                     }
                 }

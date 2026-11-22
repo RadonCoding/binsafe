@@ -7,7 +7,7 @@ use rand::Rng;
 use strum::IntoEnumIterator;
 
 /// Rewrites each [`Branch`] in place via randomized, semantics-preserving conditions.
-pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
+pub fn mutate<R: Rng + ?Sized>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
     descend(operations, |operations| {
         for i in 0..operations.len() {
             let Some(branch) = operations[i].as_any_mut().downcast_mut::<Branch>() else {
@@ -154,7 +154,7 @@ pub fn mutate<R: Rng>(operations: &mut Vec<Box<dyn Encode>>, rng: &mut R) {
 }
 
 /// Generates a randomized [`VMCondition`].
-fn random<R: Rng>(flags: &[Flag], rng: &mut R) -> VMCondition {
+fn random<R: Rng + ?Sized>(flags: &[Flag], rng: &mut R) -> VMCondition {
     let lhs = *flags.choose(rng).unwrap();
     let rhs = *flags.choose(rng).unwrap();
 

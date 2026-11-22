@@ -15,7 +15,7 @@ use runtime::{
 use crate::protections::virtualization::compress::compress;
 use crate::protections::virtualization::language::*;
 use crate::protections::virtualization::{
-    assemble_bytecode, create_attestation, create_bytecode, write_displacement,
+    compile_attestation, create_attestation, create_bytecode, write_displacement,
 };
 use crate::protections::Protection;
 use crate::{engine::Engine, exceptions::RuntimeFunction};
@@ -311,8 +311,20 @@ fn generate_loader(engine: &mut Engine, image: &Image) -> Vec<Box<dyn Encode>> {
             section.packed as u64,
         ));
         // FinalUncompressedSize -> [RSP + ...]
-        instructions.extend(compute_memory(VMReg::Rsp, VMReg::None, 1, 0x30, VMSeg::None));
-        instructions.extend(compute_memory(VMReg::Rsp, VMReg::None, 1, 0x28, VMSeg::None));
+        instructions.extend(compute_memory(
+            VMReg::Rsp,
+            VMReg::None,
+            1,
+            0x30,
+            VMSeg::None,
+        ));
+        instructions.extend(compute_memory(
+            VMReg::Rsp,
+            VMReg::None,
+            1,
+            0x28,
+            VMSeg::None,
+        ));
         instructions.push(Box::new(StoreMemory {
             width: VMWidth::Lower64,
         }));
@@ -543,15 +555,15 @@ impl Protection for Packer {
 
         let operations = generate_loader(engine, &self.image);
 
-        assemble_bytecode(engine, operations, 0, true);
+        compile_attestation(engine, operations, 0);
 
-        create_attestation(engine, 0, true);
+        create_attestation(engine, 0);
     }
 
     fn apply(&self, engine: &mut Engine) {
         let operations = generate_loader(engine, &self.image);
 
-        let loader = assemble_bytecode(engine, operations, 0, false);
+        let loader = compile_attestation(engine, operations, 0);
 
         let (base, _) = create_bytecode(engine, &[loader]);
 

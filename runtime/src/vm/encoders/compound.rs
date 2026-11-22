@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::VMCode;
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
@@ -37,12 +37,12 @@ impl Encode for Compound {
         Some(VMCode::Compound)
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend(self.index.to_le_bytes());
 
         for member in &self.members {
-            bytes.extend(member.encode(mapper));
+            bytes.extend(member.encode(rt));
         }
 
         bytes
@@ -72,9 +72,9 @@ impl Encode for Compound {
         depth - low
     }
 
-    fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
+    fn seal(&mut self, rt: &mut Runtime, transform: &mut dyn FnMut(&mut [u8], usize)) {
         for member in &mut self.members {
-            member.seal(mapper, transform);
+            member.seal(rt, transform);
         }
     }
 }

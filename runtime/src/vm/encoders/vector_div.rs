@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::{VMCode, VMWidth};
 use crate::vm::encoders::Encode;
 use std::any::Any;
@@ -22,8 +22,8 @@ impl Encode for VectorDiv {
         Some(VMCode::VectorDiv)
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(self.width), mapper.index(self.stride)]
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
+        vec![rt.mapper.index(self.width), rt.mapper.index(self.stride)]
     }
 
     fn consumes(&self) -> i32 {

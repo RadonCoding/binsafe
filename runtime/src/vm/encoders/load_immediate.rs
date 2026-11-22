@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::{VMCode, VMReg, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
@@ -22,8 +22,8 @@ impl Encode for LoadImmediate {
         Some(VMCode::LoadImmediate)
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        let mut bytes = vec![mapper.index(self.width)];
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
+        let mut bytes = vec![rt.mapper.index(self.width)];
         bytes.extend_from_slice(&self.source);
         bytes
     }
@@ -43,7 +43,7 @@ impl Encode for LoadImmediate {
         1
     }
 
-    fn seal(&mut self, _mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
+    fn seal(&mut self, _rt: &mut Runtime, transform: &mut dyn FnMut(&mut [u8], usize)) {
         transform(&mut self.source, 0);
     }
 }

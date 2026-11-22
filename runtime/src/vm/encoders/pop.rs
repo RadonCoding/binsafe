@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::{VMCode, VMReg};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
@@ -34,7 +34,7 @@ impl Encode for Pop {
         Some(VMCode::Pop)
     }
 
-    fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, _rt: &mut Runtime) -> Vec<u8> {
         vec![]
     }
 

@@ -2,7 +2,6 @@ use std::matches;
 
 use rand::Rng;
 
-use crate::mapper::Mapper;
 use crate::runtime::Runtime;
 use crate::utils::invert_multiplier;
 use crate::vm::bytecode::{VMReg, VMWidth};
@@ -20,10 +19,11 @@ use crate::vm::encoders::{Effect, Encode};
 use crate::vm::transform::{deadzones, Phase, Transform};
 
 struct Encryptor<'a> {
-    mapper: &'a mut Mapper,
+    rt: &'a mut Runtime,
     operations: &'a mut Vec<Box<dyn Encode>>,
     addend: u64,
     multiplier: u64,
+    rng: &'a mut dyn rand::RngCore,
 }
 
 /// Encrypts every immediate against rolling immediates held in [`VMReg::VImmAdd`] and [`VMReg::VImmMul`].
@@ -36,13 +36,18 @@ impl Transform for Encrypt {
         Phase::Encrypt
     }
 
-    fn run(&self, rt: &mut Runtime, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+    fn run(
+        &self,
+        rt: &mut Runtime,
+        operations: Vec<Box<dyn Encode>>,
+        rng: &mut dyn rand::RngCore,
+    ) -> Vec<Box<dyn Encode>> {
         let mut operations = operations;
 
-        let addend = rand::thread_rng().gen::<u64>();
-        let multiplier = rand::thread_rng().gen::<u64>() | 1;
+        let addend = rng.gen::<u64>();
+        let multiplier = rng.gen::<u64>() | 1;
 
-        let mut encryptor = Encryptor::new(&mut rt.mapper, &mut operations, addend, multiplier);
+        let mut encryptor = Encryptor::new(rt, &mut operations, addend, multiplier, rng);
 
         encryptor.process();
 
@@ -63,26 +68,29 @@ impl Transform for Encrypt {
 impl<'a> Encryptor<'a> {
     /// Builds an [`Encryptor`] with a deadzone mask derived from a depth-first flag-effect scan over `operations` and their children.
     fn new(
-        mapper: &'a mut Mapper,
+        rt: &'a mut Runtime,
         operations: &'a mut Vec<Box<dyn Encode>>,
         addend: u64,
         multiplier: u64,
+        rng: &'a mut dyn rand::RngCore,
     ) -> Self {
         Self {
-            mapper,
+            rt,
             operations,
             addend,
             multiplier,
+            rng,
         }
     }
 
     /// Encrypts each operation in execution order, rolling both keys after every immediate.
     fn process(&mut self) {
         walk(
-            self.mapper,
+            self.rt,
             self.operations,
             &mut self.addend,
             &mut self.multiplier,
+            &mut *self.rng,
         );
     }
 }
@@ -127,10 +135,11 @@ fn restore(
 
 /// Encrypts each leaf in place splicing a roll sequence after every top-level immediate.
 fn walk(
-    mapper: &mut Mapper,
+    rt: &mut Runtime,
     operations: &mut Vec<Box<dyn Encode>>,
     addend: &mut u64,
     multiplier: &mut u64,
+    rng: &mut dyn rand::RngCore,
 ) -> Vec<(u64, u64)> {
     let outer_addend = *addend;
     let outer_multiplier = *multiplier;
@@ -145,8 +154,6 @@ fn walk(
 
     let mut position = 0;
 
-    let mut rng = rand::thread_rng();
-
     let mut skip = rng.gen_range(0..=8);
 
     while i < operations.len() {
@@ -156,7 +163,7 @@ fn walk(
             let mut inner_addend = *addend;
             let mut inner_multiplier = *multiplier;
 
-            let mut inner_trace = walk(mapper, children, &mut inner_addend, &mut inner_multiplier);
+            let mut inner_trace = walk(rt, children, &mut inner_addend, &mut inner_multiplier, rng);
 
             if inner_addend != *addend || inner_multiplier != *multiplier {
                 let sequence = restore(*addend, *multiplier, inner_addend, inner_multiplier);
@@ -168,7 +175,7 @@ fn walk(
                 }
             }
 
-            operations[i].seal(mapper, &mut |source: &mut [u8], index| {
+            operations[i].seal(rt, &mut |source: &mut [u8], index| {
                 let (addend, multiplier) = inner_trace[index];
                 encrypt(source, addend, multiplier);
             });
@@ -197,12 +204,12 @@ fn walk(
             }
         }
 
-        if leaf(&mut operations[i], mapper, *addend, *multiplier) {
+        if leaf(&mut operations[i], rt, *addend, *multiplier) {
             skip -= 1;
 
             if !operations[i].is_branch() {
                 if skip == 0 {
-                    let sequence = transform(addend, multiplier, !flags[position]);
+                    let sequence = transform(addend, multiplier, !flags[position], rng);
                     let length = sequence.len();
                     operations.splice(i + 1..i + 1, sequence);
 
@@ -227,11 +234,11 @@ fn walk(
 /// Seals the operation against the current keys, returning whether it rolls the keystream afterwards.
 fn leaf(
     operation: &mut Box<dyn Encode>,
-    mapper: &mut Mapper,
+    rt: &mut Runtime,
     addend: u64,
     multiplier: u64,
 ) -> bool {
-    operation.seal(mapper, &mut |source, _| encrypt(source, addend, multiplier));
+    operation.seal(rt, &mut |source, _| encrypt(source, addend, multiplier));
 
     operation.as_any().downcast_ref::<LoadImmediate>().is_some()
         || operation.as_any().downcast_ref::<LoadAddress>().is_some()
@@ -249,9 +256,12 @@ pub fn encrypt(source: &mut [u8], addend: u64, multiplier: u64) {
 }
 
 /// Creates a random transformation sequence for [`VMReg::VImmAdd`] and [`VMReg::VImmMul`] while preserving flags.
-fn transform(addend: &mut u64, multiplier: &mut u64, preserve: bool) -> Vec<Box<dyn Encode>> {
-    let mut rng = rand::thread_rng();
-
+fn transform(
+    addend: &mut u64,
+    multiplier: &mut u64,
+    preserve: bool,
+    rng: &mut dyn rand::RngCore,
+) -> Vec<Box<dyn Encode>> {
     let mut sequence = Vec::<Box<dyn Encode>>::new();
 
     if preserve {

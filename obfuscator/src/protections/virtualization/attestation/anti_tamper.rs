@@ -15,6 +15,10 @@ pub fn generate(engine: &mut Engine, expected: &mut u64) -> Vec<Box<dyn Encode>>
         let rva = engine.rt.lookup(engine.rt.function_labels[&function]) as u32;
         let size = engine.rt.size(engine.rt.function_labels[&function]) as usize;
 
+        if size == 0 {
+            continue;
+        }
+
         let offset = engine.pe.translate(RVA(rva).into()).unwrap();
         let bytes = engine.pe.read(offset, size).unwrap();
 

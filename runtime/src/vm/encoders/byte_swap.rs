@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::{VMCode, VMWidth};
 use crate::vm::encoders::Encode;
 use std::any::Any;
@@ -21,8 +21,8 @@ impl Encode for ByteSwap {
         Some(VMCode::ByteSwap)
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(self.width)]
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
+        vec![rt.mapper.index(self.width)]
     }
 
     fn consumes(&self) -> i32 {

@@ -1,6 +1,6 @@
+use crate::runtime::Runtime;
 use std::any::Any;
 
-use crate::mapper::Mapper;
 use crate::vm::bytecode::{self, VMCode, VMCondition, VMLogic, VMWidth};
 use crate::vm::encoders::branch::Branch;
 use crate::vm::encoders::label::Label;
@@ -57,7 +57,7 @@ impl Block {
 
     fn position(
         &self,
-        mapper: &mut Mapper,
+        rt: &mut Runtime,
         operations: Option<&[Box<dyn Encode>]>,
         label: usize,
     ) -> Option<usize> {
@@ -70,7 +70,7 @@ impl Block {
                 }
             }
 
-            offset += operation.size(mapper);
+            offset += operation.size(rt);
         }
 
         None
@@ -121,12 +121,12 @@ impl Encode for Block {
         None
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        bytecode::assemble(mapper, &self.body)
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
+        bytecode::assemble(rt, &self.body)
     }
 
-    fn size(&self, mapper: &mut Mapper) -> usize {
-        self.body.iter().map(|op| op.size(mapper)).sum()
+    fn size(&self, rt: &mut Runtime) -> usize {
+        self.body.iter().map(|op| op.size(rt)).sum()
     }
 
     fn reads(&self) -> Vec<Effect> {
@@ -153,7 +153,7 @@ impl Encode for Block {
         Some(&mut self.body)
     }
 
-    fn seal(&mut self, mapper: &mut Mapper, transform: &mut dyn FnMut(&mut [u8], usize)) {
+    fn seal(&mut self, rt: &mut Runtime, transform: &mut dyn FnMut(&mut [u8], usize)) {
         let mut changed = true;
 
         while changed {
@@ -171,14 +171,14 @@ impl Encode for Block {
                 };
 
                 let destination = if let Some(destination) = destination_label {
-                    self.position(mapper, None, destination).unwrap()
+                    self.position(rt, None, destination).unwrap()
                 } else {
-                    self.size(mapper)
+                    self.size(rt)
                 };
 
                 let after = self.body[..=branch_index]
                     .iter()
-                    .map(|op| op.size(mapper))
+                    .map(|op| op.size(rt))
                     .sum::<usize>();
 
                 let offset = destination as isize - after as isize;
@@ -219,14 +219,14 @@ impl Encode for Block {
             };
 
             let destination = if let Some(label) = destination_label {
-                self.position(mapper, None, label).unwrap()
+                self.position(rt, None, label).unwrap()
             } else {
-                self.size(mapper)
+                self.size(rt)
             };
 
             let after = self.body[..=branch_index]
                 .iter()
-                .map(|op| op.size(mapper))
+                .map(|op| op.size(rt))
                 .sum::<usize>();
 
             let offset = destination as isize - after as isize;

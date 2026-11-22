@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::{VMCode, VMPrecision, VMWidth};
 use crate::vm::encoders::Encode;
 use std::any::Any;
@@ -23,11 +23,11 @@ impl Encode for VectorMul {
         Some(VMCode::VectorMul)
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
         vec![
-            mapper.index(self.width),
-            mapper.index(self.stride),
-            mapper.index(self.precision),
+            rt.mapper.index(self.width),
+            rt.mapper.index(self.stride),
+            rt.mapper.index(self.precision),
         ]
     }
 

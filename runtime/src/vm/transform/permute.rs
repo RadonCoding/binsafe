@@ -1,7 +1,8 @@
 use std::any::Any;
-use std::cell::RefCell;
 use std::collections::HashSet;
 use std::mem;
+
+use rand::Rng;
 
 use crate::mapper::Mappable;
 use crate::runtime::Runtime;
@@ -30,19 +31,20 @@ struct Profile {
     accesses: Option<Vec<Access>>,
 }
 
-/// Shuffles `operations` into a semantically equivalent sequence by using `picker` to select among available atomic blocks.
-pub struct Permute<'a> {
-    pub picker: &'a RefCell<&'a mut dyn FnMut(&[usize]) -> usize>,
-}
+/// Shuffles `operations` into a semantically equivalent sequence.
+pub struct Permute;
 
-impl<'a> Transform for Permute<'a> {
+impl Transform for Permute {
     fn phase(&self) -> Phase {
         Phase::Permute
     }
 
-    fn run(&self, _rt: &mut Runtime, mut operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
-        let mut picker = self.picker.borrow_mut();
-
+    fn run(
+        &self,
+        _rt: &mut Runtime,
+        mut operations: Vec<Box<dyn Encode>>,
+        rng: &mut dyn rand::RngCore,
+    ) -> Vec<Box<dyn Encode>> {
         descend(&mut operations, |operations| {
             let atoms = collapse(mem::take(operations));
 
@@ -58,7 +60,7 @@ impl<'a> Transform for Permute<'a> {
             let mut order = Vec::with_capacity(n);
 
             while !ready.is_empty() {
-                let chosen = ready.swap_remove(picker(&ready));
+                let chosen = ready.swap_remove(rng.gen_range(0..ready.len()));
                 order.push(chosen);
                 for &next in &successors[chosen] {
                     indegree[next] -= 1;

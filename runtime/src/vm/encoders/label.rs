@@ -1,7 +1,5 @@
-use crate::{
-    mapper::Mapper,
-    vm::{bytecode::VMCode, encoders::Encode},
-};
+use crate::runtime::Runtime;
+use crate::vm::{bytecode::VMCode, encoders::Encode};
 use std::{
     any::Any,
     sync::atomic::{AtomicUsize, Ordering},
@@ -54,7 +52,7 @@ impl Encode for Label {
         None
     }
 
-    fn encode(&self, _mapper: &mut Mapper) -> Vec<u8> {
+    fn encode(&self, _rt: &mut Runtime) -> Vec<u8> {
         vec![]
     }
 

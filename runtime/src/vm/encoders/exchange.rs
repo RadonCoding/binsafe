@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::runtime::Runtime;
 use crate::vm::bytecode::{VMCode, VMWidth};
 use crate::vm::encoders::{Effect, Encode};
 use std::any::Any;
@@ -21,8 +21,8 @@ impl Encode for Exchange {
         Some(VMCode::Exchange)
     }
 
-    fn encode(&self, mapper: &mut Mapper) -> Vec<u8> {
-        vec![mapper.index(self.width)]
+    fn encode(&self, rt: &mut Runtime) -> Vec<u8> {
+        vec![rt.mapper.index(self.width)]
     }
 
     fn writes(&self) -> Vec<super::Effect> {

@@ -20,7 +20,12 @@ pub mod scramble;
 pub trait Transform {
     fn phase(&self) -> Phase;
 
-    fn run(&self, rt: &mut Runtime, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>>;
+    fn run(
+        &self,
+        rt: &mut Runtime,
+        operations: Vec<Box<dyn Encode>>,
+        rng: &mut dyn rand::RngCore,
+    ) -> Vec<Box<dyn Encode>>;
 }
 
 /// Groups operations into depth-balanced atoms, appending any trailing unbalanced run as a final atom.

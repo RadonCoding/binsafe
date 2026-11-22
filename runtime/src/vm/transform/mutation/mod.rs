@@ -11,11 +11,15 @@ impl Transform for Mutation {
         Phase::Mutation
     }
 
-    fn run(&self, _rt: &mut Runtime, operations: Vec<Box<dyn Encode>>) -> Vec<Box<dyn Encode>> {
+    fn run(
+        &self,
+        _rt: &mut Runtime,
+        operations: Vec<Box<dyn Encode>>,
+        rng: &mut dyn rand::RngCore,
+    ) -> Vec<Box<dyn Encode>> {
         let mut operations = operations;
-        let mut rng = rand::thread_rng();
 
-        branch::mutate(&mut operations, &mut rng);
+        branch::mutate(&mut operations, rng);
 
         operations
     }
